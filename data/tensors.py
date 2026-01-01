@@ -5,9 +5,15 @@ def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
     y = torch.randn(n, dtype=dtype, device=device)
     return (x, y)
 
+
+def generate_sin_inputs(n, dtype=torch.float32, device='cuda'):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x,)
+
 # Registry for input generators
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
+    "sin": generate_sin_inputs,
 }
 
 def get_generator(operator_name):
