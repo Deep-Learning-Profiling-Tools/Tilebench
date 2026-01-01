@@ -1,38 +1,42 @@
 import torch
 import cuda.tile as ct
-import numpy as np
 import math
 
-# Define the cuTile kernel
-@ct.kernel
-def vector_add_kernel(X, Y, Out, N: ct.Constant[int], TILE_N: ct.Constant[int]):
-    # Get block ID
-    bid = ct.bid(0)
-    
-    # Calculate offsets and mask
-    offs = bid * TILE_N + ct.arange(TILE_N, dtype=np.int32)
-    mask = offs < N
-    
-    # Load tiles from X and Y
-    # Note: cuTile load/store expects index as a tuple and shape as a tuple
-    x_tile = ct.load(X, index=(bid * TILE_N,), shape=(TILE_N,))
-    y_tile = ct.load(Y, index=(bid * TILE_N,), shape=(TILE_N,))
-    
-    # Perform addition
-    out_tile = x_tile + y_tile
-    
-    # Store the result tile back to Out
-    ct.store(Out, index=(bid * TILE_N,), tile=out_tile)
+ConstInt = ct.Constant[int]
 
-def run(x: torch.Tensor, y: torch.Tensor):
-    n = x.numel()
-    out = torch.empty_like(x)
+@ct.kernel
+def vec_add_kernel_1d(a, b, c, TILE: ConstInt):
+    """
+    cuTile kernel for 1D element-wise vector addition using direct tiled loads/stores.
+    """
+    # Get the global ID of the current block along the first dimension.
+    bid = ct.bid(0)
+
+    # Load TILE-sized chunks from input vectors 'a' and 'b'.
+    # index=(bid,) specifies which tile to load based on the block ID.
+    a_tile = ct.load(a, index=(bid,), shape=(TILE,))
+    b_tile = ct.load(b, index=(bid,), shape=(TILE,))
+
+    # Perform the element-wise addition on the loaded tiles.
+    sum_tile = a_tile + b_tile
+
+    # Store the resulting TILE-sized chunk back to the output vector 'c'.
+    ct.store(c, index=(bid,), tile=sum_tile)
+
+def run(a: torch.Tensor, b: torch.Tensor):
+    """
+    Wrapper for cuTile vector addition.
+    """
+    if a.shape != b.shape:
+        raise ValueError("Input tensors must have the same shape.")
     
-    tile_n = 1024
-    grid = (math.ceil(n / tile_n), 1, 1)
+    c = torch.empty_like(a)
+    N = a.shape[0]
     
-    ct.launch(torch.cuda.current_stream(), grid, vector_add_kernel, (
-        x, y, out, n, tile_n
-    ))
+    # Use a fixed tile size for benchmarking consistency, or heuristic
+    TILE = 1024
+    grid = (math.ceil(N / TILE), 1, 1)
     
-    return out
+    ct.launch(torch.cuda.current_stream(), grid, vec_add_kernel_1d, (a, b, c, TILE))
+    
+    return c

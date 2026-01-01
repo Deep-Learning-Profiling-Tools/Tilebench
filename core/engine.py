@@ -3,7 +3,7 @@ import torch
 import importlib
 from core.timer import report_benchmark
 from core.verifier import verify
-from data.tensors import generate_vector_add_inputs
+from data.tensors import get_generator
 
 def run_benchmark_suite(operator_name):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
@@ -15,39 +15,51 @@ def run_benchmark_suite(operator_name):
     impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
     impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
     
+    # Get the registered input generator for this operator
+    generate_inputs = get_generator(operator_name)
+    
     results = []
     
     for case in config['test_cases']:
-        n = case['n']
-        dtype_str = case['dtype']
+        # Extract all parameters from the case except 'dtype'
+        params = {k: v for k, v in case.items() if k != 'dtype'}
+        dtype_str = case.get('dtype', 'float32')
         dtype = getattr(torch, dtype_str)
         
-        print(f"Running case: n={n}, dtype={dtype_str}")
+        print(f"Running case: {params}, dtype={dtype_str}")
         
-        # 1. Data preparation
-        inputs = generate_vector_add_inputs(n, dtype=dtype)
+        # 1. Data preparation using the generic generator
+        inputs = generate_inputs(**params, dtype=dtype)
         
         # 2. Reference run (Torch)
         ref_output = impl_torch.run(*inputs)
+        torch.cuda.synchronize()
         torch_ms = report_benchmark(impl_torch.run, inputs)['mean_time_ms']
         
         # 3. Triton run
         triton_output = impl_triton.run(*inputs)
+        torch.cuda.synchronize()
         triton_ok, triton_err = verify(triton_output, ref_output)
+        if not triton_ok:
+            print(f"  Triton verification FAILED: {triton_err}")
         triton_ms = report_benchmark(impl_triton.run, inputs)['mean_time_ms'] if triton_ok else float('nan')
         
         # 4. cuTile run
         try:
             cutile_output = impl_cutile.run(*inputs)
+            torch.cuda.synchronize()
             cutile_ok, cutile_err = verify(cutile_output, ref_output)
+            if not cutile_ok:
+                print(f"  cuTile verification FAILED: {cutile_err}")
             cutile_ms = report_benchmark(impl_cutile.run, inputs)['mean_time_ms'] if cutile_ok else float('nan')
         except Exception as e:
             cutile_ok = False
             cutile_err = str(e)
+            print(f"  cuTile execution FAILED: {cutile_err}")
             cutile_ms = float('nan')
         
-        results.append({
-            "n": n,
+        res = {
+            "params": params,
             "dtype": dtype_str,
             "torch_ms": torch_ms,
             "triton_ms": triton_ms,
@@ -58,6 +70,7 @@ def run_benchmark_suite(operator_name):
             "cutile_err": cutile_err,
             "speedup_triton": torch_ms / triton_ms if triton_ms > 0 else 0,
             "speedup_cutile": torch_ms / cutile_ms if cutile_ms > 0 else 0
-        })
+        }
+        results.append(res)
         
     return results
