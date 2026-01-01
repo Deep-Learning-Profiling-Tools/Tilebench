@@ -1,33 +1,50 @@
+# SPDX-FileCopyrightText: Copyright (c) <2025> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 import torch
-import time
+from math import ceil
 
-def _time_ms(f, args, warmup_rounds, iterations, rounds):
-    # Warmup
-    for _ in range(warmup_rounds):
-        f(*args)
-    
+
+def _estimate_bench_iter(f, tuple_of_args):
+    warmup_iter_guess = 5
+    min_round_time_ms = 100
+    rounds = 5
+    warmup_rounds = 1
+
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+    start.record()
+    for _ in range(warmup_iter_guess):
+        f(*tuple_of_args)
+    end.record()
     torch.cuda.synchronize()
-    
-    latencies = []
-    for _ in range(rounds):
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
-        
-        start_event.record()
-        for _ in range(iterations):
-            f(*args)
-        end_event.record()
-        
-        torch.cuda.synchronize()
-        latencies.append(start_event.elapsed_time(end_event) / iterations)
-    
-    return sum(latencies) / len(latencies)
+    elapsed = start.elapsed_time(end) / warmup_iter_guess
 
-def _estimate_bench_iter(f, args):
-    # Default values
-    return 10, 100, 5
+    main_iter = ceil(min_round_time_ms / elapsed)
 
-def report_benchmark(f, args) -> dict[str, float]:
-    warmup_rounds, iterations, rounds = _estimate_bench_iter(f, args)
-    mean_time_ms = _time_ms(f, args, warmup_rounds, iterations, rounds)
+    return warmup_rounds, main_iter, rounds
+
+
+def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int) -> float:
+    for _ in range(warmup):
+        f(*tuple_of_args)
+
+    run_iters = max(iters, rounds)
+    torch.cuda.synchronize()
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+    start.record()
+    for _ in range(run_iters):
+        f(*tuple_of_args)
+    end.record()
+    torch.cuda.synchronize()
+
+    ms = start.elapsed_time(end)
+    return ms / max(1, run_iters)
+
+
+def report_benchmark(f, tuple_of_args) -> dict[str, float]:
+    warmup_rounds, iterations, rounds = _estimate_bench_iter(f, tuple_of_args)
+    mean_time_ms = _time_ms(f, tuple_of_args, warmup_rounds, iterations, rounds)
     return {"mean_time_ms": mean_time_ms}
