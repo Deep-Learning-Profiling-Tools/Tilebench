@@ -6,7 +6,9 @@ import torch
 from math import ceil
 
 
-def _estimate_bench_iter(f, tuple_of_args):
+def _estimate_bench_iter(f, tuple_of_args, kwargs=None):
+    if kwargs is None:
+        kwargs = {}
     warmup_iter_guess = 5
     min_round_time_ms = 100
     rounds = 5
@@ -16,7 +18,7 @@ def _estimate_bench_iter(f, tuple_of_args):
     end = torch.cuda.Event(enable_timing=True)
     start.record()
     for _ in range(warmup_iter_guess):
-        f(*tuple_of_args)
+        f(*tuple_of_args, **kwargs)
     end.record()
     torch.cuda.synchronize()
     elapsed = start.elapsed_time(end) / warmup_iter_guess
@@ -26,9 +28,11 @@ def _estimate_bench_iter(f, tuple_of_args):
     return warmup_rounds, main_iter, rounds
 
 
-def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int) -> float:
+def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int, kwargs=None) -> float:
+    if kwargs is None:
+        kwargs = {}
     for _ in range(warmup):
-        f(*tuple_of_args)
+        f(*tuple_of_args, **kwargs)
 
     run_iters = max(iters, rounds)
     torch.cuda.synchronize()
@@ -36,7 +40,7 @@ def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int) -> float:
     end = torch.cuda.Event(enable_timing=True)
     start.record()
     for _ in range(run_iters):
-        f(*tuple_of_args)
+        f(*tuple_of_args, **kwargs)
     end.record()
     torch.cuda.synchronize()
 
@@ -44,7 +48,9 @@ def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int) -> float:
     return ms / max(1, run_iters)
 
 
-def report_benchmark(f, tuple_of_args) -> dict[str, float]:
-    warmup_rounds, iterations, rounds = _estimate_bench_iter(f, tuple_of_args)
-    mean_time_ms = _time_ms(f, tuple_of_args, warmup_rounds, iterations, rounds)
+def report_benchmark(f, tuple_of_args, kwargs=None) -> dict[str, float]:
+    if kwargs is None:
+        kwargs = {}
+    warmup_rounds, iterations, rounds = _estimate_bench_iter(f, tuple_of_args, kwargs)
+    mean_time_ms = _time_ms(f, tuple_of_args, warmup_rounds, iterations, rounds, kwargs)
     return {"mean_time_ms": mean_time_ms}
