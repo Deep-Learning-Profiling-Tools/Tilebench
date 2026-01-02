@@ -23,7 +23,7 @@ def vec_add_kernel_1d(a, b, c, TILE: ConstInt):
     # Store the resulting TILE-sized chunk back to the output vector 'c'.
     ct.store(c, index=(bid,), tile=sum_tile)
 
-def run(a: torch.Tensor, b: torch.Tensor):
+def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024):
     """
     Wrapper for cuTile vector addition.
     """
@@ -34,7 +34,7 @@ def run(a: torch.Tensor, b: torch.Tensor):
     N = a.shape[0]
     
     # Use a fixed tile size for benchmarking consistency, or heuristic
-    TILE = 1024
+    TILE = block_size
     grid = (math.ceil(N / TILE), 1, 1)
     
     ct.launch(torch.cuda.current_stream(), grid, vec_add_kernel_1d, (a, b, c, TILE))
