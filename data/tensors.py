@@ -26,14 +26,23 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     
     return (q, cos, sin)
 
-# 在 GENERATORS 字典中添加:
-# "rope": generate_rope_inputs
+def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):
+    """
+    生成 Flash Attention 所需的 Q, K, V。
+    通常 Flash Attention 运行在 FP16/BF16 上。
+    形状约定: [Batch, Heads, SeqLen, Dim]
+    """
+    q = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
+    k = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
+    v = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
+    # 确保 contiguous，避免 stride 问题影响某些 kernel 的简单实现
+    return (q.contiguous(), k.contiguous(), v.contiguous())
 
-# Registry for input generators
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
     "rope": generate_rope_inputs,
+    "flash_attention": generate_flash_attn_inputs,
 }
 
 def get_generator(operator_name):
