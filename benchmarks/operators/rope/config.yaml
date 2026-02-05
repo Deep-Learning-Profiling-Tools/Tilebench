@@ -1,0 +1,32 @@
+test_cases:
+  # Case 1: LLaMA-2-7B 典型推理场景 (Long Context)
+  # Total: 1 * 4096 * 32 * 128 = 16MB elements
+  - batch_size: 1
+    seq_len: 4096
+    n_heads: 32
+    head_dim: 128
+    dtype: "float32"
+
+  # Case 2: High Throughput / Server Scenario (Large Batch)
+  # Total: 16 * 512 * 32 * 128 = 32MB elements
+  - batch_size: 16
+    seq_len: 512
+    n_heads: 32
+    head_dim: 128
+    dtype: "float32"
+
+  # Case 3: Smaller Head Dim (e.g., older models or specific archs)
+  # Total: 4 * 2048 * 16 * 64 = 8MB elements
+  - batch_size: 4
+    seq_len: 2048
+    n_heads: 16
+    head_dim: 64
+    dtype: "float32"
+
+  # Case 4: Heavy Load (Large Batch + Mid Seq)
+  # Total: 8 * 1024 * 32 * 128 = 32MB elements
+  - batch_size: 8
+    seq_len: 1024
+    n_heads: 32
+    head_dim: 128
+    dtype: "float32"
