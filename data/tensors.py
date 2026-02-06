@@ -25,7 +25,22 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
     
     return (q, cos, sin)
+def generate_softmax_inputs(n=None, shape=None, dtype=torch.float32, device='cuda'):
+    if shape is None:
+        if n is None:
+            raise ValueError("Must provide 'n' or 'shape' for softmax inputs")
 
+        cols = int(n**0.5)
+        rows = n // cols
+        shape = (rows, cols)
+
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    x = torch.randn(*shape, dtype=dtype, device=device)
+    
+    # Softmax 通常最后一维做归一化，不需要两个输入
+    return (x,)
 def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):
     """
     生成 Flash Attention 所需的 Q, K, V。
@@ -43,6 +58,7 @@ GENERATORS = {
     "sin": generate_sin_inputs,
     "rope": generate_rope_inputs,
     "flash_attention": generate_flash_attn_inputs,
+    "softmax": generate_softmax_inputs,
 }
 
 def get_generator(operator_name):
