@@ -10,16 +10,9 @@ def generate_sin_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.float32, device='cuda', **kwargs):
-    """
-    根据显式的维度配置生成 RoPE 输入。
-    接受 **kwargs 是为了容错 (以防 config 里有 extra params)
-    """
-    # 构造 Query: [Batch, Seq, Heads, Dim]
+
     q = torch.randn(batch_size, seq_len, n_heads, head_dim, dtype=dtype, device=device)
-    
-    # 构造 Cos/Sin 表: [Seq, Dim // 2]
-    # 注意: RoPE 的 Cos/Sin 通常是预计算好的，长度覆盖最大序列长度，且最后一维是 HeadDim/2
-    # 这里我们生成刚好够用的长度
+
     half_dim = head_dim // 2
     cos = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
@@ -39,26 +32,35 @@ def generate_softmax_inputs(n=None, shape=None, dtype=torch.float32, device='cud
 
     x = torch.randn(*shape, dtype=dtype, device=device)
     
-    # Softmax 通常最后一维做归一化，不需要两个输入
+
     return (x,)
 def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):
-    """
-    生成 Flash Attention 所需的 Q, K, V。
-    通常 Flash Attention 运行在 FP16/BF16 上。
-    形状约定: [Batch, Heads, SeqLen, Dim]
-    """
+
     q = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
     k = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
     v = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
-    # 确保 contiguous，避免 stride 问题影响某些 kernel 的简单实现
-    return (q.contiguous(), k.contiguous(), v.contiguous())
 
+    return (q.contiguous(), k.contiguous(), v.contiguous())
+def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
+    # 计算 Num Blocks
+    num_blocks = (seq_len + block_seq - 1) // block_seq
+    
+    b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
+    mid_o = torch.randn((batch, heads, num_blocks, head_dim), dtype=dtype, device=device)
+    mid_o_lse = torch.randn((batch, heads, num_blocks), dtype=dtype, device=device)
+    
+    # 【修改点】将 block_seq 包装成 Tensor 放入返回列表
+    # 这样 engine 就会把它传给 run 函数的第 4 个位置
+    block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu') # 放在 CPU 即可，run 里取 .item()
+    
+    return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
     "rope": generate_rope_inputs,
     "flash_attention": generate_flash_attn_inputs,
     "softmax": generate_softmax_inputs,
+    "flash_decode": generate_flash_decode_stage2_inputs,
 }
 
 def get_generator(operator_name):
