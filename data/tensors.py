@@ -20,6 +20,10 @@ def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, 
 def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device='cuda'):
     x = torch.randn((m, n), dtype=dtype, device=device)
     return (x,)
+def generate_dropout_inputs(n, p, dtype=torch.float32, device='cuda'):
+    x = torch.randn(n, dtype=dtype, device=device)
+    x_keep = (torch.rand(n, device=device) > p).to(torch.int32)
+    return (x, x_keep, p)
 
 
 # Registry for input generators
@@ -28,6 +32,7 @@ GENERATORS = {
     "sin": generate_sin_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "matrix_transpose": generate_matrix_transpose_inputs,
+    "dropout": generate_dropout_inputs,
 }
 
 def get_generator(operator_name):
