@@ -10,10 +10,17 @@ def generate_sin_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 
+def generate_swiglu_inputs(batch_size, ncols, dtype=torch.float32, device='cuda'):
+    x = torch.randn(batch_size, ncols, dtype=dtype, device=device)
+    y = torch.randn(batch_size, ncols, dtype=dtype, device=device)
+    return (x, y)
+
+
 # Registry for input generators
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
+    "swiglu": generate_swiglu_inputs,
 }
 
 def get_generator(operator_name):
