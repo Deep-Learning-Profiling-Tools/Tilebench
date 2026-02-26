@@ -16,6 +16,15 @@ def generate_swiglu_inputs(batch_size, ncols, dtype=torch.float32, device='cuda'
     return (x, y)
 
 
+def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda'):
+    logits = torch.randn((batch_size, num_classes), dtype=dtype, device=device)
+    targets = torch.randint(0, num_classes, (batch_size,), device=device, dtype=torch.int64)
+    return (logits, targets)
+
+
+def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device='cuda'):
+    x = torch.randn((m, n), dtype=dtype, device=device)
+    return (x,)
 def generate_dropout_inputs(n, p, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     x_keep = (torch.rand(n, device=device) > p).to(torch.int32)
@@ -26,6 +35,8 @@ def generate_dropout_inputs(n, p, dtype=torch.float32, device='cuda'):
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
+    "cross_entropy": generate_cross_entropy_inputs,
+    "matrix_transpose": generate_matrix_transpose_inputs,
     "swiglu": generate_swiglu_inputs,
     "dropout": generate_dropout_inputs,
 }
