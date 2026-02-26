@@ -54,6 +54,12 @@ def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, 
     block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu') # 放在 CPU 即可，run 里取 .item()
     
     return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
+def generate_mat_mul_inputs(M=1024, K=1024, N=1024, dtype=torch.float16, device='cuda', **kwargs):
+    # Depending on the PyTorch version, directly initializing float8_e4m3fn with randn might not be supported.
+    # The safest way is to generate float32 and cast.
+    a = torch.randn((M, K), dtype=torch.float32, device=device).to(dtype)
+    b = torch.randn((K, N), dtype=torch.float32, device=device).to(dtype)
+    return (a, b)
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
@@ -61,6 +67,7 @@ GENERATORS = {
     "flash_attention": generate_flash_attn_inputs,
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
+    "matmul_fp16_fp8": generate_mat_mul_inputs,
 }
 
 def get_generator(operator_name):
