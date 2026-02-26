@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from core.engine import run_benchmark_suite
 
 def main():
@@ -11,6 +12,7 @@ def main():
     print(f"Starting benchmark for operator: {args.operator}")
     results = run_benchmark_suite(args.operator)
     
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w') as f:
         json.dump(results, f, indent=4)
     
