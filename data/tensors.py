@@ -16,11 +16,18 @@ def generate_swiglu_inputs(batch_size, ncols, dtype=torch.float32, device='cuda'
     return (x, y)
 
 
+def generate_dropout_inputs(n, p, dtype=torch.float32, device='cuda'):
+    x = torch.randn(n, dtype=dtype, device=device)
+    x_keep = (torch.rand(n, device=device) > p).to(torch.int32)
+    return (x, x_keep, p)
+
+
 # Registry for input generators
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
     "swiglu": generate_swiglu_inputs,
+    "dropout": generate_dropout_inputs,
 }
 
 def get_generator(operator_name):
