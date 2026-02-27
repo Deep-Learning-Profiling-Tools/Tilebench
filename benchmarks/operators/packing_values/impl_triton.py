@@ -13,7 +13,6 @@ def _pack_to_fp16_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 
 
 def run(x: torch.Tensor, block_size: int = 1024, **kwargs):
-    del kwargs
     x = x.contiguous()
     out = torch.empty(x.shape, device=x.device, dtype=torch.float16)
     n_elements = x.numel()

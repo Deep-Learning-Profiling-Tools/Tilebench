@@ -15,7 +15,6 @@ def unpack_kernel(x_ptr, out_ptr, BLOCK_SIZE: ConstInt):
 
 
 def run(x: torch.Tensor, block_size: int = 1024, **kwargs):
-    del kwargs
     x_flat = x.contiguous().view(-1)
     n = x_flat.numel()
     tile = block_size

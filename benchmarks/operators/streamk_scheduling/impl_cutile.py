@@ -27,7 +27,6 @@ def streamk_matmul_kernel(a_ptr, b_ptr, c_ptr, K_TILES: ConstInt, TILE: ConstInt
 
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024, **kwargs):
-    del kwargs
     if a.dim() != 2 or b.dim() != 2:
         raise ValueError("streamk_scheduling expects 2D inputs.")
     if a.shape[1] != b.shape[0]:

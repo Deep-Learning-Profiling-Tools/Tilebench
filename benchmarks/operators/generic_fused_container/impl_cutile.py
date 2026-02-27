@@ -18,7 +18,6 @@ def fused_kernel(x_ptr, gate_ptr, bias_ptr, out_ptr, BLOCK_SIZE: ConstInt):
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, block_size: int = 1024, **kwargs):
-    del kwargs
     if x.shape != gate.shape or x.shape != bias.shape:
         raise ValueError("All input tensors must have the same shape.")
 
