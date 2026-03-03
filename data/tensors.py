@@ -69,6 +69,15 @@ def generate_mat_mul_int8_inputs(n=None, M=1024, N=1024, K_b=256, device='cuda',
     
     return (a, b)
 
+def generate_streamk_matmul_inputs(n=None, M=1024, N=1024, K=1024, dtype=torch.float16, device='cuda', **kwargs):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    a = torch.randn((M, K), dtype=torch.float32, device=device).to(dtype)
+    b = torch.randn((K, N), dtype=torch.float32, device=device).to(dtype)
+
+    return (a, b)
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
@@ -78,6 +87,7 @@ GENERATORS = {
     "flash_decode": generate_flash_decode_stage2_inputs,
     "matmul_fp16_fp8": generate_mat_mul_inputs,
     "matmul_int8": generate_mat_mul_int8_inputs,
+    "streamk_matmul": generate_streamk_matmul_inputs,
 }
 
 def get_generator(operator_name):
