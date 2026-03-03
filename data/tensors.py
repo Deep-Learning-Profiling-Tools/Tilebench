@@ -60,6 +60,15 @@ def generate_mat_mul_inputs(M=1024, K=1024, N=1024, dtype=torch.float16, device=
     a = torch.randn((M, K), dtype=torch.float32, device=device).to(dtype)
     b = torch.randn((K, N), dtype=torch.float32, device=device).to(dtype)
     return (a, b)
+
+def generate_mat_mul_int8_inputs(n=None, M=1024, N=1024, K_b=256, device='cuda', **kwargs):
+    K = K_b * 4
+    
+    a = torch.randint(-128, 127, (M, K), dtype=torch.int8, device=device)
+    b = torch.randint(0, 255, (K_b, N), dtype=torch.uint8, device=device).to(torch.int8)
+    
+    return (a, b)
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
@@ -68,6 +77,7 @@ GENERATORS = {
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "matmul_fp16_fp8": generate_mat_mul_inputs,
+    "matmul_int8": generate_mat_mul_int8_inputs,
 }
 
 def get_generator(operator_name):
