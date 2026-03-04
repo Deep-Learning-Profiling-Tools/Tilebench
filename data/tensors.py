@@ -1,4 +1,5 @@
 import torch
+import math
 
 def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
@@ -77,7 +78,60 @@ def generate_streamk_matmul_inputs(n=None, M=1024, N=1024, K=1024, dtype=torch.f
     b = torch.randn((K, N), dtype=torch.float32, device=device).to(dtype)
 
     return (a, b)
-
+def generate_block_sparse_attention_inputs(n=None, B=2, H=8, M=1024, D=64, H_kv=2, 
+                                           BLOCK_M=64, BLOCK_N=64, BLOCK_D=64, NUM_D_BLOCKS=1,
+                                           dtype=torch.float16, device='cuda', **kwargs):
+    """
+    Generate inputs for block sparse attention.
+    Creates a simple "Local Window + Causal" sparse CSR layout.
+    """
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+        
+    Q = torch.randn((B, H, M, D), dtype=dtype, device=device)
+    K = torch.randn((B, H_kv, M, D), dtype=dtype, device=device) # N == M
+    V = torch.randn((B, H_kv, M, D), dtype=dtype, device=device)
+    
+    num_layout = 1 # Shared layout for all heads
+    num_rows = math.ceil(M / BLOCK_M)
+    num_cols = math.ceil(M / BLOCK_N)
+    
+    layout_csr_row_stride_h = num_rows + 1
+    layout_csr_col_stride_h = num_rows * num_cols # Max possible capacity
+    
+    # We build a causal local window mask
+    window_blocks = 2 # Attend to current block and 2 previous blocks
+    
+    row_ptrs = []
+    col_indices =[]
+    
+    current_ptr = 0
+    for r in range(num_rows):
+        row_ptrs.append(current_ptr)
+        # Start col is max(0, r - window_blocks)
+        # End col is r (inclusive, because of causal)
+        start_c = max(0, r - window_blocks)
+        end_c = r
+        for c in range(start_c, end_c + 1):
+            col_indices.append(c)
+            current_ptr += 1
+            
+    row_ptrs.append(current_ptr) # Final ptr
+    
+    # Pad col_indices to required size
+    col_indices = col_indices + [0] * (layout_csr_col_stride_h - len(col_indices))
+    
+    layout_csr_row_indices = torch.tensor(row_ptrs, dtype=torch.int32, device=device)
+    layout_csr_col_indices = torch.tensor(col_indices, dtype=torch.int32, device=device)
+    
+    softmax_scale = 1.0 / math.sqrt(D)
+    EVEN_M = (M % BLOCK_M == 0)
+    EVEN_N = (M % BLOCK_N == 0)
+    
+    return (Q, K, V, layout_csr_row_indices, layout_csr_col_indices, 
+            layout_csr_row_stride_h, layout_csr_col_stride_h,
+            num_layout, softmax_scale, H, H_kv, M, 
+            BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "sin": generate_sin_inputs,
@@ -88,6 +142,7 @@ GENERATORS = {
     "matmul_fp16_fp8": generate_mat_mul_inputs,
     "matmul_int8": generate_mat_mul_int8_inputs,
     "streamk_matmul": generate_streamk_matmul_inputs,
+    "block_sparse_attention": generate_block_sparse_attention_inputs,
 }
 
 def get_generator(operator_name):
