@@ -16,7 +16,6 @@ def _divergence_kernel(x_ptr, y_ptr, out_ptr, n_elements, eps, BLOCK_SIZE: tl.co
 
 
 def run(x: torch.Tensor, y: torch.Tensor, eps: float, block_size: int = 1024, **kwargs):
-    del kwargs
     if x.shape != y.shape:
         raise ValueError("Input tensors must have the same shape.")
     x = x.contiguous()

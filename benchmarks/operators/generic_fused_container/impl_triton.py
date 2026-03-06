@@ -17,7 +17,6 @@ def _fused_kernel(x_ptr, gate_ptr, bias_ptr, out_ptr, n_elements, BLOCK_SIZE: tl
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, block_size: int = 1024, **kwargs):
-    del kwargs
     if x.shape != gate.shape or x.shape != bias.shape:
         raise ValueError("All input tensors must have the same shape.")
     x = x.contiguous()
