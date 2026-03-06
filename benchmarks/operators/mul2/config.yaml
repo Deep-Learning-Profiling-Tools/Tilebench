@@ -1,0 +1,46 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+
+case_grid:
+  # 1M to 16M elements, step 1M
+  n:
+    expr: "[1024 * 1024 * i for i in range(1, 17)]"
+  dtype: ["fp16", "bf16", "fp32", "int8"]
+  # dtype: ["fp16", "bf16", "fp32", "fp8_e4m3fn", "fp8_e5m2", "int8"]
+  # fp8: PyTorch has no native FP8 element-wise arithmetic; cuTile DSL does not yet
+  # compile FP8 element-wise kernels. Re-enable when both backends support it.
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: n (problem size), dtype_size (bytes per element)
+# ---------------------------------------------------------------------------
+metrics:
+  # mul2 is pure memory-bound: no meaningful FLOPs, use element count as proxy
+  flops_expr: "n"
+  # 1 read + 1 write per element
+  bytes_expr: "n * dtype_size * 2"
+
+  # B200 peak HBM3e bandwidth (GB/s)
+  peak_bw_GBs: 8000.0
+
+  # B200 peak TFLOPS per dtype (for roofline compute ceiling)
+  # Note: mul2 is memory-bound for all dtypes; peak_tflops is only used
+  # to draw the compute roof line, not as a meaningful performance target.
+  peak_tflops:
+    fp16: 400.0
+    bf16: 400.0
+    fp32: 80.0
+    fp8_e4m3fn: 800.0
+    fp8_e5m2: 800.0
+    int8: 800.0
+
+  # Which metrics visualize.py plots by default when --metrics is not specified
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
+    - pct_peak_bw
+    - roofline

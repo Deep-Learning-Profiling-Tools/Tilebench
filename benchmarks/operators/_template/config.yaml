@@ -1,0 +1,20 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  quantiles: [0.5, 0.9, 0.99]
+  use_cuda_graph: true
+  use_proton_scope: false
+  flush_l2: false
+
+# Choose one:
+# 1) explicit list
+# test_cases:
+#   - n: 1048576
+#     dtype: "fp16"
+#     block_size: 1024
+
+# 2) scalable grid (recommended)
+case_grid:
+  n: [262144, 1048576, 4194304, 16777216, 1000123]
+  dtype: ["fp16", "bf16", "fp32"]
+  block_size: [256, 1024]
