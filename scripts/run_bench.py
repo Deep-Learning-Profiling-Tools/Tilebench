@@ -1,5 +1,9 @@
 import argparse
 import json
+import os
+
+from tabulate import tabulate
+
 from core.engine import run_benchmark_suite
 
 _TIMING_KEYS = {
