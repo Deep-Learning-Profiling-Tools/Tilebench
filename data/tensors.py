@@ -80,23 +80,19 @@ def generate_destindex_inputs(
     kv_rope_head_dim,
     dtype=torch.float16,
     device='cuda',
-    **kwargs,
 ):
-    del kwargs
     total_tokens = batch_size * seq_len
-    kv_nope = torch.randn(
-        (total_tokens, kv_nope_head_num, kv_nope_head_dim), dtype=dtype, device=device
-    )
-    kv_rope = torch.randn(
-        (total_tokens, kv_rope_head_num, kv_rope_head_dim), dtype=dtype, device=device
-    )
+
+    def _rand_tensor(shape):
+        if dtype == torch.int8:
+            return torch.randint(-64, 65, shape, device=device).to(torch.int8)
+        return torch.randn(shape, dtype=dtype, device=device)
+
+    kv_nope  = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
+    kv_rope  = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
     dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64).to(torch.int32)
-    o_nope = torch.randn(
-        (total_tokens, kv_nope_head_num, kv_nope_head_dim), dtype=dtype, device=device
-    )
-    o_rope = torch.randn(
-        (total_tokens, kv_rope_head_num, kv_rope_head_dim), dtype=dtype, device=device
-    )
+    o_nope   = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
+    o_rope   = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 

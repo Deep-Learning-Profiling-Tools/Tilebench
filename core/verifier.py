@@ -17,10 +17,20 @@ _DEFAULT_ATOL = 1e-2
 _DEFAULT_RTOL = 1e-2
 
 
-def verify(output: torch.Tensor, reference: torch.Tensor) -> tuple[bool, str]:
+def _verify_single(output: torch.Tensor, reference: torch.Tensor) -> tuple[bool, str]:
     atol, rtol = _TOLERANCES.get(output.dtype, (_DEFAULT_ATOL, _DEFAULT_RTOL))
     try:
         torch.testing.assert_close(output, reference, atol=atol, rtol=rtol)
         return True, ""
     except Exception as e:
         return False, str(e)
+
+
+def verify(output, reference) -> tuple[bool, str]:
+    if isinstance(output, (tuple, list)):
+        for i, (o, r) in enumerate(zip(output, reference)):
+            ok, err = _verify_single(o, r)
+            if not ok:
+                return False, f"output[{i}]: {err}"
+        return True, ""
+    return _verify_single(output, reference)

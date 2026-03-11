@@ -1,4 +1,5 @@
 import importlib
+import inspect
 
 import torch
 import yaml
@@ -26,6 +27,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
     warmup            = int(bench_cfg.get("warmup", 20))
     repeat            = int(bench_cfg.get("repeat", 100))
+    autotune          = bool(bench_cfg.get("autotune", False))
     use_cuda_graph    = bool(bench_cfg.get("use_cuda_graph", False))
     proton_scope_name = str(bench_cfg.get("proton_scope_name", "launch"))
     proton_backend    = bench_cfg.get("proton_backend")
@@ -86,8 +88,17 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
         torch_ms    = torch_stats["mean"]
 
+        def _run_kwargs(fn):
+            sig = inspect.signature(fn).parameters
+            kw = {}
+            if "block_size" in sig:
+                kw["block_size"] = block_size
+            if "autotune" in sig:
+                kw["autotune"] = autotune
+            return kw
+
         # --- Triton ---
-        triton_output = impl_triton.run(*inputs, block_size=block_size)
+        triton_output = impl_triton.run(*inputs, **_run_kwargs(impl_triton.run))
         torch.cuda.synchronize()
         triton_ok, triton_err = verify(triton_output, ref_output)
         triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)()
@@ -96,14 +107,14 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         if not triton_ok:
             print(f"  Triton verification FAILED: {triton_err}")
         triton_stats = (
-            _bench(impl_triton.run, inputs, {"block_size": block_size}, label=f"{lbl}_triton")
+            _bench(impl_triton.run, inputs, _run_kwargs(impl_triton.run), label=f"{lbl}_triton")
             if triton_ok else None
         )
         triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
 
         # --- cuTile ---
         try:
-            cutile_output = impl_cutile.run(*inputs, block_size=block_size)
+            cutile_output = impl_cutile.run(*inputs, **_run_kwargs(impl_cutile.run))
             torch.cuda.synchronize()
             cutile_ok, cutile_err = verify(cutile_output, ref_output)
             cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)()
@@ -112,7 +123,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             if not cutile_ok:
                 print(f"  cuTile verification FAILED: {cutile_err}")
             cutile_stats = (
-                _bench(impl_cutile.run, inputs, {"block_size": block_size}, label=f"{lbl}_cutile")
+                _bench(impl_cutile.run, inputs, _run_kwargs(impl_cutile.run), label=f"{lbl}_cutile")
                 if cutile_ok else None
             )
             cutile_ms = cutile_stats["mean"] if cutile_stats is not None else float("nan")
