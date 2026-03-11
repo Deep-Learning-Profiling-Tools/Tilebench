@@ -45,6 +45,8 @@ def main():
                         help="Proton context: shadow or python")
     parser.add_argument("--flush-l2", action="store_true",
                         help="Best-effort L2 flush before each iteration")
+    parser.add_argument("--autotune", action="store_true",
+                        help="Enable autotune (overrides config.yaml autotune setting)")
     parser.add_argument("--case-indices", type=str, default=None,
                         help="Comma-separated case indices to run, e.g. 0,1,3")
     parser.add_argument("--keep-proton-files", action="store_true",
@@ -68,6 +70,8 @@ def main():
         overrides["proton_context"] = args.proton_context
     if args.flush_l2:
         overrides["flush_l2"] = True
+    if args.autotune:
+        overrides["autotune"] = True
     if args.case_indices is not None:
         overrides["case_indices"] = [
             int(x.strip()) for x in args.case_indices.split(",") if x.strip()
@@ -98,15 +102,29 @@ def main():
         json.dump(autotune_results, f, indent=4)
     print(f"Autotune log    → {autotune_path}")
 
+    # Determine which param keys actually vary across ALL cases in this run.
+    # Keys that are constant (same value in every case) are hidden to reduce noise.
+    # When nothing varies (e.g. only dtype differs), fall back to problem_size.
+    all_params = [r["params"] for r in timing_results]
+    all_keys   = sorted({k for p in all_params for k in p})
+    varying_keys = [k for k in all_keys if len({p.get(k) for p in all_params}) > 1]
+
+    def _fmt_params(r):
+        if varying_keys:
+            return ", ".join(f"{k}={r['params'][k]}" for k in varying_keys if k in r["params"])
+        return f"n={r['problem_size']}"
+
+    col_w = max((len(_fmt_params(r)) for r in timing_results), default=20) + 2
+
     print("\nSummary:")
     print(
-        f"{'Params':>20} | {'Dtype':>8} | {'Torch(ms)':>10} | "
+        f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10} | "
         f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'Speedup(T)':>10} | {'Speedup(C)':>10}"
     )
-    print("-" * 95)
+    print("-" * (col_w + 75))
     for r in timing_results:
         print(
-            f"{str(r['params']):>20} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
+            f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
             f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | "
             f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}"
         )
