@@ -7,9 +7,7 @@ def run(
     dest_loc: torch.Tensor,
     o_nope: torch.Tensor,
     o_rope: torch.Tensor,
-    block_size: int = None,
 ):
-    del block_size
     out_nope = o_nope.clone()
     out_rope = o_rope.clone()
     dest = dest_loc.to(torch.long)

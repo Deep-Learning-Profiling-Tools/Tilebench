@@ -2,6 +2,10 @@ import torch
 import triton
 import triton.language as tl
 
+_last_config: dict | None = None
+
+_DEFAULT_CONFIG = {"BLOCK_DMODEL": 128, "num_warps": 4, "num_stages": 2}
+
 
 @triton.jit
 def _copy_by_dest_kernel(
@@ -19,36 +23,51 @@ def _copy_by_dest_kernel(
 ):
     token_id = tl.program_id(0)
     head_id = tl.program_id(1)
-    offs_d = tl.arange(0, BLOCK_DMODEL)
-    mask_d = offs_d < head_dim
     dest_index = tl.load(dest_ptr + token_id).to(tl.int32)
 
-    kv_ptrs = kv_ptr + token_id * stride_kv_bs + head_id * stride_kv_h + offs_d * stride_kv_d
-    out_ptrs = out_ptr + dest_index * stride_o_bs + head_id * stride_o_h + offs_d * stride_o_d
+    base_kv  = kv_ptr  + token_id * stride_kv_bs + head_id * stride_kv_h
+    base_out = out_ptr + dest_index * stride_o_bs + head_id * stride_o_h
 
-    v = tl.load(kv_ptrs, mask=mask_d, other=0.0)
-    tl.store(out_ptrs, v, mask=mask_d)
+    offs_d = tl.arange(0, BLOCK_DMODEL)
+    for d_start in tl.range(0, head_dim, BLOCK_DMODEL):
+        cur_offs = d_start + offs_d
+        mask_d   = cur_offs < head_dim
+        v = tl.load(base_kv  + cur_offs * stride_kv_d, mask=mask_d, other=0.0)
+        tl.store(base_out + cur_offs * stride_o_d, v, mask=mask_d)
 
 
-def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor):
+_copy_by_dest_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_DMODEL": bd}, num_warps=nw, num_stages=ns)
+        for bd in [32, 64, 128, 256]
+        for nw in [1, 2, 4, 8]
+        for ns in [1, 2, 3, 4]
+    ],
+    key=["head_dim"],
+)(_copy_by_dest_kernel)
+
+
+def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor, autotune: bool):
     seq_len, head_num, head_dim = kv.shape
-    block_dmodel = triton.next_power_of_2(head_dim)
     grid = (seq_len, head_num)
-    _copy_by_dest_kernel[grid](
-        kv,
-        dest_loc,
-        out,
-        kv.stride(0),
-        kv.stride(1),
-        kv.stride(2),
-        out.stride(0),
-        out.stride(1),
-        out.stride(2),
-        head_dim,
-        BLOCK_DMODEL=block_dmodel,
-        num_warps=2,
-        num_stages=1,
-    )
+    if autotune:
+        _copy_by_dest_kernel_autotuned[grid](
+            kv, dest_loc, out,
+            kv.stride(0), kv.stride(1), kv.stride(2),
+            out.stride(0), out.stride(1), out.stride(2),
+            head_dim,
+        )
+    else:
+        cfg = _DEFAULT_CONFIG
+        _copy_by_dest_kernel[grid](
+            kv, dest_loc, out,
+            kv.stride(0), kv.stride(1), kv.stride(2),
+            out.stride(0), out.stride(1), out.stride(2),
+            head_dim,
+            BLOCK_DMODEL=cfg["BLOCK_DMODEL"],
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
 
 
 def run(
@@ -57,11 +76,22 @@ def run(
     dest_loc: torch.Tensor,
     o_nope: torch.Tensor,
     o_rope: torch.Tensor,
-    block_size: int = None,
+    autotune: bool = False,
 ):
-    del block_size
+    global _last_config
     out_nope = o_nope.clone()
     out_rope = o_rope.clone()
-    _launch_copy(kv_nope, dest_loc, out_nope)
-    _launch_copy(kv_rope, dest_loc, out_rope)
+    _launch_copy(kv_nope, dest_loc, out_nope, autotune)
+    nope_cfg = _copy_by_dest_kernel_autotuned.best_config if autotune else None
+    _launch_copy(kv_rope, dest_loc, out_rope, autotune)
+    rope_cfg = _copy_by_dest_kernel_autotuned.best_config if autotune else None
+    if autotune and nope_cfg is not None and rope_cfg is not None:
+        _last_config = {
+            "nope": {"BLOCK_DMODEL": nope_cfg.kwargs["BLOCK_DMODEL"], "num_warps": nope_cfg.num_warps, "num_stages": nope_cfg.num_stages},
+            "rope": {"BLOCK_DMODEL": rope_cfg.kwargs["BLOCK_DMODEL"], "num_warps": rope_cfg.num_warps, "num_stages": rope_cfg.num_stages},
+        }
     return out_nope, out_rope
+
+
+def get_last_config() -> dict | None:
+    return _last_config

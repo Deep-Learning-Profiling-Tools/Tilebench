@@ -13,6 +13,8 @@ ConstInt = ct.Constant[int]
 
 _last_config: dict | None = None
 
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
+
 
 @ct.kernel
 def mul2_kernel(x_ptr, output_ptr, TILE: ConstInt):
@@ -30,13 +32,13 @@ _SEARCH_SPACE = [
 ]
 
 
-def run(x: torch.Tensor, block_size: int = 1024) -> torch.Tensor:
+def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     global _last_config
     output = torch.empty_like(x)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
 
-    if ct_experimental is not None:
+    if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
             stream,
             grid_fn=lambda cfg: (math.ceil(n_elements / cfg.tile), 1, 1),
@@ -50,9 +52,8 @@ def run(x: torch.Tensor, block_size: int = 1024) -> torch.Tensor:
             "occupancy": result.tuned_config.occupancy,
         }
     else:
-        tile = block_size
-        grid = (math.ceil(n_elements / tile), 1, 1)
-        ct.launch(stream, grid, mul2_kernel, (x, output, tile))
+        cfg = _DEFAULT_CONFIG
+        ct.launch(stream, (math.ceil(n_elements / cfg.tile), 1, 1), mul2_kernel, (x, output, cfg.tile))
 
     return output
 
