@@ -11,7 +11,7 @@ except ImportError:
 
 ConstInt = ct.Constant[int]
 
-_last_config: dict | None = None
+_last_autotune_config: dict | None = None
 
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
 
@@ -33,7 +33,7 @@ _SEARCH_SPACE = [
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_config
+    global _last_autotune_config
     output = torch.empty_like(x)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
@@ -47,7 +47,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
             search_space=_SEARCH_SPACE,
         )
-        _last_config = {
+        _last_autotune_config = {
             "tile":      result.tuned_config.tile,
             "occupancy": result.tuned_config.occupancy,
         }
@@ -59,4 +59,4 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
 
 
 def get_last_config() -> dict | None:
-    return _last_config
+    return _last_autotune_config

@@ -2,8 +2,6 @@ import torch
 import triton
 import triton.language as tl
 
-_last_config: dict | None = None
-
 _DEFAULT_CONFIG = {"BLOCK_DMODEL": 128, "num_warps": 4, "num_stages": 2}
 
 
@@ -78,20 +76,19 @@ def run(
     o_rope: torch.Tensor,
     autotune: bool = False,
 ):
-    global _last_config
     out_nope = o_nope.clone()
     out_rope = o_rope.clone()
     _launch_copy(kv_nope, dest_loc, out_nope, autotune)
-    nope_cfg = _copy_by_dest_kernel_autotuned.best_config if autotune else None
     _launch_copy(kv_rope, dest_loc, out_rope, autotune)
-    rope_cfg = _copy_by_dest_kernel_autotuned.best_config if autotune else None
-    if autotune and nope_cfg is not None and rope_cfg is not None:
-        _last_config = {
-            "nope": {"BLOCK_DMODEL": nope_cfg.kwargs["BLOCK_DMODEL"], "num_warps": nope_cfg.num_warps, "num_stages": nope_cfg.num_stages},
-            "rope": {"BLOCK_DMODEL": rope_cfg.kwargs["BLOCK_DMODEL"], "num_warps": rope_cfg.num_warps, "num_stages": rope_cfg.num_stages},
-        }
     return out_nope, out_rope
 
 
 def get_last_config() -> dict | None:
-    return _last_config
+    cfg = _copy_by_dest_kernel_autotuned.best_config
+    if cfg is None:
+        return None
+    return {
+        "BLOCK_DMODEL": cfg.kwargs["BLOCK_DMODEL"],
+        "num_warps": cfg.num_warps,
+        "num_stages": cfg.num_stages,
+    }
