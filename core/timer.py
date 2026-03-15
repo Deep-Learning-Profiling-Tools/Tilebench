@@ -108,12 +108,12 @@ def _get_time_ns(metrics: Any) -> float:
     return 0.0
 
 
-def _collect_gpu_kernel_ns(node: Any) -> tuple[float, int]:
+def _collect_gpu_kernel_ns(node: Any) -> float:
     """
-    Recursively collect total GPU kernel time (ns) and max call count
-    from all descendant nodes that have device_type=CUDA/HIP metrics.
+    Recursively sum total GPU kernel time (ns) from all descendant nodes
+    that have device_type=CUDA/HIP metrics.
 
-    This handles the extra `<captured_at>` level that Proton inserts when
+    Handles the extra `<captured_at>` level that Proton inserts when
     CUDA graph capture is used:
 
         launch (scope)   metrics: {}
@@ -121,27 +121,27 @@ def _collect_gpu_kernel_ns(node: Any) -> tuple[float, int]:
             └── kernel   count=100  time=160704 ns   ← actual data
     """
     if not isinstance(node, dict):
-        return 0.0, 0
+        return 0.0
     metrics = node.get("metrics", {})
-    t, c = 0.0, 0
     if isinstance(metrics, dict):
         dev = str(metrics.get("device_type", "")).upper()
         if dev in ("CUDA", "HIP"):
             ns = _get_time_ns(metrics)
             if ns > 0:
-                t = ns
-                c = int(metrics.get("count", 1))
-    for child in node.get("children", []):
-        ct, cc = _collect_gpu_kernel_ns(child)
-        t += ct
-        c = max(c, cc)
-    return t, c
+                return ns
+    return sum(_collect_gpu_kernel_ns(child) for child in node.get("children", []))
 
 
-def _find_scope_mean_ns(node: Any, scope_name: str) -> float:
+def _find_scope_mean_ns(node: Any, scope_name: str, repeat: int) -> float:
     """
     Recursively search the hatchet tree for `scope_name` and return
-    mean GPU kernel time (ns) = total_gpu_time / count.
+    mean GPU kernel time (ns) = total_gpu_time / repeat.
+
+    `repeat` is the authoritative denominator — the number of times run()
+    was called inside the scope. This correctly handles operators that
+    dispatch multiple kernels per call (each with its own Proton count):
+    summing all kernel times and dividing by repeat gives the mean wall
+    time of one complete run() invocation regardless of internal structure.
 
     Hatchet structure with repeat=N inside scope:
 
@@ -155,12 +155,12 @@ def _find_scope_mean_ns(node: Any, scope_name: str) -> float:
         return 0.0
     frame = node.get("frame", {})
     if isinstance(frame, dict) and frame.get("name") == scope_name:
-        total_ns, count = _collect_gpu_kernel_ns(node)
-        if total_ns > 0 and count > 0:
-            return total_ns / count
+        total_ns = _collect_gpu_kernel_ns(node)
+        if total_ns > 0 and repeat > 0:
+            return total_ns / repeat
         return 0.0
     for child in node.get("children", []):
-        result = _find_scope_mean_ns(child, scope_name)
+        result = _find_scope_mean_ns(child, scope_name, repeat)
         if result > 0:
             return result
     return 0.0
@@ -251,7 +251,7 @@ def report_benchmark(
     roots = hatchet_data if isinstance(hatchet_data, list) else [hatchet_data]
     mean_ns = 0.0
     for root in roots:
-        t = _find_scope_mean_ns(root, proton_scope_name)
+        t = _find_scope_mean_ns(root, proton_scope_name, repeat)
         if t > 0:
             mean_ns = t
             break

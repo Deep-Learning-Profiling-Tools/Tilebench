@@ -101,7 +101,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         triton_output = impl_triton.run(*inputs, **_run_kwargs(impl_triton.run))
         torch.cuda.synchronize()
         triton_ok, triton_err = verify(triton_output, ref_output)
-        triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)()
+        triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
         if triton_cfg:
             print(f"  Triton autotune → {triton_cfg}")
         if not triton_ok:
@@ -117,7 +117,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             cutile_output = impl_cutile.run(*inputs, **_run_kwargs(impl_cutile.run))
             torch.cuda.synchronize()
             cutile_ok, cutile_err = verify(cutile_output, ref_output)
-            cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)()
+            cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
             if cutile_cfg:
                 print(f"  cuTile  autotune → {cutile_cfg}")
             if not cutile_ok:
@@ -144,12 +144,12 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "triton_stats":          triton_stats or {},
             "triton_ok":             triton_ok,
             "triton_err":            triton_err,
-            "triton_autotune_cfg":   getattr(impl_triton, "get_last_config", lambda: None)(),
+            "triton_autotune_cfg":   getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None,
             "cutile_ms":             cutile_ms,
             "cutile_stats":          cutile_stats or {},
             "cutile_ok":             cutile_ok,
             "cutile_err":            cutile_err,
-            "cutile_autotune_cfg":   getattr(impl_cutile, "get_last_config", lambda: None)(),
+            "cutile_autotune_cfg":   getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
         })

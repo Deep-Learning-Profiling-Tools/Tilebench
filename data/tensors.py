@@ -96,6 +96,12 @@ def generate_destindex_inputs(
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
+def generate_rmsnorm_inputs(batch, M, K, dtype=torch.float32, device='cuda'):
+    x     = torch.randn(batch, M, K, dtype=dtype, device=device)
+    rms_w = torch.randn(K, dtype=dtype, device=device)
+    return (x, rms_w)
+
+
 def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.float32, device='cuda', **kwargs):
 
     q = torch.randn(batch_size, seq_len, n_heads, head_dim, dtype=dtype, device=device)
@@ -142,6 +148,7 @@ GENERATORS = {
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
     "destindex": generate_destindex_inputs,
+    "rmsnorm": generate_rmsnorm_inputs,
     "rope": generate_rope_inputs,
     "flash_attention": generate_flash_attn_inputs,
     "softmax": generate_softmax_inputs,
@@ -196,6 +203,12 @@ def infer_problem_size(operator_name, params):
         d1 = int(params.get("kv_nope_head_num", 1)) * int(params.get("kv_nope_head_dim", 1))
         d2 = int(params.get("kv_rope_head_num", 1)) * int(params.get("kv_rope_head_dim", 1))
         return tokens * (d1 + d2)
+    if operator_name == "rmsnorm":
+        return (
+            int(params.get("batch", 1))
+            * int(params.get("M", 1))
+            * int(params.get("K", 1))
+        )
     if operator_name == "flash_decode":
         return (
             int(params.get("batch", 1))
