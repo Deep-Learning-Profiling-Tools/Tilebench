@@ -13,7 +13,11 @@ def run_benchmark_suite(operator_name):
     # Dynamically import implementations
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
     impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
-    impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+    try:
+        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+    except ImportError as e:
+        print(f"  cuTile import skipped: {e}")
+        impl_cutile = None
     
     # Get the registered input generator for this operator
     generate_inputs = get_generator(operator_name)

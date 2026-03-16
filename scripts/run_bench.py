@@ -1,5 +1,9 @@
 import argparse
 import json
+import os
+
+from tabulate import tabulate
+
 from core.engine import run_benchmark_suite
 
 def main():
@@ -11,6 +15,7 @@ def main():
     print(f"Starting benchmark for operator: {args.operator}")
     results = run_benchmark_suite(args.operator)
     
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w') as f:
         json.dump(results, f, indent=4)
     
@@ -18,11 +23,24 @@ def main():
     
     # Print a summary table
     print("\nSummary:")
-    print(f"{'Params':>20} | {'Dtype':>8} | {'Torch(ms)':>10} | {'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'Speedup(T)':>10} | {'Speedup(C)':>10}")
-    print("-" * 95)
+    rows = []
     for r in results:
-        param_str = str(r['params'])
-        print(f"{param_str:>20} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | {r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | {r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}")
+        rows.append([
+            str(r["params"]),
+            r["dtype"],
+            f"{r['torch_ms']:.4f}",
+            f"{r['triton_ms']:.4f}",
+            f"{r['cutile_ms']:.4f}",
+            f"{r['speedup_triton']:.2f}",
+            f"{r['speedup_cutile']:.2f}",
+        ])
+    print(
+        tabulate(
+            rows,
+            headers=["Params", "Dtype", "Torch(ms)", "Triton(ms)", "cuTile(ms)", "Speedup(T)", "Speedup(C)"],
+            tablefmt="simple",
+        )
+    )
 
 if __name__ == "__main__":
     main()
