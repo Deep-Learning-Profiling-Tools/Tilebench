@@ -88,22 +88,18 @@ def _fwd_kernel(
     )
     tl.store(O_block_ptr, out_buffer.to(tl.float16))
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, **kwargs):
-    # 参数提取与校验
-    # Triton Kernel 假设 Lq == Lk == Lv
+
     Lq, Lk, Lv = q.shape[-1], k.shape[-1], v.shape[-1]
-    
-    # Scale 通常为 1/sqrt(dim)
+
     sm_scale = 1.0 / (Lq ** 0.5)
 
     o = torch.empty_like(q)
 
     BLOCK_M = 64
     BLOCK_N = 32
-    
-    # 你的 Kernel 逻辑中，grid 维度 1 是 Batch * Heads
+
     grid = (triton.cdiv(q.shape[2], BLOCK_M), q.shape[0] * q.shape[1], 1)
-    
-    # L 是 LogSumExp 用于反向传播的，前向推理其实不需要返回它，但 Kernel 必须要写
+
     L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
     
     num_warps = 4 if Lk <= 64 else 8

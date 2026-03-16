@@ -1,26 +1,19 @@
 test_cases:
-  # Case 1: 标准情况，列数是 2 的幂 (1024)
-  # Block size 刚好等于列数
   - n: 1048576 # 1024 * 1024
     shape: [1024, 1024]
     block_size: 1024
     dtype: "float32"
 
-  # Case 2: Corner Case - 列数不是 2 的幂 (比如 1000)
-  # Block size (1024) > 列数 (1000)，cuTile 会自动填充 NEG_INF
   - n: 1024000
     shape: [1024, 1000] 
     block_size: 1024
     dtype: "float32"
 
-  # Case 3: Corner Case - 很小的非 2 幂列数 (比如 129)
-  # Block size 必须取下一个 2 的幂 (256)
   - n: 528384 # 4096 * 129
     shape: [4096, 129]
     block_size: 256
     dtype: "float32"
-    
-  # Case 4: 大矩阵
+
   - n: 8388608 # 2048 * 4096
     shape: [2048, 4096]
     block_size: 4096

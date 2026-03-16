@@ -43,16 +43,13 @@ def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=tor
 
     return (q.contiguous(), k.contiguous(), v.contiguous())
 def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
-    # 计算 Num Blocks
     num_blocks = (seq_len + block_seq - 1) // block_seq
     
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
     mid_o = torch.randn((batch, heads, num_blocks, head_dim), dtype=dtype, device=device)
     mid_o_lse = torch.randn((batch, heads, num_blocks), dtype=dtype, device=device)
-    
-    # 【修改点】将 block_seq 包装成 Tensor 放入返回列表
-    # 这样 engine 就会把它传给 run 函数的第 4 个位置
-    block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu') # 放在 CPU 即可，run 里取 .item()
+
+    block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu') 
     
     return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
 def generate_mat_mul_inputs(M=1024, K=1024, N=1024, dtype=torch.float16, device='cuda', **kwargs):

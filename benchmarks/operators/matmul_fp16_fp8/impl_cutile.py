@@ -54,20 +54,17 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None):
     
     c = torch.empty((M, N), device=a.device, dtype=dtype)
     
-    # 严格对齐 Triton 的 Configurations
     if dtype == torch.float8_e4m3fn:
         TM, TN, TK = 128, 256, 128
         GROUP_SIZE_M = 8
     else: # float16
         TM, TN, TK = 128, 256, 64
         GROUP_SIZE_M = 8
-        
-    # 【修正点】计算 1D Grid Size
+
     num_pid_m = math.ceil(M / TM)
     num_pid_n = math.ceil(N / TN)
     grid_1d = num_pid_m * num_pid_n
     
-    # 启动 1D Grid
     grid = (grid_1d, 1, 1)
     
     ct.launch(

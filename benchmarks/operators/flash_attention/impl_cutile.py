@@ -120,18 +120,12 @@ def fmha_kernel(Q, K, V, Out,
     ct.store(Out, index=(batch_idx, head_idx, bid_x, 0), tile=acc)
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, **kwargs):
-    # 框架传入的 QKV 形状: [Batch, Heads, SeqLen, Dim]
-    
+
     Batch, Heads, SeqLen_Q, D_k = q.shape
-    
-    # 注意：cuTile Kernel 的 TILE_M/N 需要是 Constant 传入
+
     TILE_M = 64
     TILE_N = 32 
     
-    # 确保 Head Dim 匹配
-    # Kernel 中 TILE_D = D_k (ConstInt)
-    
-    # 输入 Pos 默认为 0 (Full sequence attention)
     input_pos = 0
     
     # Scale
@@ -140,13 +134,10 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     # EVEN_K Check
     even_k = (SeqLen_Q % TILE_N) == 0
     
-    # Group Size (GQA)
-    # Generator 生成的 Q,K,V 目前 Heads 是一样的，所以 Group Size = 1
     query_group_size = 1
 
     Out = torch.empty_like(q)
 
-    # 计算 Grid
     grid_x = math.ceil(SeqLen_Q / TILE_M)
     grid_y = Batch * Heads
     grid = (grid_x, grid_y, 1)

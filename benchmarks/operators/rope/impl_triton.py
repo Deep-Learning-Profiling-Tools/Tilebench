@@ -68,29 +68,17 @@ def _rope_embedding(
         tl.store(Q + offs_q2, Q2*cos1 + Q1*sin1, mask = mask)
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, block_size: int = None):
-    # 输入形状检查: 
-    # q: [Batch, SeqLen, Heads, HeadDim]
-    # cos, sin: [SeqLen, HeadDim//2]
 
-    # 1. 准备输出 (必须 clone，防止污染 Benchmark 的输入数据)
-    # 确保内存连续，这样 stride 计算才符合逻辑
     output = q.clone().contiguous()
     
     batch, seq_len, n_heads, head_dim = output.shape
-    
-    # 2. 计算 Kernel 配置
-    # 原代码逻辑: BLOCK_SIZE 设为 head_dim // 2
+
     BLOCK_SIZE, num_warps = calculate_settings(head_dim // 2)
-    
-    # 计算 Grid
+
     n_rows = batch * seq_len
     div, mod = divmod(n_heads, ROPE_GROUP_SIZE)
     n_groups = div + (mod != 0)
-    
-    # 3. 启动 Kernel
-    # 关键点：Q_row_stride 传入 output.stride(1)。
-    # 原因：Kernel 将整个 Batch*Seq 展平为 n_rows。
-    # 在 [B, S, H, D] 布局中，从 output[b, s, 0, 0] 到 output[b, s+1, 0, 0] 的内存距离正是 stride(1)。
+
     _rope_embedding[(n_rows, n_groups, )](
         output,   output.stride(1), 
         cos,      cos.stride(0),
