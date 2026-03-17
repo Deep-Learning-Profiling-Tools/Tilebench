@@ -1,4 +1,3 @@
-import math
 from types import SimpleNamespace
 
 import torch
@@ -41,7 +40,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
             stream,
-            grid_fn=lambda cfg: (math.ceil(n_elements / cfg.tile), 1, 1),
+            grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
             kernel=mul2_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
@@ -53,7 +52,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, (math.ceil(n_elements / cfg.tile), 1, 1), mul2_kernel, (x, output, cfg.tile))
+        ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1), mul2_kernel, (x, output, cfg.tile))
 
     return output
 

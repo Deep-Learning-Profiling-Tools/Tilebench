@@ -2,9 +2,11 @@ import torch
 import triton
 import triton.language as tl
 
+_DEFAULT_CONFIG = {"num_warps": 8, "num_stages": 2}
+
 
 @triton.jit
-def cross_entropy_kernel(
+def _cross_entropy_kernel(
     logits_ptr,
     targets_ptr,
     output_ptr,
@@ -33,17 +35,30 @@ def cross_entropy_kernel(
     tl.store(output_ptr + pid, loss)
 
 
-def run(logits: torch.Tensor, targets: torch.Tensor, block_size: int = 1024):
+def run(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    block_size: int = 1024,
+    autotune: bool = False,
+) -> torch.Tensor:
     batch_size, num_classes = logits.shape
     output = torch.empty((batch_size,), device=logits.device, dtype=logits.dtype)
     grid = (batch_size,)
-    cross_entropy_kernel[grid](
+    block_classes = triton.next_power_of_2(num_classes)
+    cfg = _DEFAULT_CONFIG
+    _cross_entropy_kernel[grid](
         logits,
         targets,
         output,
         num_classes,
         logits.stride(0),
         logits.stride(1),
-        BLOCK_CLASSES=block_size,
+        BLOCK_CLASSES=block_classes,
+        num_warps=cfg["num_warps"],
+        num_stages=cfg["num_stages"],
     )
     return output
+
+
+def get_last_config() -> dict | None:
+    return None

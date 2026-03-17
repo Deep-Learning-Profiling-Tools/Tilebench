@@ -1,17 +1,44 @@
-test_cases:
-  - batch_size: 4096
-    num_classes: 128
-    dtype: "float32"
-    block_size: 128
-  - batch_size: 8192
-    num_classes: 256
-    dtype: "float32"
-    block_size: 256
-  - batch_size: 16384
-    num_classes: 512
-    dtype: "float32"
-    block_size: 512
-  - batch_size: 16384
-    num_classes: 512
-    dtype: "float16"
-    block_size: 512
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep batch_size across 20 points; num_classes fixed to 512.
+# n = batch_size * num_classes total elements.
+case_defaults:
+  num_classes: 512
+
+case_grid:
+  batch_size:
+    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  dtype: ["fp16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: batch_size, num_classes, dtype_size
+#
+# Bytes:
+#   Read logits : batch_size * num_classes * dtype_size
+#   Read targets: batch_size * 8  (int64)
+#   Write output: batch_size * dtype_size
+#
+# FLOPs (per row):
+#   max(num_classes) + num_classes * exp + sum + log ≈ 4 * num_classes
+# ---------------------------------------------------------------------------
+metrics:
+  bytes_expr: "batch_size * num_classes * dtype_size + batch_size * 8 + batch_size * dtype_size"
+  flops_expr: "batch_size * num_classes * 4"
+
+  peak_bw_GBs: 8000.0
+
+  peak_tflops:
+    fp16: 400.0
+    fp32:  80.0
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
+    - pct_peak_bw

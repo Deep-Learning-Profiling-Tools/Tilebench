@@ -1,0 +1,53 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep the hidden dimension K across 20 points (512 → 10240).
+# batch=1, M=2048 mimics a typical LLM prefill batch (2k tokens).
+# n = batch * M * K total elements.
+case_defaults:
+  batch: 1
+  M: 2048
+
+case_grid:
+  K:
+    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  dtype: ["fp16", "bf16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: n (= batch*M*K), dtype_size (bytes per element)
+#
+# FLOPs:
+#   Pass 1: sum(x) + sum(x^2)  ≈ 2n
+#   rsqrt + mean computation   ≈ negligible
+#   Pass 2: (x-mean)*rstd*w+b  ≈ 4n
+#   Total: ~6n
+#
+# Bytes (two-pass kernel):
+#   Read  x     twice : 2 * n * dtype_size
+#   Read  weight once : K * dtype_size  (≪ n for large M, ~0)
+#   Read  bias   once : K * dtype_size  (≪ n)
+#   Write out    once : n * dtype_size
+#   Total ≈ 3 * n * dtype_size
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "6 * n"
+  bytes_expr: "n * dtype_size * 3"
+
+  peak_bw_GBs: 8000.0
+
+  peak_tflops:
+    fp16: 400.0
+    bf16: 400.0
+    fp32:  80.0
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
+    - pct_peak_bw
+    - roofline

@@ -1,6 +1,6 @@
-import math
 from types import SimpleNamespace
 
+import numpy as np
 import torch
 import cuda.tile as ct
 
@@ -23,25 +23,24 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
+def _dequantize_kernel(x, output, TILE: ConstInt):
     bid = ct.bid(0)
-    x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,))
-    zero = ct.zeros((TILE,), dtype=x_tile.dtype)
-    y_tile = ct.where(x_tile >= 0, x_tile, zero)
-    ct.store(output_ptr, index=(bid,), tile=y_tile)
+    x_tile = ct.load(x, index=(bid,), shape=(TILE,))
+    ct.store(output, index=(bid,), tile=ct.astype(x_tile, np.float32))
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     global _last_autotune_config
-    output = torch.empty_like(x)
+    x = x.contiguous()
+    output = torch.empty(x.shape, device=x.device, dtype=torch.float32)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
 
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
             stream,
-            grid_fn=lambda cfg: (ct.cdiv(n_elements / cfg.tile), 1, 1),
-            kernel=_relu_kernel,
+            grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
+            kernel=_dequantize_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
             search_space=_SEARCH_SPACE,
@@ -52,7 +51,8 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, (math.ceil(n_elements / cfg.tile), 1, 1), _relu_kernel, (x, output, cfg.tile))
+        ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
+                  _dequantize_kernel, (x, output, cfg.tile))
 
     return output
 
