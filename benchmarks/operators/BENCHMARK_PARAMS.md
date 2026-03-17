@@ -2,6 +2,25 @@
 
 Summary of fixed vs. swept parameters for each operator.
 
+## Default Verification Tolerances
+
+Unless noted otherwise, each operator uses the verifier's per-dtype defaults:
+
+| dtype | atol | rtol |
+|-------|------|------|
+| fp32 | 1e-5 | 1.3e-6 |
+| fp16 | 1e-2 | 1e-2 |
+| bf16 | 1e-2 | 1.6e-2 |
+| int8 | 0 | 0 (exact) |
+
+Operators that involve GEMM accumulation (TF32 / tensor-core error) use looser tolerances set via `verify:` in their `config.yaml`:
+
+| Operator | atol | rtol | Reason |
+|----------|------|------|--------|
+| `quantized_gemm` | default | default | INT8 accumulation in fp32; exact within default fp32 tol |
+| `streamk_matmul` | 1.0 | 1e-2 | TF32 error grows as √k; output magnitude ~√k for N(0,1) inputs |
+| `conv2d_fwd` | 0.5 | 1e-2 | im2col + GEMM; same TF32 accumulation issue |
+
 ---
 
 ## mul2
