@@ -52,11 +52,6 @@ def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
     return (x, y)
 
 
-def generate_sin_inputs(n, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    return (x,)
-
-
 def generate_mul2_inputs(n, dtype=torch.float32, device='cuda'):
     if dtype == torch.int8:
         # Values in [-32, 32] so that ×2 stays within int8 range [-128, 127].
@@ -96,6 +91,47 @@ def generate_destindex_inputs(
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
+def generate_divergence_metric_inputs(n, eps=1e-6, dtype=torch.float32, device='cuda'):
+    x = torch.randn(n, dtype=dtype, device=device)
+    y = torch.randn(n, dtype=dtype, device=device)
+    return (x, y, eps)
+
+
+def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+    x    = torch.randn(n, dtype=dtype, device=device)
+    gate = torch.randn(n, dtype=dtype, device=device)
+    bias = torch.randn(n, dtype=dtype, device=device)
+    return (x, gate, bias)
+
+
+def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
+    return (torch.randn(n, dtype=torch.float32, device=device),)
+
+
+def generate_dequantize_rowwise_inputs(n, dtype=torch.float16, device='cuda'):
+    return (torch.randn(n, dtype=torch.float16, device=device),)
+
+
+def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device='cuda'):
+    x = torch.randn(n, dtype=dtype, device=device)
+    x_keep = torch.bernoulli(torch.full((n,), 1 - p, device=device)).to(dtype)
+    return (x, x_keep, p)
+
+
+def generate_swiglu_inputs(M, N, dtype=torch.float32, device='cuda'):
+    x = torch.randn(M, N, dtype=dtype, device=device)
+    y = torch.randn(M, N, dtype=dtype, device=device)
+    return (x, y)
+
+
+def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device='cuda'):
+    if dtype == torch.int8:
+        x = torch.randint(-64, 65, (m, n), device=device).to(torch.int8)
+    else:
+        x = torch.randn(m, n, dtype=dtype, device=device)
+    return (x,)
+
+
 def generate_rmsnorm_inputs(batch, M, K, dtype=torch.float32, device='cuda'):
     x     = torch.randn(batch, M, K, dtype=dtype, device=device)
     rms_w = torch.randn(K, dtype=dtype, device=device)
@@ -133,26 +169,98 @@ def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=tor
     return (q.contiguous(), k.contiguous(), v.contiguous())
 def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
     num_blocks = (seq_len + block_seq - 1) // block_seq
-    
+
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
     mid_o = torch.randn((batch, heads, num_blocks, head_dim), dtype=dtype, device=device)
     mid_o_lse = torch.randn((batch, heads, num_blocks), dtype=dtype, device=device)
-    
+
     # Pack block_seq as scalar tensor for operator wrappers expecting tensor input.
     block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu')
-    
+
     return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
+
+
+def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
+    logits = torch.randn(batch_size, num_classes, dtype=dtype, device=device)
+    targets = torch.randint(0, num_classes, (batch_size,), device=device)
+    return (logits, targets)
+
+
+def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, device='cuda', **kwargs):
+    # Input tensors are always int8 regardless of dtype; output is fp32.
+    a_q = torch.randint(-64, 65, (m, k), device=device).to(torch.int8)
+    b_q = torch.randint(-64, 65, (k, n), device=device).to(torch.int8)
+    return (a_q, b_q, scale)
+
+
+def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
+    x      = torch.randn(batch, M, K, dtype=dtype, device=device)
+    weight = torch.randn(K, dtype=dtype, device=device)
+    bias   = torch.randn(K, dtype=dtype, device=device)
+    return (x, weight, bias)
+
+
+def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
+    a = torch.randn(m, k, dtype=dtype, device=device)
+    b = torch.randn(k, n, dtype=dtype, device=device)
+    return (a, b)
+
+
+def generate_mean_reduction_inputs(M, N, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(M, N, dtype=dtype, device=device)
+    return (x, 1)  # always row-wise (dim=1)
+
+
+def generate_argmax_inputs(M, N, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(M, N, dtype=dtype, device=device)
+    return (x, 1)  # always row-wise (dim=1)
+
+
+def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(batch, M, K, dtype=dtype, device=device)
+    return (x, eps)
+
+
+def generate_conv2d_fwd_inputs(
+    batch, in_channels, out_channels, H,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device='cuda', **kwargs,
+):
+    W = H  # square spatial dims
+    input  = torch.randn(batch, in_channels, H, W, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups, kernel_size, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
+
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
-    "sin": generate_sin_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "divergence_metric": generate_divergence_metric_inputs,
+    "generic_fused_container": generate_generic_fused_container_inputs,
+    "quantize-global": generate_quantize_global_inputs,
+    "dequantize-rowwise": generate_dequantize_rowwise_inputs,
+    "dropout": generate_dropout_inputs,
+    "swiglu": generate_swiglu_inputs,
+    "matrix_transpose": generate_matrix_transpose_inputs,
     "destindex": generate_destindex_inputs,
     "rmsnorm": generate_rmsnorm_inputs,
     "rope": generate_rope_inputs,
     "flash_attention": generate_flash_attn_inputs,
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
+    "cross_entropy": generate_cross_entropy_inputs,
+    "quantized_gemm": generate_quantized_gemm_inputs,
+    "layernorm_fwd": generate_layernorm_fwd_inputs,
+    "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "l2_norm": generate_l2_norm_inputs,
+    "argmax": generate_argmax_inputs,
+    "mean-reduction": generate_mean_reduction_inputs,
 }
 
 
@@ -216,6 +324,29 @@ def infer_problem_size(operator_name, params):
             * int(params.get("seq_len", 1))
             * int(params.get("head_dim", 1))
         )
+    if operator_name == "cross_entropy":
+        return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
+    if operator_name == "quantized_gemm":
+        return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
+    if operator_name == "layernorm_fwd":
+        return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
+    if operator_name == "streamk_scheduling":
+        return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
+    if operator_name in ("argmax", "mean-reduction"):
+        return int(params.get("M", 1)) * int(params.get("N", 1))
+    if operator_name == "l2_norm":
+        return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
+    if operator_name == "conv2d_fwd":
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        H            = int(params.get("H", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_H        = (H + 2 * padding - kernel_size) // stride + 1
+        return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
     # Fallback: multiply all integer-like params.
     size = 1
     used = False

@@ -74,6 +74,7 @@ def compute_derived(result: dict, metrics_cfg: dict) -> dict[str, dict[str, floa
     ds       = _dtype_bytes(dtype_str)
 
     eval_ctx = {"n": n, "dtype_size": ds}
+    eval_ctx.update({k: v for k, v in params.items() if isinstance(v, (int, float))})
 
     flops            = _eval_expr(metrics_cfg.get("flops_expr"), eval_ctx)
     bytes_transferred = _eval_expr(metrics_cfg.get("bytes_expr"), eval_ctx)

@@ -28,6 +28,10 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
     warmup            = int(bench_cfg.get("warmup", 20))
     repeat            = int(bench_cfg.get("repeat", 100))
     autotune          = bool(bench_cfg.get("autotune", False))
+
+    verify_cfg = config.get("verify", {})
+    verify_atol = float(verify_cfg["atol"]) if "atol" in verify_cfg else None
+    verify_rtol = float(verify_cfg["rtol"]) if "rtol" in verify_cfg else None
     use_cuda_graph    = bool(bench_cfg.get("use_cuda_graph", False))
     proton_scope_name = str(bench_cfg.get("proton_scope_name", "launch"))
     proton_backend    = bench_cfg.get("proton_backend")
@@ -100,7 +104,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         # --- Triton ---
         triton_output = impl_triton.run(*inputs, **_run_kwargs(impl_triton.run))
         torch.cuda.synchronize()
-        triton_ok, triton_err = verify(triton_output, ref_output)
+        triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
         triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
         if triton_cfg:
             print(f"  Triton autotune → {triton_cfg}")
@@ -116,7 +120,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         try:
             cutile_output = impl_cutile.run(*inputs, **_run_kwargs(impl_cutile.run))
             torch.cuda.synchronize()
-            cutile_ok, cutile_err = verify(cutile_output, ref_output)
+            cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
             cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
             if cutile_cfg:
                 print(f"  cuTile  autotune → {cutile_cfg}")

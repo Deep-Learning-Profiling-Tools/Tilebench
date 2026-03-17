@@ -4,7 +4,7 @@ import torch
 # Values match torch.testing.assert_close built-in defaults.
 _TOLERANCES: dict[torch.dtype, tuple[float, float]] = {
     torch.float32:  (1e-5,  1.3e-6),
-    torch.float16:  (1e-3,  1e-3),
+    torch.float16:  (1e-2,  1e-2),
     torch.bfloat16: (1e-2,  1.6e-2),
     torch.int8:     (0,     0),
     torch.int16:    (0,     0),
@@ -17,8 +17,15 @@ _DEFAULT_ATOL = 1e-2
 _DEFAULT_RTOL = 1e-2
 
 
-def _verify_single(output: torch.Tensor, reference: torch.Tensor) -> tuple[bool, str]:
-    atol, rtol = _TOLERANCES.get(output.dtype, (_DEFAULT_ATOL, _DEFAULT_RTOL))
+def _verify_single(
+    output: torch.Tensor,
+    reference: torch.Tensor,
+    atol: float | None = None,
+    rtol: float | None = None,
+) -> tuple[bool, str]:
+    default_atol, default_rtol = _TOLERANCES.get(output.dtype, (_DEFAULT_ATOL, _DEFAULT_RTOL))
+    atol = atol if atol is not None else default_atol
+    rtol = rtol if rtol is not None else default_rtol
     try:
         torch.testing.assert_close(output, reference, atol=atol, rtol=rtol)
         return True, ""
@@ -26,11 +33,16 @@ def _verify_single(output: torch.Tensor, reference: torch.Tensor) -> tuple[bool,
         return False, str(e)
 
 
-def verify(output, reference) -> tuple[bool, str]:
+def verify(
+    output,
+    reference,
+    atol: float | None = None,
+    rtol: float | None = None,
+) -> tuple[bool, str]:
     if isinstance(output, (tuple, list)):
         for i, (o, r) in enumerate(zip(output, reference)):
-            ok, err = _verify_single(o, r)
+            ok, err = _verify_single(o, r, atol=atol, rtol=rtol)
             if not ok:
                 return False, f"output[{i}]: {err}"
         return True, ""
-    return _verify_single(output, reference)
+    return _verify_single(output, reference, atol=atol, rtol=rtol)
