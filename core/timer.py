@@ -1,9 +1,11 @@
-# SPDX-FileCopyrightText: Copyright (c) <2025> NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) <2025> NVIDIA CORPORATION &
+# AFFILIATES. All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 from math import ceil
+
+import torch
 
 
 def _estimate_bench_iter(f, tuple_of_args, kwargs=None):
@@ -28,7 +30,9 @@ def _estimate_bench_iter(f, tuple_of_args, kwargs=None):
     return warmup_rounds, main_iter, rounds
 
 
-def _time_ms(f, tuple_of_args, warmup: int, iters: int, rounds: int, kwargs=None) -> float:
+def _time_ms(
+    f, tuple_of_args, warmup: int, iters: int, rounds: int, kwargs=None
+) -> float:
     if kwargs is None:
         kwargs = {}
     for _ in range(warmup):

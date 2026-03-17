@@ -1,8 +1,10 @@
-import torch
-import cuda.tile as ct
 import math
 
+import cuda.tile as ct
+import torch
+
 ConstInt = ct.Constant[int]
+
 
 @ct.kernel
 def vec_add_kernel_1d(a, b, c, TILE: ConstInt):
@@ -23,20 +25,21 @@ def vec_add_kernel_1d(a, b, c, TILE: ConstInt):
     # Store the resulting TILE-sized chunk back to the output vector 'c'.
     ct.store(c, index=(bid,), tile=sum_tile)
 
+
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024):
     """
     Wrapper for cuTile vector addition.
     """
     if a.shape != b.shape:
         raise ValueError("Input tensors must have the same shape.")
-    
+
     c = torch.empty_like(a)
     N = a.shape[0]
-    
+
     # Use a fixed tile size for benchmarking consistency, or heuristic
     TILE = block_size
     grid = (math.ceil(N / TILE), 1, 1)
-    
+
     ct.launch(torch.cuda.current_stream(), grid, vec_add_kernel_1d, (a, b, c, TILE))
-    
+
     return c

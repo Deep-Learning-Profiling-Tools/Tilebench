@@ -2,6 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
+
 @triton.jit
 def _dropout_kernel(
     x_ptr,
@@ -20,9 +21,13 @@ def _dropout_kernel(
     output = tl.where(x_keep.to(tl.int1), x / (1 - p), 0.0)
     tl.store(output_ptr + offsets, output, mask=mask)
 
+
 def run(x, x_keep, p, block_size=1024):
     output = torch.empty_like(x)
     n_elements = x.numel()
-    grid = lambda meta: (triton.cdiv(n_elements, meta['BLOCK_SIZE']),)
+
+    def grid(meta):
+        return (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+
     _dropout_kernel[grid](x, x_keep, output, n_elements, p, BLOCK_SIZE=block_size)
     return output

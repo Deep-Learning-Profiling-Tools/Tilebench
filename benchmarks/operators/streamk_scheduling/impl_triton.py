@@ -12,5 +12,7 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024, **kwargs):
     out = torch.zeros((a.shape[0], b.shape[1]), device=a.device, dtype=torch.float32)
     for start in range(0, k, chunk):
         end = min(start + chunk, k)
-        out += torch.matmul(a[:, start:end].to(torch.float32), b[start:end, :].to(torch.float32))
+        out += torch.matmul(
+            a[:, start:end].to(torch.float32), b[start:end, :].to(torch.float32)
+        )
     return out
