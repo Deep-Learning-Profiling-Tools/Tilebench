@@ -40,7 +40,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
             stream,
-            grid_fn=lambda cfg: (ct.cdiv(n_elements / cfg.tile), 1, 1),
+            grid_fn=lambda cfg: (ct.cdiv(n_elements, cfg.tile), 1, 1),
             kernel=_relu_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
