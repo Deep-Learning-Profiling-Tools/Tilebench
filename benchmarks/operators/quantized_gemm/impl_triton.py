@@ -56,7 +56,9 @@ def _tile_dim_from_block_size(block_size: int) -> int:
     return max(16, tile)
 
 
-def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs):
+def run(
+    a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs
+):
     if a_q.dim() != 2 or b_q.dim() != 2:
         raise ValueError("quantized_gemm expects 2D inputs.")
     if a_q.shape[1] != b_q.shape[0]:

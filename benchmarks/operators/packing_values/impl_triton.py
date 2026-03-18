@@ -16,6 +16,9 @@ def run(x: torch.Tensor, block_size: int = 1024, **kwargs):
     x = x.contiguous()
     out = torch.empty(x.shape, device=x.device, dtype=torch.float16)
     n_elements = x.numel()
-    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+
+    def grid(meta):
+        return (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+
     _pack_to_fp16_kernel[grid](x, out, n_elements, BLOCK_SIZE=block_size)
     return out
