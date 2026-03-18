@@ -1,7 +1,6 @@
 import torch
 
 
-def run(x: torch.Tensor, block_size: int = 1024, **kwargs):
-    del block_size, kwargs
+def run(x: torch.Tensor) -> torch.Tensor:
     # Replace with the operator-specific PyTorch reference.
-    return x
+    raise NotImplementedError
