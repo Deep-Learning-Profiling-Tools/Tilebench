@@ -67,6 +67,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             proton_file_label=label,
         )
 
+    def _run_kwargs(fn, block_size):
+        sig = inspect.signature(fn).parameters
+        kw = {}
+        if "block_size" in sig:
+            kw["block_size"] = block_size
+        if "autotune" in sig:
+            kw["autotune"] = autotune
+        return kw
+
     for case_idx, case in enumerate(cases):
         params     = {k: v for k, v in case.items() if k not in ("dtype", "block_size")}
         dtype_str  = case.get("dtype", "float32")
@@ -75,8 +84,6 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
         print(f"Running case: {params}, dtype={dtype_str}")
 
-        # Skip the case if input generation or the torch reference run fails
-        # (e.g. a dtype not supported by the operator, such as FP8 element-wise).
         try:
             inputs = generate_inputs(**params, dtype=dtype)
             ref_output = impl_torch.run(*inputs)
@@ -85,24 +92,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             print(f"  Skipped: dtype={dtype_str} not supported ({type(e).__name__}: {e})")
             continue
 
-        # Label prefix shared by all three backends for this case.
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
         # --- Torch ---
         torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
         torch_ms    = torch_stats["mean"]
 
-        def _run_kwargs(fn):
-            sig = inspect.signature(fn).parameters
-            kw = {}
-            if "block_size" in sig:
-                kw["block_size"] = block_size
-            if "autotune" in sig:
-                kw["autotune"] = autotune
-            return kw
-
         # --- Triton ---
-        triton_output = impl_triton.run(*inputs, **_run_kwargs(impl_triton.run))
+        triton_kw = _run_kwargs(impl_triton.run, block_size)
+        triton_output = impl_triton.run(*inputs, **triton_kw)
         torch.cuda.synchronize()
         triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
         triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
@@ -111,14 +109,16 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         if not triton_ok:
             print(f"  Triton verification FAILED: {triton_err}")
         triton_stats = (
-            _bench(impl_triton.run, inputs, _run_kwargs(impl_triton.run), label=f"{lbl}_triton")
+            _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
             if triton_ok else None
         )
         triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
 
         # --- cuTile ---
+        cutile_cfg = None
         try:
-            cutile_output = impl_cutile.run(*inputs, **_run_kwargs(impl_cutile.run))
+            cutile_kw = _run_kwargs(impl_cutile.run, block_size)
+            cutile_output = impl_cutile.run(*inputs, **cutile_kw)
             torch.cuda.synchronize()
             cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
             cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
@@ -127,7 +127,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             if not cutile_ok:
                 print(f"  cuTile verification FAILED: {cutile_err}")
             cutile_stats = (
-                _bench(impl_cutile.run, inputs, _run_kwargs(impl_cutile.run), label=f"{lbl}_cutile")
+                _bench(impl_cutile.run, inputs, cutile_kw, label=f"{lbl}_cutile")
                 if cutile_ok else None
             )
             cutile_ms = cutile_stats["mean"] if cutile_stats is not None else float("nan")
@@ -148,12 +148,12 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "triton_stats":          triton_stats or {},
             "triton_ok":             triton_ok,
             "triton_err":            triton_err,
-            "triton_autotune_cfg":   getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None,
+            "triton_autotune_cfg":   triton_cfg,
             "cutile_ms":             cutile_ms,
             "cutile_stats":          cutile_stats or {},
             "cutile_ok":             cutile_ok,
             "cutile_err":            cutile_err,
-            "cutile_autotune_cfg":   getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None,
+            "cutile_autotune_cfg":   cutile_cfg,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
         })

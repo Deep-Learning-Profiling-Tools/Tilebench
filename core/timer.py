@@ -17,34 +17,35 @@ import torch
 
 try:
     import triton.profiler as proton  # type: ignore
-except Exception:
+except ImportError:
     proton = None
 
-
-# ---------------------------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------------------------
 
 def _build_profile_base(kind: str, output_dir: str | None, label: str | None = None) -> str:
     base_dir = output_dir or tempfile.gettempdir()
     try:
         os.makedirs(base_dir, exist_ok=True)
-    except Exception:
+    except OSError:
         warnings.warn(
             f"Failed to create proton output dir '{base_dir}', using temp dir.",
             RuntimeWarning,
         )
         base_dir = tempfile.gettempdir()
-    # Sanitize label so it is safe as a filename component.
     safe_label = re.sub(r"[^a-zA-Z0-9_\-]", "_", label) if label else ""
     suffix = f"_{safe_label}" if safe_label else f"_{uuid.uuid4().hex[:8]}"
     return os.path.join(base_dir, f"tilebench_proton_{kind}{suffix}")
 
 
+# Pre-allocated L2 flush buffer (lazily initialized on first use).
+_l2_flush_buf: torch.Tensor | None = None
+
+
 def _flush_l2_cache(flush_mb: int = 64) -> None:
+    global _l2_flush_buf
     numel = max(1, flush_mb * 1024 * 1024 // 4)
-    buf = torch.empty(numel, device="cuda", dtype=torch.float32)
-    buf.fill_(1.0)
+    if _l2_flush_buf is None or _l2_flush_buf.numel() != numel:
+        _l2_flush_buf = torch.empty(numel, device="cuda", dtype=torch.float32)
+    _l2_flush_buf.fill_(1.0)
     torch.cuda.synchronize()
 
 
@@ -77,9 +78,11 @@ def _prepare_runner(
 def _load_profile_data(profile_base: str) -> tuple[Any, str]:
     for ext in (".json", ".hatchet"):
         path = profile_base + ext
-        if os.path.exists(path):
+        try:
             with open(path) as fh:
                 return json.load(fh), path
+        except FileNotFoundError:
+            continue
     for path in sorted(glob.glob(f"{profile_base}.*")):
         if os.path.isfile(path):
             with open(path) as fh:
@@ -87,12 +90,7 @@ def _load_profile_data(profile_base: str) -> tuple[Any, str]:
     raise FileNotFoundError(f"No profile file found for base: {profile_base}")
 
 
-# ---------------------------------------------------------------------------
-# Hatchet parsing
-# ---------------------------------------------------------------------------
-
 def _get_time_ns(metrics: Any) -> float:
-    """Extract GPU time in nanoseconds from a Proton metrics dict."""
     if not isinstance(metrics, dict):
         return 0.0
     for key in ("time (ns)", "time(ns)", "time_ns"):
@@ -109,17 +107,7 @@ def _get_time_ns(metrics: Any) -> float:
 
 
 def _collect_gpu_kernel_ns(node: Any) -> float:
-    """
-    Recursively sum total GPU kernel time (ns) from all descendant nodes
-    that have device_type=CUDA/HIP metrics.
-
-    Handles the extra `<captured_at>` level that Proton inserts when
-    CUDA graph capture is used:
-
-        launch (scope)   metrics: {}
-        └── <captured_at>   metrics: {}
-            └── kernel   count=100  time=160704 ns   ← actual data
-    """
+    """Sum GPU kernel time (ns) from descendant nodes with device_type=CUDA/HIP."""
     if not isinstance(node, dict):
         return 0.0
     metrics = node.get("metrics", {})
@@ -133,24 +121,7 @@ def _collect_gpu_kernel_ns(node: Any) -> float:
 
 
 def _find_scope_mean_ns(node: Any, scope_name: str, repeat: int) -> float:
-    """
-    Recursively search the hatchet tree for `scope_name` and return
-    mean GPU kernel time (ns) = total_gpu_time / repeat.
-
-    `repeat` is the authoritative denominator — the number of times run()
-    was called inside the scope. This correctly handles operators that
-    dispatch multiple kernels per call (each with its own Proton count):
-    summing all kernel times and dividing by repeat gives the mean wall
-    time of one complete run() invocation regardless of internal structure.
-
-    Hatchet structure with repeat=N inside scope:
-
-        ROOT
-        ├── kernel  count=3           ← CUDA graph pre-warmup (outside scope)
-        └── <scope_name>  metrics: {}
-            └── <captured_at>  metrics: {}   ← may be absent without CUDA graph
-                └── kernel  count=N  time=total_ns
-    """
+    """Find scope_name in hatchet tree and return mean GPU kernel time (ns)."""
     if not isinstance(node, dict):
         return 0.0
     frame = node.get("frame", {})
@@ -165,10 +136,6 @@ def _find_scope_mean_ns(node: Any, scope_name: str, repeat: int) -> float:
             return result
     return 0.0
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def report_benchmark(
     f: Callable[..., Any],
@@ -185,40 +152,21 @@ def report_benchmark(
     keep_proton_files: bool = False,
     proton_output_dir: str | None = None,
     proton_file_label: str | None = None,
-    # Kept for backward-compat call sites; unused
-    quantiles: tuple[float, ...] = (),
-    use_proton_scope: bool = True,
-    proton_capture_scope_name: str = "graph",
 ) -> dict[str, float]:
-    """
-    Measure mean GPU kernel time using Proton (data="tree").
-
-    Protocol
-    --------
-    - warmup  iterations run OUTSIDE the Proton session / scope
-    - repeat  iterations run INSIDE  proton.scope(proton_scope_name)
-    - Proton aggregates child kernel calls → hatchet node count = repeat
-    - mean = total_time / count  (no per-sample distribution needed)
-
-    Returns
-    -------
-    {"mean": float}   # milliseconds
-    """
-    del quantiles, use_proton_scope, proton_capture_scope_name  # unused
-
+    """Measure mean GPU kernel time (ms) using Proton (data="tree")."""
     if kwargs is None:
         kwargs = {}
     if proton is None:
         raise RuntimeError("triton.profiler (proton) is not available in this environment.")
 
-    # --- warmup (outside Proton session so warmup kernels do not pollute tree) ---
+    # Warmup outside Proton session
     for _ in range(max(0, warmup)):
         if flush_l2:
             _flush_l2_cache()
         f(*tuple_of_args, **kwargs)
     torch.cuda.synchronize()
 
-    # --- measurement session ---
+    # Measurement session
     profile_base = _build_profile_base("tree", proton_output_dir, proton_file_label)
     session_id = proton.start(
         name=profile_base,
@@ -227,12 +175,10 @@ def report_benchmark(
         backend=proton_backend,
     )
     try:
-        # Build CUDA graph runner AFTER proton.start so graph capture is visible to Proton.
         runner = _prepare_runner(f, tuple_of_args, kwargs, use_cuda_graph=use_cuda_graph)
         torch.cuda.synchronize()
         for _ in range(max(1, repeat)):
             if flush_l2:
-                # Flush L2 BEFORE entering scope so flush time is not measured by Proton.
                 _flush_l2_cache()
             with proton.scope(proton_scope_name):
                 runner()
@@ -240,7 +186,7 @@ def report_benchmark(
     finally:
         proton.finalize(session=session_id)
 
-    # --- parse hatchet ---
+    # Parse hatchet
     hatchet_data, path = _load_profile_data(profile_base)
     if not keep_proton_files:
         try:
@@ -255,5 +201,12 @@ def report_benchmark(
         if t > 0:
             mean_ns = t
             break
+
+    if mean_ns <= 0:
+        raise RuntimeError(
+            f"Failed to extract GPU timing from Proton hatchet data: "
+            f"scope '{proton_scope_name}' not found or reported zero time. "
+            f"Profile file: {path}"
+        )
 
     return {"mean": mean_ns / 1e6}

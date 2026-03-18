@@ -1,5 +1,7 @@
 import argparse
+import csv
 import json
+from pathlib import Path
 from core.engine import run_benchmark_suite
 
 _TIMING_KEYS = {
@@ -94,6 +96,9 @@ def main():
 
     timing_results, autotune_results = _split(results)
 
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(autotune_path).parent.mkdir(parents=True, exist_ok=True)
+
     with open(output_path, "w") as f:
         json.dump(timing_results, f, indent=4)
     print(f"Timing results  → {output_path}")
@@ -128,6 +133,21 @@ def main():
             f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | "
             f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}"
         )
+
+    # Save summary as CSV
+    csv_path = f"results/csv/{args.operator}_summary.csv"
+    Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms",
+                         "speedup_triton", "speedup_cutile"])
+        for r in timing_results:
+            writer.writerow([
+                _fmt_params(r), r["dtype"],
+                f"{r['torch_ms']:.4f}", f"{r['triton_ms']:.4f}", f"{r['cutile_ms']:.4f}",
+                f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
+            ])
+    print(f"Summary CSV     → {csv_path}")
 
 
 if __name__ == "__main__":
