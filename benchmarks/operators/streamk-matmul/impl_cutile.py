@@ -15,7 +15,7 @@ def _tile_dim_from_block_size(block_size: int) -> int:
 
 
 @ct.kernel
-def quantized_gemm_kernel(a_ptr, b_ptr, c_ptr, out_scale, K_TILES: ConstInt, TILE: ConstInt):
+def streamk_matmul_kernel(a_ptr, b_ptr, c_ptr, K_TILES: ConstInt, TILE: ConstInt):
     bid_m = ct.bid(0)
     bid_n = ct.bid(1)
     acc = ct.zeros((TILE, TILE), dtype=ct.float32)
@@ -23,36 +23,36 @@ def quantized_gemm_kernel(a_ptr, b_ptr, c_ptr, out_scale, K_TILES: ConstInt, TIL
         a_tile = ct.astype(ct.load(a_ptr, index=(bid_m, bid_k), shape=(TILE, TILE)), ct.float32)
         b_tile = ct.astype(ct.load(b_ptr, index=(bid_k, bid_n), shape=(TILE, TILE)), ct.float32)
         acc = acc + ct.matmul(a_tile, b_tile)
-    ct.store(c_ptr, index=(bid_m, bid_n), tile=acc * out_scale)
+    ct.store(c_ptr, index=(bid_m, bid_n), tile=acc)
 
 
-def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs):
-    if a_q.dim() != 2 or b_q.dim() != 2:
-        raise ValueError("quantized_gemm expects 2D inputs.")
-    if a_q.shape[1] != b_q.shape[0]:
-        raise ValueError("Inner dimensions must match for GEMM.")
+def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024, **kwargs):
+    if a.dim() != 2 or b.dim() != 2:
+        raise ValueError("streamk-matmul expects 2D inputs.")
+    if a.shape[1] != b.shape[0]:
+        raise ValueError("Inner dimensions must match for matmul.")
 
-    a_q = a_q.contiguous()
-    b_q = b_q.contiguous()
-    m, k = a_q.shape
-    _, n = b_q.shape
+    a = a.contiguous()
+    b = b.contiguous()
+    m, k = a.shape
+    _, n = b.shape
 
     tile = _tile_dim_from_block_size(block_size)
     m_pad = math.ceil(m / tile) * tile
     k_pad = math.ceil(k / tile) * tile
     n_pad = math.ceil(n / tile) * tile
 
-    a_pad = torch.zeros((m_pad, k_pad), device=a_q.device, dtype=a_q.dtype)
-    b_pad = torch.zeros((k_pad, n_pad), device=b_q.device, dtype=b_q.dtype)
-    a_pad[:m, :k] = a_q
-    b_pad[:k, :n] = b_q
+    a_pad = torch.zeros((m_pad, k_pad), device=a.device, dtype=a.dtype)
+    b_pad = torch.zeros((k_pad, n_pad), device=b.device, dtype=b.dtype)
+    a_pad[:m, :k] = a
+    b_pad[:k, :n] = b
 
-    c_pad = torch.empty((m_pad, n_pad), device=a_q.device, dtype=torch.float32)
+    c_pad = torch.empty((m_pad, n_pad), device=a.device, dtype=torch.float32)
     grid = (m_pad // tile, n_pad // tile, 1)
     ct.launch(
         torch.cuda.current_stream(),
         grid,
-        quantized_gemm_kernel,
-        (a_pad, b_pad, c_pad, scale * scale, k_pad // tile, tile),
+        streamk_matmul_kernel,
+        (a_pad, b_pad, c_pad, k_pad // tile, tile),
     )
     return c_pad[:m, :n]

@@ -6,7 +6,7 @@ import triton.language as tl
 
 
 @triton.jit
-def _quantized_gemm_kernel(
+def _int8_matmul_kernel(
     a_ptr,
     b_ptr,
     c_ptr,
@@ -58,7 +58,7 @@ def _tile_dim_from_block_size(block_size: int) -> int:
 
 def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs):
     if a_q.dim() != 2 or b_q.dim() != 2:
-        raise ValueError("quantized_gemm expects 2D inputs.")
+        raise ValueError("matmul-int8 expects 2D inputs.")
     if a_q.shape[1] != b_q.shape[0]:
         raise ValueError("Inner dimensions must match for GEMM.")
 
@@ -70,7 +70,7 @@ def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 10
 
     tile = _tile_dim_from_block_size(block_size)
     grid = (triton.cdiv(m, tile), triton.cdiv(n, tile))
-    _quantized_gemm_kernel[grid](
+    _int8_matmul_kernel[grid](
         a_q,
         b_q,
         out,

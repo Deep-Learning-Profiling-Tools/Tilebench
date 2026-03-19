@@ -1,9 +1,26 @@
 import yaml
 import torch
-import importlib
+import importlib.util
+import re
+from pathlib import Path
 from core.timer import report_benchmark
 from core.verifier import verify
 from data.tensors import get_generator
+
+def _load_impl_module(operator_name, impl_name):
+    operator_dir = Path("benchmarks/operators") / operator_name
+    module_path = operator_dir / f"{impl_name}.py"
+    if not module_path.exists():
+        raise ImportError(f"Missing implementation file: {module_path}")
+
+    safe_op = re.sub(r"[^0-9a-zA-Z_]", "_", operator_name)
+    module_name = f"benchmarks.operators._dyn_{safe_op}_{impl_name}"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load module spec for {module_path}")
+    spec.loader.exec_module(module)
+    return module
 
 def run_benchmark_suite(operator_name):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
@@ -11,10 +28,10 @@ def run_benchmark_suite(operator_name):
         config = yaml.safe_load(f)
     
     # Dynamically import implementations
-    impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
-    impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
+    impl_torch = _load_impl_module(operator_name, "impl_torch")
+    impl_triton = _load_impl_module(operator_name, "impl_triton")
     try:
-        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+        impl_cutile = _load_impl_module(operator_name, "impl_cutile")
     except ImportError as e:
         print(f"  cuTile import skipped: {e}")
         impl_cutile = None

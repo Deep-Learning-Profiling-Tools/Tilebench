@@ -31,7 +31,7 @@ def generate_dropout_inputs(n, p, dtype=torch.float32, device='cuda'):
     return (x, x_keep, p)
 
 
-def generate_quantized_gemm_inputs(m, n, k, dtype=torch.float32, device='cuda'):
+def generate_int8_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda'):
     a = torch.randn((m, k), dtype=dtype, device=device)
     b = torch.randn((k, n), dtype=dtype, device=device)
     scale = 0.02
@@ -40,30 +40,30 @@ def generate_quantized_gemm_inputs(m, n, k, dtype=torch.float32, device='cuda'):
     return (a_q, b_q, scale)
 
 
-def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda'):
+def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda'):
     a = torch.randn((m, k), dtype=dtype, device=device)
     b = torch.randn((k, n), dtype=dtype, device=device)
     return (a, b)
 
 
-def generate_packing_values_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 
 
-def generate_unpacking_values_inputs(n, dtype=torch.float16, device='cuda'):
+def generate_dequantize_rowwise_inputs(n, dtype=torch.float16, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 
 
-def generate_divergence_metric_inputs(n, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
+def generate_kl_divergence_inputs(n, dtype=torch.float32, device='cuda'):
+    p = torch.softmax(torch.randn(n, dtype=torch.float32, device=device), dim=0).to(dtype)
+    q = torch.softmax(torch.randn(n, dtype=torch.float32, device=device), dim=0).to(dtype)
     eps = 1e-5
-    return (x, y, eps)
+    return (p, q, eps)
 
 
-def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
     bias = torch.randn(n, dtype=dtype, device=device)
@@ -78,12 +78,12 @@ GENERATORS = {
     "matrix_transpose": generate_matrix_transpose_inputs,
     "swiglu": generate_swiglu_inputs,
     "dropout": generate_dropout_inputs,
-    "quantized_gemm": generate_quantized_gemm_inputs,
-    "streamk_scheduling": generate_streamk_scheduling_inputs,
-    "packing_values": generate_packing_values_inputs,
-    "unpacking_values": generate_unpacking_values_inputs,
-    "divergence_metric": generate_divergence_metric_inputs,
-    "generic_fused_container": generate_generic_fused_container_inputs,
+    "matmul-int8": generate_int8_matmul_inputs,
+    "streamk-matmul": generate_streamk_matmul_inputs,
+    "quantize-global": generate_quantize_global_inputs,
+    "dequantize-rowwise": generate_dequantize_rowwise_inputs,
+    "kl-divergence": generate_kl_divergence_inputs,
+    "fused-activation": generate_fused_activation_inputs,
 }
 
 def get_generator(operator_name):

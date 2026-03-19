@@ -3,7 +3,7 @@ import torch
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024, **kwargs):
     if a.dim() != 2 or b.dim() != 2:
-        raise ValueError("streamk_scheduling expects 2D inputs.")
+        raise ValueError("streamk-matmul expects 2D inputs.")
     if a.shape[1] != b.shape[0]:
         raise ValueError("Inner dimensions must match for matmul.")
 
