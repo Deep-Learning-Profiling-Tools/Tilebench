@@ -20,13 +20,19 @@ def int8_matmul_kernel(a_ptr, b_ptr, c_ptr, out_scale, K_TILES: ConstInt, TILE: 
     bid_n = ct.bid(1)
     acc = ct.zeros((TILE, TILE), dtype=ct.float32)
     for bid_k in range(K_TILES):
-        a_tile = ct.astype(ct.load(a_ptr, index=(bid_m, bid_k), shape=(TILE, TILE)), ct.float32)
-        b_tile = ct.astype(ct.load(b_ptr, index=(bid_k, bid_n), shape=(TILE, TILE)), ct.float32)
+        a_tile = ct.astype(
+            ct.load(a_ptr, index=(bid_m, bid_k), shape=(TILE, TILE)), ct.float32
+        )
+        b_tile = ct.astype(
+            ct.load(b_ptr, index=(bid_k, bid_n), shape=(TILE, TILE)), ct.float32
+        )
         acc = acc + ct.matmul(a_tile, b_tile)
     ct.store(c_ptr, index=(bid_m, bid_n), tile=acc * out_scale)
 
 
-def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs):
+def run(
+    a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs
+):
     if a_q.dim() != 2 or b_q.dim() != 2:
         raise ValueError("matmul-int8 expects 2D inputs.")
     if a_q.shape[1] != b_q.shape[0]:

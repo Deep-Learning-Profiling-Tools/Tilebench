@@ -1,6 +1,7 @@
-import torch
-import cuda.tile as ct
 import math
+
+import cuda.tile as ct
+import torch
 
 ConstInt = ct.Constant[int]
 
@@ -23,5 +24,10 @@ def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024):
     output = torch.empty_like(x_flat)
     TILE = block_size
     grid = (math.ceil(n_elements / TILE), 1, 1)
-    ct.launch(torch.cuda.current_stream(), grid, kernel_function, (x_flat, y_flat, output, n_elements, TILE))
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        kernel_function,
+        (x_flat, y_flat, output, n_elements, TILE),
+    )
     return output.view(x.shape)
