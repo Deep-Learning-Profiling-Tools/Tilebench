@@ -72,7 +72,6 @@ def run(
         )
         _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
     else:
-        cfg = _DEFAULT_CONFIG
         ct.launch(
             stream, grid, _cross_entropy_kernel,
             (logits_padded, targets, output, block_classes),

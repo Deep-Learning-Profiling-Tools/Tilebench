@@ -35,38 +35,54 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
     tl.store(Out_row_ptr, mean, mask=row_mask)
 
 
+_mean_rowwise_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_M": bm, "BLOCK_N": bn}, num_warps=nw, num_stages=ns)
+        for bm in [1, 2, 4]
+        for bn in [256, 512, 1024, 2048]
+        for nw in [4, 8]
+        for ns in [1, 2]
+    ],
+    key=["M", "N"],
+)(_mean_rowwise_kernel)
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    """
-    Triton row-wise mean reduction.
-    Input:  (M, N)  — any floating dtype
-    Output: (M,) float32
-    """
     assert x.is_cuda
 
-    # Reshape: reduction dim → last, everything else → rows
     if x.ndim == 2 and dim == 1:
         x2d = x.float().contiguous()
     else:
-        # Permute so that `dim` is last, treat remainder as M
         dims = list(range(x.ndim))
         dims.remove(dim % x.ndim)
         dims.append(dim % x.ndim)
         x2d = x.float().permute(dims).contiguous().reshape(-1, x.shape[dim])
 
     M, N = x2d.shape
-    out  = torch.empty(M, dtype=torch.float32, device=x.device)
+    out = torch.empty(M, dtype=torch.float32, device=x.device)
 
-    cfg = _DEFAULT_CONFIG
-    grid = (triton.cdiv(M, cfg["BLOCK_M"]),)
-    _mean_rowwise_kernel[grid](
-        x2d, out, M, N,
-        BLOCK_M=cfg["BLOCK_M"],
-        BLOCK_N=cfg["BLOCK_N"],
-        num_warps=cfg["num_warps"],
-        num_stages=cfg["num_stages"],
-    )
+    if autotune:
+        grid = lambda meta: (triton.cdiv(M, meta["BLOCK_M"]),)
+        _mean_rowwise_kernel_autotuned[grid](x2d, out, M, N)
+    else:
+        cfg = _DEFAULT_CONFIG
+        grid = (triton.cdiv(M, cfg["BLOCK_M"]),)
+        _mean_rowwise_kernel[grid](
+            x2d, out, M, N,
+            BLOCK_M=cfg["BLOCK_M"],
+            BLOCK_N=cfg["BLOCK_N"],
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
     return out
 
 
 def get_last_config() -> dict | None:
-    return None
+    cfg = getattr(_mean_rowwise_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {
+        "BLOCK_M": cfg.kwargs["BLOCK_M"],
+        "BLOCK_N": cfg.kwargs["BLOCK_N"],
+        "num_warps": cfg.num_warps,
+    }

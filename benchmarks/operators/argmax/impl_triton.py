@@ -35,12 +35,18 @@ def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
     tl.store(Out + row, best_idx)
 
 
+_argmax_rowwise_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_N": bn}, num_warps=nw, num_stages=ns)
+        for bn in [64, 128, 256, 512, 1024]
+        for nw in [4, 8]
+        for ns in [1, 2]
+    ],
+    key=["N"],
+)(_argmax_rowwise_kernel)
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    """
-    Triton row-wise argmax.
-    Input:  (M, N)
-    Output: (M,) int64
-    """
     assert x.is_cuda, "Input must be on CUDA"
 
     if dim == 1:
@@ -51,19 +57,21 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     M, N = x2d.shape
     out = torch.empty(M, dtype=torch.int64, device=x.device)
 
-    BLOCK_N = _DEFAULT_CONFIG["BLOCK_N"]
-    num_warps = _DEFAULT_CONFIG["num_warps"]
-    num_stages = _DEFAULT_CONFIG["num_stages"]
-
-    _argmax_rowwise_kernel[(M,)](
-        x2d, out, N,
-        BLOCK_N=BLOCK_N,
-        num_warps=num_warps,
-        num_stages=num_stages,
-    )
+    if autotune:
+        _argmax_rowwise_kernel_autotuned[(M,)](x2d, out, N)
+    else:
+        cfg = _DEFAULT_CONFIG
+        _argmax_rowwise_kernel[(M,)](
+            x2d, out, N,
+            BLOCK_N=cfg["BLOCK_N"],
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
     return out
 
 
 def get_last_config() -> dict | None:
-    # BLOCK_N is fixed; no autotuner state to report.
-    return None
+    cfg = getattr(_argmax_rowwise_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"BLOCK_N": cfg.kwargs["BLOCK_N"], "num_warps": cfg.num_warps}

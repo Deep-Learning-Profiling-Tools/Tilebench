@@ -137,6 +137,41 @@ def _find_scope_mean_ns(node: Any, scope_name: str, repeat: int) -> float:
     return 0.0
 
 
+def _report_benchmark_cuda_events(
+    f: Callable[..., Any],
+    tuple_of_args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    warmup: int,
+    repeat: int,
+    use_cuda_graph: bool,
+    flush_l2: bool,
+) -> dict[str, float]:
+    """Fallback timer using CUDA events when Proton is unavailable."""
+    for _ in range(max(0, warmup)):
+        if flush_l2:
+            _flush_l2_cache()
+        f(*tuple_of_args, **kwargs)
+    torch.cuda.synchronize()
+
+    runner = _prepare_runner(f, tuple_of_args, kwargs, use_cuda_graph=use_cuda_graph)
+    torch.cuda.synchronize()
+
+    total_ms = 0.0
+    for _ in range(max(1, repeat)):
+        if flush_l2:
+            _flush_l2_cache()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
+        runner()
+        end.record()
+        torch.cuda.synchronize()
+        total_ms += start.elapsed_time(end)
+
+    return {"mean": total_ms / max(1, repeat)}
+
+
 def report_benchmark(
     f: Callable[..., Any],
     tuple_of_args: tuple[Any, ...],
@@ -157,7 +192,15 @@ def report_benchmark(
     if kwargs is None:
         kwargs = {}
     if proton is None:
-        raise RuntimeError("triton.profiler (proton) is not available in this environment.")
+        warnings.warn(
+            "triton.profiler (proton) is not available; falling back to CUDA event timing.",
+            RuntimeWarning,
+        )
+        return _report_benchmark_cuda_events(
+            f, tuple_of_args, kwargs,
+            warmup=warmup, repeat=repeat,
+            use_cuda_graph=use_cuda_graph, flush_l2=flush_l2,
+        )
 
     # Warmup outside Proton session
     for _ in range(max(0, warmup)):

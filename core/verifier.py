@@ -1,10 +1,9 @@
 import torch
 
-# Per-dtype tolerances for correctness verification.
-# Values match torch.testing.assert_close built-in defaults.
+# Per-dtype tolerances for correctness verification (atol, rtol).
 _TOLERANCES: dict[torch.dtype, tuple[float, float]] = {
     torch.float32:  (1e-5,  1.3e-6),
-    torch.float16:  (1e-2,  1e-2),
+    torch.float16:  (1e-3,  1e-3),
     torch.bfloat16: (1e-2,  1.6e-2),
     torch.int8:     (0,     0),
     torch.int16:    (0,     0),

@@ -27,6 +27,16 @@ def _l2_norm_fwd_kernel(
     tl.store(Y + cols, y.to(X.dtype.element_ty), mask=mask)
 
 
+_l2_norm_fwd_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=nw, num_stages=ns)
+        for nw in [4, 8, 16]
+        for ns in [1, 2, 4]
+    ],
+    key=["N"],
+)(_l2_norm_fwd_kernel)
+
+
 def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
     orig_shape = x.shape
     x_2d = x.reshape(-1, x.shape[-1])
@@ -41,21 +51,30 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
     if N > BLOCK_N:
         raise RuntimeError("l2_norm: feature dim >= 64KB is not supported.")
 
-    num_warps = _DEFAULT_CONFIG["num_warps"]
-    num_stages = _DEFAULT_CONFIG["num_stages"]
-
-    with torch.cuda.device(x.device.index):
-        _l2_norm_fwd_kernel[(M,)](
-            x_2d, y_2d,
-            x_2d.stride(0),
-            N, eps,
-            BLOCK_N=BLOCK_N,
-            num_warps=num_warps,
-            num_stages=num_stages,
-        )
+    if autotune:
+        with torch.cuda.device(x.device.index):
+            _l2_norm_fwd_kernel_autotuned[(M,)](
+                x_2d, y_2d,
+                x_2d.stride(0),
+                N, eps,
+                BLOCK_N=BLOCK_N,
+            )
+    else:
+        cfg = _DEFAULT_CONFIG
+        with torch.cuda.device(x.device.index):
+            _l2_norm_fwd_kernel[(M,)](
+                x_2d, y_2d,
+                x_2d.stride(0),
+                N, eps,
+                BLOCK_N=BLOCK_N,
+                num_warps=cfg["num_warps"],
+                num_stages=cfg["num_stages"],
+            )
     return y_2d.reshape(orig_shape)
 
 
 def get_last_config() -> dict | None:
-    # BLOCK_N is fully determined by N; nothing meaningful to report.
-    return None
+    cfg = getattr(_l2_norm_fwd_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}

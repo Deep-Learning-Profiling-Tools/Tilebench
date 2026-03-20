@@ -16,7 +16,11 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
     impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
-    impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+    try:
+        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+    except ImportError as e:
+        print(f"  cuTile import skipped: {e}")
+        impl_cutile = None
 
     generate_inputs = get_generator(operator_name)
 
@@ -86,10 +90,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
         try:
             inputs = generate_inputs(**params, dtype=dtype)
+        except (RuntimeError, TypeError) as e:
+            print(f"  Skipped: dtype={dtype_str} not supported for input generation ({type(e).__name__}: {e})")
+            continue
+
+        try:
             ref_output = impl_torch.run(*inputs)
             torch.cuda.synchronize()
-        except Exception as e:
-            print(f"  Skipped: dtype={dtype_str} not supported ({type(e).__name__}: {e})")
+        except (RuntimeError, TypeError) as e:
+            print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
@@ -116,27 +125,34 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
         # --- cuTile ---
         cutile_cfg = None
-        try:
-            cutile_kw = _run_kwargs(impl_cutile.run, block_size)
-            cutile_output = impl_cutile.run(*inputs, **cutile_kw)
-            torch.cuda.synchronize()
-            cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-            cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
-            if cutile_cfg:
-                print(f"  cuTile  autotune → {cutile_cfg}")
-            if not cutile_ok:
-                print(f"  cuTile verification FAILED: {cutile_err}")
-            cutile_stats = (
-                _bench(impl_cutile.run, inputs, cutile_kw, label=f"{lbl}_cutile")
-                if cutile_ok else None
-            )
-            cutile_ms = cutile_stats["mean"] if cutile_stats is not None else float("nan")
-        except Exception as e:
-            cutile_ok    = False
-            cutile_err   = str(e)
-            cutile_ms    = float("nan")
+        if impl_cutile is None:
+            cutile_ok = False
+            cutile_err = "cuTile not available (import failed)"
+            cutile_ms = float("nan")
             cutile_stats = None
-            print(f"  cuTile execution FAILED: {cutile_err}")
+            print("  cuTile skipped (not installed)")
+        else:
+            try:
+                cutile_kw = _run_kwargs(impl_cutile.run, block_size)
+                cutile_output = impl_cutile.run(*inputs, **cutile_kw)
+                torch.cuda.synchronize()
+                cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
+                if cutile_cfg:
+                    print(f"  cuTile  autotune → {cutile_cfg}")
+                if not cutile_ok:
+                    print(f"  cuTile verification FAILED: {cutile_err}")
+                cutile_stats = (
+                    _bench(impl_cutile.run, inputs, cutile_kw, label=f"{lbl}_cutile")
+                    if cutile_ok else None
+                )
+                cutile_ms = cutile_stats["mean"] if cutile_stats is not None else float("nan")
+            except Exception as e:
+                cutile_ok    = False
+                cutile_err   = str(e)
+                cutile_ms    = float("nan")
+                cutile_stats = None
+                print(f"  cuTile execution FAILED: {cutile_err}")
 
         results.append({
             "params":                params,
