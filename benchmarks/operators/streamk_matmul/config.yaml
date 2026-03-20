@@ -1,3 +1,11 @@
+# GEMM with floating-point inputs: different tiling order + TF32 accumulation
+# cause ~1e-3 relative differences between implementations; use loose tolerance.
+verify:
+  # TF32 accumulation error grows as sqrt(k) * TF32_eps (~5e-4); for k=10240 max ~0.5.
+  # This tolerance is only a sanity check — the output magnitude is ~sqrt(k) >> atol.
+  atol: 1.0
+  rtol: 1e-2
+
 benchmark:
   warmup: 20
   repeat: 100
@@ -5,26 +13,25 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep K across 20 points with M and N fixed; inputs are always int8.
+# Sweep K (inner dimension) across 20 points with M and N fixed.
 # problem_size = 2 * m * n * k (total multiply-add operations).
 case_defaults:
   m: 2048
   n: 4096
-  scale: 1.0
 
 case_grid:
   k:
     expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
-  dtype: ["int8"]
+  dtype: ["fp16", "bf16", "fp32"]
 
 # ---------------------------------------------------------------------------
 # Derived-metric expressions
-#   Available variables: m, n, k, dtype_size (=1 for int8)
+#   Available variables: m, n, k, dtype_size
 #
 # Bytes:
-#   Read  A (int8): m * k * 1
-#   Read  B (int8): k * n * 1
-#   Write C (fp32): m * n * 4
+#   Read  A: m * k * dtype_size
+#   Read  B: k * n * dtype_size
+#   Write C: m * n * 4  (always fp32 output)
 #
 # FLOPs: 2 * m * n * k  (multiply-accumulate)
 # ---------------------------------------------------------------------------
