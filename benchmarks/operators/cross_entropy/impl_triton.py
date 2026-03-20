@@ -29,7 +29,9 @@ def _cross_entropy_kernel(
     target_cls = tl.load(targets_ptr + pid).to(tl.int32)
     target_ok = (target_cls >= 0) & (target_cls < num_classes)
     target_ptr = logits_ptr + pid * stride_bn + target_cls * stride_bc
-    target_logit = tl.load(target_ptr, mask=target_ok, other=-float("inf")).to(tl.float32)
+    target_logit = tl.load(target_ptr, mask=target_ok, other=-float("inf")).to(
+        tl.float32
+    )
 
     loss = -(target_logit - row_max - tl.log(row_sum))
     tl.store(output_ptr + pid, loss)

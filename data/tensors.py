@@ -145,7 +145,7 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     half_dim = head_dim // 2
     cos = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
-    
+
     return (q, cos, sin)
 def generate_softmax_inputs(n=None, shape=None, dtype=torch.float32, device='cuda'):
     if shape is None:
@@ -157,7 +157,7 @@ def generate_softmax_inputs(n=None, shape=None, dtype=torch.float32, device='cud
         shape = (rows, cols)
 
     x = torch.randn(*shape, dtype=dtype, device=device)
-    
+
 
     return (x,)
 def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):

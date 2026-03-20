@@ -10,14 +10,24 @@ ConstInt = ct.Constant[int]
 def fused_kernel(x_ptr, gate_ptr, bias_ptr, out_ptr, BLOCK_SIZE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.astype(ct.load(x_ptr, index=(bid,), shape=(BLOCK_SIZE,)), ct.float32)
-    gate_tile = ct.astype(ct.load(gate_ptr, index=(bid,), shape=(BLOCK_SIZE,)), ct.float32)
-    bias_tile = ct.astype(ct.load(bias_ptr, index=(bid,), shape=(BLOCK_SIZE,)), ct.float32)
+    gate_tile = ct.astype(
+        ct.load(gate_ptr, index=(bid,), shape=(BLOCK_SIZE,)), ct.float32
+    )
+    bias_tile = ct.astype(
+        ct.load(bias_ptr, index=(bid,), shape=(BLOCK_SIZE,)), ct.float32
+    )
     z = x_tile * gate_tile + bias_tile
     out_tile = ct.maximum(z, 0.0)
     ct.store(out_ptr, index=(bid,), tile=out_tile)
 
 
-def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, block_size: int = 1024, **kwargs):
+def run(
+    x: torch.Tensor,
+    gate: torch.Tensor,
+    bias: torch.Tensor,
+    block_size: int = 1024,
+    **kwargs
+):
     if x.shape != gate.shape or x.shape != bias.shape:
         raise ValueError("All input tensors must have the same shape.")
 
@@ -42,5 +52,10 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, block_size: int
 
     out_pad = torch.empty((n_padded,), device=x.device, dtype=torch.float32)
     grid = (n_padded // tile, 1, 1)
-    ct.launch(torch.cuda.current_stream(), grid, fused_kernel, (x_pad, gate_pad, bias_pad, out_pad, tile))
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        fused_kernel,
+        (x_pad, gate_pad, bias_pad, out_pad, tile),
+    )
     return out_pad[:n].view(x.shape)
