@@ -1,8 +1,8 @@
-import math
-
 import torch
 import triton
 import triton.language as tl
+
+_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 64, "BLOCK_K": 32, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -48,17 +48,20 @@ def _quantized_gemm_kernel(
     tl.store(c_ptrs, out, mask=c_mask)
 
 
-def _tile_dim_from_block_size(block_size: int) -> int:
-    root = int(math.sqrt(block_size))
-    tile = 16
-    while tile * 2 <= root:
-        tile *= 2
-    return max(16, tile)
+_quantized_gemm_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk}, num_warps=nw, num_stages=ns)
+        for bm in [64, 128]
+        for bn in [64, 128]
+        for bk in [32, 64]
+        for nw in [4, 8]
+        for ns in [2, 3]
+    ],
+    key=["m", "n", "k"],
+)(_quantized_gemm_kernel)
 
 
-def run(
-    a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs
-):
+def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, autotune: bool = False, **kwargs):
     if a_q.dim() != 2 or b_q.dim() != 2:
         raise ValueError("quantized_gemm expects 2D inputs.")
     if a_q.shape[1] != b_q.shape[0]:
@@ -70,24 +73,43 @@ def run(
     _, n = b_q.shape
     out = torch.empty((m, n), device=a_q.device, dtype=torch.float32)
 
-    tile = _tile_dim_from_block_size(block_size)
-    grid = (triton.cdiv(m, tile), triton.cdiv(n, tile))
-    _quantized_gemm_kernel[grid](
-        a_q,
-        b_q,
-        out,
-        m,
-        n,
-        k,
-        a_q.stride(0),
-        a_q.stride(1),
-        b_q.stride(0),
-        b_q.stride(1),
-        out.stride(0),
-        out.stride(1),
-        scale * scale,
-        BLOCK_M=tile,
-        BLOCK_N=tile,
-        BLOCK_K=32,
-    )
+    if autotune:
+        grid = lambda meta: (triton.cdiv(m, meta["BLOCK_M"]), triton.cdiv(n, meta["BLOCK_N"]))
+        _quantized_gemm_kernel_autotuned[grid](
+            a_q, b_q, out,
+            m, n, k,
+            a_q.stride(0), a_q.stride(1),
+            b_q.stride(0), b_q.stride(1),
+            out.stride(0), out.stride(1),
+            scale * scale,
+        )
+    else:
+        cfg = _DEFAULT_CONFIG
+        grid = (triton.cdiv(m, cfg["BLOCK_M"]), triton.cdiv(n, cfg["BLOCK_N"]))
+        _quantized_gemm_kernel[grid](
+            a_q, b_q, out,
+            m, n, k,
+            a_q.stride(0), a_q.stride(1),
+            b_q.stride(0), b_q.stride(1),
+            out.stride(0), out.stride(1),
+            scale * scale,
+            BLOCK_M=cfg["BLOCK_M"],
+            BLOCK_N=cfg["BLOCK_N"],
+            BLOCK_K=cfg["BLOCK_K"],
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
     return out
+
+
+def get_last_config() -> dict | None:
+    cfg = getattr(_quantized_gemm_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {
+        "BLOCK_M":    cfg.kwargs["BLOCK_M"],
+        "BLOCK_N":    cfg.kwargs["BLOCK_N"],
+        "BLOCK_K":    cfg.kwargs["BLOCK_K"],
+        "num_warps":  cfg.num_warps,
+        "num_stages": cfg.num_stages,
+    }

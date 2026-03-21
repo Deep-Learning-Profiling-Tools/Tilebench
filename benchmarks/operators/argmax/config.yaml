@@ -1,0 +1,34 @@
+# Row-wise argmax over a 2D matrix (M, N) → indices of shape (M,).
+# One Triton CTA per row (BLOCK_N-chunked scan); one cuTile CTA per row.
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep N (columns, reduction dimension) across 20 points.
+# M=2048 rows mimic a typical LLM batch (2048 tokens).
+case_defaults:
+  M: 2048
+
+case_grid:
+  N:
+    expr: "[1024 * i for i in range(1, 21)]"   # 1024, 2048, ..., 20480 (20 points)
+  dtype: ["fp16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Metrics
+#   argmax is memory-bandwidth bound: each element is read once.
+#   FLOPs: 1 comparison per element → M * N
+#   Bytes: read input (M*N*dtype_size); output (M*8 bytes int64, negligible)
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "M * N"
+  bytes_expr: "M * N * dtype_size"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

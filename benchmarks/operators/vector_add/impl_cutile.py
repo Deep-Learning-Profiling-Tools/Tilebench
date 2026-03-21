@@ -1,45 +1,59 @@
-import math
+from types import SimpleNamespace
 
-import cuda.tile as ct
 import torch
+import cuda.tile as ct
+
+try:
+    import cuda.tile_experimental as ct_experimental
+except ImportError:
+    ct_experimental = None
 
 ConstInt = ct.Constant[int]
 
+_last_autotune_config: dict | None = None
+
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
+
+_SEARCH_SPACE = [
+    SimpleNamespace(tile=t, occupancy=occ)
+    for t in [256, 512, 1024, 2048, 4096, 8192]
+    for occ in [1, 2, 4]
+]
+
 
 @ct.kernel
-def vec_add_kernel_1d(a, b, c, TILE: ConstInt):
-    """
-    cuTile kernel for 1D element-wise vector addition using direct tiled loads/stores.
-    """
-    # Get the global ID of the current block along the first dimension.
+def _add_kernel(a, b, c, TILE: ConstInt):
     bid = ct.bid(0)
-
-    # Load TILE-sized chunks from input vectors 'a' and 'b'.
-    # index=(bid,) specifies which tile to load based on the block ID.
     a_tile = ct.load(a, index=(bid,), shape=(TILE,))
     b_tile = ct.load(b, index=(bid,), shape=(TILE,))
-
-    # Perform the element-wise addition on the loaded tiles.
-    sum_tile = a_tile + b_tile
-
-    # Store the resulting TILE-sized chunk back to the output vector 'c'.
-    ct.store(c, index=(bid,), tile=sum_tile)
+    ct.store(c, index=(bid,), tile=a_tile + b_tile)
 
 
-def run(a: torch.Tensor, b: torch.Tensor, block_size: int = 1024):
-    """
-    Wrapper for cuTile vector addition.
-    """
-    if a.shape != b.shape:
-        raise ValueError("Input tensors must have the same shape.")
+def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+    global _last_autotune_config
+    output = torch.empty_like(x)
+    n_elements = x.numel()
+    stream = torch.cuda.current_stream()
 
-    c = torch.empty_like(a)
-    N = a.shape[0]
+    if autotune and ct_experimental is not None:
+        result = ct_experimental.autotune_launch(
+            stream,
+            grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
+            kernel=_add_kernel,
+            args_fn=lambda cfg: (x, y, output, cfg.tile),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+            search_space=_SEARCH_SPACE,
+        )
+        _last_autotune_config = {
+            "tile":      result.tuned_config.tile,
+            "occupancy": result.tuned_config.occupancy,
+        }
+    else:
+        cfg = _DEFAULT_CONFIG
+        ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1), _add_kernel, (x, y, output, cfg.tile))
 
-    # Use a fixed tile size for benchmarking consistency, or heuristic
-    TILE = block_size
-    grid = (math.ceil(N / TILE), 1, 1)
+    return output
 
-    ct.launch(torch.cuda.current_stream(), grid, vec_add_kernel_1d, (a, b, c, TILE))
 
-    return c
+def get_last_config() -> dict | None:
+    return _last_autotune_config

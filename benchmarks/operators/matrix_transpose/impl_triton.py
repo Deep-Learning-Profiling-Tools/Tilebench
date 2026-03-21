@@ -1,12 +1,12 @@
-import math
-
 import torch
 import triton
 import triton.language as tl
 
+_DEFAULT_CONFIG = {"BLOCK_TILE": 32, "num_warps": 4, "num_stages": 2}
+
 
 @triton.jit
-def transpose_kernel(
+def _transpose_kernel(
     x_ptr,
     output_ptr,
     m,
@@ -31,29 +31,42 @@ def transpose_kernel(
     tl.store(out_ptrs, values, mask=mask)
 
 
-def _tile_dim_from_block_size(block_size: int) -> int:
-    root = int(math.sqrt(block_size))
-    tile = 1
-    while tile * 2 <= root:
-        tile *= 2
-    return tile
+_transpose_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({"BLOCK_TILE": t}, num_warps=nw)
+        for t in [8, 16, 32, 64]
+        for nw in [4, 8, 16]
+    ],
+    key=["m", "n"],
+)(_transpose_kernel)
 
 
-def run(x: torch.Tensor, block_size: int = 1024):
+def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     m, n = x.shape
     output = torch.empty((n, m), device=x.device, dtype=x.dtype)
 
-    tile = _tile_dim_from_block_size(block_size)
-    grid = (triton.cdiv(m, tile), triton.cdiv(n, tile))
-    transpose_kernel[grid](
-        x,
-        output,
-        m,
-        n,
-        x.stride(0),
-        x.stride(1),
-        output.stride(0),
-        output.stride(1),
-        BLOCK_TILE=tile,
-    )
+    if autotune:
+        grid = lambda meta: (triton.cdiv(m, meta["BLOCK_TILE"]), triton.cdiv(n, meta["BLOCK_TILE"]))
+        _transpose_kernel_autotuned[grid](
+            x, output, m, n,
+            x.stride(0), x.stride(1), output.stride(0), output.stride(1),
+        )
+    else:
+        cfg = _DEFAULT_CONFIG
+        tile = cfg["BLOCK_TILE"]
+        grid = (triton.cdiv(m, tile), triton.cdiv(n, tile))
+        _transpose_kernel[grid](
+            x, output, m, n,
+            x.stride(0), x.stride(1), output.stride(0), output.stride(1),
+            BLOCK_TILE=tile,
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
     return output
+
+
+def get_last_config() -> dict | None:
+    cfg = getattr(_transpose_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"BLOCK_TILE": cfg.kwargs["BLOCK_TILE"], "num_warps": cfg.num_warps}

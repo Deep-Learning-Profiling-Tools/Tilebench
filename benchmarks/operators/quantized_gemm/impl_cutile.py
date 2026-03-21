@@ -15,26 +15,18 @@ def _tile_dim_from_block_size(block_size: int) -> int:
 
 
 @ct.kernel
-def quantized_gemm_kernel(
-    a_ptr, b_ptr, c_ptr, out_scale, K_TILES: ConstInt, TILE: ConstInt
-):
+def quantized_gemm_kernel(a_ptr, b_ptr, c_ptr, out_scale, K_TILES: ConstInt, TILE: ConstInt):
     bid_m = ct.bid(0)
     bid_n = ct.bid(1)
     acc = ct.zeros((TILE, TILE), dtype=ct.float32)
     for bid_k in range(K_TILES):
-        a_tile = ct.astype(
-            ct.load(a_ptr, index=(bid_m, bid_k), shape=(TILE, TILE)), ct.float32
-        )
-        b_tile = ct.astype(
-            ct.load(b_ptr, index=(bid_k, bid_n), shape=(TILE, TILE)), ct.float32
-        )
+        a_tile = ct.astype(ct.load(a_ptr, index=(bid_m, bid_k), shape=(TILE, TILE)), ct.float32)
+        b_tile = ct.astype(ct.load(b_ptr, index=(bid_k, bid_n), shape=(TILE, TILE)), ct.float32)
         acc = acc + ct.matmul(a_tile, b_tile)
     ct.store(c_ptr, index=(bid_m, bid_n), tile=acc * out_scale)
 
 
-def run(
-    a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, **kwargs
-):
+def run(a_q: torch.Tensor, b_q: torch.Tensor, scale: float, block_size: int = 1024, autotune: bool = False, **kwargs):
     if a_q.dim() != 2 or b_q.dim() != 2:
         raise ValueError("quantized_gemm expects 2D inputs.")
     if a_q.shape[1] != b_q.shape[0]:
@@ -46,9 +38,9 @@ def run(
     _, n = b_q.shape
 
     tile = _tile_dim_from_block_size(block_size)
-    m_pad = math.ceil(m / tile) * tile
-    k_pad = math.ceil(k / tile) * tile
-    n_pad = math.ceil(n / tile) * tile
+    m_pad = (m + tile - 1) // tile * tile
+    k_pad = (k + tile - 1) // tile * tile
+    n_pad = (n + tile - 1) // tile * tile
 
     a_pad = torch.zeros((m_pad, k_pad), device=a_q.device, dtype=a_q.dtype)
     b_pad = torch.zeros((k_pad, n_pad), device=b_q.device, dtype=b_q.dtype)
@@ -64,3 +56,7 @@ def run(
         (a_pad, b_pad, c_pad, scale * scale, k_pad // tile, tile),
     )
     return c_pad[:m, :n]
+
+
+def get_last_config() -> dict | None:
+    return None

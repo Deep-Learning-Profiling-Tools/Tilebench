@@ -5,14 +5,13 @@ import shutil
 import socket
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
 
 from core.engine import run_benchmark_suite
 
 
-def discover_operators(operators_root: Path) -> List[str]:
+def discover_operators(operators_root: Path) -> list[str]:
     operators = []
     if not operators_root.exists():
         return operators
@@ -25,7 +24,7 @@ def discover_operators(operators_root: Path) -> List[str]:
 
 
 def _now_utc_str() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def create_run_dir(base_dir: Path, run_name: str = "") -> Path:
@@ -40,9 +39,7 @@ def create_run_dir(base_dir: Path, run_name: str = "") -> Path:
     return run_dir
 
 
-def copy_profile_artifacts(
-    patterns: List[str], run_dir: Path, repo_root: Path
-) -> List[str]:
+def copy_profile_artifacts(patterns: list[str], run_dir: Path, repo_root: Path) -> list[str]:
     copied = []
     profiles_dir = run_dir / "profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
@@ -87,9 +84,7 @@ def copy_profile_artifacts(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Run all TileBench operators and save results per run."
-    )
+    parser = argparse.ArgumentParser(description="Run all TileBench operators and save results per run.")
     parser.add_argument(
         "--results-root",
         type=str,
@@ -147,9 +142,7 @@ def main() -> int:
 
     print(f"Run directory: {run_dir}")
     with run_log_path.open("w", encoding="utf-8") as run_log:
-        run_log.write(
-            f"[{_now_utc_str()}] Starting run for {len(operators)} operators\n"
-        )
+        run_log.write(f"[{_now_utc_str()}] Starting run for {len(operators)} operators\n")
         for op in operators:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
@@ -159,9 +152,7 @@ def main() -> int:
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)
                 manifest["operators_succeeded"].append(op)
-                run_log.write(
-                    f"[{_now_utc_str()}] DONE operator={op} output={out_path}\n"
-                )
+                run_log.write(f"[{_now_utc_str()}] DONE operator={op} output={out_path}\n")
             except Exception:
                 err = traceback.format_exc()
                 manifest["operators_failed"].append({"operator": op, "error": err})
@@ -170,9 +161,7 @@ def main() -> int:
                 run_log.write(f"[{_now_utc_str()}] FAIL operator={op}\n{err}\n")
                 print(f"  FAILED: {op}")
 
-        copied_profiles = copy_profile_artifacts(
-            args.profile_artifact, run_dir, repo_root
-        )
+        copied_profiles = copy_profile_artifacts(args.profile_artifact, run_dir, repo_root)
         manifest["artifacts"]["profiles"] = copied_profiles
         manifest["finished_at_utc"] = _now_utc_str()
 

@@ -1,16 +1,38 @@
-test_cases:
-  - m: 128
-    n: 128
-    k: 128
-    dtype: "float32"
-    block_size: 256
-  - m: 256
-    n: 192
-    k: 320
-    dtype: "float16"
-    block_size: 256
-  - m: 127
-    n: 193
-    k: 259
-    dtype: "float32"
-    block_size: 256
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep K across 20 points with M and N fixed; inputs are always int8.
+# problem_size = 2 * m * n * k (total multiply-add operations).
+case_defaults:
+  m: 2048
+  n: 4096
+  scale: 1.0
+
+case_grid:
+  k:
+    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  dtype: ["int8"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: m, n, k, dtype_size (=1 for int8)
+#
+# Bytes:
+#   Read  A (int8): m * k * 1
+#   Read  B (int8): k * n * 1
+#   Write C (fp32): m * n * 4
+#
+# FLOPs: 2 * m * n * k  (multiply-accumulate)
+# ---------------------------------------------------------------------------
+metrics:
+  bytes_expr: "m * k * dtype_size + k * n * dtype_size + m * n * 4"
+  flops_expr: "2 * m * n * k"
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup

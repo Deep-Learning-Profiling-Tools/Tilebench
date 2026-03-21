@@ -1,0 +1,31 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  # 1M to 16M elements, step 1M
+  n:
+    expr: "[1024 * 1024 * i for i in range(1, 21)]"
+  dtype: ["fp16", "bf16", "fp32", "int8"]
+  # dtype: ["fp16", "bf16", "fp32", "fp8_e4m3fn", "fp8_e5m2", "int8"]
+  # fp8: PyTorch has no native FP8 element-wise arithmetic; cuTile DSL does not yet
+  # compile FP8 element-wise kernels. Re-enable when both backends support it.
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: n (problem size), dtype_size (bytes per element)
+# ---------------------------------------------------------------------------
+metrics:
+  # mul2 is pure memory-bound: no meaningful FLOPs, use element count as proxy
+  flops_expr: "n"
+  # 1 read + 1 write per element
+  bytes_expr: "n * dtype_size * 2"
+
+  # Which metrics visualize.py plots by default when --metrics is not specified
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
