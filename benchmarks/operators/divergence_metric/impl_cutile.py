@@ -37,5 +37,10 @@ def run(x: torch.Tensor, y: torch.Tensor, eps: float, block_size: int = 1024, **
 
     out_pad = torch.empty((n_padded,), device=x.device, dtype=torch.float32)
     grid = (n_padded // tile, 1, 1)
-    ct.launch(torch.cuda.current_stream(), grid, divergence_kernel, (x_pad, y_pad, out_pad, eps, tile))
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        divergence_kernel,
+        (x_pad, y_pad, out_pad, eps, tile),
+    )
     return out_pad[:n].view(x.shape)

@@ -1,0 +1,27 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  dtype: "fp16"   # input is always fp16; output is always fp32
+
+case_grid:
+  n:
+    expr: "[1024 * 1024 * i for i in range(1, 21)]"
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: n (problem size), dtype_size = 2 (fp16 input)
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "n"
+  # fp16 read + fp32 write
+  bytes_expr: "n * dtype_size + n * 4"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

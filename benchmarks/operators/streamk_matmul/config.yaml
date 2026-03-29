@@ -1,29 +1,45 @@
-test_cases:
+# GEMM with floating-point inputs: different tiling order + TF32 accumulation
+# cause ~1e-3 relative differences between implementations; use loose tolerance.
+verify:
+  # TF32 accumulation error grows as sqrt(k) * TF32_eps (~5e-4); for k=10240 max ~0.5.
+  # This tolerance is only a sanity check — the output magnitude is ~sqrt(k) >> atol.
+  atol: 1.0
+  rtol: 1e-2
 
-  - M: 2048
-    K: 2048
-    N: 2048
-    dtype: "float32"
-    block_size: 128
-    grid_programs: 108
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
 
-  - M: 2176
-    K: 2176
-    N: 2176
-    dtype: "float32"
-    block_size: 128
-    grid_programs: 108
+# Sweep K (inner dimension) across 20 points with M and N fixed.
+# problem_size = 2 * m * n * k (total multiply-add operations).
+case_defaults:
+  m: 2048
+  n: 4096
 
-  - M: 256
-    K: 8192
-    N: 4096
-    dtype: "float32"
-    block_size: 128
-    grid_programs: 108
+case_grid:
+  k:
+    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  dtype: ["fp16", "bf16", "fp32"]
 
-  - M: 4096
-    K: 8192
-    N: 5120
-    dtype: "float32"
-    block_size: 128
-    grid_programs: 108
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: m, n, k, dtype_size
+#
+# Bytes:
+#   Read  A: m * k * dtype_size
+#   Read  B: k * n * dtype_size
+#   Write C: m * n * 4  (always fp32 output)
+#
+# FLOPs: 2 * m * n * k  (multiply-accumulate)
+# ---------------------------------------------------------------------------
+metrics:
+  bytes_expr: "m * k * dtype_size + k * n * dtype_size + m * n * 4"
+  flops_expr: "2 * m * n * k"
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup
