@@ -242,8 +242,8 @@ GENERATORS = {
     "relu": generate_relu_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
-    "quantize-global": generate_quantize_global_inputs,
-    "dequantize-rowwise": generate_dequantize_rowwise_inputs,
+    "quantize_global": generate_quantize_global_inputs,
+    "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
     "swiglu": generate_swiglu_inputs,
     "matrix_transpose": generate_matrix_transpose_inputs,
@@ -260,7 +260,7 @@ GENERATORS = {
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
-    "mean-reduction": generate_mean_reduction_inputs,
+    "mean_reduction": generate_mean_reduction_inputs,
 }
 
 
@@ -332,7 +332,7 @@ def infer_problem_size(operator_name, params):
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "streamk_scheduling":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
-    if operator_name in ("argmax", "mean-reduction"):
+    if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
