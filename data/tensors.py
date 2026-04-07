@@ -91,13 +91,13 @@ def generate_destindex_inputs(
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
-def generate_divergence_metric_inputs(n, eps=1e-6, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
-    return (x, y, eps)
+def generate_kl_divergence_inputs(n, eps=1e-5, dtype=torch.float32, device='cuda'):
+    p = torch.softmax(torch.randn(n, dtype=torch.float32, device=device), dim=0).to(dtype)
+    q = torch.softmax(torch.randn(n, dtype=torch.float32, device=device), dim=0).to(dtype)
+    return (p, q, eps)
 
 
-def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda'):
     x    = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
     bias = torch.randn(n, dtype=dtype, device=device)
@@ -240,8 +240,8 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
-    "divergence_metric": generate_divergence_metric_inputs,
-    "generic_fused_container": generate_generic_fused_container_inputs,
+    "kl_divergence": generate_kl_divergence_inputs,
+    "fused_activation": generate_fused_activation_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
@@ -254,9 +254,9 @@ GENERATORS = {
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
-    "quantized_gemm": generate_quantized_gemm_inputs,
+    "matmul_int8": generate_quantized_gemm_inputs,
     "layernorm_fwd": generate_layernorm_fwd_inputs,
-    "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "streamk_matmul": generate_streamk_scheduling_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
@@ -326,11 +326,11 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
-    if operator_name == "quantized_gemm":
+    if operator_name == "matmul_int8":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "layernorm_fwd":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
-    if operator_name == "streamk_scheduling":
+    if operator_name == "streamk_matmul":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
