@@ -1,9 +1,25 @@
 """Compute derived performance metrics from raw benchmark results."""
 from __future__ import annotations
 
+import json
 import math
+import os
 
 from core.dtypes import dtype_size
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def load_peak_config(gpu_name: str) -> dict:
+    """Load peak performance summary for a GPU from data/peak_performance/<gpu_name>.json.
+
+    Returns the parsed dict, or an empty dict if the file does not exist.
+    """
+    path = os.path.join(_PROJECT_ROOT, "data", "peak_performance", f"{gpu_name}.json")
+    if not os.path.isfile(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
 
 
 def _eval_expr(expr: str | None, ctx: dict) -> float | None:
@@ -18,7 +34,7 @@ def _eval_expr(expr: str | None, ctx: dict) -> float | None:
 BACKENDS = ("torch", "triton", "cutile")
 
 
-def compute_derived(result: dict, metrics_cfg: dict) -> dict[str, dict[str, float]]:
+def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = None) -> dict[str, dict[str, float]]:
     """Return per-backend derived metrics dict."""
     params = result.get("params", {})
     dtype_str = result.get("dtype", "fp32")
@@ -31,10 +47,12 @@ def compute_derived(result: dict, metrics_cfg: dict) -> dict[str, dict[str, floa
     flops = _eval_expr(metrics_cfg.get("flops_expr"), eval_ctx)
     bytes_transferred = _eval_expr(metrics_cfg.get("bytes_expr"), eval_ctx)
 
-    peak_bw_raw = metrics_cfg.get("peak_bw_GBs")
+    # Peak values: prefer GPU-specific peak_cfg, fall back to operator metrics_cfg
+    _peak = peak_cfg or {}
+    peak_bw_raw = _peak.get("peak_bw_GBs") or metrics_cfg.get("peak_bw_GBs")
     peak_bw = float(peak_bw_raw) if peak_bw_raw is not None else None
 
-    peak_tflops_map = metrics_cfg.get("peak_tflops", {})
+    peak_tflops_map = _peak.get("peak_tflops") or metrics_cfg.get("peak_tflops", {})
     raw = peak_tflops_map.get(dtype_str) if isinstance(peak_tflops_map, dict) else None
     peak_tflops = float(raw) if raw is not None else None
 
