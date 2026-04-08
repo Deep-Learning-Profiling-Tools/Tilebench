@@ -35,7 +35,7 @@ def run(x: torch.Tensor, block_size: int, autotune: bool = False):
     
 
     if block_size < n_cols:
-        raise RuntimeError(f"Block size ({block_size}) must be >= n_cols ({n_cols}) for cuTile Softmax.")
+        block_size = n_cols
     
     output = torch.empty_like(x)
     

@@ -147,15 +147,12 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
 
     return (q, cos, sin)
-def generate_softmax_inputs(shape=None, dtype=torch.float32, device='cuda', **kwargs):
+def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
     if shape is None:
-        if n is None:
-            raise ValueError("Must provide 'n' or 'shape' for softmax inputs")
-
-        cols = int(n**0.5)
-        rows = n // cols
-        shape = (rows, cols)
-
+        if n_rows is not None and n_cols is not None:
+            shape = (n_rows, n_cols)
+        else:
+            raise ValueError("Must provide either 'shape' or both 'n_rows' and 'n_cols'")
     x = torch.randn(*shape, dtype=dtype, device=device)
 
 

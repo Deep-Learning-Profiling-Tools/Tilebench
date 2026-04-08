@@ -36,7 +36,7 @@ def run(x: torch.Tensor, block_size: int, autotune: bool = False):
     output = torch.empty_like(x)
     
     if block_size < n_cols:
-        raise RuntimeError(f"Block size ({block_size}) must be >= n_cols ({n_cols}) for this Softmax kernel.")
+        block_size = n_cols
     
     if (block_size & (block_size - 1)) != 0:
          raise RuntimeError(f"Block size ({block_size}) must be a power of 2.")
