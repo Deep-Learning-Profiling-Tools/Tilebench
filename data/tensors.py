@@ -177,7 +177,7 @@ def generate_flash_decode_stage2_inputs(batch=2, heads=8, seq_len=4096, head_dim
     return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
 import math
 def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
-                                           BLOCK_M=64, BLOCK_N=64, BLOCK_D=64, NUM_D_BLOCKS=1,
+                                           BLOCK_M=64, BLOCK_N=64, BLOCK_D=64, NUM_D_BLOCKS=None,
                                            dtype=torch.float16, device='cuda', **kwargs):
     """
     Generate inputs for block sparse attention.
@@ -185,7 +185,15 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
     """
     if isinstance(dtype, str):
         dtype = getattr(torch, dtype)
-        
+    if NUM_D_BLOCKS is None:
+        if D % BLOCK_D != 0:
+            raise ValueError(f"D ({D}) must be divisible by BLOCK_D ({BLOCK_D})")
+        NUM_D_BLOCKS = D // BLOCK_D
+
+    if D != BLOCK_D * NUM_D_BLOCKS:
+        raise ValueError(
+            f"Invalid config: D={D}, BLOCK_D={BLOCK_D}, NUM_D_BLOCKS={NUM_D_BLOCKS}"
+    )
     Q = torch.randn((B, H, M, D), dtype=dtype, device=device)
     K = torch.randn((B, H_kv, M, D), dtype=dtype, device=device) # N == M
     V = torch.randn((B, H_kv, M, D), dtype=dtype, device=device)
