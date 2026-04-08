@@ -1,0 +1,32 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  B: 2
+  H: 8
+  H_kv: 2
+  BLOCK_M: 64
+  BLOCK_N: 64
+  BLOCK_D: 64
+  NUM_D_BLOCKS: 1
+
+case_grid:
+  M:
+    expr: "[1024 * i for i in range(1, 21)]"
+  D: [64, 128]
+  dtype: ["float16"]
+
+metrics:
+  flops_expr: "2 * B * H * M * M * D"
+  bytes_expr: "B * H * M * D * dtype_size * 4"
+  peak_bw_GBs: 8000.0
+  peak_tflops:
+    float16: 400.0
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
