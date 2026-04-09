@@ -7,17 +7,17 @@ ConstInt = ct.Constant[int]
 
 @ct.kernel
 def softmax_kernel(
-    input_tensor,  
-    output_tensor,   
-    N_COLS: ConstInt,  
-    TILE_SIZE: ConstInt 
+    input_tensor,
+    output_tensor,
+    N_COLS: ConstInt,
+    TILE_SIZE: ConstInt
 ):
     """
     input_tensor: (Rows, Cols)
     output_tensor: (Rows, Cols)
     """
     row_idx = ct.bid(0)
-    
+
     tile = ct.load(input_tensor, index=(row_idx, 0), shape=(1, TILE_SIZE), padding_mode=ct.PaddingMode.NEG_INF)
 
     max_val = ct.max(tile)
@@ -32,16 +32,18 @@ def softmax_kernel(
 
 def run(x: torch.Tensor, block_size: int, autotune: bool = False):
     n_rows, n_cols = x.shape
-    
+
 
     if block_size < n_cols:
         block_size = n_cols
-    
+
+    block_size = 1 << (block_size - 1).bit_length()
+
     output = torch.empty_like(x)
-    
+
 
     grid = (n_rows, 1, 1)
-    
+
 
     ct.launch(
         torch.cuda.current_stream(),
@@ -49,7 +51,7 @@ def run(x: torch.Tensor, block_size: int, autotune: bool = False):
         softmax_kernel,
         (x, output, n_cols, block_size)
     )
-    
+
     return output
 
 def get_last_config() -> dict | None:
