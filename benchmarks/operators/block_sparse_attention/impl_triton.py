@@ -159,6 +159,17 @@ def block_sparse_attention_kernel(
     if NUM_D_BLOCKS >= 2:
         tl.store(out_ptrs + BLOCK_D, acc2, mask=offs_m[:, None] < q_seq_len)
 
+
+_block_sparse_attention_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=nw, num_stages=ns)
+        for nw in [4, 8, 16]
+        for ns in [2, 3, 4]
+    ],
+    key=["total_seq_len"],
+)(block_sparse_attention_kernel)
+
+
 def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
         layout_csr_row_stride_h, layout_csr_col_stride_h,
         num_layout, softmax_scale, num_heads, num_kv_heads,
@@ -169,27 +180,31 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
     """
     q_seq_len = total_seq_len
     batch_size = Q.shape[0]
-    
+
     grid = (triton.cdiv(q_seq_len, BLOCK_M), batch_size * num_heads)
 
     out = torch.empty((batch_size, num_heads, q_seq_len, Q.shape[-1]), device=Q.device, dtype=Q.dtype)
 
-    block_sparse_attention_kernel[grid](
-        out, Q, K, V, 
-        layout_csr_row_indices, layout_csr_col_indices, 
+    kernel = _block_sparse_attention_kernel_autotuned if autotune else block_sparse_attention_kernel
+    kernel[grid](
+        out, Q, K, V,
+        layout_csr_row_indices, layout_csr_col_indices,
         layout_csr_row_stride_h, layout_csr_col_stride_h,
-        num_layout, softmax_scale, 
-        Q.stride(0), Q.stride(1), Q.stride(2), 
+        num_layout, softmax_scale,
+        Q.stride(0), Q.stride(1), Q.stride(2),
         K.stride(0), K.stride(1), K.stride(2),
-        V.stride(0), V.stride(1), V.stride(2), 
-        out.stride(0), out.stride(1), out.stride(2), 
+        V.stride(0), V.stride(1), V.stride(2),
+        out.stride(0), out.stride(1), out.stride(2),
         num_heads, num_kv_heads,
-        total_seq_len, 
-        BLOCK_M=BLOCK_M, EVEN_M=EVEN_M, 
-        BLOCK_N=BLOCK_N, EVEN_N=EVEN_N, 
+        total_seq_len,
+        BLOCK_M=BLOCK_M, EVEN_M=EVEN_M,
+        BLOCK_N=BLOCK_N, EVEN_N=EVEN_N,
         BLOCK_D=BLOCK_D, NUM_D_BLOCKS=NUM_D_BLOCKS
     )
     return out
 
 def get_last_config() -> dict | None:
-    return None
+    cfg = getattr(_block_sparse_attention_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}

@@ -50,7 +50,7 @@ def _rope_embedding(
     if BACKWARD_PASS:
         # See our blog post for more info.
         sin1 = -sin1
-    
+
     # [TODO] Autotune ROPE_GROUP_SIZE to be 1, 2, 4, 8
     head_start = group_head_position * ROPE_GROUP_SIZE
     head_end = min((head_start + ROPE_GROUP_SIZE), n_heads)
@@ -67,10 +67,22 @@ def _rope_embedding(
         tl.store(Q + offs_q1, Q1*cos1 - Q2*sin1, mask = mask)
         tl.store(Q + offs_q2, Q2*cos1 + Q1*sin1, mask = mask)
 
+
+_rope_embedding_autotuned = triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=nw, num_stages=ns)
+        for nw in [4, 8, 16]
+        for ns in [2, 3, 4]
+    ],
+    key=["seqlen", "head_dim"],
+    restore_value=["Q"],
+)(_rope_embedding)
+
+
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, block_size: int = None, autotune: bool = False):
 
     output = q.clone().contiguous()
-    
+
     batch, seq_len, n_heads, head_dim = output.shape
 
     BLOCK_SIZE, num_warps = calculate_settings(head_dim // 2)
@@ -79,19 +91,34 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, block_size: int =
     div, mod = divmod(n_heads, ROPE_GROUP_SIZE)
     n_groups = div + (mod != 0)
 
-    _rope_embedding[(n_rows, n_groups, )](
-        output,   output.stride(1), 
-        cos,      cos.stride(0),
-        sin,      sin.stride(0),
-        seq_len,
-        head_dim, 
-        n_heads,
-        BACKWARD_PASS = False,
-        BLOCK_SIZE = BLOCK_SIZE,
-        num_warps  = num_warps,
-    )
-    
+    if autotune:
+        _rope_embedding_autotuned[(n_rows, n_groups, )](
+            output,   output.stride(1),
+            cos,      cos.stride(0),
+            sin,      sin.stride(0),
+            seq_len,
+            head_dim,
+            n_heads,
+            BACKWARD_PASS = False,
+            BLOCK_SIZE = BLOCK_SIZE,
+        )
+    else:
+        _rope_embedding[(n_rows, n_groups, )](
+            output,   output.stride(1),
+            cos,      cos.stride(0),
+            sin,      sin.stride(0),
+            seq_len,
+            head_dim,
+            n_heads,
+            BACKWARD_PASS = False,
+            BLOCK_SIZE = BLOCK_SIZE,
+            num_warps  = num_warps,
+        )
+
     return output
 
 def get_last_config() -> dict | None:
-    return None
+    cfg = getattr(_rope_embedding_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}

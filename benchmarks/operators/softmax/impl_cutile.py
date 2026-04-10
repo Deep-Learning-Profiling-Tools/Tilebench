@@ -1,9 +1,19 @@
+from types import SimpleNamespace
+
 import torch
 import cuda.tile as ct
 import math
 
+try:
+    import cuda.tile_experimental as ct_experimental
+except ImportError:
+    ct_experimental = None
 
 ConstInt = ct.Constant[int]
+
+_last_autotune_config: dict | None = None
+
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
 
 @ct.kernel
 def softmax_kernel(
@@ -31,6 +41,7 @@ def softmax_kernel(
 
 
 def run(x: torch.Tensor, block_size: int, autotune: bool = False):
+    global _last_autotune_config
     n_rows, n_cols = x.shape
 
 
@@ -44,15 +55,27 @@ def run(x: torch.Tensor, block_size: int, autotune: bool = False):
 
     grid = (n_rows, 1, 1)
 
+    stream = torch.cuda.current_stream()
 
-    ct.launch(
-        torch.cuda.current_stream(),
-        grid,
-        softmax_kernel,
-        (x, output, n_cols, block_size)
-    )
+    if autotune and ct_experimental is not None:
+        result = ct_experimental.autotune_launch(
+            stream,
+            grid_fn=lambda cfg: grid,
+            kernel=softmax_kernel,
+            args_fn=lambda cfg: (x, output, n_cols, block_size),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+            search_space=_SEARCH_SPACE,
+        )
+        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+    else:
+        ct.launch(
+            stream,
+            grid,
+            softmax_kernel,
+            (x, output, n_cols, block_size)
+        )
 
     return output
 
 def get_last_config() -> dict | None:
-    return None
+    return _last_autotune_config
