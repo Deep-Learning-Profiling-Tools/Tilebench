@@ -1,3 +1,5 @@
+import math
+
 import torch
 from itertools import product
 
@@ -147,19 +149,20 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
 
     return (q, cos, sin)
-def generate_softmax_inputs(n=None, shape=None, dtype=torch.float32, device='cuda'):
+
+
+def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
     if shape is None:
-        if n is None:
-            raise ValueError("Must provide 'n' or 'shape' for softmax inputs")
-
-        cols = int(n**0.5)
-        rows = n // cols
-        shape = (rows, cols)
-
+        if n_rows is not None and n_cols is not None:
+            shape = (n_rows, n_cols)
+        else:
+            raise ValueError("Must provide either 'shape' or both 'n_rows' and 'n_cols'")
     x = torch.randn(*shape, dtype=dtype, device=device)
 
 
     return (x,)
+
+
 def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):
 
     q = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
@@ -167,7 +170,9 @@ def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=tor
     v = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
 
     return (q.contiguous(), k.contiguous(), v.contiguous())
-def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
+
+
+def generate_flash_decode_stage2_inputs(batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
     num_blocks = (seq_len + block_seq - 1) // block_seq
 
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
@@ -179,6 +184,69 @@ def generate_flash_decode_stage2_inputs(n=None, batch=2, heads=8, seq_len=4096, 
 
     return (mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
 
+
+def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
+                                           BLOCK_M=64, BLOCK_N=64, BLOCK_D=64, NUM_D_BLOCKS=None,
+                                           dtype=torch.float16, device='cuda', **kwargs):
+    """
+    Generate inputs for block sparse attention.
+    Creates a simple "Local Window + Causal" sparse CSR layout.
+    """
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+    if NUM_D_BLOCKS is None:
+        if D % BLOCK_D != 0:
+            raise ValueError(f"D ({D}) must be divisible by BLOCK_D ({BLOCK_D})")
+        NUM_D_BLOCKS = D // BLOCK_D
+
+    if D != BLOCK_D * NUM_D_BLOCKS:
+        raise ValueError(
+            f"Invalid config: D={D}, BLOCK_D={BLOCK_D}, NUM_D_BLOCKS={NUM_D_BLOCKS}"
+    )
+    Q = torch.randn((B, H, M, D), dtype=dtype, device=device)
+    K = torch.randn((B, H_kv, M, D), dtype=dtype, device=device) # N == M
+    V = torch.randn((B, H_kv, M, D), dtype=dtype, device=device)
+
+    num_layout = 1 # Shared layout for all heads
+    num_rows = math.ceil(M / BLOCK_M)
+    num_cols = math.ceil(M / BLOCK_N)
+
+    layout_csr_row_stride_h = num_rows + 1
+    layout_csr_col_stride_h = num_rows * num_cols # Max possible capacity
+
+    # We build a causal local window mask
+    window_blocks = 2 # Attend to current block and 2 previous blocks
+
+    row_ptrs = []
+    col_indices =[]
+
+    current_ptr = 0
+    for r in range(num_rows):
+        row_ptrs.append(current_ptr)
+        # Start col is max(0, r - window_blocks)
+        # End col is r (inclusive, because of causal)
+        start_c = max(0, r - window_blocks)
+        end_c = r
+        for c in range(start_c, end_c + 1):
+            col_indices.append(c)
+            current_ptr += 1
+
+    row_ptrs.append(current_ptr) # Final ptr
+
+    # Pad col_indices to required size
+    col_indices = col_indices + [0] * (layout_csr_col_stride_h - len(col_indices))
+
+    layout_csr_row_indices = torch.tensor(row_ptrs, dtype=torch.int32, device=device)
+    layout_csr_col_indices = torch.tensor(col_indices, dtype=torch.int32, device=device)
+
+    softmax_scale = 1.0 / math.sqrt(D)
+    EVEN_M = (M % BLOCK_M == 0)
+    EVEN_N = (M % BLOCK_N == 0)
+
+    return (Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
+            layout_csr_row_stride_h, layout_csr_col_stride_h,
+            num_layout, softmax_scale, H, H_kv, M,
+            BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
 def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
     logits = torch.randn(batch_size, num_classes, dtype=dtype, device=device)
@@ -251,6 +319,7 @@ GENERATORS = {
     "rmsnorm": generate_rmsnorm_inputs,
     "rope": generate_rope_inputs,
     "flash_attention": generate_flash_attn_inputs,
+    "block_sparse_attention": generate_block_sparse_attention_inputs,
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
@@ -324,6 +393,15 @@ def infer_problem_size(operator_name, params):
             * int(params.get("seq_len", 1))
             * int(params.get("head_dim", 1))
         )
+    if operator_name == "block_sparse_attention":
+        return (
+            int(params.get("B", 1))
+            * int(params.get("H", 1))
+            * int(params.get("M", 1))
+            * int(params.get("D", 1))
+        )
+    if operator_name == "softmax":
+        return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
