@@ -315,6 +315,16 @@ def generate_conv2d_fwd_inputs(
     return (input, weight, stride, padding, groups)
 
 
+def generate_weight_dequant_inputs(M, TILE_SIZE, dtype, N=None, device='cuda', **kwargs):
+    if N is None:
+        N = M
+    X = torch.randn(M, N, dtype=dtype, device=device)
+    S_rows = math.ceil(M / TILE_SIZE)
+    S_cols = math.ceil(N / TILE_SIZE)
+    S = torch.randn(S_rows, S_cols, dtype=dtype, device=device)
+    return (X, S, M, N, TILE_SIZE)
+
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
@@ -342,6 +352,7 @@ GENERATORS = {
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
+    "weight_dequant": generate_weight_dequant_inputs,
 }
 
 
@@ -443,6 +454,10 @@ def infer_problem_size(operator_name, params):
             * int(params.get("input_rows", 1))
             * int(params.get("input_cols", params.get("input_rows", 1)))
         )
+    if operator_name == "weight_dequant":
+        M = int(params.get("M", 1))
+        N = int(params.get("N", M))
+        return M * N
     # Fallback: multiply all integer-like params.
     size = 1
     used = False
