@@ -248,6 +248,17 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
             num_layout, softmax_scale, H, H_kv, M,
             BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
+def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
+                            kernel_depth=3, kernel_rows=3, kernel_cols=3,
+                            dtype=torch.float32, device='cuda', **kwargs):
+    if input_cols is None:
+        input_cols = input_rows
+    input_vol = torch.randn(input_depth * input_rows * input_cols, dtype=dtype, device=device)
+    kernel = torch.randn(kernel_depth * kernel_rows * kernel_cols, dtype=dtype, device=device)
+    return (input_vol, kernel, input_depth, input_rows, input_cols,
+            kernel_depth, kernel_rows, kernel_cols)
+
+
 def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
     logits = torch.randn(batch_size, num_classes, dtype=dtype, device=device)
     targets = torch.randint(0, num_classes, (batch_size,), device=device)
@@ -327,6 +338,7 @@ GENERATORS = {
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "3d_conv": generate_3d_conv_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
@@ -425,6 +437,12 @@ def infer_problem_size(operator_name, params):
         groups       = int(params.get("groups", 1))
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+    if operator_name == "3d_conv":
+        return (
+            int(params.get("input_depth", 1))
+            * int(params.get("input_rows", 1))
+            * int(params.get("input_cols", params.get("input_rows", 1)))
+        )
     # Fallback: multiply all integer-like params.
     size = 1
     used = False
