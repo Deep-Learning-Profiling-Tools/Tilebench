@@ -68,6 +68,14 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
+                                         dtype=torch.float32, device='cuda', **kwargs):
+    input = torch.randn(N, C, dtype=dtype, device=device)
+    gamma = torch.randn(C, dtype=dtype, device=device)
+    beta = torch.randn(C, dtype=dtype, device=device)
+    return (input, gamma, beta, N, C, eps)
+
+
 def generate_destindex_inputs(
     batch_size,
     seq_len,
@@ -319,6 +327,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "batch_normalization": generate_batch_normalization_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
     "quantize_global": generate_quantize_global_inputs,
@@ -414,6 +423,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "batch_normalization":
+        return int(params.get("N", 1)) * int(params.get("C", 1))
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
