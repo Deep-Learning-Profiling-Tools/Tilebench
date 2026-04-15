@@ -68,6 +68,17 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_batched_matmul_inputs(BATCH, M, N=None, K=None,
+                                    dtype=torch.float32, device='cuda', **kwargs):
+    if N is None:
+        N = M
+    if K is None:
+        K = M
+    A = torch.randn(BATCH * M * K, dtype=dtype, device=device)
+    B = torch.randn(BATCH * K * N, dtype=dtype, device=device)
+    return (A, B, BATCH, M, N, K)
+
+
 def generate_destindex_inputs(
     batch_size,
     seq_len,
@@ -319,6 +330,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "batched_matmul": generate_batched_matmul_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
     "quantize_global": generate_quantize_global_inputs,
@@ -414,6 +426,12 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "batched_matmul":
+        BATCH = int(params.get("BATCH", 1))
+        M = int(params.get("M", 1))
+        N = int(params.get("N", M))
+        K = int(params.get("K", M))
+        return 2 * BATCH * M * N * K
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
