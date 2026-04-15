@@ -259,6 +259,18 @@ def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
             kernel_depth, kernel_rows, kernel_cols)
 
 
+def generate_gaussian_blur_inputs(input_rows, input_cols=None,
+                                  kernel_rows=3, kernel_cols=3,
+                                  dtype=torch.float32, device='cuda', **kwargs):
+    if input_cols is None:
+        input_cols = input_rows
+    input_img = torch.randn(input_rows * input_cols, dtype=dtype, device=device)
+    # Normalized non-negative kernel (matches problem constraint: sums to 1.0).
+    kernel = torch.rand(kernel_rows * kernel_cols, dtype=dtype, device=device)
+    kernel = kernel / kernel.sum()
+    return (input_img, kernel, input_rows, input_cols, kernel_rows, kernel_cols)
+
+
 def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
     logits = torch.randn(batch_size, num_classes, dtype=dtype, device=device)
     targets = torch.randint(0, num_classes, (batch_size,), device=device)
@@ -339,6 +351,7 @@ GENERATORS = {
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
+    "gaussian_blur": generate_gaussian_blur_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
@@ -441,6 +454,11 @@ def infer_problem_size(operator_name, params):
         return (
             int(params.get("input_depth", 1))
             * int(params.get("input_rows", 1))
+            * int(params.get("input_cols", params.get("input_rows", 1)))
+        )
+    if operator_name == "gaussian_blur":
+        return (
+            int(params.get("input_rows", 1))
             * int(params.get("input_cols", params.get("input_rows", 1)))
         )
     # Fallback: multiply all integer-like params.
