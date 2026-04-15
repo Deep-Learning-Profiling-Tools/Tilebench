@@ -1,0 +1,39 @@
+# MoE Top-K Gating — row-wise iterative top-K + softmax
+# Multi-output operator: (topk_weights, topk_indices). Per-dtype defaults
+# suffice for verify (softmax values ~1e-3 tolerance for fp16).
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Fixed E = 128 experts (typical MoE size), K = 2 (LeetGPU perf test top-2).
+# Sweep M (number of tokens) across 20 points; M = 1024 is the LeetGPU perf-measured size.
+case_defaults:
+  E: 128
+  k: 2
+
+case_grid:
+  M:
+    expr: "[1024 * i for i in range(1, 21)]"   # 1K, 2K, ..., 20K tokens
+  dtype: ["fp16", "bf16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   FLOPs (per row): K passes of (max + argmax + two where's), ≈ 4 * K * E ops;
+#                    plus softmax ≈ 3 * K ops. Total: M * (4*K*E + 3*K).
+#   Bytes:
+#     Read  logits:  M * E * dtype_size
+#     Write topk_w:  M * K * dtype_size
+#     Write topk_i:  M * K * 4 (int32)
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "M * (4 * k * E + 3 * k)"
+  bytes_expr: "M * E * dtype_size + M * k * dtype_size + M * k * 4"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

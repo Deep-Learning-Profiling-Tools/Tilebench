@@ -151,6 +151,11 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     return (q, cos, sin)
 
 
+def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device='cuda', **kwargs):
+    logits = torch.randn(M, E, dtype=dtype, device=device)
+    return (logits, M, E, k)
+
+
 def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
     if shape is None:
         if n_rows is not None and n_cols is not None:
@@ -332,6 +337,7 @@ GENERATORS = {
     "flash_attention": generate_flash_attn_inputs,
     "block_sparse_attention": generate_block_sparse_attention_inputs,
     "softmax": generate_softmax_inputs,
+    "moe_topk_gating": generate_moe_topk_gating_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
@@ -414,6 +420,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "moe_topk_gating":
+        return int(params.get("M", 1)) * int(params.get("E", 1))
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
