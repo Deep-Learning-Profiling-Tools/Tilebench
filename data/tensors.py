@@ -68,6 +68,11 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
+
+
 def generate_destindex_inputs(
     batch_size,
     seq_len,
@@ -319,6 +324,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "sigmoid": generate_sigmoid_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
     "quantize_global": generate_quantize_global_inputs,
