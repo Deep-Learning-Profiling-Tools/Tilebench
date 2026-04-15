@@ -315,6 +315,17 @@ def generate_conv2d_fwd_inputs(
     return (input, weight, stride, padding, groups)
 
 
+def generate_2d_max_pooling_inputs(
+    N, C, H, W=None,
+    kernel_size=3, stride=2, padding=1,
+    dtype=torch.float32, device='cuda', **kwargs,
+):
+    if W is None:
+        W = H  # square spatial dims
+    input_flat = torch.randn(N * C * H * W, dtype=dtype, device=device)
+    return (input_flat, N, C, H, W, kernel_size, stride, padding)
+
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
@@ -339,6 +350,7 @@ GENERATORS = {
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
+    "2d_max_pooling": generate_2d_max_pooling_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
@@ -443,6 +455,17 @@ def infer_problem_size(operator_name, params):
             * int(params.get("input_rows", 1))
             * int(params.get("input_cols", params.get("input_rows", 1)))
         )
+    if operator_name == "2d_max_pooling":
+        N = int(params.get("N", 1))
+        C = int(params.get("C", 1))
+        H = int(params.get("H", 1))
+        W = int(params.get("W", H))
+        kernel_size = int(params.get("kernel_size", 3))
+        stride = int(params.get("stride", 2))
+        padding = int(params.get("padding", 1))
+        H_out = (H + 2 * padding - kernel_size) // stride + 1
+        W_out = (W + 2 * padding - kernel_size) // stride + 1
+        return N * C * H_out * W_out
     # Fallback: multiply all integer-like params.
     size = 1
     used = False
