@@ -1,0 +1,35 @@
+# Radix Sort — 32-pass 1-bit hierarchical radix sort
+# Per-pass pipeline: count_ones → block-block sum → block-of-blocks prefix → per-block prefix → scatter.
+
+verify:
+  atol: 0.0
+  rtol: 0.0
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep n across 20 points; the algorithm uses BLOCK_SIZE=1024 and supports N such that
+# ceil(ceil(N/1024)/1024) <= 128 (the compute_prefix_sums_bb kernel's tile), i.e., N <= ~134M.
+case_grid:
+  n:
+    expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
+  dtype: ["int32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   32 passes × ~5 kernel launches per pass ≈ 160 launches per sort.
+#   Bytes: per-pass ~ 2*N read + N write (scatter) + small prefix traffic.
+#   Aggregate: 32 passes × (2N read + N write) dominates → ~100 * N * dtype_size.
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "n"
+  bytes_expr: "n * dtype_size * 2"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
