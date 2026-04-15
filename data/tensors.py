@@ -65,6 +65,34 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 
+def generate_linear_attention_inputs(
+    M,
+    D,
+    dtype=torch.float32,
+    device='cuda',
+    eps=1e-6,
+    BLOCK_M=64,
+    BLOCK_D=32,
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    if dtype != torch.float32:
+        raise ValueError("linear_attention expects float32 inputs.")
+
+    q = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+    k = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+    v = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+
+    return (
+        q.contiguous(),
+        k.contiguous(),
+        v.contiguous(),
+        float(eps),
+        int(BLOCK_M),
+        int(BLOCK_D),
+    )
 
 def generate_destindex_inputs(
     batch_size,
@@ -321,6 +349,7 @@ GENERATORS = {
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
+    "linear_self_attention": generate_linear_attention_inputs,
 }
 
 
