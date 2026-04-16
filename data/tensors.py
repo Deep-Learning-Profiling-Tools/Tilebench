@@ -330,6 +330,42 @@ def generate_top_k_selection_inputs(
     )
 
 
+def generate_histogramming_inputs(
+    N,
+    num_bins,
+    dtype=torch.int32,
+    device='cuda',
+    BLOCK_SIZE=1024,
+    NUM_PARTIAL=256,
+    BLOCK_ROWS=64,
+    BLOCK_BINS=256,
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    if dtype != torch.int32:
+        raise ValueError("histogramming expects int32 inputs.")
+
+    input_tensor = torch.randint(
+        low=0,
+        high=num_bins,
+        size=(N,),
+        device=device,
+        dtype=torch.int32,
+    )
+
+    return (
+        input_tensor.contiguous(),
+        int(N),
+        int(num_bins),
+        int(BLOCK_SIZE),
+        int(NUM_PARTIAL),
+        int(BLOCK_ROWS),
+        int(BLOCK_BINS),
+    )
+
+
 def generate_conv2d_fwd_inputs(
     batch, in_channels, out_channels, H,
     kernel_size=3, stride=1, padding=1, groups=1,
@@ -373,6 +409,7 @@ GENERATORS = {
     "mean_reduction": generate_mean_reduction_inputs,
     "linear_self_attention": generate_linear_attention_inputs,
     "top_k_selection": generate_top_k_selection_inputs,
+    "histogramming": generate_histogramming_inputs,
 }
 
 
@@ -449,6 +486,8 @@ def infer_problem_size(operator_name, params):
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "top_k_selection":
+        return int(params.get("N", 1))
+    if operator_name == "histogramming":
         return int(params.get("N", 1))
     if operator_name == "conv2d_fwd":
         batch        = int(params.get("batch", 1))
