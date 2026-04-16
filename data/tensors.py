@@ -308,6 +308,28 @@ def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='
     return (x, eps)
 
 
+def generate_top_k_selection_inputs(
+    N,
+    k,
+    dtype=torch.float32,
+    device='cuda',
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    if dtype != torch.float32:
+        raise ValueError("top_k_selection currently expects float32 inputs.")
+
+    input_tensor = torch.randn((N,), dtype=dtype, device=device)
+
+    return (
+        input_tensor.contiguous(),
+        int(N),
+        int(k),
+    )
+
+
 def generate_conv2d_fwd_inputs(
     batch, in_channels, out_channels, H,
     kernel_size=3, stride=1, padding=1, groups=1,
@@ -350,6 +372,7 @@ GENERATORS = {
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
     "linear_self_attention": generate_linear_attention_inputs,
+    "top_k_selection": generate_top_k_selection_inputs,
 }
 
 
@@ -425,6 +448,8 @@ def infer_problem_size(operator_name, params):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
+    if operator_name == "top_k_selection":
+        return int(params.get("N", 1))
     if operator_name == "conv2d_fwd":
         batch        = int(params.get("batch", 1))
         in_channels  = int(params.get("in_channels", 1))
