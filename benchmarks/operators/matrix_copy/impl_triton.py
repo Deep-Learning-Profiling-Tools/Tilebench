@@ -20,9 +20,10 @@ def matrix_copy_kernel(
 
 _matrix_copy_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048, 4096, 8192]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
+        for bs in [1024, 2048, 4096]
         for nw in [4, 8]
+        for ns in [1, 2]
     ],
     key=["N"],
 )(matrix_copy_kernel)
@@ -53,4 +54,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_matrix_copy_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps}
+    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}

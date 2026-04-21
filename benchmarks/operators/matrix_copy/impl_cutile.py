@@ -12,7 +12,7 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
 
 @ct.kernel
@@ -24,8 +24,8 @@ def matrix_copy_kernel(a_ptr, b_ptr, TILE: ConstInt):
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048, 4096, 8192]
-    for occ in [1, 2, 4]
+    for t in [1024, 2048, 4096]
+    for occ in [4, 8, 16]
 ]
 
 
