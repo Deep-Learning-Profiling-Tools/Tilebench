@@ -11,11 +11,11 @@ except ImportError:  # pragma: no cover
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [128, 256, 512, 1024, 2048]
-    for occ in [1, 2, 4]
+    for t in [256, 512, 1024, 2048]
+    for occ in [4, 8, 16]
 ]
 _last_autotune_config = None
 
@@ -70,12 +70,8 @@ def run(input, kernel, input_size, kernel_size,
     if output_size <= 0:
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
-    # Allocate output in fp32; cast to input.dtype on host (matches 3d_conv / gaussian_blur cuTile pattern).
     output = torch.empty(output_size, dtype=torch.float32, device=input.device)
     stream = torch.cuda.current_stream()
-
-    input_f32 = input.float()
-    kernel_f32 = kernel.float()
 
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
@@ -83,7 +79,7 @@ def run(input, kernel, input_size, kernel_size,
             grid_fn=lambda cfg: (ct.cdiv(output_size, cfg.tile), 1, 1),
             kernel=_conv1d_stencil_kernel,
             args_fn=lambda cfg: (
-                input_f32, kernel_f32, output,
+                input, kernel, output,
                 kernel_size,
                 cfg.tile,
             ),
@@ -99,7 +95,7 @@ def run(input, kernel, input_size, kernel_size,
         grid = (ct.cdiv(output_size, cfg.tile), 1, 1)
         ct.launch(
             stream, grid, _conv1d_stencil_kernel,
-            (input_f32, kernel_f32, output, kernel_size, cfg.tile),
+            (input, kernel, output, kernel_size, cfg.tile),
         )
 
     return output.to(input.dtype)

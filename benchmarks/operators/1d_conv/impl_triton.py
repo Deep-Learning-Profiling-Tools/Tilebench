@@ -17,8 +17,8 @@ def conv1d_kernel(input_ptr, kernel_ptr, output_ptr, input_size, kernel_size, BL
     acc = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
 
     for j in range(0, kernel_size):
-        x = tl.load(input_ptr + offsets + j, mask=mask, other=0.0)
-        w = tl.load(kernel_ptr + j)
+        x = tl.load(input_ptr + offsets + j, mask=mask, other=0.0).to(tl.float32)
+        w = tl.load(kernel_ptr + j).to(tl.float32)
         acc += x * w
 
     tl.store(output_ptr + offsets, acc, mask=mask)
@@ -26,9 +26,10 @@ def conv1d_kernel(input_ptr, kernel_ptr, output_ptr, input_size, kernel_size, BL
 
 _conv1d_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [128, 256, 512, 1024]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
+        for bs in [256, 512, 1024, 2048]
         for nw in [4, 8]
+        for ns in [1, 2]
     ],
     key=["input_size"],
 )(conv1d_kernel)
@@ -67,4 +68,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_conv1d_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps}
+    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
