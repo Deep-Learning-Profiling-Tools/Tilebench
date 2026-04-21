@@ -48,8 +48,8 @@ def _bmm_kernel(a_ptr, b_ptr, c_ptr,
             A_mask = mask_M[:, None] & current_mask_K[None, :]
             B_mask = current_mask_K[:, None] & mask_N[None, :]
 
-        A_data = tl.load(a_ptr + A_offsets, mask=A_mask)
-        B_data = tl.load(b_ptr + B_offsets, mask=B_mask)
+        A_data = tl.load(a_ptr + A_offsets, mask=A_mask, other=0.0)
+        B_data = tl.load(b_ptr + B_offsets, mask=B_mask, other=0.0)
 
         accumulator += tl.dot(A_data, B_data)
 
@@ -78,7 +78,7 @@ _bmm_kernel_autotuned = triton.autotune(
         for bk in [32, 64]
         for gs in [1, 8]
         for nw in [4, 8]
-        for ns in [2, 3]
+        for ns in [2, 3, 4]
     ],
     key=["BATCH", "M", "N", "K"],
 )(_bmm_kernel)
