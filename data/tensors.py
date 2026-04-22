@@ -71,6 +71,12 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
 def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
+def generate_jacobi_stencil_2d_inputs(rows, cols=None,
+                                       dtype=torch.float32, device='cuda', **kwargs):
+    if cols is None:
+        cols = rows
+    input = torch.randn(rows, cols, dtype=dtype, device=device)
+    return (input, rows, cols)
 
 
 def generate_destindex_inputs(
@@ -320,11 +326,22 @@ def generate_conv2d_fwd_inputs(
     return (input, weight, stride, padding, groups)
 
 
+def generate_weight_dequant_inputs(M, TILE_SIZE, dtype, N=None, device='cuda', **kwargs):
+    if N is None:
+        N = M
+    X = torch.randn(M, N, dtype=dtype, device=device)
+    S_rows = math.ceil(M / TILE_SIZE)
+    S_cols = math.ceil(N / TILE_SIZE)
+    S = torch.randn(S_rows, S_cols, dtype=dtype, device=device)
+    return (X, S, M, N, TILE_SIZE)
+
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
     "leaky_relu": generate_leaky_relu_inputs,
+    "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
     "quantize_global": generate_quantize_global_inputs,
@@ -348,6 +365,7 @@ GENERATORS = {
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
+    "weight_dequant": generate_weight_dequant_inputs,
 }
 
 
@@ -420,6 +438,10 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "jacobi_stencil_2d":
+        rows = int(params.get("rows", 1))
+        cols = int(params.get("cols", rows))
+        return rows * cols
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
@@ -449,6 +471,10 @@ def infer_problem_size(operator_name, params):
             * int(params.get("input_rows", 1))
             * int(params.get("input_cols", params.get("input_rows", 1)))
         )
+    if operator_name == "weight_dequant":
+        M = int(params.get("M", 1))
+        N = int(params.get("N", M))
+        return M * N
     # Fallback: multiply all integer-like params.
     size = 1
     used = False
