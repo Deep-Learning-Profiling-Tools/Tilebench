@@ -11,8 +11,8 @@ except ImportError:  # pragma: no cover
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(occupancy=2)
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=4)
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 _last_autotune_config = None
 
 _BLOCK_SIZE = 1024
