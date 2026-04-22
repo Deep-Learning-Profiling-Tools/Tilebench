@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 128, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -27,9 +27,10 @@ def interleave_kernel(A_ptr, B_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
 
 _interleave_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [64, 128, 256, 512]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
+        for bs in [1024, 2048, 4096, 8192]
         for nw in [4, 8]
+        for ns in [1, 2]
     ],
     key=["N"],
 )(interleave_kernel)
@@ -59,4 +60,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_interleave_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps}
+    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
