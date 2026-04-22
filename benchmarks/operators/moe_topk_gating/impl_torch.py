@@ -14,8 +14,8 @@ def run(logits: torch.Tensor, M: int, E: int, k: int, **kwargs):
 
     for i in range(k):
         vals, idxs = logits_f32.max(dim=-1)          # ties → first occurrence
-        topk_vals[:, i] = vals
-        topk_idxs[:, i] = idxs.to(torch.int32)
+        topk_vals[:, k - 1 - i] = vals
+        topk_idxs[:, k - 1 - i] = idxs.to(torch.int32)
         # Mask out the chosen position so the next iteration picks the next max.
         logits_f32.scatter_(1, idxs.unsqueeze(1), float("-inf"))
 

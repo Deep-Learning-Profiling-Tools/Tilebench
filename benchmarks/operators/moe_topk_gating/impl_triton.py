@@ -41,8 +41,8 @@ def _moe_topk_gating_kernel(
         curr_max_val = tl.max(logits, axis=-1)
         curr_max_idx = tl.argmax(logits, axis=-1)
 
-        topk_vals = tl.where(offsets_k == i, curr_max_val, topk_vals)
-        topk_idxs = tl.where(offsets_k == i, curr_max_idx, topk_idxs)
+        topk_vals = tl.where(offsets_k == (K - 1 - i), curr_max_val, topk_vals)
+        topk_idxs = tl.where(offsets_k == (K - 1 - i), curr_max_idx, topk_idxs)
 
         logits = tl.where(offsets_le == curr_max_idx, float("-inf"), logits)
 

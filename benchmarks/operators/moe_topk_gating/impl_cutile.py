@@ -60,8 +60,8 @@ def _moe_topk_gating_kernel(
         curr_max_idx = ct.argmax(logits, axis=-1, keepdims=True) # (1, 1) int32
 
         # Place curr_max at position i in the top-K buffer.
-        topk_vals = ct.where(offsets_k == i, curr_max_val, topk_vals)
-        topk_idxs = ct.where(offsets_k == i, curr_max_idx, topk_idxs)
+        topk_vals = ct.where(offsets_k == (K - 1 - i), curr_max_val, topk_vals)
+        topk_idxs = ct.where(offsets_k == (K - 1 - i), curr_max_idx, topk_idxs)
 
         # Mask out the chosen position in logits so it won't win next iteration.
         logits = ct.where(offsets_le == curr_max_idx, -float("inf"), logits)
