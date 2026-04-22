@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK": 1024, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK": 1024, "num_warps": 4}
 
 
 @triton.jit
@@ -37,10 +37,9 @@ def _bitonic_step_kernel(work_ptr, k, j, M, BLOCK: tl.constexpr):
 
 _bitonic_step_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK": bs}, num_warps=nw, num_stages=ns)
-        for bs in [256, 512, 1024, 2048]
+        triton.Config({"BLOCK": bs}, num_warps=nw)
+        for bs in [512, 1024, 2048, 4096]
         for nw in [2, 4, 8]
-        for ns in [1, 2, 3]
     ],
     key=["M"],
 )(_bitonic_step_kernel)
@@ -86,7 +85,6 @@ def run(data: torch.Tensor, N: int,
                     work, k, j, M,
                     BLOCK=cfg["BLOCK"],
                     num_warps=cfg["num_warps"],
-                    num_stages=cfg["num_stages"],
                 )
                 j //= 2
             k *= 2
@@ -101,5 +99,4 @@ def get_last_config() -> dict | None:
     return {
         "BLOCK": cfg.kwargs["BLOCK"],
         "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
     }
