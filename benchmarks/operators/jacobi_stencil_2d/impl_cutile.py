@@ -11,12 +11,12 @@ except ImportError:  # pragma: no cover
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_r=1, tile_c=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile_r=1, tile_c=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile_r=tr, tile_c=tc, occupancy=occ)
     for tr in [1, 2, 4]
     for tc in [256, 512, 1024, 2048]
-    for occ in [1, 2, 4]
+    for occ in [4, 8, 16]
 ]
 _last_autotune_config = None
 
