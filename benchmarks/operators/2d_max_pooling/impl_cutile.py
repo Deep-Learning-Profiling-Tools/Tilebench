@@ -11,11 +11,11 @@ except ImportError:  # pragma: no cover
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [128, 256, 512, 1024]
-    for occ in [1, 2, 4]
+    for t in [256, 512, 1024, 2048]
+    for occ in [4, 8, 16]
 ]
 _last_autotune_config = None
 
@@ -74,7 +74,8 @@ def _max_pool2d_kernel(
 
             acc = ct.maximum(acc, x)
 
-    # ct.store silently drops OOB writes for the final partial tile.
+    # Cast back to output dtype before storing (avoids host-side conversion).
+    acc = ct.astype(acc, output_flat.dtype)
     ct.store(output_flat, index=(bid,), tile=acc)
 
 
@@ -94,11 +95,8 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
     if total_out <= 0:
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
-    # Allocate output in fp32; cast to input.dtype on host (matches 3d_conv / gaussian_blur cuTile pattern).
-    output = torch.empty(total_out, dtype=torch.float32, device=input.device)
+    output = torch.empty(total_out, dtype=input.dtype, device=input.device)
     stream = torch.cuda.current_stream()
-
-    input_f32 = input.float()
 
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
@@ -106,7 +104,7 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
             grid_fn=lambda cfg: (ct.cdiv(total_out, cfg.tile), 1, 1),
             kernel=_max_pool2d_kernel,
             args_fn=lambda cfg: (
-                input_f32, output,
+                input, output,
                 C, H, W, H_out, W_out, total_out,
                 kernel_size, stride, padding,
                 cfg.tile,
@@ -123,13 +121,13 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
         grid = (ct.cdiv(total_out, cfg.tile), 1, 1)
         ct.launch(
             stream, grid, _max_pool2d_kernel,
-            (input_f32, output,
+            (input, output,
              C, H, W, H_out, W_out, total_out,
              kernel_size, stride, padding,
              cfg.tile),
         )
 
-    return output.to(input.dtype)
+    return output
 
 
 def get_last_config() -> dict | None:

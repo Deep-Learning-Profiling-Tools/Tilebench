@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
 
 
 @triton.jit
@@ -48,10 +48,9 @@ def _max_pool2d_kernel(
 
 _max_pool2d_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [128, 256, 512, 1024]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
+        for bs in [256, 512, 1024, 2048]
         for nw in [4, 8]
-        for ns in [2, 3]
     ],
     key=["total_out", "kernel_size", "stride", "padding"],
 )(_max_pool2d_kernel)
@@ -88,7 +87,6 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
             padding=padding,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output
@@ -101,5 +99,4 @@ def get_last_config() -> dict | None:
     return {
         "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
         "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
     }
