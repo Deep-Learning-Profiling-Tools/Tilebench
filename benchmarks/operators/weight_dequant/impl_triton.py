@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
@@ -31,7 +31,7 @@ def dequant_kernel(X, S, Y, M: tl.constexpr, N: tl.constexpr,
 _dequant_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [128, 256, 512, 1024]
+        for bs in [256, 512, 1024, 2048, 4096]
         for nw in [4, 8]
     ],
     key=["M", "N"],
@@ -54,7 +54,6 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
             X, S, output, M, N,
             S_COLS, TILE_SIZE, cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output
