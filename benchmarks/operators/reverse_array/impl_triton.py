@@ -25,9 +25,11 @@ def _reverse_kernel(input_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
 
 _reverse_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
+        for bs in [1024, 2048, 4096, 8192]
         for nw in [4, 8]
+        for ns in [1, 2]
+
     ],
     key=["N"],
 )(_reverse_kernel)
@@ -57,4 +59,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_reverse_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps}
+    return {"BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"], "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
