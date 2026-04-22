@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK": 256, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK": 256, "num_warps": 4}
 
 
 @triton.jit
@@ -94,12 +94,11 @@ def _apply_batch_norm_kernel(
 # Block sums and mean/invstd kernels use fixed defaults.
 _apply_batch_norm_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK": bs}, num_warps=nw, num_stages=ns)
-        for bs in [128, 256, 512, 1024, 2048]
+        triton.Config({"BLOCK": bs}, num_warps=nw)
+        for bs in [256, 512, 1024, 2048]
         for nw in [4, 8]
-        for ns in [2, 3]
     ],
-    key=["total_elements", "C"],
+    key=["total_elements"],
 )(_apply_batch_norm_kernel)
 
 
@@ -143,7 +142,6 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
             total_elements, C,
             BLOCK=cfg["BLOCK"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output
@@ -156,5 +154,4 @@ def get_last_config() -> dict | None:
     return {
         "BLOCK": cfg.kwargs["BLOCK"],
         "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
     }
