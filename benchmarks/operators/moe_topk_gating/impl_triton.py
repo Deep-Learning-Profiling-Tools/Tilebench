@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"num_warps": 4}
 
 
 @triton.jit
@@ -57,9 +57,8 @@ def _moe_topk_gating_kernel(
 # Only num_warps / num_stages are tunable; BLOCK_SIZE_E and BLOCK_SIZE_K are fixed by E, K.
 _moe_topk_gating_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({}, num_warps=nw, num_stages=ns)
-        for nw in [1, 2, 4, 8]
-        for ns in [1, 2, 3]
+        triton.Config({}, num_warps=nw)
+        for nw in [1, 2, 4]
     ],
     key=["E", "K"],
 )(_moe_topk_gating_kernel)
@@ -89,7 +88,6 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
             BLOCK_SIZE_E=block_size_e,
             BLOCK_SIZE_K=block_size_k,
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return (topk_weights, topk_indices)
@@ -99,4 +97,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_moe_topk_gating_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
+    return {"num_warps": cfg.num_warps}
