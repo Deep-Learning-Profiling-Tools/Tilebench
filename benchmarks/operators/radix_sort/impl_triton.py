@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"num_warps": 2}
 _BLOCK_SIZE = 1024
 _BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (hardcoded in LeetGPU)
 
@@ -93,9 +93,8 @@ def _radix_sort_kernel(input, output, first_layer_sum, global_ones, bit, N, BLOC
 # because other kernels share the same block layout; only num_warps / num_stages vary.
 _radix_sort_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({}, num_warps=nw, num_stages=ns)
+        triton.Config({}, num_warps=nw)
         for nw in [2, 4, 8]
-        for ns in [1, 2, 3]
     ],
     key=["N"],
 )(_radix_sort_kernel)
@@ -143,7 +142,7 @@ def run(input: torch.Tensor, N: int,
         else:
             _radix_sort_kernel[grid](
                 work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
-                num_warps=cfg["num_warps"], num_stages=cfg["num_stages"],
+                num_warps=cfg["num_warps"],
             )
 
         work.copy_(output)
@@ -155,4 +154,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_radix_sort_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
+    return {"num_warps": cfg.num_warps}

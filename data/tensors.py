@@ -70,7 +70,7 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
 
 def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
     # Non-negative int32 so unsigned-vs-signed sort order coincide (bit 31 always 0).
-    data = torch.randint(0, 2**30, (n,), dtype=torch.int64, device=device).to(dtype)
+    data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
     return (data, n)
 
 
