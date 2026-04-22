@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
 
 
 @triton.jit
@@ -55,12 +55,11 @@ def _gaussian_blur_kernel(
 
 _gaussian_blur_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [128, 256, 512, 1024]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
+        for bs in [256, 512, 1024, 2048]
         for nw in [4, 8]
-        for ns in [2, 3]
     ],
-    key=["total_elements", "kernel_rows", "kernel_cols"],
+    key=["total_elements"],
 )(_gaussian_blur_kernel)
 
 
@@ -91,7 +90,6 @@ def run(input, kernel, input_rows, input_cols,
             kernel_cols=kernel_cols,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output
@@ -104,5 +102,4 @@ def get_last_config() -> dict | None:
     return {
         "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
         "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
     }

@@ -11,11 +11,11 @@ except ImportError:  # pragma: no cover
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [128, 256, 512, 1024]
-    for occ in [1, 2, 4]
+    for t in [256, 512, 1024, 2048]
+    for occ in [4, 8, 16]
 ]
 _last_autotune_config = None
 
@@ -67,7 +67,7 @@ def _gaussian_blur_stencil_kernel(
 
             acc = acc + x * w_scalar
 
-    # ct.store silently ignores OOB writes for the final partial tile.
+    acc = ct.astype(acc, output_flat.dtype)
     ct.store(output_flat, index=(bid,), tile=acc)
 
 
@@ -86,13 +86,8 @@ def run(input, kernel, input_rows, input_cols,
     if total_elements <= 0:
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
-    # Accumulator is fp32; allocate output in fp32 and cast to input.dtype on host
-    # (matches the 3d_conv / conv2d_fwd cuTile pattern).
-    output = torch.empty(total_elements, dtype=torch.float32, device=input.device)
+    output = torch.empty(total_elements, dtype=input.dtype, device=input.device)
     stream = torch.cuda.current_stream()
-
-    input_f32 = input.float()
-    kernel_f32 = kernel.float()
 
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
@@ -100,7 +95,7 @@ def run(input, kernel, input_rows, input_cols,
             grid_fn=lambda cfg: (ct.cdiv(total_elements, cfg.tile), 1, 1),
             kernel=_gaussian_blur_stencil_kernel,
             args_fn=lambda cfg: (
-                input_f32, kernel_f32, output,
+                input, kernel, output,
                 input_rows, input_cols, total_elements,
                 kernel_rows, kernel_cols,
                 cfg.tile,
@@ -117,13 +112,13 @@ def run(input, kernel, input_rows, input_cols,
         grid = (ct.cdiv(total_elements, cfg.tile), 1, 1)
         ct.launch(
             stream, grid, _gaussian_blur_stencil_kernel,
-            (input_f32, kernel_f32, output,
+            (input, kernel, output,
              input_rows, input_cols, total_elements,
              kernel_rows, kernel_cols,
              cfg.tile),
         )
 
-    return output.to(input.dtype)
+    return output
 
 
 def get_last_config() -> dict | None:
