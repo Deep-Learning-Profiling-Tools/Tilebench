@@ -20,9 +20,9 @@ def _sigmoid_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 _sigmoid_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [256, 512, 1024, 2048, 4096]
+        for bs in [1024, 2048, 4096, 8192]
         for nw in [4, 8]
-        for ns in [2, 3]
+        for ns in [1, 2]
     ],
     key=["n_elements"],
 )(_sigmoid_kernel)
