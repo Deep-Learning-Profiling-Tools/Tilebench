@@ -18,7 +18,13 @@ ConstBool = ct.Constant[bool]
 
 _last_autotune_config: dict | None = None
 
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=32, occupancy=8)
+_SEARCH_SPACE = [
+    SimpleNamespace(tile_m=tm, tile_n=tn, occupancy=occ)
+    for tm in [64, 128]
+    for tn in [32, 64, 128]
+    for occ in [1, 2, 4, 8]
+]
 
 @ct.kernel(occupancy=2)
 def fmha_kernel(Q, K, V, Out,
@@ -135,51 +141,45 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
 
     Batch, Heads, SeqLen_Q, D_k = q.shape
 
-    TILE_M = 64
-    TILE_N = 32
-
     input_pos = 0
-
-    # Scale
     qk_scale = 1.0 / math.sqrt(D_k)
-
-    # EVEN_K Check
-    even_k = (SeqLen_Q % TILE_N) == 0
-
     query_group_size = 1
 
     Out = torch.empty_like(q)
-
-    grid_x = math.ceil(SeqLen_Q / TILE_M)
-    grid_y = Batch * Heads
-    grid = (grid_x, grid_y, 1)
-
     stream = torch.cuda.current_stream()
-    args = (
-        q, k, v, Out,
-        qk_scale,
-        input_pos,
-        D_k,
-        Heads,
-        TILE_M,
-        TILE_N,
-        query_group_size,
-        causal,
-        even_k,
-    )
+
+    def build_args(tile_m, tile_n):
+        return (
+            q, k, v, Out,
+            qk_scale,
+            input_pos,
+            D_k,
+            Heads,
+            tile_m,
+            tile_n,
+            query_group_size,
+            causal,
+            (SeqLen_Q % tile_n) == 0,
+        )
 
     if autotune and ct_experimental is not None:
         result = ct_experimental.autotune_launch(
             stream,
-            grid_fn=lambda cfg: grid,
+            grid_fn=lambda cfg: (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1),
             kernel=fmha_kernel,
-            args_fn=lambda cfg: args,
+            args_fn=lambda cfg: build_args(cfg.tile_m, cfg.tile_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
             search_space=_SEARCH_SPACE,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+        _last_autotune_config = {
+            "tile_m": result.tuned_config.tile_m,
+            "tile_n": result.tuned_config.tile_n,
+            "occupancy": result.tuned_config.occupancy,
+        }
     else:
-        ct.launch(stream, grid, fmha_kernel, args)
+        cfg = _DEFAULT_CONFIG
+        grid = (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1)
+        ct.launch(stream, grid, fmha_kernel, build_args(cfg.tile_m, cfg.tile_n))
 
     return Out
 
