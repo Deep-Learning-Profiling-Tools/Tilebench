@@ -308,7 +308,7 @@ def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='
     return (x, eps)
 
 
-def generate_conv2d_fwd_inputs(
+def generate_2d_conv_inputs(
     batch, in_channels, out_channels, H,
     kernel_size=3, stride=1, padding=1, groups=1,
     dtype=torch.float32, device='cuda', **kwargs,
@@ -356,7 +356,7 @@ GENERATORS = {
     "quantized_gemm": generate_quantized_gemm_inputs,
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
-    "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "2d_conv": generate_2d_conv_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
@@ -450,7 +450,7 @@ def infer_problem_size(operator_name, params):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
-    if operator_name == "conv2d_fwd":
+    if operator_name == "2d_conv":
         batch        = int(params.get("batch", 1))
         in_channels  = int(params.get("in_channels", 1))
         out_channels = int(params.get("out_channels", 1))
