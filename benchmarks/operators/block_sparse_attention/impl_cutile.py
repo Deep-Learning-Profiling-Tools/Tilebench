@@ -13,7 +13,8 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
@@ -240,6 +241,7 @@ def run(
         )
         _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
     else:
+        cfg = _DEFAULT_CONFIG  # occupancy not pass-through via ct.launch; kept for parity
         ct.launch(
             stream,
             grid,
