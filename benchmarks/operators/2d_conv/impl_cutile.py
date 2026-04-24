@@ -5,11 +5,6 @@ import cuda.tile as ct
 import torch
 import torch.nn.functional as F
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
-
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -111,8 +106,9 @@ def run(
         b_pad[:K_feat, :out_channels_per_group] = w_2d
         c_pad = torch.empty((M_pad, OC_pad), device=input.device, dtype=torch.float32)
 
-        if autotune and ct_experimental is not None:
-            result = ct_experimental.autotune_launch(
+        if autotune:
+            result = ct.tune.exhaustive_search(
+                _SEARCH_SPACE,
                 stream,
                 grid_fn=lambda cfg: (M_pad // cfg.tile_m, OC_pad // cfg.tile_n, 1),
                 kernel=_gemm_kernel,
@@ -122,23 +118,24 @@ def run(
                     cfg.tile_m, cfg.tile_k, cfg.tile_n,
                 ),
                 hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-                search_space=_SEARCH_SPACE,
             )
+            cfg = result.best.config
             _last_autotune_config = {
-                "tile_m": result.tuned_config.tile_m,
-                "tile_k": result.tuned_config.tile_k,
-                "tile_n": result.tuned_config.tile_n,
-                "occupancy": result.tuned_config.occupancy,
+                "tile_m": cfg.tile_m,
+                "tile_k": cfg.tile_k,
+                "tile_n": cfg.tile_n,
+                "occupancy": cfg.occupancy,
             }
         else:
             cfg = _DEFAULT_CONFIG
-            grid = (M_pad // cfg.tile_m, OC_pad // cfg.tile_n, 1)
-            ct.launch(
-                stream, grid, _gemm_kernel,
-                (a_pad, b_pad, c_pad,
-                 K_pad // cfg.tile_k,
-                 cfg.tile_m, cfg.tile_k, cfg.tile_n),
-            )
+
+        grid = (M_pad // cfg.tile_m, OC_pad // cfg.tile_n, 1)
+        ct.launch(
+            stream, grid, _gemm_kernel,
+            (a_pad, b_pad, c_pad,
+             K_pad // cfg.tile_k,
+             cfg.tile_m, cfg.tile_k, cfg.tile_n),
+        )
 
         out_g = c_pad[:M, :out_channels_per_group]
         out_g = out_g.reshape(batch, L, out_channels_per_group).permute(0, 2, 1)
