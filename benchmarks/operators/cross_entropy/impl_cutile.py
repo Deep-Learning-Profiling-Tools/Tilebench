@@ -3,16 +3,13 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
+
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
@@ -59,23 +56,21 @@ def run(
     stream = torch.cuda.current_stream()
     grid = (batch_size, 1, 1)
 
-    search_space = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4]]
-
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
+    if autotune:
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
             stream,
             grid_fn=lambda cfg: grid,
             kernel=_cross_entropy_kernel,
             args_fn=lambda cfg: (logits_padded, targets, output, block_classes),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=search_space,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
-    else:
-        ct.launch(
-            stream, grid, _cross_entropy_kernel,
-            (logits_padded, targets, output, block_classes),
-        )
+        _last_autotune_config = {"occupancy": result.best.config.occupancy}
+
+    ct.launch(
+        stream, grid, _cross_entropy_kernel,
+        (logits_padded, targets, output, block_classes),
+    )
 
     return output
 
