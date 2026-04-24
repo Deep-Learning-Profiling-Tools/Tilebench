@@ -3,21 +3,16 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=32, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=64, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [8, 16, 32, 64]
-    for occ in [1, 2, 4]
+    for t in [32, 64, 128]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -35,23 +30,25 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     output = torch.empty((n, m), device=x.device, dtype=x.dtype)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
+    if autotune:
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
             stream,
             grid_fn=lambda cfg: ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1),
             kernel=_transpose_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
+        cfg = result.best.config
         _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1)
-        ct.launch(stream, grid, _transpose_kernel, (x, output, cfg.tile))
+
+    grid = ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1)
+    ct.launch(stream, grid, _transpose_kernel, (x, output, cfg.tile))
 
     return output
 
