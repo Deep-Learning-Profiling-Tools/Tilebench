@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
@@ -24,15 +24,17 @@ def _swiglu_kernel(
 
     x = tl.load(x_ptr + cols, mask=mask, other=0.)
     y = tl.load(y_ptr + cols, mask=mask, other=0.)
-    out = x * tl.sigmoid(x.to(tl.float32)).to(x.dtype) * y
-    tl.store(out_ptr + cols, out, mask=mask)
+    x_f32 = x.to(tl.float32)
+    y_f32 = y.to(tl.float32)
+    out = x_f32 * tl.sigmoid(x_f32) * y_f32
+    tl.store(out_ptr + cols, out.to(x.dtype), mask=mask)
 
 
 _swiglu_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [64, 128, 256, 512, 1024, 2048]
-        for nw in [4, 8, 16]
+        for bs in [512, 1024, 2048]
+        for nw in [2, 4, 8]
     ],
     key=["ncols"],
 )(_swiglu_kernel)
@@ -62,7 +64,6 @@ def run(x: torch.Tensor, y: torch.Tensor,
             N,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
     return output
 
