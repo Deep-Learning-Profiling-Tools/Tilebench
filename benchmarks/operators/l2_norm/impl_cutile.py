@@ -1,42 +1,19 @@
-"""cuTile implementation of L2 normalisation (per-row).
-
-Algorithm (one CTA per row):
-
-  Pass 1 – tiled accumulation of sum(x²):
-      for j in range(num_tiles):
-          xj = ct.load(x, index=(row, j), shape=(1, TILE_SIZE), padding_mode=ZERO)
-          _sum_sq += xj * xj
-      rstd = ct.rsqrt(sum(_sum_sq) + eps)
-
-  Pass 2 – tiled normalise:
-      for j in range(num_tiles):
-          yj = xj * rstd
-          ct.store(out, index=(row, j), tile=yj)
-
-padding_mode=ZERO on the last tile: OOB elements load as 0 → contribute 0
-to sum(x²), so rstd is computed correctly without any masking.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
     for ts in [256, 512, 1024, 2048]
-    for occ in [1, 2, 4, 8]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -85,23 +62,25 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
     stream = torch.cuda.current_stream()
     grid   = (batch_M, 1, 1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
+    if autotune:
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
             stream,
             grid_fn=lambda cfg: grid,
             kernel=_l2_norm_kernel,
             args_fn=lambda cfg: (x_2d, out_2d, eps, K, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
+        cfg = result.best.config
         _last_autotune_config = {
-            "tile_size": result.tuned_config.tile_size,
-            "occupancy": result.tuned_config.occupancy,
+            "tile_size": cfg.tile_size,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, grid, _l2_norm_kernel,
-                  (x_2d, out_2d, eps, K, cfg.tile_size))
+
+    ct.launch(stream, grid, _l2_norm_kernel,
+              (x_2d, out_2d, eps, K, cfg.tile_size))
 
     return out
 
