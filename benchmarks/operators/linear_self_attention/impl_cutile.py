@@ -151,6 +151,7 @@ def run(
     BLOCK_D: int = 16,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 

@@ -10,6 +10,7 @@ def run(
     BLOCK_SIZE: int = 1024,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 
@@ -19,9 +20,9 @@ def run(
     assert input.ndim == 1
     assert input.shape[0] == N
     assert input.dtype == torch.float32
+    assert 1 <= k <= N
 
     input = input.contiguous()
-
     output = torch.topk(input, k, largest=True, sorted=True).values
 
     _LAST_CONFIG = {

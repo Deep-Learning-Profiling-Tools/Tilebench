@@ -4,6 +4,7 @@ _LAST_CONFIG = None
 
 
 def _phi(x: torch.Tensor) -> torch.Tensor:
+    # phi(x) = ELU(x) + 1
     return torch.where(x > 0, x + 1.0, torch.exp(x))
 
 
@@ -16,6 +17,7 @@ def run(
     BLOCK_D: int = 16,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 
@@ -35,9 +37,7 @@ def run(
 
     S = phi_k.transpose(0, 1) @ V
     Z = phi_k.sum(dim=0)
-    numer = phi_q @ S
-    denom = phi_q @ Z
-    O = numer / (denom[:, None] + float(eps))
+    O = (phi_q @ S) / ((phi_q @ Z)[:, None] + float(eps))
 
     _LAST_CONFIG = {
         "BLOCK_M": int(BLOCK_M),

@@ -47,6 +47,7 @@ def run(
     BLOCK_SIZE: int = 1024,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 

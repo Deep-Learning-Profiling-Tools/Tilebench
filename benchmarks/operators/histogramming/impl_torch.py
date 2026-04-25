@@ -13,6 +13,7 @@ def run(
     BLOCK_BINS: int = 256,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 
@@ -25,8 +26,7 @@ def run(
     assert num_bins >= 1
 
     input = input.contiguous()
-
-    hist = torch.bincount(input.to(torch.int64), minlength=num_bins).to(torch.int32)
+    histogram = torch.bincount(input.to(torch.int64), minlength=num_bins).to(torch.int32)
 
     _LAST_CONFIG = {
         "BLOCK_SIZE": int(BLOCK_SIZE),
@@ -34,7 +34,7 @@ def run(
         "BLOCK_ROWS": int(BLOCK_ROWS),
         "BLOCK_BINS": int(BLOCK_BINS),
     }
-    return hist
+    return histogram
 
 
 def get_last_config() -> dict | None:

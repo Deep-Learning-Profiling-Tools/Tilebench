@@ -79,6 +79,7 @@ def run(
     BLOCK_BINS: int = 256,
     block_size: int = None,
     autotune: bool = False,
+    **kwargs,
 ):
     global _LAST_CONFIG
 
