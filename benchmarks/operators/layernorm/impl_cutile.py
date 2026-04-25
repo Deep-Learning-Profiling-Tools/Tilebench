@@ -1,38 +1,8 @@
-"""cuTile implementation of LayerNorm using tiled two-pass loops.
-
-Algorithm (one CTA per row):
-
-  Pass 1 – single tiled scan accumulates sum(x) and sum(x²):
-      for j in range(num_tiles):
-          xj = ct.load(x, index=(row, j), shape=(1, TILE_SIZE), padding_mode=ZERO)
-          _sum_x  += xj
-          _sum_x2 += xj * xj
-      mean = sum(_sum_x)  / N
-      var  = sum(_sum_x2) / N - mean * mean   # E[x²] - E[x]²
-      rstd = ct.rsqrt(var + eps)
-
-  Pass 2 – tiled normalize, scale, and shift:
-      for j in range(num_tiles):
-          yj = (xj - mean) * rstd * wj + bj
-          ct.store(out, index=(row, j), tile=yj)
-
-padding_mode=ZERO on the last tile:  OOB elements load as 0.
-  - sum(x):  0 contributes 0 → mean correct.
-  - sum(x²): 0² = 0 contributes 0 → var correct (via E[x²]-E[x]² formula).
-  - Pass 2 store is bounds-checked by cuTile against the output tensor shape.
-
-Autotune parameters: TILE_SIZE (tile width, must be power of 2), occupancy.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
 import numpy as np
 import torch
-
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
 
 ConstInt = ct.Constant[int]
 
@@ -42,8 +12,8 @@ _DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
-    for ts in [256, 512, 1024, 2048]
-    for occ in [1, 2, 4, 8]
+    for ts in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -116,23 +86,25 @@ def run(
     stream = torch.cuda.current_stream()
     grid   = (batch_M, 1, 1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
+    if autotune:
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
             stream,
             grid_fn=lambda cfg: grid,
             kernel=_layernorm_kernel,
             args_fn=lambda cfg: (x_2d, weight_c, bias_c, out_2d, eps, K, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
+        cfg = result.best.config
         _last_autotune_config = {
-            "tile_size": result.tuned_config.tile_size,
-            "occupancy": result.tuned_config.occupancy,
+            "tile_size": cfg.tile_size,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, grid, _layernorm_kernel,
-                  (x_2d, weight_c, bias_c, out_2d, eps, K, cfg.tile_size))
+
+    ct.launch(stream, grid, _layernorm_kernel,
+              (x_2d, weight_c, bias_c, out_2d, eps, K, cfg.tile_size))
 
     return out
 
