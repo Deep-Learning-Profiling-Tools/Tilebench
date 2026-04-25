@@ -293,6 +293,18 @@ def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cud
     return (a, b)
 
 
+def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwargs):
+    """Inputs for matmul_int8: A is int8 (M, K), B is uint8 (K_b=K/4, N) packed
+    with 4 ternary-ish 2-bit fields per byte. dtype kwarg is ignored — A is
+    always int8 and B is always uint8 by construction.
+    """
+    assert K % 4 == 0, "K must be divisible by 4 (B holds 4 fields per byte)"
+    K_b = K // 4
+    a = torch.randint(-64, 65, (M, K), device=device, dtype=torch.int8)
+    b = torch.randint(0, 256, (K_b, N), device=device, dtype=torch.uint8)
+    return (a, b)
+
+
 def generate_mean_reduction_inputs(M, N, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(M, N, dtype=dtype, device=device)
     return (x, 1)  # always row-wise (dim=1)
@@ -356,6 +368,7 @@ GENERATORS = {
     "quantized_gemm": generate_quantized_gemm_inputs,
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "matmul_int8": generate_matmul_int8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "l2_norm": generate_l2_norm_inputs,
@@ -446,6 +459,8 @@ def infer_problem_size(operator_name, params):
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "streamk_scheduling":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
+    if operator_name == "matmul_int8":
+        return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
