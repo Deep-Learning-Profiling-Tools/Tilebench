@@ -7,18 +7,15 @@ benchmark:
 
 case_defaults:
   n_rows: 2048
-  n_cols: 4096
 
 case_grid:
-  dtype: ["float32", "float16"]
+  n_cols:
+    expr: "[512 * i for i in range(1, 21)]"
+  dtype: ["fp16", "fp32"]
 
 metrics:
   flops_expr: "n_rows * n_cols"
   bytes_expr: "n_rows * n_cols * dtype_size * 2"
-  peak_bw_GBs: 8000.0
-  peak_tflops:
-    float32: 80.0
-    float16: 400.0
   plots:
     - latency_ms
     - bandwidth_GBs

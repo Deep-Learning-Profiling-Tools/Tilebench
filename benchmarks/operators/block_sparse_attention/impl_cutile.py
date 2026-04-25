@@ -1,8 +1,19 @@
 import math
+from types import SimpleNamespace
+
 import torch
 import cuda.tile as ct
 
+try:
+    import cuda.tile_experimental as ct_experimental
+except ImportError:
+    ct_experimental = None
+
 ConstInt = ct.Constant[int]
+
+_last_autotune_config: dict | None = None
+
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
 
 
 @ct.kernel
@@ -190,6 +201,7 @@ def run(
     total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS,
     block_size: int = None, autotune: bool = False
 ):
+    global _last_autotune_config
     batch_size = Q.shape[0]
     D = Q.shape[-1]
     TOTAL_D = BLOCK_D * NUM_D_BLOCKS
@@ -207,22 +219,36 @@ def run(
     # Grid: [num_q_blocks, batch_size * num_heads, 1]
     grid = (math.ceil(total_seq_len / BLOCK_M), batch_size * num_heads, 1)
 
-    ct.launch(
-        torch.cuda.current_stream(),
-        grid,
-        block_sparse_attention_cutile_kernel,
-        (
-            out, Q, K, V,
-            layout_csr_row_indices, layout_csr_col_indices,
-            layout_csr_row_stride_h, layout_csr_col_stride_h,
-            num_layout, float(softmax_scale),
-            num_heads, num_kv_heads, total_seq_len,
-            BLOCK_M, BLOCK_N, TOTAL_D,
-        )
+    stream = torch.cuda.current_stream()
+    args = (
+        out, Q, K, V,
+        layout_csr_row_indices, layout_csr_col_indices,
+        layout_csr_row_stride_h, layout_csr_col_stride_h,
+        num_layout, float(softmax_scale),
+        num_heads, num_kv_heads, total_seq_len,
+        BLOCK_M, BLOCK_N, TOTAL_D,
     )
+
+    if autotune and ct_experimental is not None:
+        result = ct_experimental.autotune_launch(
+            stream,
+            grid_fn=lambda cfg: grid,
+            kernel=block_sparse_attention_cutile_kernel,
+            args_fn=lambda cfg: args,
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+            search_space=_SEARCH_SPACE,
+        )
+        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+    else:
+        ct.launch(
+            stream,
+            grid,
+            block_sparse_attention_cutile_kernel,
+            args
+        )
 
     return out
 
 
 def get_last_config() -> dict | None:
-    return None
+    return _last_autotune_config

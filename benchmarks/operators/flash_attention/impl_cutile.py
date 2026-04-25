@@ -1,13 +1,24 @@
 
+from types import SimpleNamespace
+
 import torch
 import cuda.tile as ct
 import math
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
+try:
+    import cuda.tile_experimental as ct_experimental
+except ImportError:
+    ct_experimental = None
+
 INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
+
+_last_autotune_config: dict | None = None
+
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
 
 @ct.kernel(occupancy=2)
 def fmha_kernel(Q, K, V, Out,
@@ -120,20 +131,21 @@ def fmha_kernel(Q, K, V, Out,
     ct.store(Out, index=(batch_idx, head_idx, bid_x, 0), tile=acc)
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
+    global _last_autotune_config
 
     Batch, Heads, SeqLen_Q, D_k = q.shape
 
     TILE_M = 64
-    TILE_N = 32 
-    
+    TILE_N = 32
+
     input_pos = 0
-    
+
     # Scale
     qk_scale = 1.0 / math.sqrt(D_k)
-    
+
     # EVEN_K Check
     even_k = (SeqLen_Q % TILE_N) == 0
-    
+
     query_group_size = 1
 
     Out = torch.empty_like(q)
@@ -142,7 +154,8 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     grid_y = Batch * Heads
     grid = (grid_x, grid_y, 1)
 
-    ct.launch(torch.cuda.current_stream(), grid, fmha_kernel, (
+    stream = torch.cuda.current_stream()
+    args = (
         q, k, v, Out,
         qk_scale,
         input_pos,
@@ -152,10 +165,23 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
         TILE_N,
         query_group_size,
         causal,
-        even_k
-    ))
+        even_k,
+    )
+
+    if autotune and ct_experimental is not None:
+        result = ct_experimental.autotune_launch(
+            stream,
+            grid_fn=lambda cfg: grid,
+            kernel=fmha_kernel,
+            args_fn=lambda cfg: args,
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+            search_space=_SEARCH_SPACE,
+        )
+        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+    else:
+        ct.launch(stream, grid, fmha_kernel, args)
 
     return Out
 
 def get_last_config() -> dict | None:
-    return None
+    return _last_autotune_config
