@@ -20,6 +20,8 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -56,6 +58,10 @@ def _mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
     ct.store(out, index=(row, 0), tile=out_tile, allow_tma=False, latency=1)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_mean_rowwise_kernel)
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     """
     cuTile row-wise mean reduction.
@@ -82,15 +88,14 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     grid   = (M, 1, 1)
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_mean_rowwise_kernel,
             args_fn=lambda cfg: (x2d, out, N, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {
             "tile_size": cfg.tile_size,
             "occupancy": cfg.occupancy,
@@ -98,7 +103,8 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     else:
         cfg = _DEFAULT_CONFIG
 
-    ct.launch(stream, grid, _mean_rowwise_kernel,
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
               (x2d, out, N, cfg.tile_size))
 
     return out.squeeze(1)  # (M,) float32
