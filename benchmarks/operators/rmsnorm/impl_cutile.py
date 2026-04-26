@@ -24,6 +24,8 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -74,6 +76,10 @@ def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_rmsnorm_kernel)
+
+
 def run(
     x: torch.Tensor,
     rms_w: torch.Tensor,
@@ -95,15 +101,14 @@ def run(
     grid   = (batch_M, 1, 1)
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch_M, K),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_rmsnorm_kernel,
             args_fn=lambda cfg: (x_2d, rms_w_c, out_2d, eps, K, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {
             "tile_size": cfg.tile_size,
             "occupancy": cfg.occupancy,
@@ -111,7 +116,8 @@ def run(
     else:
         cfg = _DEFAULT_CONFIG
 
-    ct.launch(stream, grid, _rmsnorm_kernel,
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
               (x_2d, rms_w_c, out_2d, eps, K, cfg.tile_size))
 
     return out
