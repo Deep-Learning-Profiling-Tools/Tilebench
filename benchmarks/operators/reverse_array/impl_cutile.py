@@ -3,10 +3,7 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -30,29 +27,35 @@ def _reverse_kernel(x_ptr, out_ptr, N, TILE: ConstInt):
     ct.store(out_ptr, index=(bid,), tile=vals)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_reverse_kernel)
+
+
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     global _last_autotune_config
     output = torch.empty_like(input)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(N,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((N + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=_reverse_kernel,
             args_fn=lambda cfg: (input, output, N, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile": result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile": cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = ((N + cfg.tile - 1) // cfg.tile, 1, 1)
-        ct.launch(stream, grid, _reverse_kernel, (input, output, N, cfg.tile))
+
+    grid = ((N + cfg.tile - 1) // cfg.tile, 1, 1)
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, (input, output, N, cfg.tile))
 
     return output
 
