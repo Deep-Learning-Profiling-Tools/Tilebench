@@ -293,6 +293,20 @@ def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cud
     return (a, b)
 
 
+def generate_matmul_fp32_fp16_fp8_inputs(M, N, K, dtype=torch.float32,
+                                         device='cuda', **kwargs):
+    """Inputs for plain GEMM tested across fp32 / fp16 / fp8 e4m3fn / fp8 e5m2.
+    fp8 dtypes don't support torch.randn directly, so generate in fp32 and cast.
+    """
+    if dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
+        a = torch.randn(M, K, dtype=torch.float32, device=device).to(dtype)
+        b = torch.randn(K, N, dtype=torch.float32, device=device).to(dtype)
+    else:
+        a = torch.randn(M, K, dtype=dtype, device=device)
+        b = torch.randn(K, N, dtype=dtype, device=device)
+    return (a, b)
+
+
 def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwargs):
     """Inputs for matmul_int8: A is int8 (M, K), B is uint8 (K_b=K/4, N) packed
     with 4 ternary-ish 2-bit fields per byte. dtype kwarg is ignored — A is
@@ -369,6 +383,7 @@ GENERATORS = {
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "matmul_int8": generate_matmul_int8_inputs,
+    "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "l2_norm": generate_l2_norm_inputs,
@@ -460,6 +475,8 @@ def infer_problem_size(operator_name, params):
     if operator_name == "streamk_scheduling":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "matmul_int8":
+        return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
+    if operator_name == "matmul_fp32_fp16_fp8":
         return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
