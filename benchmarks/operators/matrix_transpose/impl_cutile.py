@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -24,6 +26,10 @@ def _transpose_kernel(x, output, TILE: ConstInt):
     ct.store(output, index=(bid_n, bid_m), tile=ct.transpose(x_tile))
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_transpose_kernel)
+
+
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     global _last_autotune_config
     m, n = x.shape
@@ -31,15 +37,14 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     stream = torch.cuda.current_stream()
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(m, n),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1),
-            kernel=_transpose_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
@@ -48,7 +53,8 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
         cfg = _DEFAULT_CONFIG
 
     grid = ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1)
-    ct.launch(stream, grid, _transpose_kernel, (x, output, cfg.tile))
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, (x, output, cfg.tile))
 
     return output
 
