@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -60,6 +57,10 @@ def _argmax_rowwise_kernel(
     ct.store(output_flat, index=(row,), tile=ct.reshape(best_idx, (1,)))
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_argmax_rowwise_kernel)
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     global _last_autotune_config
 
@@ -76,30 +77,34 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     output = torch.empty(M, dtype=torch.int64, device=x.device)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
+    if autotune:
+        # n_tiles depends on N, so derive search_space per shape.
         search_space = [
             SimpleNamespace(block_n=cfg.block_n,
                             n_tiles=(N + cfg.block_n - 1) // cfg.block_n,
                             occupancy=cfg.occupancy)
             for cfg in _SEARCH_SPACE_BASE
         ]
-        result = ct_experimental.autotune_launch(
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N),
+            search_space=search_space,
+            stream=stream,
             grid_fn=lambda cfg: (M, 1, 1),
-            kernel=_argmax_rowwise_kernel,
             args_fn=lambda cfg: (input_flat, output, N, cfg.n_tiles, cfg.block_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=search_space,
         )
         _last_autotune_config = {
-            "block_n": result.tuned_config.block_n,
-            "occupancy": result.tuned_config.occupancy,
+            "block_n": cfg.block_n,
+            "occupancy": cfg.occupancy,
         }
+        n_tiles = cfg.n_tiles
     else:
         cfg = _DEFAULT_CONFIG
         n_tiles = (N + cfg.block_n - 1) // cfg.block_n
-        ct.launch(stream, (M, 1, 1), _argmax_rowwise_kernel,
-                  (input_flat, output, N, n_tiles, cfg.block_n))
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, (M, 1, 1), kernel,
+              (input_flat, output, N, n_tiles, cfg.block_n))
 
     return output
 
