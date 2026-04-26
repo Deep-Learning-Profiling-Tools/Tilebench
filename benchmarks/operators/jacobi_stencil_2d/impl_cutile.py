@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -63,6 +60,10 @@ def _jacobi_stencil_kernel(input_2d, output_2d, rows, cols,
     ct.store(output_2d, index=(bid_r, bid_c), tile=tile_out)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_jacobi_stencil_kernel)
+
+
 def run(input: torch.Tensor, rows: int, cols: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
@@ -75,35 +76,37 @@ def run(input: torch.Tensor, rows: int, cols: int,
     output = torch.empty_like(input)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(rows, cols),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (
                 ct.cdiv(rows, cfg.tile_r),
                 ct.cdiv(cols, cfg.tile_c),
                 1,
             ),
-            kernel=_jacobi_stencil_kernel,
             args_fn=lambda cfg: (
                 input, output, rows, cols, cfg.tile_r, cfg.tile_c,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile_r":    result.tuned_config.tile_r,
-            "tile_c":    result.tuned_config.tile_c,
-            "occupancy": result.tuned_config.occupancy,
+            "tile_r":    cfg.tile_r,
+            "tile_c":    cfg.tile_c,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (
-            ct.cdiv(rows, cfg.tile_r),
-            ct.cdiv(cols, cfg.tile_c),
-            1,
-        )
-        ct.launch(stream, grid, _jacobi_stencil_kernel,
-                  (input, output, rows, cols, cfg.tile_r, cfg.tile_c))
+
+    grid = (
+        ct.cdiv(rows, cfg.tile_r),
+        ct.cdiv(cols, cfg.tile_c),
+        1,
+    )
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (input, output, rows, cols, cfg.tile_r, cfg.tile_c))
 
     return output
 
