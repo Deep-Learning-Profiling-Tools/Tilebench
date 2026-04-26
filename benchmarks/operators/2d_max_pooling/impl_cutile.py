@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -79,6 +76,10 @@ def _max_pool2d_kernel(
     ct.store(output_flat, index=(bid,), tile=acc)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_max_pool2d_kernel)
+
+
 def run(input, N, C, H, W, kernel_size, stride, padding,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
@@ -98,11 +99,12 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
     output = torch.empty(total_out, dtype=input.dtype, device=input.device)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(total_out, kernel_size, stride, padding),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(total_out, cfg.tile), 1, 1),
-            kernel=_max_pool2d_kernel,
             args_fn=lambda cfg: (
                 input, output,
                 C, H, W, H_out, W_out, total_out,
@@ -110,22 +112,23 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
                 cfg.tile,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (ct.cdiv(total_out, cfg.tile), 1, 1)
-        ct.launch(
-            stream, grid, _max_pool2d_kernel,
-            (input, output,
-             C, H, W, H_out, W_out, total_out,
-             kernel_size, stride, padding,
-             cfg.tile),
-        )
+
+    grid = (ct.cdiv(total_out, cfg.tile), 1, 1)
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream, grid, kernel,
+        (input, output,
+         C, H, W, H_out, W_out, total_out,
+         kernel_size, stride, padding,
+         cfg.tile),
+    )
 
     return output
 
