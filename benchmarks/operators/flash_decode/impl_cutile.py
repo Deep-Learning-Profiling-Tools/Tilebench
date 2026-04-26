@@ -4,6 +4,8 @@ import torch
 import cuda.tile as ct
 import math
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -65,6 +67,12 @@ def flash_decode_stage2_kernel(
 
     ct.store(Out, index=(bid_b, bid_h, 0, 0), tile=final_out)
 
+
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# See core/cutile_autotune.py for why both layers matter.
+_tuner = CutileAutotuner(flash_decode_stage2_kernel)
+
+
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
     global _last_autotune_config
 
@@ -87,22 +95,20 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
     args = (mid_o, mid_o_lse, b_seqlen, out_view, HEAD_DIM, block_seq, TOTAL_BLOCKS)
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch, head_num, head_dim, num_blocks, block_seq),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=flash_decode_stage2_kernel,
             args_fn=lambda cfg: args,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": result.best.config.occupancy}
+        _last_autotune_config = {"occupancy": cfg.occupancy}
+    else:
+        cfg = _DEFAULT_CONFIG
 
-    ct.launch(
-        stream,
-        grid,
-        flash_decode_stage2_kernel,
-        args,
-    )
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, args)
 
     return out
 
