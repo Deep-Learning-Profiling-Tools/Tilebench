@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -57,6 +59,10 @@ def rope_kernel(
         ct.store(Q, index=(row_id, head_id, 1, 0), tile=out2)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(rope_kernel)
+
+
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
     global _last_autotune_config
@@ -78,21 +84,20 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         # accumulate into the real output.
         tmp = output.clone()
         tmp_view = tmp.view(batch * seq_len, n_heads, 2, half_dim)
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch, seq_len, n_heads, head_dim),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (
                 batch * seq_len,
                 (n_heads + cfg.group_size - 1) // cfg.group_size,
                 1,
             ),
-            kernel=rope_kernel,
             args_fn=lambda cfg: (
                 tmp_view, cos_view, sin_view, seq_len, half_dim, cfg.group_size,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {"group_size": cfg.group_size, "occupancy": cfg.occupancy}
     else:
         cfg = _DEFAULT_CONFIG
@@ -102,8 +107,9 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         (n_heads + cfg.group_size - 1) // cfg.group_size,
         1,
     )
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
-        stream, grid, rope_kernel,
+        stream, grid, kernel,
         (output_view, cos_view, sin_view, seq_len, half_dim, cfg.group_size),
     )
 
