@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -73,6 +70,11 @@ def _bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
     ct.scatter(work_ptr, ixj_safe, new_b)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# Mirrors Triton's @triton.autotune(key=["M"]) — one sweep per problem size.
+_tuner = CutileAutotuner(_bitonic_step_kernel)
+
+
 def run(data: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
@@ -94,37 +96,37 @@ def run(data: torch.Tensor, N: int,
     pad_grid = (ct.cdiv(M, default_tile), 1, 1)
     ct.launch(stream, pad_grid, _pad_kernel, (data, work, N, M, default_tile))
 
-    # Bitonic phase — many launches; autotune_launch caches per in-session key.
-    if autotune and ct_experimental is not None:
-        k = 2
-        while k <= M:
-            j = k // 2
-            while j > 0:
-                result = ct_experimental.autotune_launch(
-                    stream,
-                    grid_fn=lambda cfg: (ct.cdiv(M, cfg.tile), 1, 1),
-                    kernel=_bitonic_step_kernel,
-                    args_fn=lambda cfg, k=k, j=j: (work, k, j, M, cfg.tile),
-                    hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-                    search_space=_SEARCH_SPACE,
-                )
-                _last_autotune_config = {
-                    "tile":      result.tuned_config.tile,
-                    "occupancy": result.tuned_config.occupancy,
-                }
-                j //= 2
-            k *= 2
+    # Bitonic phase — same kernel launched O(log²(M)) times. Tune ONCE per M
+    # (matching Triton's `@triton.autotune(key=["M"])`), then reuse the cached
+    # config across all (k, j) steps.
+    if autotune:
+        # Use first step's (k, j) for the tuning launches; the optimal config
+        # depends on M and TILE only (not on k or j, which are runtime ints).
+        k0, j0 = 2, 1
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: (ct.cdiv(M, cfg.tile), 1, 1),
+            args_fn=lambda cfg: (work, k0, j0, M, cfg.tile),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+        _last_autotune_config = {
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
+        }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (ct.cdiv(M, cfg.tile), 1, 1)
-        k = 2
-        while k <= M:
-            j = k // 2
-            while j > 0:
-                ct.launch(stream, grid, _bitonic_step_kernel,
-                          (work, k, j, M, cfg.tile))
-                j //= 2
-            k *= 2
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    grid = (ct.cdiv(M, cfg.tile), 1, 1)
+    k = 2
+    while k <= M:
+        j = k // 2
+        while j > 0:
+            ct.launch(stream, grid, kernel, (work, k, j, M, cfg.tile))
+            j //= 2
+        k *= 2
 
     return work[:N].contiguous()
 
