@@ -3,10 +3,7 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -29,6 +26,10 @@ _SEARCH_SPACE = [
 ]
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(matrix_copy_kernel)
+
+
 def run(A: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     global _last_autotune_config
@@ -39,27 +40,29 @@ def run(A: torch.Tensor, N: int,
     A_flat = A.contiguous().view(-1)
     B_flat = B.view(-1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(N,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=matrix_copy_kernel,
             args_fn=lambda cfg: (A_flat, B_flat, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile": result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile": cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(
-            stream,
-            ((total + cfg.tile - 1) // cfg.tile, 1, 1),
-            matrix_copy_kernel,
-            (A_flat, B_flat, cfg.tile),
-        )
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream,
+        ((total + cfg.tile - 1) // cfg.tile, 1, 1),
+        kernel,
+        (A_flat, B_flat, cfg.tile),
+    )
 
     return B
 
