@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -92,6 +89,10 @@ def _bmm_kernel(a_3d, b_3d, c_3d,
              tile=ct.astype(acc_3d, c_3d.dtype))
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_bmm_kernel)
+
+
 def run(A: torch.Tensor, B: torch.Tensor,
         BATCH: int, M: int, N: int, K: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
@@ -115,15 +116,16 @@ def run(A: torch.Tensor, B: torch.Tensor,
     c_3d = torch.empty(BATCH, M, N, dtype=A.dtype, device=A.device)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(BATCH, M, N, K),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (
                 ct.cdiv(M, cfg.tile_m) * ct.cdiv(N, cfg.tile_n),
                 BATCH,
                 1,
             ),
-            kernel=_bmm_kernel,
             args_fn=lambda cfg: (
                 a_3d, b_3d, c_3d,
                 ct.cdiv(K, cfg.tile_k),
@@ -133,27 +135,28 @@ def run(A: torch.Tensor, B: torch.Tensor,
                 cfg.group_size,           # GROUP_SIZE
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile_m":     result.tuned_config.tile_m,
-            "tile_n":     result.tuned_config.tile_n,
-            "tile_k":     result.tuned_config.tile_k,
-            "occupancy":  result.tuned_config.occupancy,
-            "group_size": result.tuned_config.group_size,
+            "tile_m":     cfg.tile_m,
+            "tile_n":     cfg.tile_n,
+            "tile_k":     cfg.tile_k,
+            "occupancy":  cfg.occupancy,
+            "group_size": cfg.group_size,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid_m = ct.cdiv(M, cfg.tile_m)
-        grid_n = ct.cdiv(N, cfg.tile_n)
-        grid = (grid_m * grid_n, BATCH, 1)
-        K_TILES = ct.cdiv(K, cfg.tile_k)
-        ct.launch(stream, grid, _bmm_kernel, (
-            a_3d, b_3d, c_3d,
-            K_TILES,
-            cfg.tile_m, cfg.tile_n, cfg.tile_k,
-            grid_m, grid_n, cfg.group_size,
-        ))
+
+    grid_m = ct.cdiv(M, cfg.tile_m)
+    grid_n = ct.cdiv(N, cfg.tile_n)
+    grid = (grid_m * grid_n, BATCH, 1)
+    K_TILES = ct.cdiv(K, cfg.tile_k)
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, (
+        a_3d, b_3d, c_3d,
+        K_TILES,
+        cfg.tile_m, cfg.tile_n, cfg.tile_k,
+        grid_m, grid_n, cfg.group_size,
+    ))
 
     return c_3d.reshape(-1)
 
