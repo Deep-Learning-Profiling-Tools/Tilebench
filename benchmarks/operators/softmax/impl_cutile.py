@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -66,6 +63,11 @@ def softmax_online_kernel(
         ct.store(output_tensor, index=(row_idx, i), tile=y)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# See core/cutile_autotune.py for why both layers matter.
+_tuner = CutileAutotuner(softmax_online_kernel)
+
+
 def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
     global _last_autotune_config
 
@@ -74,7 +76,8 @@ def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
     grid = (n_rows, 1, 1)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
+    if autotune:
+        # n_tiles depends on n_cols, so derive search_space per shape.
         search_space = [
             SimpleNamespace(
                 block_size=cfg.block_size,
@@ -83,25 +86,28 @@ def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
             )
             for cfg in _SEARCH_SPACE_BASE
         ]
-        result = ct_experimental.autotune_launch(
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(n_rows, n_cols),
+            search_space=search_space,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=softmax_online_kernel,
             args_fn=lambda cfg: (x, output, n_cols, cfg.n_tiles, cfg.block_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=search_space,
         )
         _last_autotune_config = {
-            "block_size": result.tuned_config.block_size,
-            "occupancy": result.tuned_config.occupancy,
+            "block_size": cfg.block_size,
+            "occupancy": cfg.occupancy,
         }
+        n_tiles = cfg.n_tiles
     else:
         cfg = _DEFAULT_CONFIG
         n_tiles = (n_cols + cfg.block_size - 1) // cfg.block_size
-        ct.launch(
-            stream, grid, softmax_online_kernel,
-            (x, output, n_cols, n_tiles, cfg.block_size),
-        )
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream, grid, kernel,
+        (x, output, n_cols, n_tiles, cfg.block_size),
+    )
 
     return output
 
