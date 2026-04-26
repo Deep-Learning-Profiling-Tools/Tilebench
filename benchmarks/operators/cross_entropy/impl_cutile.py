@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -26,6 +28,10 @@ def _cross_entropy_kernel(logits, targets, output, BLOCK_CLASSES: ConstInt):
 
     loss = -(target_logit - row_max - ct.log(row_sum))
     ct.store(output, index=(bid,), tile=loss)
+
+
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_cross_entropy_kernel)
 
 
 def run(
@@ -57,18 +63,21 @@ def run(
     grid = (batch_size, 1, 1)
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch_size, num_classes),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_cross_entropy_kernel,
             args_fn=lambda cfg: (logits_padded, targets, output, block_classes),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": result.best.config.occupancy}
+        _last_autotune_config = {"occupancy": cfg.occupancy}
+    else:
+        cfg = _DEFAULT_CONFIG
 
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
-        stream, grid, _cross_entropy_kernel,
+        stream, grid, kernel,
         (logits_padded, targets, output, block_classes),
     )
 
