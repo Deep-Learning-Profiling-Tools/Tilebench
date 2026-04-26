@@ -7,6 +7,8 @@ import math
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
+from core.cutile_autotune import CutileAutotuner
+
 INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
@@ -18,10 +20,10 @@ _SEARCH_SPACE = [
     SimpleNamespace(tile_m=tm, tile_n=tn, occupancy=occ)
     for tm in [64, 128]
     for tn in [32, 64, 128]
-    for occ in [1, 2, 4, 8]
+    for occ in [4, 8, 16, 32]
 ]
 
-@ct.kernel(occupancy=2)
+@ct.kernel
 def fmha_kernel(Q, K, V, Out,
                 qk_scale: float,
                 input_pos: int,
@@ -131,6 +133,12 @@ def fmha_kernel(Q, K, V, Out,
     acc = acc.reshape((1, 1, TILE_M, TILE_D)).astype(Out.dtype)
     ct.store(Out, index=(batch_idx, head_idx, bid_x, 0), tile=acc)
 
+
+# Caches replace_hints results (per occupancy) and autotune outcomes (per
+# problem shape). See core/cutile_autotune.py for why both layers matter.
+_tuner = CutileAutotuner(fmha_kernel)
+
+
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
     global _last_autotune_config
 
@@ -158,15 +166,14 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
         )
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(SeqLen_Q, D_k, Heads, causal),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1),
-            kernel=fmha_kernel,
             args_fn=lambda cfg: build_args(cfg.tile_m, cfg.tile_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {
             "tile_m": cfg.tile_m,
             "tile_n": cfg.tile_n,
@@ -175,8 +182,9 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     else:
         cfg = _DEFAULT_CONFIG
 
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     grid = (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1)
-    ct.launch(stream, grid, fmha_kernel, build_args(cfg.tile_m, cfg.tile_n))
+    ct.launch(stream, grid, kernel, build_args(cfg.tile_m, cfg.tile_n))
 
     return Out
 
