@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -56,6 +53,10 @@ def _conv1d_stencil_kernel(
     ct.store(output_flat, index=(bid,), tile=acc)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_conv1d_stencil_kernel)
+
+
 def run(input, kernel, input_size, kernel_size,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
@@ -73,30 +74,32 @@ def run(input, kernel, input_size, kernel_size,
     output = torch.empty(output_size, dtype=torch.float32, device=input.device)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(input_size, kernel_size),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(output_size, cfg.tile), 1, 1),
-            kernel=_conv1d_stencil_kernel,
             args_fn=lambda cfg: (
                 input, kernel, output,
                 kernel_size,
                 cfg.tile,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (ct.cdiv(output_size, cfg.tile), 1, 1)
-        ct.launch(
-            stream, grid, _conv1d_stencil_kernel,
-            (input, kernel, output, kernel_size, cfg.tile),
-        )
+
+    grid = (ct.cdiv(output_size, cfg.tile), 1, 1)
+    kernel_obj = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream, grid, kernel_obj,
+        (input, kernel, output, kernel_size, cfg.tile),
+    )
 
     return output.to(input.dtype)
 
