@@ -28,7 +28,7 @@ _SEARCH_SPACE = [
     for bbhw in [32, 64, 128]
     for bin_ in [16, 32, 64]
     for bout in [64, 128]
-    for occ in [4, 8, 16]
+    for occ in [4, 8, 16, 32]
     if bbhw * bout >= 256 and bbhw * bout <= 128 * 128
 ]
 
