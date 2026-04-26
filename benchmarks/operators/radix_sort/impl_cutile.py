@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -127,6 +124,12 @@ def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
     ct.scatter(output_ptr, dest, block)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# Mirrors Triton's @triton.autotune(key=["N"]) — one sweep per problem size,
+# reused across all 32 bit-pass scatter launches.
+_tuner = CutileAutotuner(_radix_sort_kernel)
+
+
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
@@ -158,6 +161,25 @@ def run(input: torch.Tensor, N: int,
     grid_second = (L, 1, 1)
     grid_third = (1, 1, 1)
 
+    # Tune the scatter ONCE per N (matching Triton's `key=["N"]`); the optimal
+    # config doesn't depend on `bit`, only on the problem size.
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(N,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: grid,
+            args_fn=lambda cfg: (
+                work, output, first_layer, global_ones, 0, N, _BLOCK_SIZE,
+            ),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+        _last_autotune_config = {"occupancy": cfg.occupancy}
+    else:
+        cfg = _DEFAULT_CONFIG
+
+    scatter_kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+
     for bit in range(32):
         ct.launch(stream, grid, _count_ones_in_block,
                   (work, first_layer, N, bit, _BLOCK_SIZE))
@@ -167,24 +189,8 @@ def run(input: torch.Tensor, N: int,
                   (second_layer, global_ones, L, _BLOCK_BB))
         ct.launch(stream, grid_second, _compute_prefix_sums_per_block,
                   (first_layer, second_layer, K, _BLOCK_SIZE))
-
-        # Scatter kernel — autotuned (occupancy only; tile must stay at _BLOCK_SIZE
-        # so block layouts match the earlier kernels in this bit pass).
-        if autotune and ct_experimental is not None:
-            result = ct_experimental.autotune_launch(
-                stream,
-                grid_fn=lambda cfg: grid,
-                kernel=_radix_sort_kernel,
-                args_fn=lambda cfg, bit=bit: (
-                    work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
-                ),
-                hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-                search_space=_SEARCH_SPACE,
-            )
-            _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
-        else:
-            ct.launch(stream, grid, _radix_sort_kernel,
-                      (work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE))
+        ct.launch(stream, grid, scatter_kernel,
+                  (work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE))
 
         work.copy_(output)
 
