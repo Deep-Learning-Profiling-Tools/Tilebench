@@ -20,6 +20,8 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -50,6 +52,12 @@ def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstIn
         ct.scatter(out, (dest_index, head_id, offsets), kv_vals)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# Same kernel is launched twice (nope + rope) with different shapes, so the
+# two shape_keys share this single tuner's caches.
+_tuner = CutileAutotuner(_copy_by_dest_kernel)
+
+
 def run(
     kv_nope: torch.Tensor,
     kv_rope: torch.Tensor,
@@ -69,24 +77,22 @@ def run(
     stream = torch.cuda.current_stream()
 
     if autotune:
-        nope_result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        nope_cfg = _tuner.tune_or_cached(
+            shape_key=("nope", seq_len, nope_head_num, nope_head_dim),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (seq_len, nope_head_num, 1),
-            kernel=_copy_by_dest_kernel,
             args_fn=lambda cfg: (kv_nope, dest_loc, out_nope, nope_head_dim, cfg.block_d),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        rope_result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        rope_cfg = _tuner.tune_or_cached(
+            shape_key=("rope", seq_len, rope_head_num, rope_head_dim),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (seq_len, rope_head_num, 1),
-            kernel=_copy_by_dest_kernel,
             args_fn=lambda cfg: (kv_rope, dest_loc, out_rope, rope_head_dim, cfg.block_d),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        nope_cfg = nope_result.best.config
-        rope_cfg = rope_result.best.config
         _last_autotune_config = {
             "nope": {"block_d": nope_cfg.block_d, "occupancy": nope_cfg.occupancy},
             "rope": {"block_d": rope_cfg.block_d, "occupancy": rope_cfg.occupancy},
@@ -94,9 +100,11 @@ def run(
     else:
         nope_cfg = rope_cfg = _DEFAULT_CONFIG
 
-    ct.launch(stream, (seq_len, nope_head_num, 1), _copy_by_dest_kernel,
+    nope_kernel = _tuner.kernel_with_hints(occupancy=nope_cfg.occupancy)
+    rope_kernel = _tuner.kernel_with_hints(occupancy=rope_cfg.occupancy)
+    ct.launch(stream, (seq_len, nope_head_num, 1), nope_kernel,
               (kv_nope, dest_loc, out_nope, nope_head_dim, nope_cfg.block_d))
-    ct.launch(stream, (seq_len, rope_head_num, 1), _copy_by_dest_kernel,
+    ct.launch(stream, (seq_len, rope_head_num, 1), rope_kernel,
               (kv_rope, dest_loc, out_rope, rope_head_dim, rope_cfg.block_d))
 
     return out_nope, out_rope
