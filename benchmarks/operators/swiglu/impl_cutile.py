@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import cuda.tile as ct
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
@@ -27,6 +29,10 @@ def _swiglu_kernel(x, y, output, TILE: ConstInt):
     ct.store(output, index=(bid,), tile=out_tile)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_swiglu_kernel)
+
+
 def run(x: torch.Tensor, y: torch.Tensor,
         block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     global _last_autotune_config
@@ -38,15 +44,14 @@ def run(x: torch.Tensor, y: torch.Tensor,
     stream = torch.cuda.current_stream()
 
     if autotune:
-        result = ct.tune.exhaustive_search(
-            _SEARCH_SPACE,
-            stream,
+        cfg = _tuner.tune_or_cached(
+            shape_key=(n_elements,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=_swiglu_kernel,
             args_fn=lambda cfg: (x_flat, y_flat, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config = {
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
@@ -54,8 +59,9 @@ def run(x: torch.Tensor, y: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
 
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-              _swiglu_kernel, (x_flat, y_flat, output, cfg.tile))
+              kernel, (x_flat, y_flat, output, cfg.tile))
 
     return output.view(x.shape)
 
