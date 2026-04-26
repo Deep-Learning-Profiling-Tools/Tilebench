@@ -7,11 +7,6 @@ import math
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
 INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
@@ -162,24 +157,26 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
             (SeqLen_Q % tile_n) == 0,
         )
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
+    if autotune:
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
             stream,
             grid_fn=lambda cfg: (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1),
             kernel=fmha_kernel,
             args_fn=lambda cfg: build_args(cfg.tile_m, cfg.tile_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
+        cfg = result.best.config
         _last_autotune_config = {
-            "tile_m": result.tuned_config.tile_m,
-            "tile_n": result.tuned_config.tile_n,
-            "occupancy": result.tuned_config.occupancy,
+            "tile_m": cfg.tile_m,
+            "tile_n": cfg.tile_n,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1)
-        ct.launch(stream, grid, fmha_kernel, build_args(cfg.tile_m, cfg.tile_n))
+
+    grid = (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1)
+    ct.launch(stream, grid, fmha_kernel, build_args(cfg.tile_m, cfg.tile_n))
 
     return Out
 
