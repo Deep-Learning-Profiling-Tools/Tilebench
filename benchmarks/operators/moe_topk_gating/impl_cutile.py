@@ -8,8 +8,8 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(occupancy=2)
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=16)
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [8, 16, 32]]
 _last_autotune_config = None
 
 
