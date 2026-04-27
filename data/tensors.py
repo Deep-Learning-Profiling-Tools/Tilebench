@@ -386,10 +386,6 @@ def generate_histogramming_inputs(
     num_bins,
     dtype=torch.int32,
     device='cuda',
-    BLOCK_SIZE=1024,
-    NUM_PARTIAL=256,
-    BLOCK_ROWS=64,
-    BLOCK_BINS=256,
     **kwargs,
 ):
     if isinstance(dtype, str):
@@ -406,15 +402,7 @@ def generate_histogramming_inputs(
         dtype=torch.int32,
     )
 
-    return (
-        input_tensor.contiguous(),
-        int(N),
-        int(num_bins),
-        int(BLOCK_SIZE),
-        int(NUM_PARTIAL),
-        int(BLOCK_ROWS),
-        int(BLOCK_BINS),
-    )
+    return (input_tensor.contiguous(), int(N), int(num_bins))
 
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
