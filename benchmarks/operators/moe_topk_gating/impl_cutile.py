@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -79,6 +76,10 @@ def _moe_topk_gating_kernel(
     ct.store(topk_idx_ptr, index=(row, 0), tile=topk_idxs)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_moe_topk_gating_kernel)
+
+
 def _next_pow2(n: int) -> int:
     return 1 << ((n - 1).bit_length()) if n > 1 else 1
 
@@ -96,26 +97,28 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
     stream = torch.cuda.current_stream()
     grid = (M, 1, 1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, E, k),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_moe_topk_gating_kernel,
             args_fn=lambda cfg: (
                 logits, topk_weights, topk_indices,
                 E, k, block_size_e, block_size_k,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+        _last_autotune_config = {"occupancy": cfg.occupancy}
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(
-            stream, grid, _moe_topk_gating_kernel,
-            (logits, topk_weights, topk_indices,
-             E, k, block_size_e, block_size_k),
-        )
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream, grid, kernel,
+        (logits, topk_weights, topk_indices,
+         E, k, block_size_e, block_size_k),
+    )
 
     return (topk_weights, topk_indices)
 
