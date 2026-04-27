@@ -186,13 +186,6 @@ def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, 
     return (logits, targets)
 
 
-def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, device='cuda', **kwargs):
-    # Input tensors are always int8 regardless of dtype; output is fp32.
-    a_q = torch.randint(-64, 65, (m, k), device=device).to(torch.int8)
-    b_q = torch.randint(-64, 65, (k, n), device=device).to(torch.int8)
-    return (a_q, b_q, scale)
-
-
 def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
     x      = torch.randn(batch, M, K, dtype=dtype, device=device)
     weight = torch.randn(K, dtype=dtype, device=device)
@@ -254,7 +247,6 @@ GENERATORS = {
     "softmax": generate_softmax_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
-    "matmul_int8": generate_quantized_gemm_inputs,
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_matmul": generate_streamk_scheduling_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
@@ -326,8 +318,6 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "cross_entropy":
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
-    if operator_name == "matmul_int8":
-        return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "layernorm_fwd":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "streamk_matmul":
