@@ -3,10 +3,7 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -48,6 +45,10 @@ def _dequant_kernel(x_ptr, s_ptr, out_ptr, N, TILE_SIZE, TILE: ConstInt):
     ct.store(out_ptr, index=(bid,), tile=result_cast)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_dequant_kernel)
+
+
 def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     global _last_autotune_config
@@ -57,24 +58,26 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
     total = M * N
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N, TILE_SIZE),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=_dequant_kernel,
             args_fn=lambda cfg: (X_flat, S, out_flat, N, TILE_SIZE, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile": result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile": cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = ((total + cfg.tile - 1) // cfg.tile, 1, 1)
-        ct.launch(stream, grid, _dequant_kernel,
-                  (X_flat, S, out_flat, N, TILE_SIZE, cfg.tile))
+
+    grid = ((total + cfg.tile - 1) // cfg.tile, 1, 1)
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (X_flat, S, out_flat, N, TILE_SIZE, cfg.tile))
 
     return output
 
