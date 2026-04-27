@@ -4,10 +4,7 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:  # pragma: no cover
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -40,6 +37,10 @@ def _sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
     ct.store(y_ptr, index=(bid,), tile=y_out)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_sigmoid_kernel)
+
+
 def run(X: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """cuTile element-wise sigmoid mirroring Triton's tl.sigmoid method."""
@@ -47,23 +48,25 @@ def run(X: torch.Tensor, N: int,
     output = torch.empty_like(X)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(N,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(N, cfg.tile), 1, 1),
-            kernel=_sigmoid_kernel,
             args_fn=lambda cfg: (X, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (ct.cdiv(N, cfg.tile), 1, 1)
-        ct.launch(stream, grid, _sigmoid_kernel, (X, output, cfg.tile))
+
+    grid = (ct.cdiv(N, cfg.tile), 1, 1)
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, (X, output, cfg.tile))
 
     return output
 
