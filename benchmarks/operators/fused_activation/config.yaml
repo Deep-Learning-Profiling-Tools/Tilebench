@@ -1,0 +1,51 @@
+# Fused element-wise activation: out = silu(x * gate + bias)
+#
+# Pure 1D bandwidth-bound op: 3 reads + 1 write per element, plus a
+# transcendental sigmoid. SiLU (x * sigmoid(x)) chosen over ReLU to match
+# modern LLM activations (Llama / Mistral / Gemma). Single-dtype sweep
+# over n only (20 cases): the per-element compute is fixed, so the
+# interesting axis is total work / HBM bandwidth saturation.
+
+verify:
+  # SiLU via 1/(1+exp(-z)) chains exp + add + div in fp32; reduction
+  # rounding is per-element so 1e-5 would hold, 1e-4 leaves headroom.
+  atol: 1e-4
+  rtol: 1e-4
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  dtype: "fp32"
+
+case_grid:
+  n:
+    expr: "[1024 * 1024 * i for i in range(1, 21)]"
+
+# 20 cases (n from 1M to 20M, fp32 throughout).
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Available variables: n, dtype_size (=4 for fp32)
+#
+# Bytes:
+#   Read  x, gate, bias  (fp32):  3 * n * 4
+#   Write out            (fp32):      n * 4
+#   = 4 * n * dtype_size
+#
+# FLOPs per element (lower bound): 1 mul + 1 add + sigmoid (~3 ops) +
+#   1 mul ~= 5-6 ops. Real bottleneck is HBM bandwidth + SFU throughput;
+#   bandwidth_GBs is the more meaningful number here.
+# ---------------------------------------------------------------------------
+metrics:
+  bytes_expr: "4 * n * dtype_size"
+  flops_expr: "5 * n"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
