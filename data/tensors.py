@@ -118,8 +118,12 @@ def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
     return (torch.randn(n, dtype=torch.float32, device=device),)
 
 
-def generate_dequantize_rowwise_inputs(n, dtype=torch.float16, device='cuda'):
-    return (torch.randn(n, dtype=torch.float16, device=device),)
+def generate_dequantize_rowwise_inputs(rows, cols, device='cuda', **kwargs):
+    # bitsandbytes-style rowwise dequant: int8 input + per-row absmax (fp32)
+    # output[r, c] = state_x[r] * x[r, c] / 127  (fp16 output)
+    x = torch.randint(-128, 127, (rows, cols), dtype=torch.int8, device=device)
+    state_x = torch.rand(rows, dtype=torch.float32, device=device) * 10.0
+    return (x, state_x)
 
 
 def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device='cuda'):
@@ -434,6 +438,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "dequantize_rowwise":
+        return int(params.get("rows", 1)) * int(params.get("cols", 1))
     if operator_name == "jacobi_stencil_2d":
         rows = int(params.get("rows", 1))
         cols = int(params.get("cols", rows))

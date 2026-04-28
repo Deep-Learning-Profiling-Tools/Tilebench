@@ -1,3 +1,9 @@
+verify:
+  # Loose tolerance: state_x * (1/127) introduces small fp32 rounding;
+  # output magnitude in [-state_x, state_x] ~ O(1).
+  atol: 1e-3
+  rtol: 1e-3
+
 benchmark:
   warmup: 20
   repeat: 100
@@ -5,21 +11,26 @@ benchmark:
   flush_l2: true
   autotune: false
 
-case_defaults:
-  dtype: "fp16"   # input is always fp16; output is always fp32
-
 case_grid:
-  n:
-    expr: "[1024 * 1024 * i for i in range(1, 21)]"
+  rows: [512, 1024, 2048, 4096]
+  cols: [512, 1024, 2048, 4096, 8192]
+
+# 4 rows x 4 cols = 16 cases.
 
 # ---------------------------------------------------------------------------
 # Derived-metric expressions
-#   Available variables: n (problem size), dtype_size = 2 (fp16 input)
+#   Available variables: rows, cols
+#
+# Bytes:
+#   Read  x       (int8): rows * cols * 1
+#   Read  state_x (fp32): rows * 4
+#   Write out    (fp16):  rows * cols * 2
+#
+# FLOPs: 2 * rows * cols  (one mul by scale, one mul by inv_127 = two FMAs)
 # ---------------------------------------------------------------------------
 metrics:
-  flops_expr: "n"
-  # fp16 read + fp32 write
-  bytes_expr: "n * dtype_size + n * 4"
+  bytes_expr: "rows * cols * 1 + rows * 4 + rows * cols * 2"
+  flops_expr: "2 * rows * cols"
 
   plots:
     - latency_ms
