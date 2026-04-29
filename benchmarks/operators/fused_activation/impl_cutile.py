@@ -15,14 +15,14 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-# 1:1 mirrors impl_triton.py: tile <-> BLOCK_SIZE, occupancy <-> num_warps
-# via nw * occ ~= 64 (Triton sweeps nw in [4, 8, 16]; cuTile sweeps
-# occ in [16, 8, 4]).
+# Mirrors impl_triton.py via nw * occ ~= 64 (Triton sweeps nw in
+# [2, 4, 8]; cuTile sweeps occ in [4, 8, 16, 32], adding occ=4 as the
+# extra low-warps endpoint with no Triton counterpart).
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048, 4096, 8192]
-    for occ in [4, 8, 16]
+    for t in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
 ]
 
 

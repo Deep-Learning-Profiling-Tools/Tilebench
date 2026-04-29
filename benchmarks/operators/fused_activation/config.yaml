@@ -1,14 +1,4 @@
-# Fused element-wise activation: out = silu(x * gate + bias)
-#
-# Pure 1D bandwidth-bound op: 3 reads + 1 write per element, plus a
-# transcendental sigmoid. SiLU (x * sigmoid(x)) chosen over ReLU to match
-# modern LLM activations (Llama / Mistral / Gemma). Single-dtype sweep
-# over n only (20 cases): the per-element compute is fixed, so the
-# interesting axis is total work / HBM bandwidth saturation.
-
 verify:
-  # SiLU via 1/(1+exp(-z)) chains exp + add + div in fp32; reduction
-  # rounding is per-element so 1e-5 would hold, 1e-4 leaves headroom.
   atol: 1e-4
   rtol: 1e-4
 
