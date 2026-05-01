@@ -1,8 +1,23 @@
+"""Top-k via multi-launch descending bitonic sort.
+
+Algorithm:
+  1. Pad the input to next_pow2(N) with -inf.
+  2. Outer loop over `stage in [2, 4, ..., padding_len]`; inner loop over
+     `stride in [stage/2, stage/4, ..., 1]`. Each (stage, stride) launches
+     a single compare-exchange kernel that, for each of the
+     padding_len/2 pairs, swaps the two endpoints based on whether the
+     pair lies in an ascending or descending sub-sequence.
+  3. The first k elements of the sorted buffer are the top-k (descending).
+
+The compare-exchange kernel is autotuned via `triton.autotune(key=["N"])`,
+so the first launch in step 2 runs the sweep and all subsequent
+log²(padding_len)/2 launches are cache hits — equivalent to running the
+sweep once per padding_len.
+"""
 import torch
 import triton
 import triton.language as tl
 
-_LAST_CONFIG = None
 
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE": 1024,
@@ -12,7 +27,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def bitonic_sort_desc_kernel(
+def _bitonic_step_kernel(
     input_ptr,
     N,
     stage,
@@ -25,16 +40,10 @@ def bitonic_sort_desc_kernel(
     slice_1_offset = (offset // stride) * (2 * stride) + (offset % stride)
     slice_2_offset = slice_1_offset + stride
 
-    slice_1_t = tl.load(
-        input_ptr + slice_1_offset,
-        mask=slice_1_offset < N,
-        other=-float("inf"),
-    )
-    slice_2_t = tl.load(
-        input_ptr + slice_2_offset,
-        mask=slice_2_offset < N,
-        other=-float("inf"),
-    )
+    slice_1_t = tl.load(input_ptr + slice_1_offset,
+                        mask=slice_1_offset < N, other=-float("inf"))
+    slice_2_t = tl.load(input_ptr + slice_2_offset,
+                        mask=slice_2_offset < N, other=-float("inf"))
 
     descend = ((slice_1_offset // stage) % 2) == 1
     greater = slice_1_t > slice_2_t
@@ -47,36 +56,29 @@ def bitonic_sort_desc_kernel(
     tl.store(input_ptr + slice_2_offset, new_slice_2_t, mask=slice_2_offset < N)
 
 
-bitonic_sort_desc_kernel_autotuned = triton.autotune(
+# Sweep mirrors impl_cutile.py 1-to-1:
+#   BLOCK_SIZE  ↔ tile             same values
+#   num_warps   ↔ occupancy        nw * occ ≈ 64 on B200, so Triton's
+#                                   nw ∈ [2, 4, 8] pairs with cuTile's
+#                                   occ ∈ [32, 16, 8].
+# num_stages is fixed to 1 — this kernel has no runtime K-loop, just
+# load → compare → store, so software pipelining has nothing to overlap.
+_bitonic_step_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=1)
-        for bs in [256, 512, 1024]
-        for nw in [1, 2, 4]
+        for bs in [512, 1024, 2048]
+        for nw in [2, 4, 8]
     ],
     key=["N"],
-)(bitonic_sort_desc_kernel)
+)(_bitonic_step_kernel)
 
 
-def _next_power_of_2_py(x: int) -> int:
+def _next_pow2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
 
 
-def run(
-    input,
-    N: int,
-    k: int,
-    BLOCK_SIZE: int = 1024,
-    block_size: int = None,
-    autotune: bool = False,
-    **kwargs,
-):
-    global _LAST_CONFIG
-
-    if block_size is not None:
-        BLOCK_SIZE = int(block_size)
-
-    BLOCK_SIZE = int(BLOCK_SIZE)
-
+def run(input: torch.Tensor, N: int, k: int,
+        block_size: int = None, autotune: bool = False, **kwargs):
     assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
@@ -84,33 +86,28 @@ def run(
     assert 1 <= k <= N
 
     input = input.contiguous()
-
-    padding_len = _next_power_of_2_py(N)
+    padding_len = _next_pow2(N)
     input_padding = torch.empty((padding_len,), device=input.device, dtype=input.dtype)
     input_padding[:N] = input
     input_padding[N:] = -float("inf")
+
+    BLOCK_SIZE = (
+        int(block_size) if block_size is not None else _DEFAULT_CONFIG["BLOCK_SIZE"]
+    )
 
     stage = 2
     while stage <= padding_len:
         stride = stage >> 1
         while stride > 0:
             if autotune:
-                grid = lambda meta: (
-                    triton.cdiv(padding_len, meta["BLOCK_SIZE"] * 2),
-                )
-                bitonic_sort_desc_kernel_autotuned[grid](
-                    input_padding,
-                    padding_len,
-                    stage,
-                    stride,
+                grid = lambda meta: (triton.cdiv(padding_len, meta["BLOCK_SIZE"] * 2),)
+                _bitonic_step_kernel_autotuned[grid](
+                    input_padding, padding_len, stage, stride,
                 )
             else:
                 grid = (triton.cdiv(padding_len, BLOCK_SIZE * 2),)
-                bitonic_sort_desc_kernel[grid](
-                    input_padding,
-                    padding_len,
-                    stage,
-                    stride,
+                _bitonic_step_kernel[grid](
+                    input_padding, padding_len, stage, stride,
                     BLOCK_SIZE=BLOCK_SIZE,
                     num_warps=_DEFAULT_CONFIG["num_warps"],
                     num_stages=_DEFAULT_CONFIG["num_stages"],
@@ -118,49 +115,15 @@ def run(
             stride >>= 1
         stage <<= 1
 
-    output = input_padding[:k].clone()
-
-    _LAST_CONFIG = {
-        "BLOCK_SIZE": BLOCK_SIZE,
-        "num_warps": _DEFAULT_CONFIG["num_warps"],
-        "num_stages": _DEFAULT_CONFIG["num_stages"],
-        "autotune": bool(autotune),
-    }
-    return output
-
-
-def solve(input: torch.Tensor, output: torch.Tensor, N: int, k: int):
-    padding_len = triton.next_power_of_2(N)
-    input_padding = torch.empty((padding_len,), device=input.device, dtype=input.dtype)
-    input_padding[:N] = input
-    input_padding[N:] = -float("inf")
-
-    BLOCK_SIZE = 1024
-    grid = lambda metadata: (triton.cdiv(padding_len, metadata["BLOCK_SIZE"] * 2),)
-
-    stage = 2
-    while stage <= padding_len:
-        stride = stage >> 1
-        while stride > 0:
-            bitonic_sort_desc_kernel[grid](
-                input_padding,
-                padding_len,
-                stage,
-                stride,
-                BLOCK_SIZE=BLOCK_SIZE,
-            )
-            stride >>= 1
-        stage <<= 1
-
-    output.copy_(input_padding[:k])
+    return input_padding[:k].clone()
 
 
 def get_last_config() -> dict | None:
-    cfg = getattr(bitonic_sort_desc_kernel_autotuned, "best_config", None)
+    cfg = getattr(_bitonic_step_kernel_autotuned, "best_config", None)
     if cfg is None:
-        return _LAST_CONFIG
+        return None
     return {
         "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
-        "num_warps": cfg.num_warps,
+        "num_warps":  cfg.num_warps,
         "num_stages": cfg.num_stages,
     }

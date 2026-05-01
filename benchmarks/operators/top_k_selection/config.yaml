@@ -5,14 +5,20 @@ benchmark:
   flush_l2: true
   autotune: false
 
-case_defaults:
-  BLOCK_SIZE: 1024
-
-test_cases:
-  - {N: 1024, k: 16, dtype: "float32"}
-  - {N: 4096, k: 32, dtype: "float32"}
-  - {N: 16384, k: 64, dtype: "float32"}
-  - {N: 65536, k: 128, dtype: "float32"}
+# Top-k via bitonic sort: pad input to next power of two with -inf, run a
+# multi-launch bitonic sort, then return the first k elements.
+#
+# Practical range for top-k selection:
+#   N (input size): from MoE-routing scale (~1K) up to recommendation /
+#                   vector-retrieval scale (~256K). All values are
+#                   powers of 2 to keep bitonic padding trivial.
+#   k:              8 (MoE-small / kNN-tight), 32 (LLM beam search),
+#                   128 (MoE-large), 512 (recommendation top-k).
+# 5 N x 4 k x 1 dtype = 20 cases.
+case_grid:
+  N: [4096, 16384, 65536, 262144, 1048576]
+  k: [16, 64, 256, 1024]
+  dtype: ["fp32"]
 
 verify:
   atol: 1.0e-5
@@ -21,9 +27,6 @@ verify:
 metrics:
   flops_expr: "N"
   bytes_expr: "(N + k) * dtype_size"
-  peak_bw_GBs: 8000.0
-  peak_tflops:
-    float32: 125.0
   plots:
     - latency_ms
     - bandwidth_GBs
