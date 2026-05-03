@@ -21,6 +21,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import statistics
 from datetime import datetime
 import torch
@@ -41,6 +42,24 @@ L2_BW_SIZES_MB = [1, 2, 4, 8, 16]
 
 # GEMM sizes for FLOPS
 GEMM_SIZES = [4096, 8192, 12288, 16384]
+
+_GPU_MODEL_PATTERNS = [
+    # Data center GPUs: B200, H100, H200, A100, A800, V100, P100, L40S.
+    r"\b[BHAVLP]\d{2,4}[A-Z]*\b",
+    # RTX GPUs: RTX 4090, RTX4090, RTX 6000 Ada.
+    r"\bRTX\s*\d{4}(?:\s*Ada)?\b",
+]
+
+
+def _default_gpu_label(gpu_name: str) -> str:
+    for pattern in _GPU_MODEL_PATTERNS:
+        model = re.search(pattern, gpu_name, flags=re.IGNORECASE)
+        if model:
+            return re.sub(r"\s+", "", model.group(0)).upper()
+
+    label = re.sub(r"^NVIDIA\s+", "", gpu_name, flags=re.IGNORECASE)
+    label = re.sub(r"[^A-Za-z0-9]+", "_", label).strip("_")
+    return label or "GPU"
 
 
 def _sync():
@@ -263,8 +282,9 @@ def main():
     args = parser.parse_args()
 
     gpu_name = torch.cuda.get_device_name(0)
-    gpu_label = args.gpu if args.gpu else gpu_name.split()[-1]
+    gpu_label = args.gpu if args.gpu else _default_gpu_label(gpu_name)
     print(f"GPU: {gpu_name}")
+    print(f"GPU label: {gpu_label}")
     print(f"PyTorch: {torch.__version__}")
     print(f"CUDA: {torch.version.cuda}")
     print(f"Warmup: {WARMUP}, Repeat: {REPEAT}, Target per-region: {TARGET_MS} ms")
