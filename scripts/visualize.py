@@ -76,6 +76,7 @@ _DEFAULT_METRICS = [
     "latency_ms", "bandwidth_GBs", "tflops", "speedup",
     "pct_peak_bw", "pct_peak_tflops", "roofline",
 ]
+_GPU_PEAK_METRICS = ["pct_peak_bw", "pct_peak_tflops", "roofline"]
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -88,6 +89,17 @@ def _load_operator_config(operator: str) -> dict:
         return {}
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
+
+def _dedupe_preserve_order(metrics: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for metric in metrics:
+        if metric in seen:
+            continue
+        seen.add(metric)
+        deduped.append(metric)
+    return deduped
 
 
 def _group_by_dtype(
@@ -393,6 +405,9 @@ def main() -> None:
         metrics_to_plot = args.metrics
     elif metrics_cfg.get("plots"):
         metrics_to_plot = list(metrics_cfg["plots"])
+        if peak_cfg:
+            metrics_to_plot.extend(_GPU_PEAK_METRICS)
+        metrics_to_plot = _dedupe_preserve_order(metrics_to_plot)
     else:
         metrics_to_plot = _DEFAULT_METRICS
     print(f"Metrics to plot: {metrics_to_plot}")
