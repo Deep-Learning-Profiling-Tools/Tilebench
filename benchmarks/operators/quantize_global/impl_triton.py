@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 2048, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -16,9 +16,11 @@ def _quantize_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 
 _quantize_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048, 4096, 8192]
-        for nw in [4, 8, 16]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
+        for bs in [2048, 4096, 8192, 8192, 16384]
+        for nw in [2, 4, 8]
+        for ns in [1, 2, 4]
+        if bs >= nw * 32 * 4
     ],
     key=["n_elements"],
 )(_quantize_kernel)
@@ -38,7 +40,6 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
             x, out, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
     return out
 
