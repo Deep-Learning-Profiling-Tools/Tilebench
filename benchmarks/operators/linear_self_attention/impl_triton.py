@@ -4,14 +4,6 @@ import triton.language as tl
 
 _LAST_CONFIG = None
 
-_DEFAULT_CONFIG = {
-    "BLOCK_M": 32,
-    "BLOCK_D": 16,
-    "KV_BLOCK_M": 32,
-    "num_warps": 1,
-    "num_stages": 1,
-}
-
 
 @triton.jit
 def _phi(x):
@@ -34,6 +26,7 @@ def linear_attention_kv_kernel(
     stride_sd,
     BLOCK_M: tl.constexpr,
 ):
+    # Each program computes one scalar S[d0, d1].
     pid_d0 = tl.program_id(0)
     pid_d1 = tl.program_id(1)
 
@@ -71,6 +64,7 @@ def linear_attention_z_kernel(
     stride_zd,
     BLOCK_M: tl.constexpr,
 ):
+    # Each program computes one scalar Z[d].
     pid_d = tl.program_id(0)
 
     acc = tl.zeros((), dtype=tl.float32)
@@ -84,6 +78,7 @@ def linear_attention_z_kernel(
             mask=mask_m,
             other=-float("inf"),
         )
+
         phi_k = _phi(k)
         acc += tl.sum(phi_k, axis=0)
 
@@ -109,6 +104,7 @@ def linear_attention_out_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_D: tl.constexpr,
 ):
+    # Each program computes O tile [BLOCK_M, BLOCK_D].
     pid_m = tl.program_id(0)
     pid_do = tl.program_id(1)
 
@@ -148,25 +144,7 @@ def linear_attention_out_kernel(
     )
 
 
-linear_attention_out_kernel_autotuned = triton.autotune(
-    configs=[
-        triton.Config(
-            {
-                "BLOCK_M": bm,
-                "BLOCK_D": bd,
-            },
-            num_warps=nw,
-            num_stages=1,
-        )
-        for bm in [16, 32, 64]
-        for bd in [8, 16, 32]
-        for nw in [1, 2, 4]
-    ],
-    key=["M", "D"],
-)(linear_attention_out_kernel)
-
-
-def _launch_fixed_prefix(
+def _launch_prefix(
     Q,
     K,
     V,
@@ -228,11 +206,14 @@ def run(
 
     BLOCK_M = int(BLOCK_M)
     BLOCK_D = int(BLOCK_D)
+    KV_BLOCK_M = BLOCK_M
 
     assert Q.is_cuda and K.is_cuda and V.is_cuda
     assert Q.ndim == 2 and K.ndim == 2 and V.ndim == 2
     assert Q.shape == K.shape == V.shape
-    assert Q.dtype == torch.float32 and K.dtype == torch.float32 and V.dtype == torch.float32
+    assert Q.dtype == torch.float32
+    assert K.dtype == torch.float32
+    assert V.dtype == torch.float32
 
     Q = Q.contiguous()
     K = K.contiguous()
@@ -241,67 +222,45 @@ def run(
     M, D = Q.shape
     O = torch.empty((M, D), device=Q.device, dtype=torch.float32)
 
-    cfg = dict(_DEFAULT_CONFIG)
-    cfg["BLOCK_M"] = BLOCK_M
-    cfg["BLOCK_D"] = BLOCK_D
+    # Autotune is intentionally disabled for this operator until Triton/cuTile
+    # search spaces are unified.
+    S, Z = _launch_prefix(Q, K, V, M, D, KV_BLOCK_M)
 
-    S, Z = _launch_fixed_prefix(Q, K, V, M, D, cfg["KV_BLOCK_M"])
+    grid = (
+        triton.cdiv(M, BLOCK_M),
+        triton.cdiv(D, BLOCK_D),
+    )
 
-    if autotune:
-        grid = lambda meta: (
-            triton.cdiv(M, meta["BLOCK_M"]),
-            triton.cdiv(D, meta["BLOCK_D"]),
-        )
-        linear_attention_out_kernel_autotuned[grid](
-            O,
-            Q,
-            S,
-            Z,
-            M,
-            D,
-            float(eps),
-            Q.stride(0),
-            Q.stride(1),
-            O.stride(0),
-            O.stride(1),
-            S.stride(0),
-            S.stride(1),
-            Z.stride(0),
-        )
-    else:
-        grid = (
-            triton.cdiv(M, cfg["BLOCK_M"]),
-            triton.cdiv(D, cfg["BLOCK_D"]),
-        )
-        linear_attention_out_kernel[grid](
-            O,
-            Q,
-            S,
-            Z,
-            M,
-            D,
-            float(eps),
-            Q.stride(0),
-            Q.stride(1),
-            O.stride(0),
-            O.stride(1),
-            S.stride(0),
-            S.stride(1),
-            Z.stride(0),
-            BLOCK_M=cfg["BLOCK_M"],
-            BLOCK_D=cfg["BLOCK_D"],
-            num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
-        )
+    linear_attention_out_kernel[grid](
+        O,
+        Q,
+        S,
+        Z,
+        M,
+        D,
+        float(eps),
+        Q.stride(0),
+        Q.stride(1),
+        O.stride(0),
+        O.stride(1),
+        S.stride(0),
+        S.stride(1),
+        Z.stride(0),
+        BLOCK_M=BLOCK_M,
+        BLOCK_D=BLOCK_D,
+        num_warps=1,
+        num_stages=1,
+    )
 
     _LAST_CONFIG = {
-        "BLOCK_M": cfg["BLOCK_M"],
-        "BLOCK_D": cfg["BLOCK_D"],
-        "KV_BLOCK_M": cfg["KV_BLOCK_M"],
-        "num_warps": cfg["num_warps"],
-        "num_stages": cfg["num_stages"],
+        "BLOCK_M": BLOCK_M,
+        "BLOCK_D": BLOCK_D,
+        "KV_BLOCK_M": KV_BLOCK_M,
+        "num_warps": 1,
+        "num_stages": 1,
         "eps": float(eps),
-        "autotune": bool(autotune),
+        "autotune": False,
+        "kernel_style": "scalar_reduction",
     }
     return O
 
@@ -311,9 +270,9 @@ def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tenso
     eps = 1e-6
     BLOCK_M = 32
     BLOCK_D = 16
-    KV_BLOCK_M = 32
+    KV_BLOCK_M = BLOCK_M
 
-    S, Z = _launch_fixed_prefix(Q, K, V, M, d, KV_BLOCK_M)
+    S, Z = _launch_prefix(Q, K, V, M, d, KV_BLOCK_M)
 
     linear_attention_out_kernel[(triton.cdiv(M, BLOCK_M), triton.cdiv(d, BLOCK_D))](
         output,
@@ -338,13 +297,4 @@ def solve(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, output: torch.Tenso
 
 
 def get_last_config() -> dict | None:
-    cfg = getattr(linear_attention_out_kernel_autotuned, "best_config", None)
-    if cfg is None:
-        return _LAST_CONFIG
-    return {
-        "BLOCK_M": cfg.kwargs["BLOCK_M"],
-        "BLOCK_D": cfg.kwargs["BLOCK_D"],
-        "KV_BLOCK_M": _DEFAULT_CONFIG["KV_BLOCK_M"],
-        "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
-    }
+    return _LAST_CONFIG

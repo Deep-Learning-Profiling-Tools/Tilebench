@@ -8,6 +8,7 @@ _LAST_CONFIG = None
 
 
 def _phi_tile(x):
+    # phi(x) = ELU(x) + 1
     return ct.where(x > 0, x + 1.0, ct.exp(x))
 
 
@@ -20,6 +21,7 @@ def linear_attention_kv_kernel(
     D: ConstInt,
     BLOCK_M: ConstInt,
 ):
+    # Each program computes one scalar S[d0, d1].
     pid_d0 = ct.bid(0)
     pid_d1 = ct.bid(1)
 
@@ -62,6 +64,7 @@ def linear_attention_z_kernel(
     D: ConstInt,
     BLOCK_M: ConstInt,
 ):
+    # Each program computes one scalar Z[d].
     pid_d = ct.bid(0)
 
     acc = ct.full((1,), 0.0, dtype=ct.float32)
@@ -100,6 +103,7 @@ def linear_attention_out_kernel(
     BLOCK_M: ConstInt,
     BLOCK_D: ConstInt,
 ):
+    # Each program computes O tile [BLOCK_M, BLOCK_D].
     pid_m = ct.bid(0)
     pid_do = ct.bid(1)
 
@@ -160,11 +164,14 @@ def run(
 
     BLOCK_M = int(BLOCK_M)
     BLOCK_D = int(BLOCK_D)
+    KV_BLOCK_M = BLOCK_M
 
     assert Q.is_cuda and K.is_cuda and V.is_cuda
     assert Q.ndim == 2 and K.ndim == 2 and V.ndim == 2
     assert Q.shape == K.shape == V.shape
-    assert Q.dtype == torch.float32 and K.dtype == torch.float32 and V.dtype == torch.float32
+    assert Q.dtype == torch.float32
+    assert K.dtype == torch.float32
+    assert V.dtype == torch.float32
 
     Q = Q.contiguous()
     K = K.contiguous()
@@ -185,7 +192,7 @@ def run(
             V,
             M,
             D,
-            BLOCK_M,
+            KV_BLOCK_M,
         ),
     )
 
@@ -198,7 +205,7 @@ def run(
             K,
             M,
             D,
-            BLOCK_M,
+            KV_BLOCK_M,
         ),
     )
 
@@ -222,7 +229,9 @@ def run(
     _LAST_CONFIG = {
         "BLOCK_M": BLOCK_M,
         "BLOCK_D": BLOCK_D,
+        "KV_BLOCK_M": KV_BLOCK_M,
         "eps": float(eps),
+        "autotune": False,
         "kernel_style": "scalar_reduction",
     }
     return O
