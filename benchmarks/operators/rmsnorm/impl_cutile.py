@@ -24,21 +24,18 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
-    for ts in [256, 512, 1024, 2048]
-    for occ in [1, 2, 4, 8]
+    for ts in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -79,6 +76,10 @@ def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_rmsnorm_kernel)
+
+
 def run(
     x: torch.Tensor,
     rms_w: torch.Tensor,
@@ -99,23 +100,25 @@ def run(
     stream = torch.cuda.current_stream()
     grid   = (batch_M, 1, 1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch_M, K),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_rmsnorm_kernel,
             args_fn=lambda cfg: (x_2d, rms_w_c, out_2d, eps, K, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile_size": result.tuned_config.tile_size,
-            "occupancy": result.tuned_config.occupancy,
+            "tile_size": cfg.tile_size,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, grid, _rmsnorm_kernel,
-                  (x_2d, rms_w_c, out_2d, eps, K, cfg.tile_size))
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (x_2d, rms_w_c, out_2d, eps, K, cfg.tile_size))
 
     return out
 
