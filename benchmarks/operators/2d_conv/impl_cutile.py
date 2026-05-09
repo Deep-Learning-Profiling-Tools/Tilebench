@@ -20,7 +20,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(block_bhw=64, block_in=32, block_out=64, occupancy=8)
 _SEARCH_SPACE = [
@@ -181,7 +181,6 @@ def run(
     **kwargs,
 ):
     """cuTile Conv2d forward via implicit GEMM. Matches impl_triton.py."""
-    global _last_autotune_config
 
     assert input.is_contiguous() and weight.is_contiguous()
     batch, in_channels, in_H, in_W = input.shape
@@ -229,12 +228,13 @@ def run(
             args_fn=lambda cfg: runtime_args + (cfg.block_bhw, cfg.block_in, cfg.block_out),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "block_bhw": cfg.block_bhw,
             "block_in":  cfg.block_in,
             "block_out": cfg.block_out,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -252,4 +252,4 @@ def run(
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
