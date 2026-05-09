@@ -281,7 +281,7 @@ def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, devi
     return (a_q, b_q, scale)
 
 
-def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
+def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
     x      = torch.randn(batch, M, K, dtype=dtype, device=device)
     weight = torch.randn(K, dtype=dtype, device=device)
     bias   = torch.randn(K, dtype=dtype, device=device)
@@ -291,6 +291,18 @@ def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda
 def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
     a = torch.randn(m, k, dtype=dtype, device=device)
     b = torch.randn(k, n, dtype=dtype, device=device)
+    return (a, b)
+
+
+def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwargs):
+    """Inputs for matmul_int8: A is int8 (M, K), B is uint8 (K_b=K/4, N) packed
+    with 4 ternary-ish 2-bit fields per byte. dtype kwarg is ignored — A is
+    always int8 and B is always uint8 by construction.
+    """
+    assert K % 4 == 0, "K must be divisible by 4 (B holds 4 fields per byte)"
+    K_b = K // 4
+    a = torch.randint(-64, 65, (M, K), device=device, dtype=torch.int8)
+    b = torch.randint(0, 256, (K_b, N), device=device, dtype=torch.uint8)
     return (a, b)
 
 
@@ -355,8 +367,9 @@ GENERATORS = {
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
-    "layernorm_fwd": generate_layernorm_fwd_inputs,
+    "layernorm": generate_layernorm_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "matmul_int8": generate_matmul_int8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "l2_norm": generate_l2_norm_inputs,
@@ -443,10 +456,12 @@ def infer_problem_size(operator_name, params):
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
-    if operator_name == "layernorm_fwd":
+    if operator_name == "layernorm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "streamk_scheduling":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
+    if operator_name == "matmul_int8":
+        return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
