@@ -18,7 +18,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 # Cartesian product, mirrors impl_triton.py.
 # Triton sweeps (BLOCK_SIZE, num_warps); cuTile sweeps (tile, occupancy)
@@ -69,7 +69,6 @@ _tuner = CutileAutotuner(_kl_divergence_kernel)
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     rows, cols = log_y_pred.shape
     loss = torch.empty(rows, device=log_y_pred.device, dtype=torch.float32)
@@ -84,7 +83,8 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
             args_fn=lambda cfg: (log_y_pred, y_true, loss, cols, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"tile": cfg.tile, "occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -94,4 +94,4 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
