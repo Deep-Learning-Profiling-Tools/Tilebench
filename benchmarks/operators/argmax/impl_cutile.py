@@ -14,7 +14,7 @@ _SEARCH_SPACE_BASE = [
     for bn in [256, 512, 1024, 2048]
     for occ in [4, 8, 16, 32]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -62,7 +62,6 @@ _tuner = CutileAutotuner(_argmax_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     assert x.is_cuda, "x must be on CUDA"
 
@@ -93,10 +92,11 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
             args_fn=lambda cfg: (input_flat, output, N, cfg.n_tiles, cfg.block_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "block_n": cfg.block_n,
             "occupancy": cfg.occupancy,
-        }
+        })
         n_tiles = cfg.n_tiles
     else:
         cfg = _DEFAULT_CONFIG
@@ -110,4 +110,4 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
