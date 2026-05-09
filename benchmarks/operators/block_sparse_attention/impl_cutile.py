@@ -8,7 +8,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
@@ -204,7 +204,6 @@ def run(
     total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS,
     block_size: int = None, autotune: bool = False
 ):
-    global _last_autotune_config
     batch_size = Q.shape[0]
     D = Q.shape[-1]
     TOTAL_D = BLOCK_D * NUM_D_BLOCKS
@@ -241,7 +240,8 @@ def run(
             args_fn=lambda cfg: args,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -252,4 +252,4 @@ def run(
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
