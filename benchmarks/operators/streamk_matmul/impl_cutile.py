@@ -36,7 +36,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(
     tm=128, tn=128, tk=32, group_m=8, occupancy=16,
@@ -181,7 +181,6 @@ def _device_sm_count() -> int:
 
 def run(a: torch.Tensor, b: torch.Tensor,
         block_size: int = None, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     assert a.shape[1] == b.shape[0]
 
@@ -229,10 +228,11 @@ def run(a: torch.Tensor, b: torch.Tensor,
                   (a, b, c, NUM_SMS, first_cfg.tm, first_cfg.tn, first_cfg.tk, first_cfg.group_m))
 
     if autotune:
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tm": first_cfg.tm, "tn": first_cfg.tn, "tk": first_cfg.tk,
             "group_m": first_cfg.group_m, "occupancy": first_cfg.occupancy,
-        }
+        })
 
     if c is not out:
         out.copy_(c)
@@ -240,4 +240,4 @@ def run(a: torch.Tensor, b: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
