@@ -15,7 +15,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [
@@ -45,7 +45,6 @@ _tuner = CutileAutotuner(_dequantize_rowwise_kernel)
 
 def run(x: torch.Tensor, state_x: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     rows, cols = x.shape
     output = torch.empty(rows, cols, device=x.device, dtype=torch.float16)
@@ -60,7 +59,8 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
             args_fn=lambda cfg: (x, state_x, output, cols),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -70,4 +70,4 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
