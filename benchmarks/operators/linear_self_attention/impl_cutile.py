@@ -22,7 +22,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _KV_BLOCK_M = 32
 
@@ -144,7 +144,6 @@ _out_tuner = CutileAutotuner(_out_kernel)
 
 def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
         block_size: int = None, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     assert Q.is_cuda and K.is_cuda and V.is_cuda
     assert Q.shape == K.shape == V.shape
@@ -183,11 +182,12 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "block_m":   out_cfg.block_m,
             "block_d":   out_cfg.block_d,
             "occupancy": out_cfg.occupancy,
-        }
+        })
     else:
         BLOCK_M = int(block_size) if block_size is not None else _DEFAULT_OUT.block_m
         out_cfg = SimpleNamespace(
@@ -211,4 +211,4 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
