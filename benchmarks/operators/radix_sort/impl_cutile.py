@@ -10,7 +10,7 @@ ConstInt = ct.Constant[int]
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=4)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 _BLOCK_SIZE = 1024
 _BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (matches Triton)
@@ -140,7 +140,6 @@ def run(input: torch.Tensor, N: int,
         3. per-block prefix sum (adds block-level offset)
         4. scatter to final position
     """
-    global _last_autotune_config
 
     if N <= 1:
         return input.clone()
@@ -174,7 +173,8 @@ def run(input: torch.Tensor, N: int,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -198,4 +198,4 @@ def run(input: torch.Tensor, N: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
