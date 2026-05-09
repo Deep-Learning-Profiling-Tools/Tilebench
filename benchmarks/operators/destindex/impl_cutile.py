@@ -24,7 +24,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(block_d=64, occupancy=8)
 
@@ -66,7 +66,6 @@ def run(
     o_rope: torch.Tensor,
     autotune: bool = False,
 ):
-    global _last_autotune_config
 
     out_nope = o_nope.clone()
     out_rope = o_rope.clone()
@@ -93,10 +92,11 @@ def run(
             args_fn=lambda cfg: (kv_rope, dest_loc, out_rope, rope_head_dim, cfg.block_d),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "nope": {"block_d": nope_cfg.block_d, "occupancy": nope_cfg.occupancy},
             "rope": {"block_d": rope_cfg.block_d, "occupancy": rope_cfg.occupancy},
-        }
+        })
     else:
         nope_cfg = rope_cfg = _DEFAULT_CONFIG
 
@@ -111,4 +111,4 @@ def run(
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
