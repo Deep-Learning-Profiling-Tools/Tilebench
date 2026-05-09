@@ -14,7 +14,7 @@ _SEARCH_SPACE = [
     for t in [512, 1024, 2048, 4096]
     for occ in [4, 8, 16, 32]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def _next_pow2(n: int) -> int:
@@ -82,7 +82,6 @@ def run(data: torch.Tensor, N: int,
       1. Pad phase: one cuTile kernel copies data[0:N] → work with +inf padding.
       2. Bitonic phase: host loop over (k, j) launches one compare-exchange kernel per step.
     """
-    global _last_autotune_config
 
     if N <= 1:
         return data.clone()
@@ -111,10 +110,11 @@ def run(data: torch.Tensor, N: int,
             args_fn=lambda cfg: (work, k0, j0, M, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -132,4 +132,4 @@ def run(data: torch.Tensor, N: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
