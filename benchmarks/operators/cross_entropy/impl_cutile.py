@@ -7,7 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 
@@ -40,7 +40,6 @@ def run(
     block_size: int = 1024,
     autotune: bool = False,
 ) -> torch.Tensor:
-    global _last_autotune_config
     batch_size, num_classes = logits.shape
 
     # BLOCK_CLASSES must be a power of 2 >= num_classes.
@@ -71,7 +70,8 @@ def run(
             args_fn=lambda cfg: (logits_padded, targets, output, block_classes),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -85,4 +85,4 @@ def run(
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
