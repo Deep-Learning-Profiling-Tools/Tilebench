@@ -7,7 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_PARTIAL = SimpleNamespace(block_size=1024, occupancy=8)
 _DEFAULT_REDUCE = SimpleNamespace(block_rows=64, block_bins=256, occupancy=8)
@@ -99,7 +99,6 @@ _reduce_tuner = CutileAutotuner(_histogram_reduce_kernel)
 
 def run(input: torch.Tensor, N: int, num_bins: int,
         block_size: int = None, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     assert input.is_cuda
     assert input.ndim == 1
@@ -173,16 +172,17 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     )
 
     if autotune:
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "partial_block_size": partial_cfg.block_size,
             "partial_occupancy":  partial_cfg.occupancy,
             "reduce_block_rows":  reduce_cfg.block_rows,
             "reduce_block_bins":  reduce_cfg.block_bins,
             "reduce_occupancy":   reduce_cfg.occupancy,
-        }
+        })
 
     return histogram
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
