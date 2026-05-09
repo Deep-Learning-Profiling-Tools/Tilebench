@@ -8,7 +8,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [8, 16, 32]]
@@ -74,7 +74,6 @@ _tuner = CutileAutotuner(flash_decode_stage2_kernel)
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
-    global _last_autotune_config
 
     if isinstance(block_seq_tensor, torch.Tensor):
         block_seq = block_seq_tensor.item()
@@ -103,7 +102,8 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
             args_fn=lambda cfg: args,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -174,4 +174,4 @@ if __name__ == "__main__":
     print("Done.")
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
