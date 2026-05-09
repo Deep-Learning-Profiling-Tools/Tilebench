@@ -14,7 +14,7 @@ _SEARCH_SPACE = [
     for t in [256, 512, 1024, 2048]
     for occ in [4, 8, 16]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def _next_pow2(n: int) -> int:
@@ -137,7 +137,6 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
       kernel 2: finish reduction → mean / inv_std  (grid: C)
       kernel 3: element-wise apply                  (grid: cdiv(N*C, TILE))
     """
-    global _last_autotune_config
 
     output = torch.empty_like(input)
     BLOCK_N = 1024
@@ -180,10 +179,11 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -197,4 +197,4 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
