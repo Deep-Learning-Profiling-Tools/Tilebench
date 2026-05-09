@@ -1,8 +1,8 @@
-"""cuTile fused element-wise activation: out = silu(x * gate + bias).
+"""cuTile fused element-wise mul-add + SiLU: out = silu(x * gate + bias).
 
-Mirrors impl_triton.py: 1D grid, each CTA loads TILE elements. silu(z)
-computed via z / (1 + exp(-z)) since cuTile doesn't expose a fused
-sigmoid primitive.
+1D grid, each CTA loads TILE elements. silu(z) implemented as
+z / (1 + exp(-z)) since cuTile does not expose a fused sigmoid
+primitive (cf. impl_triton.py which uses tl.sigmoid).
 """
 from types import SimpleNamespace
 
@@ -13,7 +13,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 # Mirrors impl_triton.py via nw * occ ~= 64 (Triton sweeps nw in
 # [2, 4, 8]; cuTile sweeps occ in [4, 8, 16, 32], adding occ=4 as the
@@ -53,7 +53,6 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.shape != gate.shape or x.shape != bias.shape:
         raise ValueError("All input tensors must have the same shape.")
-    global _last_autotune_config
 
     x = x.contiguous()
     gate = gate.contiguous()
@@ -71,7 +70,8 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
             args_fn=lambda cfg: (x, gate, bias, out, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"tile": cfg.tile, "occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update(tile=cfg.tile, occupancy=cfg.occupancy)
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -82,4 +82,4 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
