@@ -13,7 +13,7 @@ INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=32, occupancy=8)
 _SEARCH_SPACE = [
@@ -140,7 +140,6 @@ _tuner = CutileAutotuner(fmha_kernel)
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     Batch, Heads, SeqLen_Q, D_k = q.shape
 
@@ -174,11 +173,12 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
             args_fn=lambda cfg: build_args(cfg.tile_m, cfg.tile_n),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile_m": cfg.tile_m,
             "tile_n": cfg.tile_n,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -189,4 +189,4 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     return Out
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
