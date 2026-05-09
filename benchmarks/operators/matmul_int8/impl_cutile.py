@@ -18,7 +18,7 @@ import torch
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(
     tm=128, tn=128, tk=64, group_size_m=8, occupancy=8,
@@ -82,7 +82,6 @@ def matmul_int8_kernel(
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """cuTile int8 GEMM with 2-bit packed B."""
-    global _last_autotune_config
 
     assert a.shape[1] == b.shape[0] * 4, (
         "Incompatible dims: A's K must equal 4 * B's K_b (B is packed 4-per-byte)"
@@ -108,13 +107,14 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         cfg = result.best.config
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tm":           cfg.tm,
             "tn":           cfg.tn,
             "tk":           cfg.tk,
             "group_size_m": cfg.group_size_m,
             "occupancy":    cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -130,4 +130,4 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None

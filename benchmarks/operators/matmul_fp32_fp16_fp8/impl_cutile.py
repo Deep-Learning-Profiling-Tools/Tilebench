@@ -20,7 +20,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 # Per-dtype default tile sizes.
 #   fp32 — Blackwell's fp32 Tensor Core MMA shape is small (~16x16x8); per
@@ -94,7 +94,6 @@ _tuner = CutileAutotuner(matmul_kernel)
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """cuTile matmul. Output dtype matches input dtype."""
-    global _last_autotune_config
 
     assert a.shape[1] == b.shape[0], "Incompatible dimensions"
     assert a.dtype == b.dtype, "Incompatible dtypes"
@@ -119,13 +118,14 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tm":           cfg.tm,
             "tn":           cfg.tn,
             "tk":           cfg.tk,
             "group_size_m": cfg.group_size_m,
             "occupancy":    cfg.occupancy,
-        }
+        })
     else:
         if a.dtype not in _DEFAULT_CONFIGS:
             raise ValueError(f"No default config for dtype {a.dtype}")
@@ -144,4 +144,4 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
