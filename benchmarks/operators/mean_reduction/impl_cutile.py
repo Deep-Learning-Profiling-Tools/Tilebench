@@ -24,7 +24,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
 
@@ -68,7 +68,6 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     Input:  (M, N)  — any floating dtype
     Output: (M,) float32
     """
-    global _last_autotune_config
 
     # Permute so that `dim` is last, treat all other dims as rows.
     if x.ndim == 2 and dim == 1:
@@ -96,10 +95,11 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
             args_fn=lambda cfg: (x2d, out, N, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile_size": cfg.tile_size,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -111,4 +111,4 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
