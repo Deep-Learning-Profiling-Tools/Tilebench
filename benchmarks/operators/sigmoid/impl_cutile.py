@@ -14,7 +14,7 @@ _SEARCH_SPACE = [
     for t in [1024, 2048, 4096, 8192]
     for occ in [4, 8, 16]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -44,7 +44,6 @@ _tuner = CutileAutotuner(_sigmoid_kernel)
 def run(X: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """cuTile element-wise sigmoid mirroring Triton's tl.sigmoid method."""
-    global _last_autotune_config
     output = torch.empty_like(X)
     stream = torch.cuda.current_stream()
 
@@ -57,10 +56,11 @@ def run(X: torch.Tensor, N: int,
             args_fn=lambda cfg: (X, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -72,4 +72,4 @@ def run(X: torch.Tensor, N: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
