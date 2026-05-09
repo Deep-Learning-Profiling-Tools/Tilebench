@@ -7,7 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
@@ -51,7 +51,6 @@ _tuner = CutileAutotuner(_dequant_kernel)
 
 def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    global _last_autotune_config
     output = torch.empty(M, N, dtype=X.dtype, device=X.device)
     X_flat = X.contiguous().view(-1)
     out_flat = output.view(-1)
@@ -67,10 +66,11 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
             args_fn=lambda cfg: (X_flat, S, out_flat, N, TILE_SIZE, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile": cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -83,4 +83,4 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
