@@ -10,7 +10,7 @@ ConstInt = ct.Constant[int]
 
 _DEFAULT_CONFIG = SimpleNamespace(occupancy=16)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [8, 16, 32]]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -87,7 +87,6 @@ def _next_pow2(n: int) -> int:
 def run(logits: torch.Tensor, M: int, E: int, k: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """cuTile MoE Top-K gating — direct mirror of the Triton method."""
-    global _last_autotune_config
 
     topk_weights = torch.empty(M, k, dtype=logits.dtype, device=logits.device)
     topk_indices = torch.empty(M, k, dtype=torch.int32, device=logits.device)
@@ -109,7 +108,8 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -124,4 +124,4 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
