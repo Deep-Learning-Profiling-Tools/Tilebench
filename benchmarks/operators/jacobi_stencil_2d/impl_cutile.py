@@ -15,7 +15,7 @@ _SEARCH_SPACE = [
     for tc in [256, 512, 1024, 2048]
     for occ in [4, 8, 16]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -71,7 +71,6 @@ def run(input: torch.Tensor, rows: int, cols: int,
     ct.gather for per-pixel runtime-indexed reads (equivalent to Triton's
     tl.load with per-pixel pointer offsets).
     """
-    global _last_autotune_config
 
     output = torch.empty_like(input)
     stream = torch.cuda.current_stream()
@@ -91,11 +90,12 @@ def run(input: torch.Tensor, rows: int, cols: int,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile_r":    cfg.tile_r,
             "tile_c":    cfg.tile_c,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -112,4 +112,4 @@ def run(input: torch.Tensor, rows: int, cols: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
