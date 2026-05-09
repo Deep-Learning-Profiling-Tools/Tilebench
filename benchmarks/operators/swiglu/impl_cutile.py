@@ -8,7 +8,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
@@ -35,7 +35,6 @@ _tuner = CutileAutotuner(_swiglu_kernel)
 
 def run(x: torch.Tensor, y: torch.Tensor,
         block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
     assert x.shape == y.shape
     x_flat = x.contiguous().view(-1)
     y_flat = y.contiguous().view(-1)
@@ -52,10 +51,11 @@ def run(x: torch.Tensor, y: torch.Tensor,
             args_fn=lambda cfg: (x_flat, y_flat, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -67,4 +67,4 @@ def run(x: torch.Tensor, y: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
