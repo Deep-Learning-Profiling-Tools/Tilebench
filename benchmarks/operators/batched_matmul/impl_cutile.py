@@ -20,7 +20,7 @@ _SEARCH_SPACE = [
     for occ in [4, 8, 16]
 
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -109,7 +109,6 @@ def run(A: torch.Tensor, B: torch.Tensor,
     The only remaining cross-DSL differences are compiler codegen and the
     autotune search space.
     """
-    global _last_autotune_config
 
     a_3d = A.contiguous().view(BATCH, M, K)
     b_3d = B.contiguous().view(BATCH, K, N)
@@ -136,13 +135,14 @@ def run(A: torch.Tensor, B: torch.Tensor,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile_m":     cfg.tile_m,
             "tile_n":     cfg.tile_n,
             "tile_k":     cfg.tile_k,
             "occupancy":  cfg.occupancy,
             "group_size": cfg.group_size,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -162,4 +162,4 @@ def run(A: torch.Tensor, B: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
