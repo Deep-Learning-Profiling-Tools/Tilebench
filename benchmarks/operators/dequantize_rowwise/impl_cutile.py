@@ -35,9 +35,8 @@ def _dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
     scale = ct.load(state_x, index=(bid,), shape=(1,))
     scale_2d = ct.reshape(scale, (1, 1))
 
-    x_f32 = ct.astype(x_tile, ct.float32)
-    out_f32 = x_f32 * scale_2d * _INV_127
-    ct.store(output, index=(bid, 0), tile=ct.astype(out_f32, ct.float16))
+    out = x_tile * scale_2d * _INV_127
+    ct.store(output, index=(bid, 0), tile=ct.astype(out, ct.float16))
 
 
 _tuner = CutileAutotuner(_dequantize_rowwise_kernel)
