@@ -39,8 +39,8 @@ def _histogram_partial_kernel(
 ):
     pid = ct.bid(0)
 
-    chunk_idx = pid
-    while chunk_idx * BLOCK_SIZE < N:
+    num_chunks = ct.cdiv(N, BLOCK_SIZE)
+    for chunk_idx in range(pid, num_chunks, num_partials):
         vals = ct.load(
             input_ptr,
             index=(chunk_idx,),
@@ -61,8 +61,6 @@ def _histogram_partial_kernel(
 
         ct.atomic_add(partial_ptr, (row_idx, bin_idx), update)
 
-        chunk_idx = chunk_idx + num_partials
-
 
 @ct.kernel
 def _histogram_reduce_kernel(
@@ -78,8 +76,7 @@ def _histogram_reduce_kernel(
     acc = ct.full((BLOCK_BINS,), 0, dtype=ct.int32)
 
     num_row_tiles = ct.cdiv(num_partials, BLOCK_ROWS)
-    row_tile = 0
-    while row_tile < num_row_tiles:
+    for row_tile in range(num_row_tiles):
         tile = ct.load(
             partial_ptr,
             index=(row_tile, pid_b),
@@ -87,7 +84,6 @@ def _histogram_reduce_kernel(
             padding_mode=ct.PaddingMode.ZERO,
         )
         acc = acc + ct.sum(tile, axis=0)
-        row_tile = row_tile + 1
 
     ct.store(hist_ptr, index=(pid_b,), tile=acc)
 
