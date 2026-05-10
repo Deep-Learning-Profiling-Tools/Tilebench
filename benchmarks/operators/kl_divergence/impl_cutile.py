@@ -39,8 +39,7 @@ def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
     acc = ct.full((1, TILE), 0.0, dtype=ct.float32)
     n_tiles = ct.cdiv(n_cols, TILE)
 
-    t = 0
-    while t < n_tiles:
+    for t in range(n_tiles):
         log_pred_tile = ct.load(
             log_y_pred, index=(bid, t), shape=(1, TILE),
             padding_mode=ct.PaddingMode.ZERO,
@@ -58,7 +57,6 @@ def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
         # doesn't go through NaN.
         safe_log = ct.where(y_true_f32 > 0.0, ct.log(y_true_f32), 0.0)
         acc = acc + y_true_f32 * (safe_log - log_pred_f32)
-        t = t + 1
 
     row_sum = ct.sum(acc, axis=1)  # (1,)
     ct.store(loss, index=(bid,), tile=row_sum)
