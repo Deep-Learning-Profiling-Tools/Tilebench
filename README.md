@@ -205,3 +205,253 @@ GENERATORS["<name>"] = generate_<name>_inputs
 ```
 
 See `OPERATOR_AUTHORING_GUIDE.md` for full details.
+
+---
+
+## LLM Kernel Generation (TileBench-LLMGen)
+
+`llm_kernelgen/` is an extension that evaluates how well Large Language Models
+can generate correct, performant Triton and cuTile kernels **without access to
+any existing hand-written implementation**.
+
+### Design principles
+
+| Principle | How it is enforced |
+|---|---|
+| **No leakage** | `impl_triton.py` / `impl_cutile.py` are never included in prompts |
+| **Reproducible** | Every prompt, raw response, error log, and repair round is archived |
+| **Quantifiable** | compile rate, correctness pass rate, repair success, token cost, LOC |
+| **Replaceable models** | OpenAI Responses API + any OpenAI-compatible `/chat/completions` endpoint |
+| **Integrated** | Generated kernels run through the identical TileBench correctness + timing suite |
+
+---
+
+### Prerequisites
+
+```bash
+pip install openai jinja2 pyyaml
+```
+
+Set API key(s):
+```bash
+export OPENAI_API_KEY="sk-..."           # For OpenAI Responses API
+export OPENAI_COMPAT_API_KEY="..."       # For any compatible endpoint
+export OPENAI_COMPAT_BASE_URL="https://..." # Base URL for compatible endpoint
+```
+
+---
+
+### Quick start
+
+#### Step 1 — Generate one kernel (smoke test)
+
+```bash
+# Generate a Triton kernel for softmax, zero-shot, gpt4o model
+PYTHONPATH=. python llm_kernelgen/scripts/generate.py \
+    --operator softmax \
+    --backend triton \
+    --model gpt4o \
+    --experiment exp_smoke \
+    --samples 1
+```
+
+Output directory: `llm_kernelgen/generated/exp_smoke/softmax/triton/sample_00/`
+
+```
+sample_00/
+├── prompt.md           # Full prompt sent to the LLM
+├── response.raw.txt    # Raw LLM response
+├── impl_triton.py      # Extracted code
+└── metadata.json       # Model, tokens, latency, git commit, context audit
+```
+
+#### Step 2 — Evaluate the generated kernel
+
+```bash
+PYTHONPATH=. python scripts/run_generated.py \
+    --operator softmax \
+    --backend triton \
+    --impl llm_kernelgen/generated/exp_smoke/softmax/triton/sample_00/impl_triton.py
+```
+
+#### Step 3 — Run the full pipeline (generate → evaluate → repair)
+
+```bash
+PYTHONPATH=. python scripts/eval_llm_kernels.py \
+    --experiment smoke_triton
+```
+
+This runs the `smoke_triton` experiment defined in
+`llm_kernelgen/configs/experiments.yaml`:
+- Model: `gpt4o`
+- Backend: Triton
+- Operators: from `dev_ops` split (dropout, swiglu, l2_norm, softmax)
+- 1 sample per operator, no repair
+
+#### Step 4 — Summarise results
+
+```bash
+PYTHONPATH=. python llm_kernelgen/scripts/summarize.py \
+    --experiment smoke_triton
+```
+
+Prints per-operator correctness / performance / cost metrics and writes
+`llm_kernelgen/generated/smoke_triton/summary.json`.
+
+#### Step 5 — Repair a failed sample
+
+```bash
+PYTHONPATH=. python llm_kernelgen/scripts/repair.py \
+    --operator softmax \
+    --backend triton \
+    --sample-dir llm_kernelgen/generated/exp_smoke/softmax/triton/sample_00 \
+    --model o3_medium \
+    --max-rounds 2
+```
+
+---
+
+### Module layout
+
+```
+llm_kernelgen/
+├── configs/
+│   ├── models.yaml            # LLM provider / model aliases
+│   ├── experiments.yaml       # Named experiment configs (model, operators, samples, repair)
+│   └── prompt_profiles.yaml   # Zero-shot / few-shot profile definitions
+│
+├── clients/
+│   ├── base.py                # Abstract BaseClient + LLMResponse dataclass
+│   ├── openai_responses.py    # OpenAI Responses API (/v1/responses)
+│   └── openai_chat_compat.py  # Any OpenAI-compatible /chat/completions endpoint
+│
+├── prompts/
+│   ├── system.md              # System prompt (rules, interface requirements)
+│   ├── task_triton.md.j2      # Jinja2 task template for Triton
+│   ├── task_cutile.md.j2      # Jinja2 task template for cuTile
+│   ├── repair.md.j2           # Repair prompt template
+│   ├── dsl_reference/
+│   │   ├── triton_minimal.md  # Triton DSL cookbook (injected into prompts)
+│   │   └── cutile_minimal.md  # cuTile DSL cookbook (injected into prompts)
+│   └── examples/              # Few-shot examples (train split only)
+│
+├── dataset/
+│   ├── manifest.yaml          # Three-way train / dev / test split
+│   ├── train_examples.yaml    # Operators used as few-shot demonstrations
+│   ├── dev_ops.yaml           # Operators for prompt engineering / smoke tests
+│   └── test_ops.yaml          # Held-out test set for paper results
+│
+├── runtime/
+│   ├── module_loader.py       # Dynamic loader for generated kernel files
+│   ├── sandbox.py             # Static safety + syntax checks
+│   └── adapters.py            # Build clients from config dicts
+│
+├── scripts/
+│   ├── build_prompt.py        # Assemble leakage-free prompts
+│   ├── generate.py            # Call LLM and archive all artefacts
+│   ├── extract_code.py        # Parse code block from LLM response
+│   ├── evaluate.py            # Multi-stage evaluation (syntax → correctness → perf)
+│   ├── repair.py              # Repair loop (error log → LLM → re-evaluate)
+│   └── summarize.py           # Aggregate pass rates, speedups, token costs
+│
+└── generated/                 # Auto-created; never commit to git
+    └── <experiment_id>/
+        └── <operator>/
+            └── <backend>/
+                └── sample_<N>/
+                    ├── prompt.md
+                    ├── response.raw.txt
+                    ├── impl_<backend>.py
+                    ├── metadata.json
+                    ├── bench.json
+                    ├── eval_status.json
+                    └── eval.log
+
+scripts/
+├── run_generated.py      # Evaluate one generated kernel via TileBench engine
+└── eval_llm_kernels.py   # Batch generate + evaluate + repair for an experiment
+```
+
+---
+
+### Configuration
+
+#### `llm_kernelgen/configs/models.yaml`
+
+Defines LLM providers and model aliases.  Add your own entry:
+
+```yaml
+providers:
+  my_provider:
+    api_type: chat_completions   # or "responses"
+    base_url: "https://my-endpoint/v1"
+    api_key_env: "MY_API_KEY"
+
+models:
+  my_model:
+    provider: my_provider
+    model: "model-name"
+    temperature: 0.2
+    max_output_tokens: 12000
+```
+
+#### `llm_kernelgen/configs/experiments.yaml`
+
+Defines complete experiment runs:
+
+```yaml
+experiments:
+  my_experiment:
+    model_alias: my_model
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: dev_ops      # train_examples | dev_ops | test_ops
+    num_samples: 5
+    repair_rounds: 2
+    description: "My custom experiment"
+```
+
+---
+
+### Evaluation stages
+
+Each generated kernel is evaluated in stages.  The highest stage reached is
+recorded in `eval_status.json`:
+
+| Stage | Name | Criterion |
+|---|---|---|
+| 0 | `syntax_import` | Python parses and imports without error |
+| 1 | `run_case0` | `run()` executes on case 0 without exception |
+| 2 | `correct_case0` | Output matches `impl_torch` on case 0 |
+| 3 | `correct_all` | Correctness passes on all configured cases |
+| 4 | `bench_complete` | Full benchmark timing completes |
+| 5 | `perf_score` | Performance metrics computed |
+
+---
+
+### Paper metrics
+
+The summary script reports:
+
+**Generation quality**
+- `syntax_pass_rate`, `runtime_pass_rate`, `correctness_pass_rate`
+- `pass@1`, `pass@k` (Chen et al. 2021 unbiased estimator)
+- `repair_success_rate`
+
+**Performance** (correctness-passing kernels only)
+- `mean_speedup_vs_torch`, `median_speedup_vs_torch`
+
+**Effort / cost**
+- `mean_prompt_tokens`, `mean_completion_tokens`, `mean_reasoning_tokens`
+- `mean_latency_s`, `mean_loc`, total API calls
+
+---
+
+### Leakage audit checklist
+
+- [ ] `impl_triton.py` / `impl_cutile.py` are **not** present in any `prompt.md`
+- [ ] Few-shot examples are from `train_examples` split only
+- [ ] `metadata.json` records `"forbidden_context_enforced": true`
+- [ ] `allowed_context` in `metadata.json` lists only permitted files
+- [ ] Repair prompts contain only the generated code + error log
+- [ ] Test operator split is fixed before any generation begins

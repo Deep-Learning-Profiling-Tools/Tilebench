@@ -1,0 +1,47 @@
+# TileBench LLM-KernelGen dataset manifest.
+#
+# Operators are split into three disjoint sets to prevent prompt-leakage:
+#
+#   train_examples  - Used only as few-shot demonstration examples.
+#                     Their impl_triton/cutile code MAY appear in the prompt
+#                     because they exist purely to illustrate DSL style.
+#
+#   dev_ops         - Used during prompt-engineering and smoke-testing.
+#                     Their implementations are NEVER shown to the LLM.
+#
+#   test_ops        - The held-out evaluation set for the final paper results.
+#                     Their implementations are NEVER shown to the LLM.
+#
+# Splits are exhaustive: every operator in this repo must appear in exactly
+# one of the three lists.  Update this file when new operators are added.
+
+train_examples:
+  - vector_add
+  - relu
+  - mean_reduction
+  - matrix_transpose
+
+dev_ops:
+  - dropout
+  - swiglu
+  - l2_norm
+  - softmax
+
+test_ops:
+  - rmsnorm
+  - layernorm
+  - rope
+  - cross_entropy
+  - jacobi_stencil_2d
+  - weight_dequant
+  - flash_decode
+  - block_sparse_attention
+  - destindex
+  - matmul_int8
+
+# ---------------------------------------------------------------------------
+# Metadata
+# ---------------------------------------------------------------------------
+# version: dataset split version tag (increment when any operator moves)
+version: "1.0"
+created: "2026-05-11"

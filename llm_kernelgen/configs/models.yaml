@@ -1,0 +1,94 @@
+# Model and provider configuration for llm_kernelgen.
+#
+# Supported api_type values:
+#   responses        - OpenAI Responses API (/v1/responses). Best for
+#                      reasoning models (o-series) and GPT-5+.
+#   chat_completions - Any OpenAI-compatible /chat/completions endpoint
+#                      (OpenRouter, vLLM, Ollama, etc.).
+#
+# Environment variable placeholders use ${VAR} syntax and are resolved
+# at runtime.  The actual keys are never stored in this file.
+
+providers:
+  openai:
+    api_type: responses
+    base_url: "https://api.openai.com/v1"
+    api_key_env: "OPENAI_API_KEY"
+
+  openai_compat:
+    api_type: chat_completions
+    base_url: "${OPENAI_COMPAT_BASE_URL}"
+    api_key_env: "OPENAI_COMPAT_API_KEY"
+
+  # Example: local vLLM endpoint
+  local_vllm:
+    api_type: chat_completions
+    base_url: "http://localhost:8000/v1"
+    api_key_env: "VLLM_API_KEY"
+
+# ---------------------------------------------------------------------------
+# Model aliases
+# ---------------------------------------------------------------------------
+# Each entry inherits provider fields and can override them locally.
+# Fields:
+#   provider        - one of the provider keys above
+#   model           - model name string passed to the API
+#   temperature     - sampling temperature (default 0.2)
+#   max_output_tokens - maximum tokens in the completion
+#   reasoning_effort  - "low" | "medium" | "high" (responses API / o-series)
+#   extra_body      - arbitrary extra fields for chat_completions providers
+
+models:
+  # --- OpenAI official ---
+
+  gpt4o:
+    provider: openai
+    model: "gpt-4o"
+    temperature: 0.2
+    max_output_tokens: 12000
+
+  gpt4o_high:
+    provider: openai
+    model: "gpt-4o"
+    temperature: 0.2
+    max_output_tokens: 16000
+
+  o3_medium:
+    provider: openai
+    model: "o3"
+    reasoning_effort: "medium"
+    temperature: 1.0
+    max_output_tokens: 16000
+
+  o3_high:
+    provider: openai
+    model: "o3"
+    reasoning_effort: "high"
+    temperature: 1.0
+    max_output_tokens: 32000
+
+  o4_mini_medium:
+    provider: openai
+    model: "o4-mini"
+    reasoning_effort: "medium"
+    temperature: 1.0
+    max_output_tokens: 16000
+
+  # --- OpenAI-compatible (e.g. OpenRouter, proxy) ---
+
+  compat_coder:
+    provider: openai_compat
+    model: "${COMPAT_MODEL}"
+    temperature: 0.2
+    max_output_tokens: 12000
+    extra_body:
+      reasoning:
+        effort: "medium"
+
+  # --- Local vLLM example ---
+
+  local_qwen_coder:
+    provider: local_vllm
+    model: "Qwen/Qwen2.5-Coder-32B-Instruct"
+    temperature: 0.2
+    max_output_tokens: 8192

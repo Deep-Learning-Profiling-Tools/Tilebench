@@ -1,0 +1,40 @@
+# Repair Request: Fix `impl_{{ backend }}.py` for operator `{{ operator_name }}`
+
+Your previous implementation failed at **repair round {{ repair_round }}**.
+
+## Failure summary
+
+**Stage reached:** {{ failure_stage }}
+**Error type:** {{ error_type }}
+
+```
+{{ error_log }}
+```
+
+{% if failing_cases %}
+## Failing test cases
+
+The following cases produced incorrect results or runtime errors:
+
+{% for case in failing_cases %}
+- Case {{ loop.index }}: `{{ case }}`
+{% endfor %}
+{% endif %}
+
+## Your previous code
+
+This is the exact code that failed.  You must fix it and return a corrected version.
+
+```python
+{{ previous_code }}
+```
+
+## Repair instructions
+
+1. Analyse the error log above and identify the root cause.
+2. Fix **only** the generated file — do **not** use external references.
+3. Do not add new external imports beyond what was already present.
+4. Ensure the corrected `run()` still matches `impl_torch.run()` semantics.
+5. Return a **complete** corrected Python file in **one** fenced code block.
+
+**Do not** ask for clarification.  Return only the fixed code.

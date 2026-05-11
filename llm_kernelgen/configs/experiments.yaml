@@ -1,0 +1,80 @@
+# Experiment configurations for llm_kernelgen.
+#
+# Each experiment entry defines:
+#   model_alias     - key in models.yaml
+#   backends        - list of target backends: [triton, cutile]
+#   prompt_profile  - key in prompt_profiles.yaml
+#   operators_split - which dataset split to run: train_examples | dev_ops | test_ops
+#   num_samples     - how many independent generations per operator
+#   repair_rounds   - max number of repair iterations (0 = no repair)
+#   description     - human-readable note for the paper
+
+experiments:
+  # Quick smoke test (does the pipeline work?)
+  smoke_triton:
+    model_alias: gpt4o
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: dev_ops
+    num_samples: 1
+    repair_rounds: 0
+    description: "Smoke test: zero-shot Triton on dev operators"
+
+  # Main experiment – zero-shot Triton
+  main_triton_zero_shot:
+    model_alias: o3_medium
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: test_ops
+    num_samples: 5
+    repair_rounds: 2
+    description: "RQ1/RQ4: zero-shot Triton, o3-medium, test split, repair up to 2 rounds"
+
+  # Main experiment – few-shot Triton
+  main_triton_few_shot:
+    model_alias: o3_medium
+    backends: [triton]
+    prompt_profile: triton_few_shot_4
+    operators_split: test_ops
+    num_samples: 5
+    repair_rounds: 2
+    description: "RQ1/RQ2: few-shot-4 Triton, o3-medium, test split"
+
+  # Main experiment – zero-shot cuTile
+  main_cutile_zero_shot:
+    model_alias: o3_medium
+    backends: [cutile]
+    prompt_profile: cutile_zero_shot
+    operators_split: test_ops
+    num_samples: 5
+    repair_rounds: 2
+    description: "RQ2: zero-shot cuTile, o3-medium, test split"
+
+  # Ablation – reasoning effort
+  ablation_effort_low:
+    model_alias: o3_medium
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: dev_ops
+    num_samples: 3
+    repair_rounds: 0
+    description: "RQ5 ablation: reasoning effort=medium (o3)"
+
+  ablation_effort_high:
+    model_alias: o3_high
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: dev_ops
+    num_samples: 3
+    repair_rounds: 0
+    description: "RQ5 ablation: reasoning effort=high (o3)"
+
+  # Ablation – model comparison
+  ablation_gpt4o:
+    model_alias: gpt4o
+    backends: [triton]
+    prompt_profile: triton_zero_shot
+    operators_split: dev_ops
+    num_samples: 3
+    repair_rounds: 2
+    description: "RQ5 ablation: GPT-4o vs o-series"

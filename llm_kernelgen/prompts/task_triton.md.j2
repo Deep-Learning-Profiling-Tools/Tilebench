@@ -1,0 +1,90 @@
+# Task: Generate `impl_triton.py` for TileBench operator `{{ operator_name }}`
+
+## Required Python interface
+
+Your file **must** implement both of the following functions with exactly these signatures:
+
+```python
+{{ run_signature }}
+
+def get_last_config() -> dict | None:
+    """Return the last autotuner-selected config as a dict, or None if not applicable."""
+    ...
+```
+
+The `run()` function must accept the same positional arguments as
+`impl_torch.run()` and return tensors with identical shapes and dtypes.
+
+---
+
+## Problem statement
+
+{{ problem_statement }}
+
+---
+
+## PyTorch reference implementation (`impl_torch.py`)
+
+Study this carefully — it defines the ground-truth semantics your kernel must reproduce.
+
+```python
+{{ impl_torch }}
+```
+
+---
+
+## Input generator
+
+The benchmark framework calls this function to produce inputs.  Use it to
+understand the exact shapes and dtypes your kernel will receive.
+
+```python
+{{ generator_function }}
+```
+
+---
+
+## Benchmark configuration (`config.yaml`)
+
+```yaml
+{{ config_yaml }}
+```
+
+Pay attention to `dtype` variants and non-power-of-two sizes — your kernel
+must handle all cases listed in `case_grid`.
+
+---
+
+## Triton DSL reference
+
+{{ triton_dsl_reference }}
+
+---
+{% if examples %}
+## Few-shot examples
+
+The following are **training-split** examples — they are from *different*
+operators and are provided only to illustrate correct Triton coding style.
+Do **not** copy them verbatim; adapt the patterns to the operator above.
+
+{% for example in examples %}
+### Example {{ loop.index }}
+
+{{ example }}
+
+---
+{% endfor %}
+{% endif %}
+
+## Requirements checklist
+
+- [ ] Output of `run()` numerically matches `impl_torch.run()` within the
+      tolerances in `config.yaml`.
+- [ ] Handles non-power-of-two tensor sizes with proper masking.
+- [ ] `block_size` parameter is respected in fixed (non-autotune) mode.
+- [ ] When `autotune=True`, `get_last_config()` returns the selected config.
+- [ ] When `autotune=False`, `get_last_config()` returns `None` or a fixed dict.
+- [ ] No imports outside: `torch`, `triton`, `triton.language`, `math`, `functools`.
+- [ ] The file is completely self-contained — no relative imports.
+
+Return **only** one fenced Python code block containing the complete file.

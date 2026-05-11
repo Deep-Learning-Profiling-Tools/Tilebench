@@ -9,15 +9,52 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-def run_benchmark_suite(operator_name, benchmark_overrides=None):
+def run_benchmark_suite(operator_name, benchmark_overrides=None, impl_overrides=None):
+    """Run the full benchmark suite for *operator_name*.
+
+    Parameters
+    ----------
+    operator_name:
+        Operator subdirectory name under ``benchmarks/operators/``.
+    benchmark_overrides:
+        Optional dict that overrides fields in the ``benchmark`` section of
+        ``config.yaml`` (e.g. ``{"warmup": 5, "repeat": 10}``).
+    impl_overrides:
+        Optional dict mapping backend name → path to an alternative
+        implementation file.  Supported keys: ``"triton"``, ``"cutile"``.
+
+        Example::
+
+            impl_overrides = {
+                "triton": "llm_kernelgen/generated/exp1/softmax/triton/sample_00/impl_triton.py"
+            }
+
+        When a key is present, the specified file is loaded instead of the
+        canonical ``benchmarks/operators/<op>/impl_<backend>.py``.  The
+        canonical ``impl_torch.py`` is always used as the reference.
+    """
+    from llm_kernelgen.runtime.module_loader import load_backend_module
+
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    overrides = impl_overrides or {}
+
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
-    impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
+
+    impl_triton = load_backend_module(
+        operator_name,
+        "triton",
+        override_path=overrides.get("triton"),
+    )
+
     try:
-        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+        impl_cutile = load_backend_module(
+            operator_name,
+            "cutile",
+            override_path=overrides.get("cutile"),
+        )
     except ImportError as e:
         print(f"  cuTile import skipped: {e}")
         impl_cutile = None

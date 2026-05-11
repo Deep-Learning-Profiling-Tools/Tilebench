@@ -1,0 +1,96 @@
+# Task: Generate `impl_cutile.py` for TileBench operator `{{ operator_name }}`
+
+## Required Python interface
+
+Your file **must** implement both of the following functions:
+
+```python
+{{ run_signature }}
+
+def get_last_config() -> dict | None:
+    """Return the last autotuner-selected config as a dict, or None if not applicable."""
+    ...
+```
+
+The `run()` function must accept the same positional arguments as
+`impl_torch.run()` and return tensors with identical shapes and dtypes.
+
+---
+
+## Problem statement
+
+{{ problem_statement }}
+
+---
+
+## PyTorch reference implementation (`impl_torch.py`)
+
+Study this carefully — it defines the ground-truth semantics your kernel must reproduce.
+
+```python
+{{ impl_torch }}
+```
+
+---
+
+## Input generator
+
+```python
+{{ generator_function }}
+```
+
+---
+
+## Benchmark configuration (`config.yaml`)
+
+```yaml
+{{ config_yaml }}
+```
+
+---
+
+## cuTile (cuda.tile) DSL reference
+
+{{ cutile_dsl_reference }}
+
+---
+{% if examples %}
+## Few-shot examples
+
+These are **training-split** examples from *different* operators, provided
+only to illustrate cuTile coding style.
+
+{% for example in examples %}
+### Example {{ loop.index }}
+
+{{ example }}
+
+---
+{% endfor %}
+{% endif %}
+
+## cuTile-specific requirements
+
+- Use `ct.bid(axis)` for block IDs; do **not** use CUDA thread indices directly.
+- Use `ct.load(array, index=..., shape=..., padding_mode=...)` with explicit
+  tile-space indices.
+- Out-of-bound stores are automatically ignored by `ct.store` — rely on this
+  for boundary handling.
+- Use `ct.PaddingMode.ZERO` for neutral-zero reductions (e.g. sum).
+- Use `ct.PaddingMode.NEG_INF` where a negative-infinity padding is needed
+  (e.g. softmax / attention max-reduce).
+- If using `CutileAutotuner` (from `core.cutile_autotune`), the fixed-mode
+  path must also work without the autotuner.
+- `get_last_config()` must return the last selected config when autotune is
+  used, or `None` otherwise.
+
+## General requirements checklist
+
+- [ ] Output of `run()` numerically matches `impl_torch.run()`.
+- [ ] Handles non-power-of-two tensor sizes correctly.
+- [ ] No imports outside: `torch`, `cuda.tile`, `math`, `functools`,
+      and `core.cutile_autotune` (optional).
+- [ ] The file is completely self-contained — no relative imports beyond
+      the above allowed set.
+
+Return **only** one fenced Python code block containing the complete file.

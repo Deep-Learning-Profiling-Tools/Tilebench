@@ -1,0 +1,82 @@
+# Prompt profiles for llm_kernelgen.
+#
+# Each profile specifies:
+#   template          - Jinja2 template file (relative to prompts/)
+#   dsl_reference     - DSL reference markdown file (relative to prompts/dsl_reference/)
+#   num_examples      - number of few-shot examples to include (0 = zero-shot)
+#   example_pool      - list of example file basenames (relative to prompts/examples/)
+#                       selected in order up to num_examples
+#   include_generator - whether to include the input generator function in the prompt
+#   include_config    - whether to include the operator config.yaml content
+#   description       - human-readable label
+
+profiles:
+  # --- Triton ---
+
+  triton_zero_shot:
+    template: task_triton.md.j2
+    dsl_reference: triton_minimal.md
+    num_examples: 0
+    example_pool: []
+    include_generator: true
+    include_config: true
+    description: "Zero-shot Triton: DSL reference + problem spec, no examples"
+
+  triton_few_shot_2:
+    template: task_triton.md.j2
+    dsl_reference: triton_minimal.md
+    num_examples: 2
+    example_pool:
+      - triton_elementwise.md
+      - triton_reduction.md
+    include_generator: true
+    include_config: true
+    description: "Few-shot-2 Triton: 2 train-split examples"
+
+  triton_few_shot_4:
+    template: task_triton.md.j2
+    dsl_reference: triton_minimal.md
+    num_examples: 4
+    example_pool:
+      - triton_elementwise.md
+      - triton_reduction.md
+      - triton_tiled_matmul.md
+      - triton_fused_ops.md
+    include_generator: true
+    include_config: true
+    description: "Few-shot-4 Triton: 4 train-split examples"
+
+  # --- cuTile ---
+
+  cutile_zero_shot:
+    template: task_cutile.md.j2
+    dsl_reference: cutile_minimal.md
+    num_examples: 0
+    example_pool: []
+    include_generator: true
+    include_config: true
+    description: "Zero-shot cuTile: DSL reference + problem spec, no examples"
+
+  cutile_few_shot_2:
+    template: task_cutile.md.j2
+    dsl_reference: cutile_minimal.md
+    num_examples: 2
+    example_pool:
+      - cutile_elementwise.md
+      - cutile_reduction.md
+    include_generator: true
+    include_config: true
+    description: "Few-shot-2 cuTile: 2 train-split examples"
+
+  cutile_few_shot_4:
+    template: task_cutile.md.j2
+    dsl_reference: cutile_minimal.md
+    num_examples: 4
+    example_pool:
+      - cutile_elementwise.md
+      - cutile_reduction.md
+      - cutile_autotune.md
+      - cutile_matmul.md
+    include_generator: true
+    include_config: true
+    description: "Few-shot-4 cuTile: 4 train-split examples"
