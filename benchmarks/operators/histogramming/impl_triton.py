@@ -31,10 +31,7 @@ def _histogram_partial_kernel(
     row_base = partial_ptr + pid * stride_pr
     one = tl.full((BLOCK_SIZE,), 1, dtype=tl.int32)
 
-    chunk_start = pid * BLOCK_SIZE
-    chunk_step = num_partials * BLOCK_SIZE
-
-    while chunk_start < N:
+    for chunk_start in tl.range(pid * BLOCK_SIZE, N, num_partials * BLOCK_SIZE):
         idx = chunk_start + offs
         mask = idx < N
 
@@ -43,8 +40,6 @@ def _histogram_partial_kernel(
 
         safe_bins = tl.where(valid, vals, 0)
         tl.atomic_add(row_base + safe_bins * stride_pb, one, mask=valid)
-
-        chunk_start += chunk_step
 
 
 @triton.jit
