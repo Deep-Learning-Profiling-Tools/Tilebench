@@ -29,10 +29,10 @@ _last_autotune_config: dict = {}
 #          (orders-of-magnitude slower).
 #   fp16 / fp8 — large tiles fit HMMA / IMMA Tensor Core natively.
 _DEFAULT_CONFIGS = {
-    torch.float32:        SimpleNamespace(tm=32,  tn=32,  tk=32,  group_size_m=8, occupancy=4),
-    torch.float16:        SimpleNamespace(tm=128, tn=256, tk=64,  group_size_m=8, occupancy=4),
-    torch.float8_e4m3fn:  SimpleNamespace(tm=128, tn=256, tk=128, group_size_m=8, occupancy=4),
-    torch.float8_e5m2:    SimpleNamespace(tm=128, tn=256, tk=128, group_size_m=8, occupancy=4),
+    torch.float32:        SimpleNamespace(tm=128,  tn=128, tk=32,  group_size_m=8, occupancy=16),
+    torch.float16:        SimpleNamespace(tm=128, tn=128, tk=64,  group_size_m=8, occupancy=16),
+    torch.float8_e4m3fn:  SimpleNamespace(tm=128, tn=256, tk=64, group_size_m=8, occupancy=16),
+    torch.float8_e5m2:    SimpleNamespace(tm=128, tn=256, tk=64, group_size_m=8, occupancy=16),
 }
 
 # Search space (independent sweep, mirroring Triton). exhaustive_search
