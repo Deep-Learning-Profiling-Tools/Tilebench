@@ -7,7 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(group_size=4, occupancy=8)
 
@@ -65,7 +65,6 @@ _tuner = CutileAutotuner(rope_kernel)
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
-    global _last_autotune_config
 
     # RoPE is in-place; clone so the caller's q stays pristine across backends.
     output = q.clone().contiguous()
@@ -98,7 +97,8 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"group_size": cfg.group_size, "occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"group_size": cfg.group_size, "occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -117,4 +117,4 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
