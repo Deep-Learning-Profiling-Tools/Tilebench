@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_N": 128, "num_warps": 4, "num_stages": 1}
+_DEFAULT_CONFIG = {"BLOCK_N": 256, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -38,9 +38,9 @@ def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
 _argmax_rowwise_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_N": bn}, num_warps=nw, num_stages=ns)
-        for bn in [64, 128, 256, 512, 1024]
-        for nw in [4, 8]
-        for ns in [1, 2]
+        for bn in [256, 512, 1024, 2048]
+        for nw in [4, 8, 16]
+        for ns in [2, 3, 4]
     ],
     key=["N"],
 )(_argmax_rowwise_kernel)
