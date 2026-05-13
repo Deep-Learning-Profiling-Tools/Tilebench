@@ -116,7 +116,8 @@ def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda'
     return (y_pred, y_true)
 
 
-def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    # Fused element-wise activation: silu(x * gate + bias)
     x    = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
     bias = torch.randn(n, dtype=dtype, device=device)
@@ -439,8 +440,8 @@ GENERATORS = {
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
-    "kl_divergence": generate_kl_divergence_inputs,
-    "generic_fused_container": generate_generic_fused_container_inputs,
+    "divergence_metric": generate_divergence_metric_inputs,
+    "fused_activation": generate_fused_activation_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
