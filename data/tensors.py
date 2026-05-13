@@ -362,7 +362,78 @@ def generate_weight_dequant_inputs(M, TILE_SIZE, dtype, N=None, device='cuda', *
     S_cols = math.ceil(N / TILE_SIZE)
     S = torch.randn(S_rows, S_cols, dtype=dtype, device=device)
     return (X, S, M, N, TILE_SIZE)
+def generate_linear_self_attention_inputs(
+    M,
+    D,
+    dtype=torch.float32,
+    device='cuda',
+    eps=1e-6,
+    BLOCK_M=32,
+    BLOCK_D=16,
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
 
+    if dtype != torch.float32:
+        raise ValueError("linear_self_attention expects float32 inputs.")
+
+    q = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+    k = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+    v = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
+
+    return (
+        q.contiguous(),
+        k.contiguous(),
+        v.contiguous(),
+        float(eps),
+        int(BLOCK_M),
+        int(BLOCK_D),
+    )
+def generate_top_k_selection_inputs(
+    N,
+    k,
+    dtype=torch.float32,
+    device='cuda',
+    BLOCK_SIZE=1024,
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    if dtype != torch.float32:
+        raise ValueError("top_k_selection expects float32 inputs.")
+
+    input_tensor = torch.randn((N,), dtype=dtype, device=device)
+
+    return (
+        input_tensor.contiguous(),
+        int(N),
+        int(k),
+        int(BLOCK_SIZE),
+    )
+def generate_histogramming_inputs(
+    N,
+    num_bins,
+    dtype=torch.int32,
+    device='cuda',
+    **kwargs,
+):
+    if isinstance(dtype, str):
+        dtype = getattr(torch, dtype)
+
+    if dtype != torch.int32:
+        raise ValueError("histogramming expects int32 inputs.")
+
+    input_tensor = torch.randint(
+        low=0,
+        high=int(num_bins),
+        size=(int(N),),
+        device=device,
+        dtype=torch.int32,
+    )
+
+    return (input_tensor.contiguous(), int(N), int(num_bins))
 
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
@@ -395,6 +466,9 @@ GENERATORS = {
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
     "weight_dequant": generate_weight_dequant_inputs,
+    "linear_self_attention": generate_linear_self_attention_inputs,
+    "top_k_selection": generate_top_k_selection_inputs,
+    "histogramming": generate_histogramming_inputs,
 }
 
 
@@ -508,6 +582,14 @@ def infer_problem_size(operator_name, params):
         M = int(params.get("M", 1))
         N = int(params.get("N", M))
         return M * N
+    if operator_name == "linear_self_attention":
+        return int(params.get("M", 1)) * int(params.get("D", 1))
+
+    if operator_name == "top_k_selection":
+        return int(params.get("N", 1))
+
+    if operator_name == "histogramming":
+        return int(params.get("N", 1))
     # Fallback: multiply all integer-like params.
     size = 1
     used = False
