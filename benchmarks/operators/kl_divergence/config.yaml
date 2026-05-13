@@ -1,0 +1,29 @@
+verify:
+  # fp32 throughout. Reduction-tree differences vs. torch's sequential sum
+  # introduce O(eps * sqrt(cols)) ~ 1.5e-5 rounding at cols=16384;
+  # 1e-4 leaves headroom without being loose.
+  atol: 1e-4
+  rtol: 1e-4
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  rows: [512, 1024, 2048, 4096]
+  cols: [1024, 2048, 4096, 8192, 16384]
+
+metrics:
+  bytes_expr: "rows * cols * 4 * 2 + rows * 4"
+  # Lower bound: 1 log + 1 sub + 1 mul + 1 reduce-add per element.
+  # log goes through SFU and isn't counted; real bottleneck is HBM + SFU,
+  # so bandwidth_GBs is the more meaningful number here.
+  flops_expr: "4 * rows * cols"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
