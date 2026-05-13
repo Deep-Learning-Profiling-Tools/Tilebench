@@ -106,7 +106,6 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        cfg = result.best.config
         _last_autotune_config.clear()
         _last_autotune_config.update({
             "tm":           cfg.tm,
