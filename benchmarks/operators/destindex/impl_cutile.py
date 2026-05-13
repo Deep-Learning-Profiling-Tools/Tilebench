@@ -46,9 +46,11 @@ def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstIn
 
     for d_start in range(0, HEAD_DIM, BLOCK_D):
         offsets = d_start + ct.arange(BLOCK_D, dtype=np.int32)
-        # padding_value=0.0 handles BLOCK_D > HEAD_DIM; OOB scatter writes are
-        # silently dropped by cuTile, so out-of-range lanes produce no side effect.
-        kv_vals = ct.gather(kv, (token_id, head_id, offsets), padding_value=0.0)
+        # padding_value=0 (int literal) is dtype-agnostic — cuTile auto-casts it
+        # to kv.dtype, working for fp16/bf16/fp32 and int8 alike. Handles BLOCK_D
+        # > HEAD_DIM; OOB scatter writes are silently dropped by cuTile, so
+        # out-of-range lanes produce no side effect.
+        kv_vals = ct.gather(kv, (token_id, head_id, offsets), padding_value=0)
         ct.scatter(out, (dest_index, head_id, offsets), kv_vals)
 
 
