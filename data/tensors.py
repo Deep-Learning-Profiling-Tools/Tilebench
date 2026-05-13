@@ -68,6 +68,10 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
+    # Non-negative int32 so unsigned-vs-signed sort order coincide (bit 31 always 0).
+    data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
+    return (data, n)
 def generate_jacobi_stencil_2d_inputs(rows, cols=None,
                                        dtype=torch.float32, device='cuda', **kwargs):
     if cols is None:
@@ -157,6 +161,11 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     sin = torch.randn(seq_len, half_dim, dtype=dtype, device=device)
 
     return (q, cos, sin)
+
+
+def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device='cuda', **kwargs):
+    logits = torch.randn(M, E, dtype=dtype, device=device)
+    return (logits, M, E, k)
 
 
 def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
@@ -280,7 +289,7 @@ def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, devi
     return (a_q, b_q, scale)
 
 
-def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
+def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
     x      = torch.randn(batch, M, K, dtype=dtype, device=device)
     weight = torch.randn(K, dtype=dtype, device=device)
     bias   = torch.randn(K, dtype=dtype, device=device)
@@ -290,6 +299,18 @@ def generate_layernorm_fwd_inputs(batch, M, K, dtype=torch.float32, device='cuda
 def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
     a = torch.randn(m, k, dtype=dtype, device=device)
     b = torch.randn(k, n, dtype=dtype, device=device)
+    return (a, b)
+
+
+def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwargs):
+    """Inputs for matmul_int8: A is int8 (M, K), B is uint8 (K_b=K/4, N) packed
+    with 4 ternary-ish 2-bit fields per byte. dtype kwarg is ignored — A is
+    always int8 and B is always uint8 by construction.
+    """
+    assert K % 4 == 0, "K must be divisible by 4 (B holds 4 fields per byte)"
+    K_b = K // 4
+    a = torch.randint(-64, 65, (M, K), device=device, dtype=torch.int8)
+    b = torch.randint(0, 256, (K_b, N), device=device, dtype=torch.uint8)
     return (a, b)
 
 
@@ -348,6 +369,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "generic_fused_container": generate_generic_fused_container_inputs,
@@ -362,11 +384,13 @@ GENERATORS = {
     "flash_attention": generate_flash_attn_inputs,
     "block_sparse_attention": generate_block_sparse_attention_inputs,
     "softmax": generate_softmax_inputs,
+    "moe_topk_gating": generate_moe_topk_gating_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
-    "layernorm_fwd": generate_layernorm_fwd_inputs,
+    "layernorm": generate_layernorm_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "matmul_int8": generate_matmul_int8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "2d_max_pooling": generate_2d_max_pooling_inputs,
@@ -446,6 +470,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "moe_topk_gating":
+        return int(params.get("M", 1)) * int(params.get("E", 1))
     if operator_name == "jacobi_stencil_2d":
         rows = int(params.get("rows", 1))
         cols = int(params.get("cols", rows))
@@ -454,10 +480,12 @@ def infer_problem_size(operator_name, params):
         return int(params.get("batch_size", 1)) * int(params.get("num_classes", 1))
     if operator_name == "quantized_gemm":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
-    if operator_name == "layernorm_fwd":
+    if operator_name == "layernorm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "streamk_scheduling":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
+    if operator_name == "matmul_int8":
+        return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
