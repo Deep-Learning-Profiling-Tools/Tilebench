@@ -8,26 +8,19 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 @triton.jit
 def _swiglu_kernel(
     x_ptr, y_ptr, out_ptr,
-    stride_x_row, stride_y_row, stride_out_row,
-    ncols,
+    n_elements,
     BLOCK_SIZE: tl.constexpr,
 ):
-    row = tl.program_id(0)
-    col_start = tl.program_id(1) * BLOCK_SIZE
+    pid = tl.program_id(0)
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
 
-    x_ptr = x_ptr + row * stride_x_row
-    y_ptr = y_ptr + row * stride_y_row
-    out_ptr = out_ptr + row * stride_out_row
-
-    cols = col_start + tl.arange(0, BLOCK_SIZE)
-    mask = cols < ncols
-
-    x = tl.load(x_ptr + cols, mask=mask, other=0.)
-    y = tl.load(y_ptr + cols, mask=mask, other=0.)
+    x = tl.load(x_ptr + offsets, mask=mask, other=0.)
+    y = tl.load(y_ptr + offsets, mask=mask, other=0.)
     x_f32 = x.to(tl.float32)
     y_f32 = y.to(tl.float32)
     out = x_f32 * tl.sigmoid(x_f32) * y_f32
-    tl.store(out_ptr + cols, out.to(x.dtype), mask=mask)
+    tl.store(out_ptr + offsets, out.to(x.dtype), mask=mask)
 
 
 _swiglu_kernel_autotuned = triton.autotune(
@@ -36,36 +29,30 @@ _swiglu_kernel_autotuned = triton.autotune(
         for bs in [512, 1024, 2048]
         for nw in [2, 4, 8]
     ],
-    key=["ncols"],
+    key=["n_elements"],
 )(_swiglu_kernel)
 
 
 def run(x: torch.Tensor, y: torch.Tensor,
         block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     assert x.shape == y.shape
-    x = x.contiguous()
-    y = y.contiguous()
-    M, N = x.shape
-    output = torch.empty_like(x)
+    x_flat = x.contiguous().view(-1)
+    y_flat = y.contiguous().view(-1)
+    output = torch.empty_like(x_flat)
+    n_elements = x_flat.numel()
 
     if autotune:
-        grid = lambda meta: (M, triton.cdiv(N, meta["BLOCK_SIZE"]))
-        _swiglu_kernel_autotuned[grid](
-            x, y, output,
-            x.stride(0), y.stride(0), output.stride(0),
-            N,
-        )
+        grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+        _swiglu_kernel_autotuned[grid](x_flat, y_flat, output, n_elements)
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (M, triton.cdiv(N, cfg["BLOCK_SIZE"]))
+        grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
         _swiglu_kernel[grid](
-            x, y, output,
-            x.stride(0), y.stride(0), output.stride(0),
-            N,
+            x_flat, y_flat, output, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
         )
-    return output
+    return output.view(x.shape)
 
 
 def get_last_config() -> dict | None:
