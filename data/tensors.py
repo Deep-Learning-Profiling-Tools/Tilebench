@@ -368,8 +368,6 @@ def generate_linear_self_attention_inputs(
     dtype=torch.float32,
     device='cuda',
     eps=1e-6,
-    BLOCK_M=32,
-    BLOCK_D=16,
     **kwargs,
 ):
     if isinstance(dtype, str):
@@ -382,14 +380,7 @@ def generate_linear_self_attention_inputs(
     k = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
     v = torch.empty((M, D), dtype=dtype, device=device).uniform_(-3.0, 3.0)
 
-    return (
-        q.contiguous(),
-        k.contiguous(),
-        v.contiguous(),
-        float(eps),
-        int(BLOCK_M),
-        int(BLOCK_D),
-    )
+    return (q.contiguous(), k.contiguous(), v.contiguous(), float(eps))
 def generate_top_k_selection_inputs(
     N,
     k,

@@ -1,6 +1,10 @@
-import torch
+"""Reference linear self-attention via plain torch matmuls.
 
-_LAST_CONFIG = None
+  S = phi(K)^T @ V        (D, D)
+  Z = sum_m phi(K[m, :])  (D,)
+  O = (phi(Q) @ S) / (phi(Q) @ Z + eps)
+"""
+import torch
 
 
 def _phi(x: torch.Tensor) -> torch.Tensor:
@@ -8,25 +12,10 @@ def _phi(x: torch.Tensor) -> torch.Tensor:
     return torch.where(x > 0, x + 1.0, torch.exp(x))
 
 
-def run(
-    Q,
-    K,
-    V,
-    eps: float = 1e-6,
-    BLOCK_M: int = 32,
-    BLOCK_D: int = 16,
-    block_size: int = None,
-    autotune: bool = False,
-    **kwargs,
-):
-    global _LAST_CONFIG
-
-    if block_size is not None:
-        BLOCK_M = int(block_size)
-
-    assert Q.ndim == 2 and K.ndim == 2 and V.ndim == 2
+def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6, **kwargs):
+    assert Q.is_cuda and K.is_cuda and V.is_cuda
     assert Q.shape == K.shape == V.shape
-    assert Q.dtype == torch.float32 and K.dtype == torch.float32 and V.dtype == torch.float32
+    assert Q.dtype == K.dtype == V.dtype == torch.float32
 
     Q = Q.contiguous()
     K = K.contiguous()
@@ -37,15 +26,8 @@ def run(
 
     S = phi_k.transpose(0, 1) @ V
     Z = phi_k.sum(dim=0)
-    O = (phi_q @ S) / ((phi_q @ Z)[:, None] + float(eps))
-
-    _LAST_CONFIG = {
-        "BLOCK_M": int(BLOCK_M),
-        "BLOCK_D": int(BLOCK_D),
-        "eps": float(eps),
-    }
-    return O
+    return (phi_q @ S) / ((phi_q @ Z)[:, None] + float(eps))
 
 
 def get_last_config() -> dict | None:
-    return _LAST_CONFIG
+    return None
