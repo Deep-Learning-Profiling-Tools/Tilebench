@@ -73,12 +73,17 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
-def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
-                                         dtype=torch.float32, device='cuda', **kwargs):
-    input = torch.randn(N, C, dtype=dtype, device=device)
-    gamma = torch.randn(C, dtype=dtype, device=device)
-    beta = torch.randn(C, dtype=dtype, device=device)
-    return (input, gamma, beta, N, C, eps)
+def generate_batched_matmul_inputs(BATCH, M, N=None, K=None,
+                                    dtype=torch.float32, device='cuda', **kwargs):
+    if N is None:
+        N = M
+    if K is None:
+        K = M
+    A = torch.randn(BATCH * M * K, dtype=dtype, device=device)
+    B = torch.randn(BATCH * K * N, dtype=dtype, device=device)
+    return (A, B, BATCH, M, N, K)
+
+
 def generate_jacobi_stencil_2d_inputs(rows, cols=None,
                                        dtype=torch.float32, device='cuda', **kwargs):
     if cols is None:
@@ -475,7 +480,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
-    "batch_normalization": generate_batch_normalization_inputs,
+    "batched_matmul": generate_batched_matmul_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "fused_activation": generate_fused_activation_inputs,
@@ -579,8 +584,12 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
-    if operator_name == "batch_normalization":
-        return int(params.get("N", 1)) * int(params.get("C", 1))
+    if operator_name == "batched_matmul":
+        BATCH = int(params.get("BATCH", 1))
+        M = int(params.get("M", 1))
+        N = int(params.get("N", M))
+        K = int(params.get("K", M))
+        return 2 * BATCH * M * N * K
     if operator_name == "jacobi_stencil_2d":
         rows = int(params.get("rows", 1))
         cols = int(params.get("cols", rows))
