@@ -1,24 +1,20 @@
-import math
 from types import SimpleNamespace
 
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict | None = None
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048, 4096, 8192]
-    for occ in [1, 2, 4]
+    for t in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -31,28 +27,35 @@ def _relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
     ct.store(output_ptr, index=(bid,), tile=y_tile)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_relu_kernel)
+
+
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     global _last_autotune_config
     output = torch.empty_like(x)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(n_elements,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(n_elements, cfg.tile), 1, 1),
-            kernel=_relu_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
         _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
+            "tile":      cfg.tile,
+            "occupancy": cfg.occupancy,
         }
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, (math.ceil(n_elements / cfg.tile), 1, 1), _relu_kernel, (x, output, cfg.tile))
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, (ct.cdiv(n_elements, cfg.tile), 1, 1),
+              kernel, (x, output, cfg.tile))
 
     return output
 

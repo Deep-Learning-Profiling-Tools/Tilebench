@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
 
 
 @triton.jit
@@ -46,8 +46,8 @@ def _conv3d_kernel(
 _conv3d_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [128, 256, 512, 1024]
-        for nw in [4, 8]
+        for bs in [256, 512, 1024, 2048]
+        for nw in [2, 4, 8, 16]
     ],
     key=["total_out"],
 )(_conv3d_kernel)
@@ -90,7 +90,6 @@ def run(input, kernel, input_depth, input_rows, input_cols,
             kernel_cols=kernel_cols,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output.to(input.dtype)
