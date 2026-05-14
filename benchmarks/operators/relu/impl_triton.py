@@ -19,8 +19,8 @@ def _relu_kernel(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 _relu_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048, 4096, 8192]
-        for nw in [4, 8, 16]
+        for bs in [512, 1024, 2048]
+        for nw in [2, 4, 8]
     ],
     key=["n_elements"],
 )(_relu_kernel)
