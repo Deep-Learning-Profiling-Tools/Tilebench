@@ -73,6 +73,10 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
+    # Non-negative int32 so unsigned-vs-signed sort order coincide (bit 31 always 0).
+    data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
+    return (data, n)
 def generate_jacobi_stencil_2d_inputs(rows, cols=None,
                                        dtype=torch.float32, device='cuda', **kwargs):
     if cols is None:
@@ -173,6 +177,11 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     return (q, cos, sin)
 
 
+def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device='cuda', **kwargs):
+    logits = torch.randn(M, E, dtype=dtype, device=device)
+    return (logits, M, E, k)
+
+
 def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
     if shape is None:
         if n_rows is not None and n_cols is not None:
@@ -270,6 +279,16 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
             num_layout, softmax_scale, H, H_kv, M,
             BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
+def generate_interleave_inputs(n, dtype, device='cuda', **kwargs):
+    if dtype == torch.int8:
+        a = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+        b = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+    else:
+        a = torch.randn(n, dtype=dtype, device=device)
+        b = torch.randn(n, dtype=dtype, device=device)
+    return (a, b, n)
+
+
 def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
                             kernel_depth=3, kernel_rows=3, kernel_cols=3,
                             dtype=torch.float32, device='cuda', **kwargs):
@@ -279,6 +298,18 @@ def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
     kernel = torch.randn(kernel_depth * kernel_rows * kernel_cols, dtype=dtype, device=device)
     return (input_vol, kernel, input_depth, input_rows, input_cols,
             kernel_depth, kernel_rows, kernel_cols)
+
+
+def generate_gaussian_blur_inputs(input_rows, input_cols=None,
+                                  kernel_rows=3, kernel_cols=3,
+                                  dtype=torch.float32, device='cuda', **kwargs):
+    if input_cols is None:
+        input_cols = input_rows
+    input_img = torch.randn(input_rows * input_cols, dtype=dtype, device=device)
+    # Normalized non-negative kernel (matches problem constraint: sums to 1.0).
+    kernel = torch.rand(kernel_rows * kernel_cols, dtype=dtype, device=device)
+    kernel = kernel / kernel.sum()
+    return (input_img, kernel, input_rows, input_cols, kernel_rows, kernel_cols)
 
 
 def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
@@ -439,6 +470,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "fused_activation": generate_fused_activation_inputs,
@@ -453,13 +485,16 @@ GENERATORS = {
     "flash_attention": generate_flash_attn_inputs,
     "block_sparse_attention": generate_block_sparse_attention_inputs,
     "softmax": generate_softmax_inputs,
+    "moe_topk_gating": generate_moe_topk_gating_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_matmul": generate_streamk_matmul_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "interleave": generate_interleave_inputs,
     "3d_conv": generate_3d_conv_inputs,
+    "gaussian_blur": generate_gaussian_blur_inputs,
     "l2_norm": generate_l2_norm_inputs,
     "argmax": generate_argmax_inputs,
     "mean_reduction": generate_mean_reduction_inputs,
@@ -539,8 +574,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
-    if operator_name == "kl_divergence":
-        return int(params.get("rows", 1)) * int(params.get("cols", 1))
+    if operator_name == "moe_topk_gating":
+        return int(params.get("M", 1)) * int(params.get("E", 1))
     if operator_name == "jacobi_stencil_2d":
         rows = int(params.get("rows", 1))
         cols = int(params.get("cols", rows))
@@ -576,6 +611,11 @@ def infer_problem_size(operator_name, params):
         return (
             int(params.get("input_depth", 1))
             * int(params.get("input_rows", 1))
+            * int(params.get("input_cols", params.get("input_rows", 1)))
+        )
+    if operator_name == "gaussian_blur":
+        return (
+            int(params.get("input_rows", 1))
             * int(params.get("input_cols", params.get("input_rows", 1)))
         )
     if operator_name == "weight_dequant":
