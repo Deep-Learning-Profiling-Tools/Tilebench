@@ -476,13 +476,73 @@ def generate_histogramming_inputs(
 
     return (input_tensor.contiguous(), int(N), int(num_bins))
 
+
+# ---------------- generators recovered from older PR branches ----------------
+
+def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
+                                         dtype=torch.float32, device='cuda', **kwargs):
+    input = torch.randn(N, C, dtype=dtype, device=device)
+    gamma = torch.randn(C, dtype=dtype, device=device)
+    beta = torch.randn(C, dtype=dtype, device=device)
+    return (input, gamma, beta, N, C, eps)
+
+
+def generate_bitonic_sort_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    data = torch.randn(n, dtype=dtype, device=device)
+    return (data, n)
+
+
+def generate_gaussian_blur_inputs(input_rows, input_cols=None,
+                                  kernel_rows=3, kernel_cols=3,
+                                  dtype=torch.float32, device='cuda', **kwargs):
+    if input_cols is None:
+        input_cols = input_rows
+    input_img = torch.randn(input_rows * input_cols, dtype=dtype, device=device)
+    kernel = torch.rand(kernel_rows * kernel_cols, dtype=dtype, device=device)
+    kernel = kernel / kernel.sum()
+    return (input_img, kernel, input_rows, input_cols, kernel_rows, kernel_cols)
+
+
+def generate_interleave_inputs(n, dtype, device='cuda', **kwargs):
+    if dtype == torch.int8:
+        a = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+        b = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+    else:
+        a = torch.randn(n, dtype=dtype, device=device)
+        b = torch.randn(n, dtype=dtype, device=device)
+    return (a, b, n)
+
+
+def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
+
+
+def generate_matrix_copy_inputs(N, dtype=torch.float32, device='cuda', **kwargs):
+    if dtype == torch.int8:
+        A = torch.randint(-64, 65, (N, N), device=device).to(torch.int8)
+    else:
+        A = torch.randn(N, N, dtype=dtype, device=device)
+    return (A, N)
+
+
+def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
+    data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
+    return (data, n)
+
+
+def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
+
+
 GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
     "batched_matmul": generate_batched_matmul_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
-    "divergence_metric": generate_divergence_metric_inputs,
+    "kl_divergence": generate_kl_divergence_inputs,
     "fused_activation": generate_fused_activation_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
@@ -498,10 +558,10 @@ GENERATORS = {
     "moe_topk_gating": generate_moe_topk_gating_inputs,
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
-    "quantized_gemm": generate_quantized_gemm_inputs,
-    "layernorm_fwd": generate_layernorm_fwd_inputs,
+    "layernorm": generate_layernorm_inputs,
     "streamk_matmul": generate_streamk_matmul_inputs,
-    "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "2d_conv": generate_2d_conv_inputs,
+    "1d_conv": generate_1d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "2d_max_pooling": generate_2d_max_pooling_inputs,
@@ -512,6 +572,16 @@ GENERATORS = {
     "linear_self_attention": generate_linear_self_attention_inputs,
     "top_k_selection": generate_top_k_selection_inputs,
     "histogramming": generate_histogramming_inputs,
+    "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
+    "matmul_int8": generate_matmul_int8_inputs,
+    "sigmoid": generate_sigmoid_inputs,
+    "leaky_relu": generate_leaky_relu_inputs,
+    "bitonic_sort": generate_bitonic_sort_inputs,
+    "radix_sort": generate_radix_sort_inputs,
+    "matrix_copy": generate_matrix_copy_inputs,
+    "interleave": generate_interleave_inputs,
+    "gaussian_blur": generate_gaussian_blur_inputs,
+    "batch_normalization": generate_batch_normalization_inputs,
 }
 
 
