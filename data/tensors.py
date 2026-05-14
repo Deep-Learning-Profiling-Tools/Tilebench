@@ -279,12 +279,12 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
             num_layout, softmax_scale, H, H_kv, M,
             BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
-def generate_matrix_copy_inputs(N, dtype=torch.float32, device='cuda', **kwargs):
+def generate_reverse_array_inputs(n, dtype, device='cuda', **kwargs):
     if dtype == torch.int8:
-        A = torch.randint(-64, 65, (N, N), device=device).to(torch.int8)
+        x = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
     else:
-        A = torch.randn(N, N, dtype=dtype, device=device)
-    return (A, N)
+        x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
 
 
 def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
@@ -484,7 +484,7 @@ GENERATORS = {
     "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_matmul": generate_streamk_matmul_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
-    "1d_conv": generate_1d_conv_inputs,
+    "reverse_array": generate_reverse_array_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "gaussian_blur": generate_gaussian_blur_inputs,
     "l2_norm": generate_l2_norm_inputs,
