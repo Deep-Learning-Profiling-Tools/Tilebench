@@ -73,11 +73,9 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
-def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
-
-
 def generate_jacobi_stencil_2d_inputs(rows, cols=None,
                                        dtype=torch.float32, device='cuda', **kwargs):
     if cols is None:
@@ -474,7 +472,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
-    "sigmoid": generate_sigmoid_inputs,
+    "leaky_relu": generate_leaky_relu_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
     "fused_activation": generate_fused_activation_inputs,
