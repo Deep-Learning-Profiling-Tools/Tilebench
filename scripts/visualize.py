@@ -48,7 +48,7 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import compute_derived  # noqa: E402
+from core.metrics import compute_derived, load_peak_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # constants
@@ -72,7 +72,11 @@ _METRIC_LABEL: dict[str, str] = {
     "arithmetic_intensity": "Arithmetic Intensity (FLOP/Byte)",
 }
 
-_DEFAULT_METRICS = ["latency_ms", "bandwidth_GBs", "speedup", "pct_peak_bw"]
+_DEFAULT_METRICS = [
+    "latency_ms", "bandwidth_GBs", "tflops", "speedup",
+    "pct_peak_bw", "pct_peak_tflops", "roofline",
+]
+_GPU_PEAK_METRICS = ["pct_peak_bw", "pct_peak_tflops", "roofline"]
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -85,6 +89,17 @@ def _load_operator_config(operator: str) -> dict:
         return {}
     with open(path) as f:
         return yaml.safe_load(f) or {}
+
+
+def _dedupe_preserve_order(metrics: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for metric in metrics:
+        if metric in seen:
+            continue
+        seen.add(metric)
+        deduped.append(metric)
+    return deduped
 
 
 def _group_by_dtype(
@@ -218,7 +233,7 @@ def _plot_roofline(
     peak_tflops_map = metrics_cfg.get("peak_tflops", {})
 
     if not peak_bw_GBs:
-        print("  [skip roofline] peak_bw_GBs not defined in config.yaml")
+        print("  [skip roofline] peak_bw_GBs not available (pass --gpu to load peak data)")
         return
 
     peak_bw_TBps = float(peak_bw_GBs) / 1000.0  # GB/s → TB/s
@@ -286,8 +301,8 @@ def _plot_roofline(
                 fontsize=8, color="gray",
                 rotation=np.degrees(np.arctan(np.log10(peak_bw_TBps))),
             )
-            ax.axhline(peak_tf, color="gray", linewidth=1, linestyle="--",
-                       alpha=0.6, label=f"Peak compute ({peak_tf:.0f} TFLOPS)")
+            ax.axhline(peak_tf, color="red", linewidth=2.5, linestyle="--",
+                       alpha=0.85, label=f"Peak Performance ({peak_tf:.0f} TFLOPS)")
             # Ridge point
             ax.axvline(x_ridge, color="gray", linewidth=0.8, linestyle=":",
                        alpha=0.5, label=f"Ridge ({x_ridge:.1f} FLOP/B)")
@@ -356,6 +371,9 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Directory to write PNG files "
                              "(default: results/figures/<operator>/)")
+    parser.add_argument("--gpu", type=str, default=None,
+                        help="GPU short name (e.g. B200). Loads peak performance from "
+                             "data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
     args = parser.parse_args()
 
     # Resolve operator-bound default paths
@@ -373,18 +391,30 @@ def main() -> None:
     config = _load_operator_config(args.operator)
     metrics_cfg: dict = config.get("metrics", {})
 
+    # Load GPU-specific peak performance data
+    peak_cfg: dict = {}
+    if args.gpu:
+        peak_cfg = load_peak_config(args.gpu)
+        if not peak_cfg:
+            print(f"Warning: no peak data found for GPU '{args.gpu}' at "
+                  f"data/peak_performance/{args.gpu}.json — "
+                  f"roofline/pct_peak will be skipped")
+
     # Determine which metrics to plot
     if args.metrics:
         metrics_to_plot = args.metrics
     elif metrics_cfg.get("plots"):
         metrics_to_plot = list(metrics_cfg["plots"])
+        if peak_cfg:
+            metrics_to_plot.extend(_GPU_PEAK_METRICS)
+        metrics_to_plot = _dedupe_preserve_order(metrics_to_plot)
     else:
         metrics_to_plot = _DEFAULT_METRICS
     print(f"Metrics to plot: {metrics_to_plot}")
 
     # Compute derived metrics for every result entry
     results_with_derived = [
-        (r, compute_derived(r, metrics_cfg)) for r in results
+        (r, compute_derived(r, metrics_cfg, peak_cfg=peak_cfg)) for r in results
     ]
 
     # Group by dtype once; reuse for all metrics
@@ -395,7 +425,8 @@ def main() -> None:
     # One figure per metric
     for metric in metrics_to_plot:
         if metric == "roofline":
-            _plot_roofline(grouped, metrics_cfg, args.operator, output_dir)
+            roofline_cfg = {**metrics_cfg, **peak_cfg}
+            _plot_roofline(grouped, roofline_cfg, args.operator, output_dir)
         else:
             _plot_one_metric(grouped, metric, args.operator, output_dir)
 
