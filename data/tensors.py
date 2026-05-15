@@ -68,6 +68,9 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
 def generate_bitonic_sort_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     data = torch.randn(n, dtype=dtype, device=device)
 def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
@@ -410,6 +413,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "leaky_relu": generate_leaky_relu_inputs,
     "bitonic_sort": generate_bitonic_sort_inputs,
     "sigmoid": generate_sigmoid_inputs,
     "radix_sort": generate_radix_sort_inputs,
