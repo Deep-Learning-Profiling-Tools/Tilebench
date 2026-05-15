@@ -68,6 +68,12 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
+                                         dtype=torch.float32, device='cuda', **kwargs):
+    input = torch.randn(N, C, dtype=dtype, device=device)
+    gamma = torch.randn(C, dtype=dtype, device=device)
+    beta = torch.randn(C, dtype=dtype, device=device)
+    return (input, gamma, beta, N, C, eps)
 def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
@@ -413,6 +419,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "batch_normalization": generate_batch_normalization_inputs,
     "leaky_relu": generate_leaky_relu_inputs,
     "bitonic_sort": generate_bitonic_sort_inputs,
     "sigmoid": generate_sigmoid_inputs,
@@ -521,6 +528,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "batch_normalization":
+        return int(params.get("N", 1)) * int(params.get("C", 1))
     if operator_name == "moe_topk_gating":
         return int(params.get("M", 1)) * int(params.get("E", 1))
     if operator_name == "jacobi_stencil_2d":
