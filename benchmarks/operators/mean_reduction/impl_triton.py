@@ -37,11 +37,10 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
 
 _mean_rowwise_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_M": bm, "BLOCK_N": bn}, num_warps=nw, num_stages=ns)
-        for bm in [1, 2, 4]
-        for bn in [256, 512, 1024, 2048]
-        for nw in [4, 8]
-        for ns in [1, 2]
+        triton.Config({"BLOCK_M": 1, "BLOCK_N": bn}, num_warps=nw, num_stages=ns)
+        for bn in [512, 1024, 2048]
+        for nw in [2, 4, 8]
+        for ns in [2, 3, 4]
     ],
     key=["M", "N"],
 )(_mean_rowwise_kernel)
@@ -51,12 +50,12 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     assert x.is_cuda
 
     if x.ndim == 2 and dim == 1:
-        x2d = x.float().contiguous()
+        x2d = x.contiguous()
     else:
         dims = list(range(x.ndim))
         dims.remove(dim % x.ndim)
         dims.append(dim % x.ndim)
-        x2d = x.float().permute(dims).contiguous().reshape(-1, x.shape[dim])
+        x2d = x.permute(dims).contiguous().reshape(-1, x.shape[dim])
 
     M, N = x2d.shape
     out = torch.empty(M, dtype=torch.float32, device=x.device)

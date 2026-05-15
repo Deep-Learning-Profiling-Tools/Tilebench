@@ -1,0 +1,32 @@
+# Sorting — multi-launch bitonic sort (pad + O(log²M) compare-exchange passes)
+# Per-dtype defaults suffice for verify: sort is exact element reordering.
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep n across 20 points; max n = 10M exceeds B200 L2 (40MB fp32).
+# LeetGPU perf test uses N = 1M (matches i=1 in the expr below, but also at i=2 etc.).
+case_grid:
+  n:
+    expr: "[500000 * i for i in range(1, 21)]"   # 0.5M, 1M, ..., 10M (20 points)
+  dtype: ["fp16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Bitonic sort does O(N log²M) comparisons where M = next_pow2(n).
+#   For a proxy FLOP count we use n * (log2(n))^2 / 2 ≈ compare-swaps.
+#   Bytes: total memory traffic ≈ 2 * M * log²M * dtype_size (each step reads+writes M).
+# Simpler proxies (good enough for bandwidth plot):
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "n"
+  bytes_expr: "n * dtype_size * 2"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
