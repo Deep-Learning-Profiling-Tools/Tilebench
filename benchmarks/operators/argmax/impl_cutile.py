@@ -1,55 +1,68 @@
-import math
+from types import SimpleNamespace
 
 import cuda.tile as ct
+import numpy as np
 import torch
 
+from core.cutile_autotune import CutileAutotuner
+
 ConstInt = ct.Constant[int]
+
+_DEFAULT_CONFIG = SimpleNamespace(block_n=256, occupancy=8)
+_SEARCH_SPACE_BASE = [
+    SimpleNamespace(block_n=bn, occupancy=occ)
+    for bn in [256, 512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
+]
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
 def _argmax_rowwise_kernel(
-    input_tensor,
-    output_tensor,
-    N_COLS: ConstInt,
-    TILE_SIZE: ConstInt,
+    input_flat,
+    output_flat,
+    N,
+    N_TILES: ConstInt,
+    BLOCK_N: ConstInt,
 ):
     """
-    One CTA per row.
-    Loads a padded row (NEG_INF padding), finds the argmax index within
-    [0, N_COLS), and stores that index (as float) into output_tensor[:,0].
+    Chunked row-wise argmax matching Triton's BLOCK_N-tiled scan.
+    Each CTA processes one row in N_TILES chunks of BLOCK_N.
+    Per chunk: ct.max + ct.argmax → scalar, then sequential comparison
+    (mirrors Triton's tl.max / tl.argmax + scalar best_val / best_idx).
     """
-    row_idx = ct.bid(0)
+    row = ct.bid(0)
+    base = row * N
 
-    tile = ct.load(
-        input_tensor,
-        index=(row_idx, 0),
-        shape=(1, TILE_SIZE),
-        padding_mode=ct.PaddingMode.NEG_INF,
-    )
+    best_val = ct.full((), -float("inf"), dtype=np.float32)
+    best_idx = ct.full((), 0, dtype=np.int64)
 
-    argmax_idx = ct.argmax(tile)
-    argmax_idx = ct.minimum(argmax_idx, N_COLS - 1)
+    for i in range(N_TILES):
+        start = i * BLOCK_N
+        offsets = start + ct.arange(BLOCK_N, dtype=np.int32)
+        valid = offsets < N
 
-    # Write a single float into output_tensor[row_idx, 0].
-    idx_tile = tile * 0 + argmax_idx
-    ct.store(output_tensor, index=(row_idx, 0), tile=idx_tile)
+        idx = base + offsets
+        idx_safe = ct.where(valid, idx, -1)
+        chunk = ct.gather(input_flat, idx_safe, padding_value=-float("inf"))
+        chunk = ct.astype(chunk, np.float32)
+
+        tile_max = ct.max(chunk)
+        tile_arg = ct.astype(ct.argmax(chunk), np.int64)
+
+        better = tile_max > best_val
+        best_val = ct.where(better, tile_max, best_val)
+        best_idx = ct.where(better, start + tile_arg, best_idx)
+
+    ct.store(output_flat, index=(row,), tile=ct.reshape(best_idx, (1,)))
 
 
-def _next_power_of_2(n: int) -> int:
-    if n <= 1:
-        return 1
-    p = 1
-    while p < n:
-        p <<= 1
-    return p
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_argmax_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    """
-    cuTile row-wise argmax.
-    Input:  (M, N) float tensor
-    Output: (M,) int64 indices
-    """
+
     assert x.is_cuda, "x must be on CUDA"
 
     if dim == 1:
@@ -57,21 +70,44 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     else:
         x2d = x.transpose(0, 1).contiguous()
 
-    # Always use float32 so that the index (stored as float) is exact.
-    # fp16 can only exactly represent integers up to 2048; larger N would corrupt indices.
-    x2d = x2d.float()
-
     M, N = x2d.shape
-    TILE_SIZE = _next_power_of_2(N)
+    input_flat = x2d.view(-1)
 
-    out2d = torch.empty_like(x2d)
-
+    output = torch.empty(M, dtype=torch.int64, device=x.device)
     stream = torch.cuda.current_stream()
-    ct.launch(stream, (M, 1, 1), _argmax_rowwise_kernel,
-              (x2d, out2d, N, TILE_SIZE))
 
-    return out2d[:, 0].to(torch.int64)
+    if autotune:
+        # n_tiles depends on N, so derive search_space per shape.
+        search_space = [
+            SimpleNamespace(block_n=cfg.block_n,
+                            n_tiles=(N + cfg.block_n - 1) // cfg.block_n,
+                            occupancy=cfg.occupancy)
+            for cfg in _SEARCH_SPACE_BASE
+        ]
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N),
+            search_space=search_space,
+            stream=stream,
+            grid_fn=lambda cfg: (M, 1, 1),
+            args_fn=lambda cfg: (input_flat, output, N, cfg.n_tiles, cfg.block_n),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
+            "block_n": cfg.block_n,
+            "occupancy": cfg.occupancy,
+        })
+        n_tiles = cfg.n_tiles
+    else:
+        cfg = _DEFAULT_CONFIG
+        n_tiles = (N + cfg.block_n - 1) // cfg.block_n
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, (M, 1, 1), kernel,
+              (input_flat, output, N, n_tiles, cfg.block_n))
+
+    return output
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) if _last_autotune_config else None
