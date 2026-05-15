@@ -95,6 +95,9 @@ def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     return (x, n)
 def generate_bitonic_sort_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     data = torch.randn(n, dtype=dtype, device=device)
+    return (data, n)
+
+
 def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
@@ -546,6 +549,7 @@ GENERATORS = {
     "matmul_int8": generate_matmul_int8_inputs,
     "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
     "1d_conv": generate_1d_conv_inputs,
+    "2d_conv": generate_2d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "matrix_copy": generate_matrix_copy_inputs,
     "interleave": generate_interleave_inputs,
