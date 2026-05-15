@@ -21,6 +21,14 @@ import triton
 import triton.language as tl
 
 
+_DEFAULT_CONFIG = {
+    "KV_BLOCK_M": 32,
+    "BLOCK_M":    32,
+    "BLOCK_D":    16,
+    "num_warps":  4,
+    "num_stages": 2,
+}
+
 
 @triton.jit
 def _phi(x):
