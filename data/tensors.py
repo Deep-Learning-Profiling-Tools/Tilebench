@@ -132,10 +132,14 @@ def generate_destindex_inputs(
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
-def generate_divergence_metric_inputs(n, eps=1e-6, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
-    return (x, y, eps)
+def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda', **kwargs):
+    # y_pred: log-probabilities (output of log_softmax over the cols axis)
+    # y_true: probabilities     (output of softmax     over the cols axis)
+    logits_pred = torch.randn(rows, cols, dtype=dtype, device=device)
+    logits_true = torch.randn(rows, cols, dtype=dtype, device=device)
+    y_pred = torch.log_softmax(logits_pred, dim=-1)
+    y_true = torch.softmax(logits_true, dim=-1)
+    return (y_pred, y_true)
 
 
 def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
@@ -438,8 +442,8 @@ GENERATORS = {
     "sigmoid": generate_sigmoid_inputs,
     "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
-    "divergence_metric": generate_divergence_metric_inputs,
-    "fused_activation": generate_fused_activation_inputs,
+    "kl_divergence": generate_kl_divergence_inputs,
+    "generic_fused_container": generate_generic_fused_container_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
@@ -541,6 +545,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "kl_divergence":
+        return int(params.get("rows", 1)) * int(params.get("cols", 1))
     if operator_name == "batched_matmul":
         BATCH = int(params.get("BATCH", 1))
         M = int(params.get("M", 1))
