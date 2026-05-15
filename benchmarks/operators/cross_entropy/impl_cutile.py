@@ -3,32 +3,46 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(occupancy=2)
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
+
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
-def _cross_entropy_kernel(logits, targets, output, BLOCK_CLASSES: ConstInt):
+def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: ConstInt):
     bid = ct.bid(0)
-    logits_tile = ct.load(logits, index=(bid, 0), shape=(1, BLOCK_CLASSES))
+    # Kernel-side -inf padding: lanes >= num_classes contribute -inf to max/sum
+    # so they don't affect the row-wise reduction. Mirrors Triton's
+    # tl.load(..., mask=cls_offsets < num_classes, other=-inf).
+    logits_tile = ct.load(
+        logits, index=(bid, 0), shape=(1, BLOCK_CLASSES),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
 
     row_max = ct.max(logits_tile, axis=1)
     shifted = logits_tile - ct.reshape(row_max, (1, 1))
     row_sum = ct.sum(ct.exp(shifted), axis=1)
 
     target_cls = ct.load(targets, index=(bid,), shape=())
-    target_logit = ct.gather(logits, (bid, target_cls), check_bounds=False)
+    # Bounds check on the target class (mirrors Triton's target_ok mask).
+    # Out-of-range targets produce loss=+inf, matching Triton's behaviour.
+    target_ok = (target_cls >= 0) & (target_cls < num_classes)
+    safe_target = ct.where(target_ok, target_cls, 0)
+    target_logit_raw = ct.gather(logits, (bid, safe_target), check_bounds=False)
+    target_logit = ct.where(target_ok, target_logit_raw, -float("inf"))
 
     loss = -(target_logit - row_max - ct.log(row_sum))
     ct.store(output, index=(bid,), tile=loss)
+
+
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_cross_entropy_kernel)
 
 
 def run(
@@ -37,7 +51,6 @@ def run(
     block_size: int = 1024,
     autotune: bool = False,
 ) -> torch.Tensor:
-    global _last_autotune_config
     batch_size, num_classes = logits.shape
 
     # BLOCK_CLASSES must be a power of 2 >= num_classes.
@@ -45,40 +58,33 @@ def run(
     while block_classes < num_classes:
         block_classes *= 2
 
-    # Pad logits with -inf so out-of-bounds positions don't affect max/sum.
-    if block_classes != num_classes:
-        logits_padded = torch.full(
-            (batch_size, block_classes), float("-inf"),
-            dtype=logits.dtype, device=logits.device,
-        )
-        logits_padded[:, :num_classes] = logits
-    else:
-        logits_padded = logits.contiguous()
-
+    logits = logits.contiguous()
     output = torch.empty((batch_size,), device=logits.device, dtype=logits.dtype)
     stream = torch.cuda.current_stream()
     grid = (batch_size, 1, 1)
 
-    search_space = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4]]
-
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch_size, num_classes),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_cross_entropy_kernel,
-            args_fn=lambda cfg: (logits_padded, targets, output, block_classes),
+            args_fn=lambda cfg: (logits, targets, output, num_classes, block_classes),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=search_space,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
-        ct.launch(
-            stream, grid, _cross_entropy_kernel,
-            (logits_padded, targets, output, block_classes),
-        )
+        cfg = _DEFAULT_CONFIG
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(
+        stream, grid, kernel,
+        (logits, targets, output, num_classes, block_classes),
+    )
 
     return output
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
