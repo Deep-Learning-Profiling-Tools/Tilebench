@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_DMODEL": 128, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_DMODEL": 64, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -37,9 +37,9 @@ def _copy_by_dest_kernel(
 _copy_by_dest_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_DMODEL": bd}, num_warps=nw, num_stages=ns)
-        for bd in [32, 64, 128, 256]
-        for nw in [1, 2, 4, 8]
-        for ns in [1, 2, 3, 4]
+        for bd in [32, 64, 128]
+        for nw in [1, 2, 4]
+        for ns in [1, 2]
     ],
     key=["head_dim"],
 )(_copy_by_dest_kernel)

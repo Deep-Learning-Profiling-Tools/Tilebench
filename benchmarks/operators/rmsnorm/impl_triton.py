@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 8, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
@@ -57,9 +57,9 @@ def _rmsnorm_kernel(
 _rmsnorm_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_N_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [256, 512, 1024, 2048]
-        for nw in [4, 8, 16]
-        for ns in [2, 3]
+        for bs in [512, 1024, 2048]
+        for nw in [2, 4, 8]
+        for ns in [2, 3, 4]
     ],
     key=["N_SIZE"],
 )(_rmsnorm_kernel)

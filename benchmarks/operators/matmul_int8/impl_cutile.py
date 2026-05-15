@@ -16,11 +16,9 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
-from core.cutile_autotune import CutileAutotuner
-
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(
     tm=128, tn=128, tk=64, group_size_m=8, occupancy=8,
@@ -81,14 +79,9 @@ def matmul_int8_kernel(
     ct.store(C, index=(pid_m, pid_n), tile=acc)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(matmul_int8_kernel)
-
-
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """cuTile int8 GEMM with 2-bit packed B."""
-    global _last_autotune_config
 
     assert a.shape[1] == b.shape[0] * 4, (
         "Incompatible dims: A's K must equal 4 * B's K_b (B is packed 4-per-byte)"
@@ -100,26 +93,28 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     stream = torch.cuda.current_stream()
 
     if autotune:
-        cfg = _tuner.tune_or_cached(
-            shape_key=(M, N, K_b),
-            search_space=_SEARCH_SPACE,
-            stream=stream,
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
+            stream,
             grid_fn=lambda cfg: (
                 ((M + cfg.tm - 1) // cfg.tm) * ((N + cfg.tn - 1) // cfg.tn),
                 1, 1,
             ),
+            kernel=matmul_int8_kernel,
             args_fn=lambda cfg: (
                 a, b, c, M, N, K_b, cfg.tm, cfg.tn, cfg.tk, cfg.group_size_m,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        cfg = result.best.config
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tm":           cfg.tm,
             "tn":           cfg.tn,
             "tk":           cfg.tk,
             "group_size_m": cfg.group_size_m,
             "occupancy":    cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -127,13 +122,12 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         ((M + cfg.tm - 1) // cfg.tm) * ((N + cfg.tn - 1) // cfg.tn),
         1, 1,
     )
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
-        stream, grid, kernel,
+        stream, grid, matmul_int8_kernel,
         (a, b, c, M, N, K_b, cfg.tm, cfg.tn, cfg.tk, cfg.group_size_m),
     )
     return c
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
