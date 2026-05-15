@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
@@ -27,8 +27,8 @@ def _dropout_kernel(
 _dropout_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048, 4096, 8192]
-        for nw in [4, 8, 16]
+        for bs in [512, 1024, 2048]
+        for nw in [2, 4, 8]
     ],
     key=["n_elements"],
 )(_dropout_kernel)
@@ -48,7 +48,6 @@ def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
             x, x_keep, output, n_elements, p,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
     return output
 

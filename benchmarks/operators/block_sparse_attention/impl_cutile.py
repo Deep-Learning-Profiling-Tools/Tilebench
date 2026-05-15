@@ -4,16 +4,14 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
+_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
@@ -193,6 +191,11 @@ def block_sparse_attention_cutile_kernel(
     ct.store(Out, index=(off_b, off_h, start_m, 0), tile=acc_tile)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+# See core/cutile_autotune.py for why both layers matter.
+_tuner = CutileAutotuner(block_sparse_attention_cutile_kernel)
+
+
 def run(
     Q, K, V,
     layout_csr_row_indices, layout_csr_col_indices,
@@ -201,7 +204,6 @@ def run(
     total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS,
     block_size: int = None, autotune: bool = False
 ):
-    global _last_autotune_config
     batch_size = Q.shape[0]
     D = Q.shape[-1]
     TOTAL_D = BLOCK_D * NUM_D_BLOCKS
@@ -229,26 +231,25 @@ def run(
         BLOCK_M, BLOCK_N, TOTAL_D,
     )
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(batch_size, num_heads, total_seq_len, BLOCK_M, BLOCK_N, TOTAL_D),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=block_sparse_attention_cutile_kernel,
             args_fn=lambda cfg: args,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
-        ct.launch(
-            stream,
-            grid,
-            block_sparse_attention_cutile_kernel,
-            args
-        )
+        cfg = _DEFAULT_CONFIG
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel, args)
 
     return out
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
