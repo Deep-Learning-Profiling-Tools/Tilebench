@@ -470,7 +470,7 @@ GENERATORS = {
     "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "kl_divergence": generate_kl_divergence_inputs,
-    "generic_fused_container": generate_generic_fused_container_inputs,
+    "fused_activation": generate_fused_activation_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
@@ -486,14 +486,11 @@ GENERATORS = {
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
-    "layernorm_fwd": generate_layernorm_fwd_inputs,
     "streamk_matmul": generate_streamk_matmul_inputs,
     "layernorm": generate_layernorm_inputs,
-    "streamk_scheduling": generate_streamk_scheduling_inputs,
     "2d_conv": generate_2d_conv_inputs,
     "matmul_int8": generate_matmul_int8_inputs,
     "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
-    "conv2d_fwd": generate_conv2d_fwd_inputs,
     "1d_conv": generate_1d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "matrix_copy": generate_matrix_copy_inputs,
@@ -577,7 +574,6 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
-    if operator_name == "dequantize_rowwise":
     if operator_name == "kl_divergence":
         return int(params.get("rows", 1)) * int(params.get("cols", 1))
     if operator_name == "batched_matmul":
