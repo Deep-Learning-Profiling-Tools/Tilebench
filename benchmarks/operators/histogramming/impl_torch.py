@@ -1,41 +1,18 @@
 import torch
 
-_LAST_CONFIG = None
 
+def run(input: torch.Tensor, N: int, num_bins: int, **kwargs):
+    """Reference histogram via torch.bincount.
 
-def run(
-    input,
-    N: int,
-    num_bins: int,
-    BLOCK_SIZE: int = 1024,
-    NUM_PARTIAL: int = 256,
-    BLOCK_ROWS: int = 64,
-    BLOCK_BINS: int = 256,
-    block_size: int = None,
-    autotune: bool = False,
-    **kwargs,
-):
-    global _LAST_CONFIG
-
-    if block_size is not None:
-        BLOCK_SIZE = int(block_size)
-
+    bincount only accepts int64 input, so cast first; cast the result back
+    to int32 to match the Triton/cuTile output dtype.
+    """
+    assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
     assert input.dtype == torch.int32
-    assert num_bins >= 1
-
-    input = input.contiguous()
-    histogram = torch.bincount(input.to(torch.int64), minlength=num_bins).to(torch.int32)
-
-    _LAST_CONFIG = {
-        "BLOCK_SIZE": int(BLOCK_SIZE),
-        "NUM_PARTIAL": int(NUM_PARTIAL),
-        "BLOCK_ROWS": int(BLOCK_ROWS),
-        "BLOCK_BINS": int(BLOCK_BINS),
-    }
-    return histogram
+    return torch.bincount(input.to(torch.int64), minlength=num_bins).to(torch.int32)
 
 
 def get_last_config() -> dict | None:
-    return _LAST_CONFIG
+    return None

@@ -5,27 +5,37 @@ benchmark:
   flush_l2: true
   autotune: false
 
-case_defaults:
-  BLOCK_SIZE: 1024
-  NUM_PARTIAL: 256
-  BLOCK_ROWS: 64
-  BLOCK_BINS: 256
-
+# Sweep covers the practical histogramming workload range:
+#   N (input length): from a 512x512 thumbnail (256K) up to an 8K image
+#                     (~33M elements, 64M for headroom). Representative steps
+#                     hit 1M (1024x1024), 4M (2K), and 16M (4K UHD).
+#   num_bins:         64 (sub-sampled), 256 (8-bit image — by far the most
+#                     common case in CUB / NPP / OpenCV), 1024 (HDR / 10-bit
+#                     reduced), and 4096 (very large bin — stress test for
+#                     the partial reduce).
+# 5 N x 4 num_bins x 1 dtype = 20 cases.
 case_grid:
-  N: [1048576, 4194304, 16777216]
-  num_bins: [64, 256, 1024]
+  N: [262144, 1048576, 4194304, 16777216, 67108864]
+  num_bins: [64, 256, 1024, 4096]
   dtype: ["int32"]
 
 verify:
   atol: 0
   rtol: 0
 
+# ---------------------------------------------------------------------------
+# Histogramming: counts how many input ints fall into each bin.
+#   Read  input:  N * dtype_size              (int32 stream)
+#   Write output: num_bins * dtype_size       (int32 histogram)
+# The intermediate per-CTA partial buffer is excluded — it's a transient
+# scratch allocation, not a memory cost the operator inherently incurs.
+#
+# "FLOPs": no real arithmetic; using N as a proxy for "operations performed"
+# so the throughput metric reflects elements-processed-per-second.
+# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "N"
-  bytes_expr: "(N + num_bins + NUM_PARTIAL * num_bins) * dtype_size"
-  peak_bw_GBs: 8000.0
-  peak_tflops:
-    int32: 60.0
+  bytes_expr: "(N + num_bins) * dtype_size"
   plots:
     - latency_ms
     - bandwidth_GBs
