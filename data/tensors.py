@@ -154,8 +154,12 @@ def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
     return (torch.randn(n, dtype=torch.float32, device=device),)
 
 
-def generate_dequantize_rowwise_inputs(n, dtype=torch.float16, device='cuda'):
-    return (torch.randn(n, dtype=torch.float16, device=device),)
+def generate_dequantize_rowwise_inputs(rows, cols, device='cuda', **kwargs):
+    # bitsandbytes-style rowwise dequant: int8 input + per-row absmax (fp32)
+    # output[r, c] = state_x[r] * x[r, c] / 127  (fp16 output)
+    x = torch.randint(-128, 127, (rows, cols), dtype=torch.int8, device=device)
+    state_x = torch.rand(rows, dtype=torch.float32, device=device) * 10.0
+    return (x, state_x)
 
 
 def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device='cuda'):
@@ -330,6 +334,10 @@ def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
             kernel_depth, kernel_rows, kernel_cols)
 
 
+def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device='cuda', **kwargs):
+    inp = torch.randn(input_size, dtype=dtype, device=device)
+    kern = torch.randn(kernel_size, dtype=dtype, device=device)
+    return (inp, kern, input_size, kernel_size)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
                                   dtype=torch.float32, device='cuda', **kwargs):
@@ -535,6 +543,7 @@ GENERATORS = {
     "matmul_int8": generate_matmul_int8_inputs,
     "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "1d_conv": generate_1d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "matrix_copy": generate_matrix_copy_inputs,
     "interleave": generate_interleave_inputs,
@@ -620,6 +629,7 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "dequantize_rowwise":
     if operator_name == "kl_divergence":
         return int(params.get("rows", 1)) * int(params.get("cols", 1))
     if operator_name == "batched_matmul":
@@ -663,6 +673,8 @@ def infer_problem_size(operator_name, params):
         groups       = int(params.get("groups", 1))
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+    if operator_name == "1d_conv":
+        return int(params.get("input_size", 1))
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N
