@@ -1,0 +1,41 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# `eps` is a true algorithm parameter (numerical stability), kept in
+# case_defaults so it flows uniformly into the generator and run().
+# Tile sizes (BLOCK_M / BLOCK_D / KV_BLOCK_M) are backend-specific tuning
+# knobs and live inside each impl_*.py.
+case_defaults:
+  eps: 1.0e-6
+
+case_grid:
+  M: [1024, 2048, 4096, 8192, 10000]
+  D: [32, 64, 128, 256]
+  dtype: ["float32"]
+
+verify:
+  atol: 1.0e-4
+  rtol: 1.0e-4
+
+# ---------------------------------------------------------------------------
+# Linear self-attention (no causal mask):
+#   S = phi(K)^T @ V          # (D, D)
+#   Z = sum_m phi(K[m, :])    # (D,)
+#   O = (phi(Q) @ S) / (phi(Q) @ Z + eps)   # (M, D)
+#
+# FLOPs: phi(Q,K) ~ M*D ELU+add; KV matmul ~ 2*M*D*D; Q.S matmul ~ 2*M*D*D;
+#        Q.Z dot ~ 2*M*D; div ~ M*D. Aggregate to leading order ≈ 4*M*D^2.
+#        We keep the original 3*M*D term to count phi/div elementwise too.
+# Bytes: read Q + K + V + S + Z, write O. Q/K/V/O each M*D, S is D*D, Z is D.
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "4 * M * D * D + 3 * M * D"
+  bytes_expr: "(4 * M * D + D * D + D) * dtype_size"
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
