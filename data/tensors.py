@@ -362,7 +362,7 @@ def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device='cuda', *
     return (x, weight, bias)
 
 
-def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
+def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
     a = torch.randn(m, k, dtype=dtype, device=device)
     b = torch.randn(k, n, dtype=dtype, device=device)
     return (a, b)
@@ -459,6 +459,8 @@ GENERATORS = {
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
+    "layernorm_fwd": generate_layernorm_fwd_inputs,
+    "streamk_matmul": generate_streamk_matmul_inputs,
     "layernorm": generate_layernorm_inputs,
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "matmul_int8": generate_matmul_int8_inputs,
@@ -567,7 +569,7 @@ def infer_problem_size(operator_name, params):
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "layernorm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
-    if operator_name == "streamk_scheduling":
+    if operator_name == "streamk_matmul":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "matmul_int8":
         return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))

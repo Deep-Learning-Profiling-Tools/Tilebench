@@ -1,8 +1,12 @@
-# GEMM with floating-point inputs: different tiling order + TF32 accumulation
-# cause ~1e-3 relative differences between implementations; use loose tolerance.
+# Stream-K's value comes from balanced K-iteration distribution when
+# total_tiles doesn't tile-align with the SM count (wave-quantization
+# tail). We sweep (M, N) to exercise a range of total_tiles vs SM-count
+# ratios — that's what stresses the scheduler. K is fixed because it
+# only changes per-tile inner-loop work, not the inter-CTA distribution
+# Stream-K is designed to balance.
 verify:
-  # TF32 accumulation error grows as sqrt(k) * TF32_eps (~5e-4); for k=10240 max ~0.5.
-  # This tolerance is only a sanity check — the output magnitude is ~sqrt(k) >> atol.
+  # TF32 accumulation error grows as sqrt(K) * TF32_eps (~5e-4); for k=4096 max ~0.5.
+  # This tolerance is only a sanity check — the output magnitude is ~sqrt(K) >> atol.
   atol: 1.0
   rtol: 1e-2
 
@@ -13,30 +17,16 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep K (inner dimension) across 20 points with M and N fixed.
-# problem_size = 2 * m * n * k (total multiply-add operations).
 case_defaults:
-  m: 2048
-  n: 4096
+  k: 4096
 
 case_grid:
-  k:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  m: [1024, 2048, 4096, 8192]
+  n: [4096, 5120, 11008, 14336, 28672]
   dtype: ["fp16", "bf16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: m, n, k, dtype_size
-#
-# Bytes:
-#   Read  A: m * k * dtype_size
-#   Read  B: k * n * dtype_size
-#   Write C: m * n * 4  (always fp32 output)
-#
-# FLOPs: 2 * m * n * k  (multiply-accumulate)
-# ---------------------------------------------------------------------------
 metrics:
-  bytes_expr: "m * k * dtype_size + k * n * dtype_size + m * n * 4"
+  bytes_expr: "(m * k + k * n + m * n) * dtype_size"
   flops_expr: "2 * m * n * k"
 
   plots:
