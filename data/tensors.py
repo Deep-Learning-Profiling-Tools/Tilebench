@@ -265,6 +265,18 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
             num_layout, softmax_scale, H, H_kv, M,
             BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
+def generate_reverse_array_inputs(n, dtype, device='cuda', **kwargs):
+    if dtype == torch.int8:
+        x = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+    else:
+        x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
+def generate_matrix_copy_inputs(N, dtype=torch.float32, device='cuda', **kwargs):
+    if dtype == torch.int8:
+        A = torch.randint(-64, 65, (N, N), device=device).to(torch.int8)
+    else:
+        A = torch.randn(N, N, dtype=dtype, device=device)
+    return (A, N)
 def generate_interleave_inputs(n, dtype, device='cuda', **kwargs):
     if dtype == torch.int8:
         a = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
@@ -414,6 +426,8 @@ GENERATORS = {
     "streamk_scheduling": generate_streamk_scheduling_inputs,
     "matmul_int8": generate_matmul_int8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "reverse_array": generate_reverse_array_inputs,
+    "matrix_copy": generate_matrix_copy_inputs,
     "interleave": generate_interleave_inputs,
     "3d_conv": generate_3d_conv_inputs,
     "2d_max_pooling": generate_2d_max_pooling_inputs,
@@ -525,6 +539,9 @@ def infer_problem_size(operator_name, params):
         groups       = int(params.get("groups", 1))
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+    if operator_name == "matrix_copy":
+        N = int(params.get("N", 1))
+        return N * N
     if operator_name == "3d_conv":
         return (
             int(params.get("input_depth", 1))
