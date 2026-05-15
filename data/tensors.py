@@ -68,6 +68,17 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
+def generate_batched_matmul_inputs(BATCH, M, N=None, K=None,
+                                    dtype=torch.float32, device='cuda', **kwargs):
+    if N is None:
+        N = M
+    if K is None:
+        K = M
+    A = torch.randn(BATCH * M * K, dtype=dtype, device=device)
+    B = torch.randn(BATCH * K * N, dtype=dtype, device=device)
+    return (A, B, BATCH, M, N, K)
+
+
 def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
                                          dtype=torch.float32, device='cuda', **kwargs):
     input = torch.randn(N, C, dtype=dtype, device=device)
@@ -419,6 +430,7 @@ GENERATORS = {
     "vector_add": generate_vector_add_inputs,
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
+    "batched_matmul": generate_batched_matmul_inputs,
     "batch_normalization": generate_batch_normalization_inputs,
     "leaky_relu": generate_leaky_relu_inputs,
     "bitonic_sort": generate_bitonic_sort_inputs,
@@ -528,6 +540,12 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "batched_matmul":
+        BATCH = int(params.get("BATCH", 1))
+        M = int(params.get("M", 1))
+        N = int(params.get("N", M))
+        K = int(params.get("K", M))
+        return 2 * BATCH * M * N * K
     if operator_name == "batch_normalization":
         return int(params.get("N", 1)) * int(params.get("C", 1))
     if operator_name == "moe_topk_gating":
