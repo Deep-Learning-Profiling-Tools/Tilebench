@@ -6,7 +6,6 @@ _DEFAULT_CONFIG = {
     "BLOCK_SIZE_R": 1,
     "BLOCK_SIZE_C": 1024,
     "num_warps": 4,
-    "num_stages": 2,
 }
 
 
@@ -59,12 +58,11 @@ _jacobi_stencil_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config(
             {"BLOCK_SIZE_R": br, "BLOCK_SIZE_C": bc},
-            num_warps=nw, num_stages=ns,
+            num_warps=nw,
         )
         for br in [1, 2, 4]
         for bc in [256, 512, 1024, 2048]
         for nw in [4, 8]
-        for ns in [2, 3]
     ],
     key=["rows", "cols"],
 )(_jacobi_stencil_kernel)
@@ -97,7 +95,6 @@ def run(input: torch.Tensor, rows: int, cols: int,
             BLOCK_SIZE_R=cfg["BLOCK_SIZE_R"],
             BLOCK_SIZE_C=cfg["BLOCK_SIZE_C"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
     return output
@@ -111,5 +108,4 @@ def get_last_config() -> dict | None:
         "BLOCK_SIZE_R": cfg.kwargs["BLOCK_SIZE_R"],
         "BLOCK_SIZE_C": cfg.kwargs["BLOCK_SIZE_C"],
         "num_warps":    cfg.num_warps,
-        "num_stages":   cfg.num_stages,
     }
