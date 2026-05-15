@@ -16,8 +16,6 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
-from core.cutile_autotune import CutileAutotuner
-
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
@@ -81,10 +79,6 @@ def matmul_int8_kernel(
     ct.store(C, index=(pid_m, pid_n), tile=acc)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(matmul_int8_kernel)
-
-
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """cuTile int8 GEMM with 2-bit packed B."""
@@ -99,19 +93,20 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     stream = torch.cuda.current_stream()
 
     if autotune:
-        cfg = _tuner.tune_or_cached(
-            shape_key=(M, N, K_b),
-            search_space=_SEARCH_SPACE,
-            stream=stream,
+        result = ct.tune.exhaustive_search(
+            _SEARCH_SPACE,
+            stream,
             grid_fn=lambda cfg: (
                 ((M + cfg.tm - 1) // cfg.tm) * ((N + cfg.tn - 1) // cfg.tn),
                 1, 1,
             ),
+            kernel=matmul_int8_kernel,
             args_fn=lambda cfg: (
                 a, b, c, M, N, K_b, cfg.tm, cfg.tn, cfg.tk, cfg.group_size_m,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
+        cfg = result.best.config
         _last_autotune_config.clear()
         _last_autotune_config.update({
             "tm":           cfg.tm,
@@ -127,9 +122,8 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         ((M + cfg.tm - 1) // cfg.tm) * ((N + cfg.tn - 1) // cfg.tn),
         1, 1,
     )
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
-        stream, grid, kernel,
+        stream, grid, matmul_int8_kernel,
         (a, b, c, M, N, K_b, cfg.tm, cfg.tn, cfg.tk, cfg.group_size_m),
     )
     return c
