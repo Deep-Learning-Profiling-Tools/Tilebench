@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_TILE": 32, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_TILE": 64, "num_warps": 4}
 
 
 @triton.jit
@@ -33,9 +33,9 @@ def _transpose_kernel(
 
 _transpose_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_TILE": t}, num_warps=nw)
-        for t in [8, 16, 32, 64]
-        for nw in [4, 8, 16]
+        triton.Config({"BLOCK_TILE": b}, num_warps=nw)
+        for b in [32, 64, 128]
+        for nw in [2, 4, 8]
     ],
     key=["m", "n"],
 )(_transpose_kernel)
@@ -60,7 +60,6 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
             x.stride(0), x.stride(1), output.stride(0), output.stride(1),
             BLOCK_TILE=tile,
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
     return output
 
