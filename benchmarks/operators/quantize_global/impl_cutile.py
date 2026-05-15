@@ -1,24 +1,28 @@
+"""cuTile fp32 -> fp16 quantization (elementwise cast).
+
+1D grid; each CTA loads a TILE of fp32 and stores it as fp16. Pure
+bandwidth-bound, so the autotune sweep is over (TILE, occupancy) only.
+"""
 from types import SimpleNamespace
 
+import cuda.tile as ct
 import numpy as np
 import torch
-import cuda.tile as ct
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
-
+# 1:1 mirrors impl_triton.py: tile <-> BLOCK_SIZE, occupancy <-> num_warps
+# (nw * occ ~= 64 on B200, so Triton's nw in [4, 8, 16] pairs with
+# cuTile's occ in [16, 8, 4]).
+_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048, 4096, 8192]
-    for occ in [1, 2, 4]
+    for t in [2048, 4096, 8192, 16384]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -29,33 +33,36 @@ def _quantize_kernel(x, output, TILE: ConstInt):
     ct.store(output, index=(bid,), tile=ct.astype(x_tile, np.float16))
 
 
+_tuner = CutileAutotuner(_quantize_kernel)
+
+
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
+
     x = x.contiguous()
     output = torch.empty(x.shape, device=x.device, dtype=torch.float16)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(n_elements,),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=_quantize_kernel,
             args_fn=lambda cfg: (x, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
-        _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
-        }
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-                  _quantize_kernel, (x, output, cfg.tile))
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    grid = ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1)
+    ct.launch(stream, grid, kernel, (x, output, cfg.tile))
 
     return output
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None

@@ -2,6 +2,9 @@ import torch
 import triton
 import triton.language as tl
 
+_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 32, "num_warps": 8, "num_stages": 4}
+
+
 @triton.jit
 def _fwd_kernel(
     Q, K, V, sm_scale,
@@ -91,8 +94,13 @@ def _fwd_kernel(
 
 _fwd_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({}, num_warps=nw, num_stages=ns)
-        for nw in [4, 8, 16]
+        triton.Config(
+            {"BLOCK_M": bm, "BLOCK_N": bn},
+            num_warps=nw, num_stages=ns,
+        )
+        for bm in [64, 128]
+        for bn in [32, 64, 128]
+        for nw in [2, 4, 8]
         for ns in [2, 3, 4]
     ],
     key=["SEQLEN", "DIM"],
@@ -106,17 +114,10 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     sm_scale = 1.0 / (Lq ** 0.5)
 
     o = torch.empty_like(q)
-
-    BLOCK_M = 64
-    BLOCK_N = 32
-
-    grid = (triton.cdiv(q.shape[2], BLOCK_M), q.shape[0] * q.shape[1], 1)
-
     L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
 
-    num_warps = 4 if Lk <= 64 else 8
-
     if autotune:
+        grid = lambda meta: (triton.cdiv(q.shape[2], meta["BLOCK_M"]), q.shape[0] * q.shape[1], 1)
         _fwd_kernel_autotuned[grid](
             q, k, v, sm_scale,
             L,
@@ -126,10 +127,12 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
             v.stride(0), v.stride(1), v.stride(2), v.stride(3),
             o.stride(0), o.stride(1), o.stride(2), o.stride(3),
             q.shape[0], q.shape[1], q.shape[2],
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, DIM=Lk,
+            DIM=Lk,
             IS_CAUSAL=causal,
         )
     else:
+        cfg = _DEFAULT_CONFIG
+        grid = (triton.cdiv(q.shape[2], cfg["BLOCK_M"]), q.shape[0] * q.shape[1], 1)
         _fwd_kernel[grid](
             q, k, v, sm_scale,
             L,
@@ -139,10 +142,10 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
             v.stride(0), v.stride(1), v.stride(2), v.stride(3),
             o.stride(0), o.stride(1), o.stride(2), o.stride(3),
             q.shape[0], q.shape[1], q.shape[2],
-            BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, DIM=Lk,
+            BLOCK_M=cfg["BLOCK_M"], BLOCK_N=cfg["BLOCK_N"], DIM=Lk,
             IS_CAUSAL=causal,
-            num_warps=num_warps,
-            num_stages=4
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
         )
 
     return o
@@ -151,4 +154,9 @@ def get_last_config() -> dict | None:
     cfg = getattr(_fwd_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
+    return {
+        "BLOCK_M": cfg.kwargs["BLOCK_M"],
+        "BLOCK_N": cfg.kwargs["BLOCK_N"],
+        "num_warps": cfg.num_warps,
+        "num_stages": cfg.num_stages,
+    }
