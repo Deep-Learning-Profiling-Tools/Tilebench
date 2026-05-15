@@ -330,6 +330,10 @@ def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
             kernel_depth, kernel_rows, kernel_cols)
 
 
+def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device='cuda', **kwargs):
+    inp = torch.randn(input_size, dtype=dtype, device=device)
+    kern = torch.randn(kernel_size, dtype=dtype, device=device)
+    return (inp, kern, input_size, kernel_size)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
                                   dtype=torch.float32, device='cuda', **kwargs):
@@ -480,6 +484,7 @@ GENERATORS = {
     "matmul_int8": generate_matmul_int8_inputs,
     "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
     "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "1d_conv": generate_1d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "matrix_copy": generate_matrix_copy_inputs,
     "interleave": generate_interleave_inputs,
@@ -605,6 +610,8 @@ def infer_problem_size(operator_name, params):
         groups       = int(params.get("groups", 1))
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+    if operator_name == "1d_conv":
+        return int(params.get("input_size", 1))
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N
