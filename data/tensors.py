@@ -49,8 +49,13 @@ CASE_PRESETS = {
 }
 
 def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
+    if dtype == torch.int8:
+        # Values in [-32, 32] so that x + y stays within int8 range [-128, 127].
+        x = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
+        y = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
+    else:
+        x = torch.randn(n, dtype=dtype, device=device)
+        y = torch.randn(n, dtype=dtype, device=device)
     return (x, y)
 
 
