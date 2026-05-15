@@ -7,20 +7,23 @@ import math
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
-_SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [1, 2, 4, 8]]
+_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=32, occupancy=8)
+_SEARCH_SPACE = [
+    SimpleNamespace(tile_m=tm, tile_n=tn, occupancy=occ)
+    for tm in [64, 128]
+    for tn in [32, 64, 128]
+    for occ in [4, 8, 16, 32]
+]
 
-@ct.kernel(occupancy=2)
+@ct.kernel
 def fmha_kernel(Q, K, V, Out,
                 qk_scale: float,
                 input_pos: int,
@@ -130,58 +133,60 @@ def fmha_kernel(Q, K, V, Out,
     acc = acc.reshape((1, 1, TILE_M, TILE_D)).astype(Out.dtype)
     ct.store(Out, index=(batch_idx, head_idx, bid_x, 0), tile=acc)
 
+
+# Caches replace_hints results (per occupancy) and autotune outcomes (per
+# problem shape). See core/cutile_autotune.py for why both layers matter.
+_tuner = CutileAutotuner(fmha_kernel)
+
+
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     Batch, Heads, SeqLen_Q, D_k = q.shape
 
-    TILE_M = 64
-    TILE_N = 32
-
     input_pos = 0
-
-    # Scale
     qk_scale = 1.0 / math.sqrt(D_k)
-
-    # EVEN_K Check
-    even_k = (SeqLen_Q % TILE_N) == 0
-
     query_group_size = 1
 
     Out = torch.empty_like(q)
-
-    grid_x = math.ceil(SeqLen_Q / TILE_M)
-    grid_y = Batch * Heads
-    grid = (grid_x, grid_y, 1)
-
     stream = torch.cuda.current_stream()
-    args = (
-        q, k, v, Out,
-        qk_scale,
-        input_pos,
-        D_k,
-        Heads,
-        TILE_M,
-        TILE_N,
-        query_group_size,
-        causal,
-        even_k,
-    )
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
-            grid_fn=lambda cfg: grid,
-            kernel=fmha_kernel,
-            args_fn=lambda cfg: args,
-            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
+    def build_args(tile_m, tile_n):
+        return (
+            q, k, v, Out,
+            qk_scale,
+            input_pos,
+            D_k,
+            Heads,
+            tile_m,
+            tile_n,
+            query_group_size,
+            causal,
+            (SeqLen_Q % tile_n) == 0,
         )
-        _last_autotune_config = {"occupancy": result.tuned_config.occupancy}
+
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(SeqLen_Q, D_k, Heads, causal),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1),
+            args_fn=lambda cfg: build_args(cfg.tile_m, cfg.tile_n),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
+            "tile_m": cfg.tile_m,
+            "tile_n": cfg.tile_n,
+            "occupancy": cfg.occupancy,
+        })
     else:
-        ct.launch(stream, grid, fmha_kernel, args)
+        cfg = _DEFAULT_CONFIG
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    grid = (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1)
+    ct.launch(stream, grid, kernel, build_args(cfg.tile_m, cfg.tile_n))
 
     return Out
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
