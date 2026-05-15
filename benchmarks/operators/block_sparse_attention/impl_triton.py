@@ -2,6 +2,9 @@ import torch
 import triton
 import triton.language as tl
 
+_DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
+
+
 @triton.jit
 def block_sparse_attention_kernel(
     out,  # output [B, H, M, D]. Note that B is batch_size, H is num_heads, M is q_seq_len, and D is head_size
@@ -36,7 +39,7 @@ def block_sparse_attention_kernel(
     BLOCK_D: tl.constexpr,  # block size for D
     NUM_D_BLOCKS: tl.constexpr,  # number of data blocks =  D / BLOCK_D
 ):
-    tl.static_print(f"{BLOCK_M=} {BLOCK_N=} {BLOCK_D=} {EVEN_M=} {EVEN_N=} {NUM_D_BLOCKS=}")
+    #tl.static_print(f"{BLOCK_M=} {BLOCK_N=} {BLOCK_D=} {EVEN_M=} {EVEN_N=} {NUM_D_BLOCKS=}")
 
     # Past sequence length is 0 since this kernel is for prompt only.
     q_seq_len = total_seq_len
@@ -163,7 +166,7 @@ def block_sparse_attention_kernel(
 _block_sparse_attention_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw, num_stages=ns)
-        for nw in [4, 8, 16]
+        for nw in [2, 4, 8]
         for ns in [2, 3, 4]
     ],
     key=["total_seq_len"],
@@ -185,22 +188,41 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
 
     out = torch.empty((batch_size, num_heads, q_seq_len, Q.shape[-1]), device=Q.device, dtype=Q.dtype)
 
-    kernel = _block_sparse_attention_kernel_autotuned if autotune else block_sparse_attention_kernel
-    kernel[grid](
-        out, Q, K, V,
-        layout_csr_row_indices, layout_csr_col_indices,
-        layout_csr_row_stride_h, layout_csr_col_stride_h,
-        num_layout, softmax_scale,
-        Q.stride(0), Q.stride(1), Q.stride(2),
-        K.stride(0), K.stride(1), K.stride(2),
-        V.stride(0), V.stride(1), V.stride(2),
-        out.stride(0), out.stride(1), out.stride(2),
-        num_heads, num_kv_heads,
-        total_seq_len,
-        BLOCK_M=BLOCK_M, EVEN_M=EVEN_M,
-        BLOCK_N=BLOCK_N, EVEN_N=EVEN_N,
-        BLOCK_D=BLOCK_D, NUM_D_BLOCKS=NUM_D_BLOCKS
-    )
+    if autotune:
+        _block_sparse_attention_kernel_autotuned[grid](
+            out, Q, K, V,
+            layout_csr_row_indices, layout_csr_col_indices,
+            layout_csr_row_stride_h, layout_csr_col_stride_h,
+            num_layout, softmax_scale,
+            Q.stride(0), Q.stride(1), Q.stride(2),
+            K.stride(0), K.stride(1), K.stride(2),
+            V.stride(0), V.stride(1), V.stride(2),
+            out.stride(0), out.stride(1), out.stride(2),
+            num_heads, num_kv_heads,
+            total_seq_len,
+            BLOCK_M=BLOCK_M, EVEN_M=EVEN_M,
+            BLOCK_N=BLOCK_N, EVEN_N=EVEN_N,
+            BLOCK_D=BLOCK_D, NUM_D_BLOCKS=NUM_D_BLOCKS,
+        )
+    else:
+        cfg = _DEFAULT_CONFIG
+        block_sparse_attention_kernel[grid](
+            out, Q, K, V,
+            layout_csr_row_indices, layout_csr_col_indices,
+            layout_csr_row_stride_h, layout_csr_col_stride_h,
+            num_layout, softmax_scale,
+            Q.stride(0), Q.stride(1), Q.stride(2),
+            K.stride(0), K.stride(1), K.stride(2),
+            V.stride(0), V.stride(1), V.stride(2),
+            out.stride(0), out.stride(1), out.stride(2),
+            num_heads, num_kv_heads,
+            total_seq_len,
+            BLOCK_M=BLOCK_M, EVEN_M=EVEN_M,
+            BLOCK_N=BLOCK_N, EVEN_N=EVEN_N,
+            BLOCK_D=BLOCK_D, NUM_D_BLOCKS=NUM_D_BLOCKS,
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
+        )
     return out
 
 def get_last_config() -> dict | None:
