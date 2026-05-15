@@ -71,6 +71,11 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
 def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
+def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    x = torch.randn(n, dtype=dtype, device=device)
+    return (x, n)
+
+
 def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
     # Non-negative int32 so unsigned-vs-signed sort order coincide (bit 31 always 0).
     data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
@@ -407,6 +412,7 @@ GENERATORS = {
     "mul2": generate_mul2_inputs,
     "relu": generate_relu_inputs,
     "leaky_relu": generate_leaky_relu_inputs,
+    "sigmoid": generate_sigmoid_inputs,
     "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
     "divergence_metric": generate_divergence_metric_inputs,
