@@ -2,6 +2,9 @@ import torch
 import triton
 import triton.language as tl
 
+_DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
+
+
 @triton.jit
 def _fwd_kernel_flash_decode_stage2(
     B_Seqlen,
@@ -55,7 +58,7 @@ def _fwd_kernel_flash_decode_stage2(
 _fwd_kernel_flash_decode_stage2_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw, num_stages=ns)
-        for nw in [4, 8, 16]
+        for nw in [1, 2, 4]
         for ns in [2, 3, 4]
     ],
     key=["head_dim"],
@@ -111,7 +114,7 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
             BLOCK_DMODEL=BLOCK_DMODEL,
         )
     else:
-        # Launch the kernel
+        cfg = _DEFAULT_CONFIG
         _fwd_kernel_flash_decode_stage2[grid](
             B_Seqlen=b_seqlen,
             Mid_O=mid_o,
@@ -134,8 +137,8 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
             head_dim=head_dim,
             BLOCK_SEQ=block_seq,
             BLOCK_DMODEL=BLOCK_DMODEL,
-            num_warps=4,
-            num_stages=2,
+            num_warps=cfg["num_warps"],
+            num_stages=cfg["num_stages"],
         )
 
     return output
