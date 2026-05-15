@@ -20,21 +20,18 @@ import cuda.tile as ct
 import numpy as np
 import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
-    for ts in [256, 512, 1024, 2048]
-    for occ in [1, 2, 4, 8]
+    for ts in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
 ]
 
 
@@ -61,22 +58,25 @@ def _mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
     ct.store(out, index=(row, 0), tile=out_tile, allow_tma=False, latency=1)
 
 
+# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
+_tuner = CutileAutotuner(_mean_rowwise_kernel)
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     """
     cuTile row-wise mean reduction.
     Input:  (M, N)  — any floating dtype
     Output: (M,) float32
     """
-    global _last_autotune_config
 
     # Permute so that `dim` is last, treat all other dims as rows.
     if x.ndim == 2 and dim == 1:
-        x2d = x.float().contiguous()
+        x2d = x.contiguous()
     else:
         dims = list(range(x.ndim))
         dims.remove(dim % x.ndim)
         dims.append(dim % x.ndim)
-        x2d = x.float().permute(dims).contiguous().reshape(-1, x.shape[dim])
+        x2d = x.permute(dims).contiguous().reshape(-1, x.shape[dim])
 
     M, N = x2d.shape
 
@@ -86,26 +86,29 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     stream = torch.cuda.current_stream()
     grid   = (M, 1, 1)
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
             grid_fn=lambda cfg: grid,
-            kernel=_mean_rowwise_kernel,
             args_fn=lambda cfg: (x2d, out, N, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-            search_space=_SEARCH_SPACE,
         )
-        _last_autotune_config = {
-            "tile_size": result.tuned_config.tile_size,
-            "occupancy": result.tuned_config.occupancy,
-        }
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
+            "tile_size": cfg.tile_size,
+            "occupancy": cfg.occupancy,
+        })
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, grid, _mean_rowwise_kernel,
-                  (x2d, out, N, cfg.tile_size))
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (x2d, out, N, cfg.tile_size))
 
     return out.squeeze(1)  # (M,) float32
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
