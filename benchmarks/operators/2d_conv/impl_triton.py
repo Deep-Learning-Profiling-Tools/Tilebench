@@ -3,11 +3,11 @@ import triton
 import triton.language as tl
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 32,
+    "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 64,
     "BLOCK_SIZE_IN_FEAT": 32,
-    "BLOCK_SIZE_OUT_FEAT": 32,
+    "BLOCK_SIZE_OUT_FEAT": 64,
     "num_warps": 4,
-    "num_stages": 2,
+    "num_stages": 3,
 }
 
 
@@ -31,8 +31,6 @@ def _conv2d_kernel(
     BLOCK_SIZE_BATCH_HEIGHT_WIDTH: tl.constexpr,
     BLOCK_SIZE_IN_FEAT: tl.constexpr,
     BLOCK_SIZE_OUT_FEAT: tl.constexpr,
-    fp16_flag: tl.constexpr,
-    tf32_flag: tl.constexpr,
 ):
     """
     Implicit GEMM Conv2d kernel.
@@ -111,16 +109,9 @@ def _conv2d_kernel(
         )
         w_tile = tl.load(w_ptrs, mask=weight_mask, other=0.0)
 
-        if fp16_flag:
-            in_tile = in_tile.to(tl.float16)
-            w_tile  = w_tile.to(tl.float16)
-            acc += tl.dot(in_tile, w_tile, allow_tf32=False)
-        elif tf32_flag:
-            in_tile = in_tile.to(tl.float32)
-            w_tile  = w_tile.to(tl.float32)
-            acc += tl.dot(in_tile, w_tile, allow_tf32=True)
-        else:
-            acc += tl.dot(in_tile.to(tl.float32), w_tile.to(tl.float32), allow_tf32=False)
+        # fp16 inputs use Tensor Core fp16->fp32 accumulation automatically;
+        # fp32 inputs use true fp32 dot (no silent TF32 promotion).
+        acc += tl.dot(in_tile, w_tile, allow_tf32=False)
 
     # Store output tile
     out_mask = (bhw_offsets < batch * out_H * out_W)[:, None] & (oc_abs < out_channels)[None, :]
@@ -145,13 +136,18 @@ _conv2d_kernel_autotuned = triton.autotune(
             num_warps=nw,
             num_stages=ns,
         )
-        for bs_bhw in [16, 32, 64]
-        for bs_in  in [16, 32]
-        for bs_out in [32, 64]
-        for nw in [4, 8]
-        for ns in [2, 3]
+        for bs_bhw in [32, 64, 128]
+        for bs_in  in [16, 32, 64]
+        for bs_out in [64, 128]
+        for nw in [2, 4, 8]
+        for ns in [2, 3, 4]
+        if bs_bhw * bs_out >= nw * 256
+        and bs_bhw * bs_out <= 128 * 128
     ],
-    key=["batch", "in_channels", "out_channels", "in_H", "in_W", "kH", "kW"],
+    key=["batch", "in_channels", "out_channels", "in_H", "in_W",
+     "kH", "kW", "groups", "stride_h", "stride_w", "pad_h", "pad_w"],
+    warmup=5,
+    rep=10
 )(_conv2d_kernel)
 
 
@@ -180,9 +176,6 @@ def run(
     out_channels_per_group = out_channels // groups
 
     output = torch.empty((batch, out_channels, out_H, out_W), device=input.device, dtype=input.dtype)
-
-    fp16_flag = input.dtype == torch.float16
-    tf32_flag = input.dtype == torch.float32
 
     total_bhw = batch * out_H * out_W
 
@@ -215,8 +208,6 @@ def run(
         stride_output_c=output.stride(1),
         stride_output_h=output.stride(2),
         stride_output_w=output.stride(3),
-        fp16_flag=fp16_flag,
-        tf32_flag=tf32_flag,
     )
 
     if autotune:

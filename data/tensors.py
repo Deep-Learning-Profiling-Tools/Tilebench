@@ -49,8 +49,13 @@ CASE_PRESETS = {
 }
 
 def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
+    if dtype == torch.int8:
+        # Values in [-32, 32] so that x + y stays within int8 range [-128, 127].
+        x = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
+        y = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
+    else:
+        x = torch.randn(n, dtype=dtype, device=device)
+        y = torch.randn(n, dtype=dtype, device=device)
     return (x, y)
 
 
@@ -132,13 +137,18 @@ def generate_destindex_inputs(
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
-def generate_divergence_metric_inputs(n, eps=1e-6, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
-    y = torch.randn(n, dtype=dtype, device=device)
-    return (x, y, eps)
+def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda', **kwargs):
+    # y_pred: log-probabilities (output of log_softmax over the cols axis)
+    # y_true: probabilities     (output of softmax     over the cols axis)
+    logits_pred = torch.randn(rows, cols, dtype=dtype, device=device)
+    logits_true = torch.randn(rows, cols, dtype=dtype, device=device)
+    y_pred = torch.log_softmax(logits_pred, dim=-1)
+    y_true = torch.softmax(logits_true, dim=-1)
+    return (y_pred, y_true)
 
 
-def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    # Fused element-wise activation: silu(x * gate + bias)
     x    = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
     bias = torch.randn(n, dtype=dtype, device=device)
@@ -149,8 +159,12 @@ def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
     return (torch.randn(n, dtype=torch.float32, device=device),)
 
 
-def generate_dequantize_rowwise_inputs(n, dtype=torch.float16, device='cuda'):
-    return (torch.randn(n, dtype=torch.float16, device=device),)
+def generate_dequantize_rowwise_inputs(rows, cols, device='cuda', **kwargs):
+    # bitsandbytes-style rowwise dequant: int8 input + per-row absmax (fp32)
+    # output[r, c] = state_x[r] * x[r, c] / 127  (fp16 output)
+    x = torch.randint(-128, 127, (rows, cols), dtype=torch.int8, device=device)
+    state_x = torch.rand(rows, dtype=torch.float32, device=device) * 10.0
+    return (x, state_x)
 
 
 def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device='cuda'):
@@ -325,6 +339,10 @@ def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
             kernel_depth, kernel_rows, kernel_cols)
 
 
+def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device='cuda', **kwargs):
+    inp = torch.randn(input_size, dtype=dtype, device=device)
+    kern = torch.randn(kernel_size, dtype=dtype, device=device)
+    return (inp, kern, input_size, kernel_size)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
                                   dtype=torch.float32, device='cuda', **kwargs):
@@ -357,9 +375,23 @@ def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device='cuda', *
     return (x, weight, bias)
 
 
-def generate_streamk_scheduling_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
+def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
     a = torch.randn(m, k, dtype=dtype, device=device)
     b = torch.randn(k, n, dtype=dtype, device=device)
+    return (a, b)
+
+
+def generate_matmul_fp32_fp16_fp8_inputs(M, N, K, dtype=torch.float32,
+                                         device='cuda', **kwargs):
+    """Inputs for plain GEMM tested across fp32 / fp16 / fp8 e4m3fn / fp8 e5m2.
+    fp8 dtypes don't support torch.randn directly, so generate in fp32 and cast.
+    """
+    if dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
+        a = torch.randn(M, K, dtype=torch.float32, device=device).to(dtype)
+        b = torch.randn(K, N, dtype=torch.float32, device=device).to(dtype)
+    else:
+        a = torch.randn(M, K, dtype=dtype, device=device)
+        b = torch.randn(K, N, dtype=dtype, device=device)
     return (a, b)
 
 
@@ -390,7 +422,7 @@ def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='
     return (x, eps)
 
 
-def generate_conv2d_fwd_inputs(
+def generate_2d_conv_inputs(
     batch, in_channels, out_channels, H,
     kernel_size=3, stride=1, padding=1, groups=1,
     dtype=torch.float32, device='cuda', **kwargs,
@@ -437,8 +469,8 @@ GENERATORS = {
     "sigmoid": generate_sigmoid_inputs,
     "radix_sort": generate_radix_sort_inputs,
     "jacobi_stencil_2d": generate_jacobi_stencil_2d_inputs,
-    "divergence_metric": generate_divergence_metric_inputs,
-    "generic_fused_container": generate_generic_fused_container_inputs,
+    "kl_divergence": generate_kl_divergence_inputs,
+    "fused_activation": generate_fused_activation_inputs,
     "quantize_global": generate_quantize_global_inputs,
     "dequantize_rowwise": generate_dequantize_rowwise_inputs,
     "dropout": generate_dropout_inputs,
@@ -454,10 +486,12 @@ GENERATORS = {
     "flash_decode": generate_flash_decode_stage2_inputs,
     "cross_entropy": generate_cross_entropy_inputs,
     "quantized_gemm": generate_quantized_gemm_inputs,
+    "streamk_matmul": generate_streamk_matmul_inputs,
     "layernorm": generate_layernorm_inputs,
-    "streamk_scheduling": generate_streamk_scheduling_inputs,
+    "2d_conv": generate_2d_conv_inputs,
     "matmul_int8": generate_matmul_int8_inputs,
-    "conv2d_fwd": generate_conv2d_fwd_inputs,
+    "matmul_fp32_fp16_fp8": generate_matmul_fp32_fp16_fp8_inputs,
+    "1d_conv": generate_1d_conv_inputs,
     "reverse_array": generate_reverse_array_inputs,
     "matrix_copy": generate_matrix_copy_inputs,
     "interleave": generate_interleave_inputs,
@@ -540,6 +574,8 @@ def infer_problem_size(operator_name, params):
         )
     if operator_name == "softmax":
         return int(params.get("n_rows", 1)) * int(params.get("n_cols", 1))
+    if operator_name == "kl_divergence":
+        return int(params.get("rows", 1)) * int(params.get("cols", 1))
     if operator_name == "batched_matmul":
         BATCH = int(params.get("BATCH", 1))
         M = int(params.get("M", 1))
@@ -560,15 +596,17 @@ def infer_problem_size(operator_name, params):
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "layernorm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
-    if operator_name == "streamk_scheduling":
+    if operator_name == "streamk_matmul":
         return 2 * int(params.get("m", 1)) * int(params.get("n", 1)) * int(params.get("k", 1))
     if operator_name == "matmul_int8":
+        return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
+    if operator_name == "matmul_fp32_fp16_fp8":
         return 2 * int(params.get("M", 1)) * int(params.get("N", 1)) * int(params.get("K", 1))
     if operator_name in ("argmax", "mean_reduction"):
         return int(params.get("M", 1)) * int(params.get("N", 1))
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
-    if operator_name == "conv2d_fwd":
+    if operator_name == "2d_conv":
         batch        = int(params.get("batch", 1))
         in_channels  = int(params.get("in_channels", 1))
         out_channels = int(params.get("out_channels", 1))
@@ -579,6 +617,8 @@ def infer_problem_size(operator_name, params):
         groups       = int(params.get("groups", 1))
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+    if operator_name == "1d_conv":
+        return int(params.get("input_size", 1))
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N

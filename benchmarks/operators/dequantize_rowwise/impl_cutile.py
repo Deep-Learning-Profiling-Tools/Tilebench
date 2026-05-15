@@ -1,61 +1,72 @@
+"""cuTile dequantize_rowwise (mirrors impl_triton.py).
+
+Each CTA dequantises one row. Since cuTile tile dims must be powers of
+two and case_grid restricts cols to powers of two, the entire row
+loads in one ct.load((1, COLS)) — no inner tiled loop, no padding.
+
+Autotune knob: occupancy (cuTile's analogue of Triton num_warps).
+"""
 from types import SimpleNamespace
 
-import numpy as np
-import torch
 import cuda.tile as ct
+import torch
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
+from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=2)
-
+_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048, 4096, 8192]
-    for occ in [1, 2, 4]
+    SimpleNamespace(occupancy=occ)
+    for occ in [2, 4, 8, 16, 32]
 ]
+
+_INV_127 = 1.0 / 127.0
 
 
 @ct.kernel
-def _dequantize_kernel(x, output, TILE: ConstInt):
+def _dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
     bid = ct.bid(0)
-    x_tile = ct.load(x, index=(bid,), shape=(TILE,))
-    ct.store(output, index=(bid,), tile=ct.astype(x_tile, np.float32))
+    # x: (rows, cols) int8 -- load row `bid` as (1, COLS).
+    x_tile = ct.load(x, index=(bid, 0), shape=(1, COLS))
+    # state_x: (rows,) fp32 -- load element `bid` as (1,), reshape for broadcast.
+    scale = ct.load(state_x, index=(bid,), shape=(1,))
+    scale_2d = ct.reshape(scale, (1, 1))
+
+    out = x_tile * scale_2d * _INV_127
+    ct.store(output, index=(bid, 0), tile=ct.astype(out, ct.float16))
 
 
-def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
-    x = x.contiguous()
-    output = torch.empty(x.shape, device=x.device, dtype=torch.float32)
-    n_elements = x.numel()
+_tuner = CutileAutotuner(_dequantize_rowwise_kernel)
+
+
+def run(x: torch.Tensor, state_x: torch.Tensor,
+        autotune: bool = False, **kwargs) -> torch.Tensor:
+
+    rows, cols = x.shape
+    output = torch.empty(rows, cols, device=x.device, dtype=torch.float16)
     stream = torch.cuda.current_stream()
 
-    if autotune and ct_experimental is not None:
-        result = ct_experimental.autotune_launch(
-            stream,
-            grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-            kernel=_dequantize_kernel,
-            args_fn=lambda cfg: (x, output, cfg.tile),
-            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(rows, cols),
             search_space=_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: (rows, 1, 1),
+            args_fn=lambda cfg: (x, state_x, output, cols),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
-            "tile":      result.tuned_config.tile,
-            "occupancy": result.tuned_config.occupancy,
-        }
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
-        ct.launch(stream, ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),
-                  _dequantize_kernel, (x, output, cfg.tile))
 
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, (rows, 1, 1), kernel, (x, state_x, output, cols))
     return output
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
