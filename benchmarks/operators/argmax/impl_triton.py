@@ -74,4 +74,8 @@ def get_last_config() -> dict | None:
     cfg = getattr(_argmax_rowwise_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"BLOCK_N": cfg.kwargs["BLOCK_N"], "num_warps": cfg.num_warps}
+    return {
+        "BLOCK_N":    cfg.kwargs["BLOCK_N"],
+        "num_warps":  cfg.num_warps,
+        "num_stages": cfg.num_stages,
+    }
