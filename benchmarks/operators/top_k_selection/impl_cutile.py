@@ -19,7 +19,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 # Defaults and search space mirror impl_triton.py 1-to-1:
 #   tile       ↔ BLOCK_SIZE        same values
@@ -95,7 +95,6 @@ def _next_pow2(x: int) -> int:
 
 def run(input: torch.Tensor, N: int, k: int,
         block_size: int = None, autotune: bool = False, **kwargs):
-    global _last_autotune_config
 
     assert input.is_cuda
     assert input.ndim == 1
@@ -125,7 +124,8 @@ def run(input: torch.Tensor, N: int, k: int,
             args_fn=lambda cfg: (input_padding, padding_len, stage0, stride0, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {"tile": cfg.tile, "occupancy": cfg.occupancy}
+        _last_autotune_config.clear()
+        _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
     else:
         TILE = int(block_size) if block_size is not None else _DEFAULT_CONFIG.tile
         cfg = SimpleNamespace(tile=TILE, occupancy=_DEFAULT_CONFIG.occupancy)
@@ -146,4 +146,4 @@ def run(input: torch.Tensor, N: int, k: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
