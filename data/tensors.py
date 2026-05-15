@@ -142,7 +142,8 @@ def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda'
     return (y_pred, y_true)
 
 
-def generate_generic_fused_container_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+    # Fused element-wise activation: silu(x * gate + bias)
     x    = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
     bias = torch.randn(n, dtype=dtype, device=device)
