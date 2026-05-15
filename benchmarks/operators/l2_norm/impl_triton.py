@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"num_warps": 8, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_N": 1024, "num_warps": 4, "num_stages": 3}
 
 
 @triton.jit
@@ -14,24 +14,34 @@ def _l2_norm_fwd_kernel(
     eps,
     BLOCK_N: tl.constexpr,
 ):
+    """One CTA normalises one row with tiled two-pass L2 norm."""
     row = tl.program_id(0)
     X += row * stride_x_row
     Y += row * stride_x_row
-    cols = tl.arange(0, BLOCK_N)
-    x = tl.load(X + cols, mask=cols < N, other=0.0).to(tl.float32)
-    xbar = tl.where(cols < N, x, 0.0)
-    var = tl.sum(xbar * xbar, axis=0)
-    rstd = 1 / tl.sqrt(var + eps)
-    mask = cols < N
-    y = x * rstd
-    tl.store(Y + cols, y.to(X.dtype.element_ty), mask=mask)
+
+    # Pass 1: accumulate sum(x²).
+    acc = tl.zeros([BLOCK_N], dtype=tl.float32)
+    for off in range(0, N, BLOCK_N):
+        cols = off + tl.arange(0, BLOCK_N)
+        x = tl.load(X + cols, mask=cols < N, other=0.0).to(tl.float32)
+        acc += x * x
+    rstd = 1 / tl.sqrt(tl.sum(acc, axis=0) + eps)
+
+    # Pass 2: normalise (re-load x).
+    for off in range(0, N, BLOCK_N):
+        cols = off + tl.arange(0, BLOCK_N)
+        mask = cols < N
+        x = tl.load(X + cols, mask=mask, other=0.0).to(tl.float32)
+        y = x * rstd
+        tl.store(Y + cols, y.to(X.dtype.element_ty), mask=mask)
 
 
 _l2_norm_fwd_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({}, num_warps=nw, num_stages=ns)
-        for nw in [4, 8, 16]
-        for ns in [1, 2, 4]
+        triton.Config({"BLOCK_N": bn}, num_warps=nw, num_stages=ns)
+        for bn in [512, 1024, 2048]
+        for nw in [2, 4, 8]
+        for ns in [2, 3, 4]
     ],
     key=["N"],
 )(_l2_norm_fwd_kernel)
@@ -46,18 +56,12 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
     N = x_2d.shape[-1]
     M = x_2d.shape[0]
 
-    MAX_FUSED_SIZE = 65536 // x.element_size()
-    BLOCK_N = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
-    if N > BLOCK_N:
-        raise RuntimeError("l2_norm: feature dim >= 64KB is not supported.")
-
     if autotune:
         with torch.cuda.device(x.device.index):
             _l2_norm_fwd_kernel_autotuned[(M,)](
                 x_2d, y_2d,
                 x_2d.stride(0),
                 N, eps,
-                BLOCK_N=BLOCK_N,
             )
     else:
         cfg = _DEFAULT_CONFIG
@@ -66,7 +70,7 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
                 x_2d, y_2d,
                 x_2d.stride(0),
                 N, eps,
-                BLOCK_N=BLOCK_N,
+                BLOCK_N=cfg["BLOCK_N"],
                 num_warps=cfg["num_warps"],
                 num_stages=cfg["num_stages"],
             )
@@ -77,4 +81,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_l2_norm_fwd_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
+    return {"BLOCK_N": cfg.kwargs["BLOCK_N"], "num_warps": cfg.num_warps, "num_stages": cfg.num_stages}
