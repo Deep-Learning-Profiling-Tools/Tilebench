@@ -21,14 +21,6 @@ import triton
 import triton.language as tl
 
 
-_DEFAULT_CONFIG = {
-    "BLOCK_M": 32,
-    "BLOCK_D": 16,
-    "KV_BLOCK_M": 32,
-    "num_warps": 1,
-    "num_stages": 1,
-}
-
 
 @triton.jit
 def _phi(x):
@@ -45,6 +37,7 @@ def _kv_kernel(
     stride_sm, stride_sd,
     BLOCK_M: tl.constexpr,
 ):
+    # Each program computes one scalar S[d0, d1].
     pid_d0 = tl.program_id(0)
     pid_d1 = tl.program_id(1)
 
@@ -73,6 +66,7 @@ def _z_kernel(
     stride_zd,
     BLOCK_M: tl.constexpr,
 ):
+    # Each program computes one scalar Z[d].
     pid_d = tl.program_id(0)
 
     acc = tl.zeros((), dtype=tl.float32)
@@ -100,6 +94,7 @@ def _out_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_D: tl.constexpr,
 ):
+    # Each program computes O tile [BLOCK_M, BLOCK_D].
     pid_m = tl.program_id(0)
     pid_do = tl.program_id(1)
 

@@ -1,35 +1,15 @@
 import torch
 
-_LAST_CONFIG = None
 
-
-def run(
-    input,
-    N: int,
-    k: int,
-    BLOCK_SIZE: int = 1024,
-    block_size: int = None,
-    autotune: bool = False,
-    **kwargs,
-):
-    global _LAST_CONFIG
-
-    if block_size is not None:
-        BLOCK_SIZE = int(block_size)
-
+def run(input: torch.Tensor, N: int, k: int, **kwargs):
+    """Reference top-k via torch.topk (descending, sorted)."""
+    assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
     assert input.dtype == torch.float32
     assert 1 <= k <= N
-
-    input = input.contiguous()
-    output = torch.topk(input, k, largest=True, sorted=True).values
-
-    _LAST_CONFIG = {
-        "BLOCK_SIZE": int(BLOCK_SIZE),
-    }
-    return output
+    return torch.topk(input.contiguous(), k, largest=True, sorted=True).values
 
 
 def get_last_config() -> dict | None:
-    return _LAST_CONFIG
+    return None

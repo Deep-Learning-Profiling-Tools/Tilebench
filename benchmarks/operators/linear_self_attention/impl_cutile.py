@@ -46,6 +46,7 @@ def _kv_kernel(
     M, D,
     BLOCK_M: ConstInt,
 ):
+    # Each program computes one scalar S[d0, d1].
     pid_d0 = ct.bid(0)
     pid_d1 = ct.bid(1)
 
@@ -78,6 +79,7 @@ def _z_kernel(
     M, D,
     BLOCK_M: ConstInt,
 ):
+    # Each program computes one scalar Z[d].
     pid_d = ct.bid(0)
 
     acc = ct.full((1,), 0.0, dtype=ct.float32)
@@ -108,6 +110,7 @@ def _out_kernel(
     BLOCK_M: ConstInt,
     BLOCK_D: ConstInt,
 ):
+    # Each program computes O tile [BLOCK_M, BLOCK_D].
     pid_m = ct.bid(0)
     pid_do = ct.bid(1)
 

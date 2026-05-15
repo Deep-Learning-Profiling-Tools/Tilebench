@@ -355,7 +355,6 @@ def generate_top_k_selection_inputs(
     k,
     dtype=torch.float32,
     device='cuda',
-    BLOCK_SIZE=1024,
     **kwargs,
 ):
     if isinstance(dtype, str):
@@ -365,13 +364,7 @@ def generate_top_k_selection_inputs(
         raise ValueError("top_k_selection expects float32 inputs.")
 
     input_tensor = torch.randn((N,), dtype=dtype, device=device)
-
-    return (
-        input_tensor.contiguous(),
-        int(N),
-        int(k),
-        int(BLOCK_SIZE),
-    )
+    return (input_tensor.contiguous(), int(N), int(k))
 def generate_histogramming_inputs(
     N,
     num_bins,
