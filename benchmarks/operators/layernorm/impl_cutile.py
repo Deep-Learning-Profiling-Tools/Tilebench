@@ -8,7 +8,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
 
@@ -77,7 +77,6 @@ def run(
     eps: float = 1e-5,
     autotune: bool = False,
 ) -> torch.Tensor:
-    global _last_autotune_config
 
     orig_shape = x.shape
     K       = orig_shape[-1]
@@ -101,10 +100,11 @@ def run(
             args_fn=lambda cfg: (x_2d, weight_c, bias_c, out_2d, eps, K, cfg.tile_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile_size": cfg.tile_size,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -116,4 +116,4 @@ def run(
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
