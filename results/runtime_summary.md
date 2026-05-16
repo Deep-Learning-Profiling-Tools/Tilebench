@@ -36,7 +36,7 @@
 | leaky_relu | 60 | 0.0739 | 0.0237 | 0.0242 | 0.0233 | 0.0237 | 2.99 → 3.05 | 2.92 → 3.02 |
 | linear_self_attention | 20 | 0.0775 | 1.0034 | 3.8549 | 0.8870 | 3.4412 | 0.27 → 0.46 | 0.08 → 0.14 |
 | matmul_fp32_fp16_fp8 | 49 | 2.7687 | 1.5067 | 0.3626 | TIMEOUT | TIMEOUT | 5.07 → — | 11.37 → — |
-| matmul_int8 | 20 | 1.8263 | 0.2999 | 0.5165 | 0.0289 | 95.1731 | 6.13 → 7.77 | 3.57 → 0.00 |
+| matmul_int8 | 20 | 1.8263 | 0.2999 | 0.5165 | 0.2437 | 0.1802 | 6.13 → 7.49 | 3.57 → 10.14 |
 | matrix_copy | 80 | 0.0089 | 0.0088 | 0.0089 | 0.0084 | 0.0087 | 1.02 → 1.09 | 1.00 → 1.04 |
 | matrix_transpose | 80 | 0.1846 | 0.0369 | 0.0354 | 0.0336 | 0.0346 | 5.57 → 6.05 | 5.47 → 5.69 |
 | mean_reduction | 60 | 0.0674 | 0.0146 | 0.0218 | 0.0141 | 0.0152 | 5.44 → 5.63 | 3.65 → 5.11 |
@@ -78,3 +78,8 @@
 - `bitonic_sort`'s Torch reference is the slow PyTorch-op-per-step impl
   (per its docstring, kept as same-algorithm baseline); use `radix_sort`
   for the fast PyTorch sort.
+- `matmul_int8` autotune cuTile was originally reported as 95.17 ms — a
+  bookkeeping artefact from a missing two-cache layer in `impl_cutile.py`
+  that re-ran the 52-config sweep inside every timed launch. PR #88 wires
+  it through `CutileAutotuner` like every other autotune op; rerun on
+  2026-05-16 produced the corrected 0.1802 ms mean (10.14× over Torch).
