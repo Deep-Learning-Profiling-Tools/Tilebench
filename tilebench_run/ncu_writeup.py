@@ -32,41 +32,86 @@ WANTED = {
 
 
 def parse_report(rep: Path) -> dict:
+    """Parse an .ncu-rep that may contain one or many kernels.
+
+    Returns a dict with:
+      - per_kernel: list of {name, metrics, bottleneck, mem_bw}
+                    in launch order (NCU CSV "ID" column ascending)
+      - aggregate:  {Duration: sum_us, ...} a single-dict view for headline
+                    use; uses the heaviest kernel's per-kernel metrics for
+                    rate-style fields and sums Duration to µs.
+    """
     proc = subprocess.run(
         [NCU, "--import", str(rep), "--csv", "--page", "details"],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=180,
     )
     if proc.returncode != 0:
         return {"error": proc.stderr[-400:]}
 
-    metrics: dict[str, tuple[str, str]] = {}
-    bottleneck = None
-    bw_value = None
-    bw_unit = None
+    by_id: dict[str, dict] = {}
     rdr = csv.DictReader(io.StringIO(proc.stdout))
     for row in rdr:
+        kid = (row.get("ID") or "").strip()
+        if not kid:
+            continue
+        kname = (row.get("Kernel Name") or "").strip()
         m = (row.get("Metric Name") or "").strip()
         u = (row.get("Metric Unit") or "").strip()
         v = (row.get("Metric Value") or "").strip()
         rule = (row.get("Rule Name") or "").strip()
         desc = (row.get("Rule Description") or "").strip()
+        bucket = by_id.setdefault(kid, {
+            "name": kname, "metrics": {}, "bottleneck": None, "mem_bw": None,
+        })
         if m == "Memory Throughput" and u in {"Tbyte/s", "Gbyte/s"}:
-            bw_value, bw_unit = v, u
+            if bucket["mem_bw"] is None:
+                bucket["mem_bw"] = (v, u)
             continue
-        if rule == "SOLBottleneck" and desc and bottleneck is None:
-            bottleneck = desc[:300]
+        if rule == "SOLBottleneck" and desc and bucket["bottleneck"] is None:
+            bucket["bottleneck"] = desc[:300]
             continue
-        if m in WANTED and m not in metrics:
-            metrics[m] = (v, u)
-    metrics["__bottleneck__"] = (bottleneck or "", "")
-    if bw_value is not None:
-        metrics["__memory_bandwidth__"] = (bw_value, bw_unit)
-    return metrics
+        if m in WANTED and m not in bucket["metrics"]:
+            bucket["metrics"][m] = (v, u)
+
+    per_kernel = []
+    for kid in sorted(by_id.keys(), key=lambda x: int(x) if x.isdigit() else 0):
+        b = by_id[kid]
+        b["duration_us"] = _duration_us_pair(b["metrics"].get("Duration"))
+        per_kernel.append(b)
+
+    # Aggregate: representative kernel = the one with the largest Duration
+    rep_k = max(per_kernel, key=lambda b: b["duration_us"] or 0, default=None)
+    total_us = sum((b["duration_us"] or 0) for b in per_kernel)
+    aggregate = dict(rep_k["metrics"]) if rep_k else {}
+    aggregate["__bottleneck__"] = ((rep_k["bottleneck"] if rep_k else "") or "", "")
+    if rep_k and rep_k.get("mem_bw"):
+        aggregate["__memory_bandwidth__"] = rep_k["mem_bw"]
+    aggregate["__total_us__"] = (f"{total_us:.2f}", "us")
+    aggregate["__n_kernels__"] = (str(len(per_kernel)), "")
+    return {"per_kernel": per_kernel, "aggregate": aggregate}
+
+
+def _duration_us_pair(pair):
+    if not pair:
+        return None
+    v, u = pair
+    try:
+        v = float(v.replace(",", ""))
+    except Exception:
+        return None
+    return v * {"ns": 1e-3, "us": 1.0, "ms": 1e3, "s": 1e6}.get(u, 1.0)
 
 
 def duration_us(metrics: dict) -> float | None:
-    """Return Duration in microseconds regardless of NCU's reported unit."""
-    if not metrics or metrics.get("error") or "Duration" not in metrics:
+    """End-to-end Duration in microseconds (sum across kernels in the report)."""
+    if not metrics or metrics.get("error"):
+        return None
+    if "__total_us__" in metrics:
+        try:
+            return float(metrics["__total_us__"][0])
+        except Exception:
+            pass
+    if "Duration" not in metrics:
         return None
     v_str, unit = metrics["Duration"]
     try:
@@ -106,7 +151,15 @@ def collect_ops() -> dict:
                 continue
             backend = m.group(1)
             tag = m.group(2) or "default"
-            per_pair[(tag, backend)] = parse_report(rep)
+            parsed = parse_report(rep)
+            # Normalize to {error?, agg_metrics, per_kernel} shape that the
+            # downstream helpers consume:
+            if parsed.get("error"):
+                per_pair[(tag, backend)] = {"error": parsed["error"]}
+            else:
+                view = dict(parsed["aggregate"])
+                view["__per_kernel__"] = parsed["per_kernel"]
+                per_pair[(tag, backend)] = view
         ops[sub.name] = per_pair
     return ops
 
@@ -184,6 +237,36 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
                         row_cells.append(fmt(metrics, key))
             headline.append("| " + dt + " | " + " | ".join(row_cells) + " |")
     headline.append("")
+
+    # Per-kernel breakdown (only when at least one (dt, backend) has >1 kernel)
+    multi_rows = []
+    for (dt, backend), metrics in sorted(per_pair.items()):
+        if metrics.get("error"):
+            continue
+        pk = metrics.get("__per_kernel__") or []
+        if len(pk) > 1:
+            for i, k in enumerate(pk):
+                d = k.get("duration_us")
+                d_s = f"{d:.2f} us" if d is not None else "—"
+                short = (k.get("name") or "")[:50]
+                multi_rows.append(
+                    f"| {dt} | {backend} | {i+1}/{len(pk)} | {d_s} | `{short}` |"
+                )
+    if multi_rows:
+        headline.append("## Per-kernel breakdown (multi-kernel pipelines)")
+        headline.append("")
+        headline.append(
+            "End-to-end Duration in the headline above sums every kernel "
+            "launched per `impl.run()` call. This table lists each kernel "
+            "in launch order; the headline rate metrics (Mem%, Compute%, "
+            "etc.) come from the heaviest kernel of the pipeline."
+        )
+        headline.append("")
+        headline.append("| dtype | backend | k# | kernel duration | kernel name |")
+        headline.append("|---|---|---|---|---|")
+        for r in multi_rows:
+            headline.append(r)
+        headline.append("")
 
     headline.append("## Key findings (auto-derived)")
     headline.append("")

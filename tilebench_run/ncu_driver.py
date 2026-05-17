@@ -35,7 +35,7 @@ def out_path(op: str, backend: str, dtype: str) -> Path:
 
 
 def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
-            timeout_s: int = 600) -> dict:
+            n_kernels_per_call: int = 1, timeout_s: int = 1800) -> dict:
     out = out_path(op, backend, dtype)
     out.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -47,9 +47,15 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
         env["NCU_CFG_JSON"] = json.dumps(cfg)
     env["PYTHONPATH"] = str(ROOT)
 
+    # Harness does 3 warmup calls + 1 measured call, each launching
+    # n_kernels_per_call kernels. Skip the warmups (3*N) and profile every
+    # kernel of the 4th call.
+    skip = 3 * n_kernels_per_call
+    count = n_kernels_per_call
+
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
-        "--launch-skip", "3", "--launch-count", "1",
+        "--launch-skip", str(skip), "--launch-count", str(count),
         "--force-overwrite",
         "-o", str(out).removesuffix(".ncu-rep"),
         sys.executable, str(HARNESS),
@@ -78,6 +84,14 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
 def main() -> None:
     catalogue = json.loads(CATALOGUE.read_text())
     NCU_DIR.mkdir(parents=True, exist_ok=True)
+
+    kc_path = NCU_DIR / "kernel_counts.json"
+    kernel_counts: dict[tuple[str, str, str], int] = {}
+    if kc_path.exists():
+        for r in json.loads(kc_path.read_text()):
+            if r.get("count") is not None:
+                kernel_counts[(r["op"], r["dtype"], r["backend"])] = r["count"]
+
     pairs = []
     for c in catalogue:
         op = c["op"]
@@ -88,7 +102,8 @@ def main() -> None:
                 cfg = None
                 if winner is not None:
                     cfg = winner.get(backend)
-                pairs.append((op, dt, backend, params, cfg))
+                n = kernel_counts.get((op, dt, backend), 1)
+                pairs.append((op, dt, backend, params, cfg, n))
 
     total = len(pairs)
     log = []
@@ -102,7 +117,7 @@ def main() -> None:
     fails: list[dict] = [e for e in log if not e.get("ok")]
     t_start = time.time()
 
-    for i, (op, dt, backend, params, cfg) in enumerate(pairs):
+    for i, (op, dt, backend, params, cfg, n) in enumerate(pairs):
         key = (op, dt, backend)
         if key in done_keys:
             continue
@@ -112,7 +127,8 @@ def main() -> None:
                         "rc": 0, "elapsed_s": 0, "stderr_tail": "(pre-existing)"})
             done_keys.add(key)
             continue
-        res = run_one(op, dt, backend, params, cfg)
+        res = run_one(op, dt, backend, params, cfg, n_kernels_per_call=n)
+        res["n_kernels"] = n
         log.append(res)
         if not res["ok"]:
             fails.append(res)

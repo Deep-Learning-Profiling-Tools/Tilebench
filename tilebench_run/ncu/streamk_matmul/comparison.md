@@ -15,25 +15,54 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 83.52 us | 21.65 % | 7.23 % | 23.29 % | 21.64 % | 25.94 % | 554.09 Gbyte/s | 256 | 80 register/thread | 0 byte/block | 36.88 Kbyte/block | 3 block / 3 block |
-| fp16 | cutile | 722.21 us | 9.45 % | 1.16 % | 8.82 % | 9.45 % | 12.41 % | 89.17 Gbyte/s | 384 | 168 register/thread | 16.47 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| bf16 | triton | 81.06 us | 22.30 % | 7.45 % | 23.25 % | 22.34 % | 25.39 % | 571.34 Gbyte/s | 256 | 80 register/thread | 0 byte/block | 36.88 Kbyte/block | 3 block / 3 block |
-| bf16 | cutile | 722.50 us | 9.44 % | 1.16 % | 8.81 % | 9.44 % | 12.38 % | 89.07 Gbyte/s | 384 | 168 register/thread | 16.47 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| fp32 | triton | 328.64 us | 82.69 % | 4.50 % | 86.16 % | 10.85 % | 11.06 % | 345.11 Gbyte/s | 256 | 114 register/thread | 0 byte/block | 73.74 Kbyte/block | 2 block / 3 block |
-| fp32 | cutile | 873.76 us | 8.69 % | 2.73 % | 7.63 % | 8.69 % | 10.21 % | 209.38 Gbyte/s | 384 | 168 register/thread | 32.85 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 3482.72 us | 61.18 % | 19.98 % | 61.50 % | 51.96 % | 75.53 % | 1.53 Tbyte/s | 256 | 64 register/thread | 0 byte/block | 36.88 Kbyte/block | 4 block / 4 block |
+| fp16 | cutile | 14664.03 us | 10.13 % | 2.70 % | 10.21 % | 7.29 % | 12.76 % | 207.24 Gbyte/s | 256 | 255 register/thread | 82.01 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| bf16 | triton | 3413.13 us | 60.28 % | 20.40 % | 60.56 % | 52.25 % | 74.41 % | 1.57 Tbyte/s | 256 | 64 register/thread | 0 byte/block | 36.88 Kbyte/block | 4 block / 4 block |
+| bf16 | cutile | 14662.24 us | 10.15 % | 2.69 % | 10.24 % | 7.08 % | 12.79 % | 206.75 Gbyte/s | 256 | 255 register/thread | 82.01 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp32 | triton | 33424.66 us | 93.70 % | 3.48 % | 93.71 % | 12.31 % | 11.86 % | 266.69 Gbyte/s | 256 | 80 register/thread | 0 byte/block | 73.74 Kbyte/block | 3 block / 3 block |
+| fp32 | cutile | 16331.82 us | 12.75 % | 4.13 % | 11.79 % | 12.71 % | 16.84 % | 316.96 Gbyte/s | 256 | 255 register/thread | 98.40 Kbyte/block | 0 byte/block | 1 block / 1 block |
+
+## Per-kernel breakdown (multi-kernel pipelines)
+
+End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
+
+| dtype | backend | k# | kernel duration | kernel name |
+|---|---|---|---|---|
+| bf16 | cutile | 1/4 | 13620.00 us | `full_tiles_kernel_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2` |
+| bf16 | cutile | 2/4 | 195.20 us | `void at::vectorized_elementwise_kernel<8, at::bflo` |
+| bf16 | cutile | 3/4 | 126.72 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
+| bf16 | cutile | 4/4 | 720.32 us | `first_wave_kernel_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2` |
+| bf16 | triton | 1/4 | 3010.00 us | `full_tiles` |
+| bf16 | triton | 2/4 | 195.10 us | `void at::vectorized_elementwise_kernel<8, at::bflo` |
+| bf16 | triton | 3/4 | 127.10 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
+| bf16 | triton | 4/4 | 80.93 us | `first_wave` |
+| fp16 | cutile | 1/4 | 13620.00 us | `full_tiles_kernel_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f` |
+| fp16 | cutile | 2/4 | 194.53 us | `void at::vectorized_elementwise_kernel<8, at::floa` |
+| fp16 | cutile | 3/4 | 126.62 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
+| fp16 | cutile | 4/4 | 722.88 us | `first_wave_kernel_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f` |
+| fp16 | triton | 1/4 | 3080.00 us | `full_tiles` |
+| fp16 | triton | 2/4 | 194.66 us | `void at::vectorized_elementwise_kernel<8, at::floa` |
+| fp16 | triton | 3/4 | 126.40 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
+| fp16 | triton | 4/4 | 81.66 us | `first_wave` |
+| fp32 | cutile | 1/3 | 875.55 us | `first_wave_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f` |
+| fp32 | cutile | 2/3 | 15330.00 us | `full_tiles_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f` |
+| fp32 | cutile | 3/3 | 126.27 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
+| fp32 | triton | 1/3 | 327.97 us | `first_wave` |
+| fp32 | triton | 2/3 | 32970.00 us | `full_tiles` |
+| fp32 | triton | 3/3 | 126.69 us | `void at::vectorized_elementwise_kernel<4, at::Fill` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **8.65× faster** (83.5 µs vs 722.2 µs).
-- **bf16**: Triton is **8.91× faster** (81.1 µs vs 722.5 µs).
-- **fp32**: Triton is **2.66× faster** (328.6 µs vs 873.8 µs).
+- **fp16**: Triton is **4.21× faster** (3482.7 µs vs 14664.0 µs).
+- **bf16**: Triton is **4.30× faster** (3413.1 µs vs 14662.2 µs).
+- **fp32**: cuTile is **2.05× faster** (16331.8 µs vs 33424.7 µs).
 
 ## NCU's own bottleneck verdict
 
 - **bf16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **bf16 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.33 full waves across all SMs. Look at Launch Statistics for more details.
+- **bf16 / triton** — Compute is more heavily utilized than Memory
 - **fp16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp16 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.33 full waves across all SMs. Look at Launch Statistics for more details.
+- **fp16 / triton** — Compute is more heavily utilized than Memory
 - **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
 

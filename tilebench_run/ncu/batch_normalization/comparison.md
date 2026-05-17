@@ -15,18 +15,43 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 86.94 us | 92.36 % | 6.15 % | 97.50 % | 64.39 % | 12.75 % | 471.52 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| fp16 | cutile | 87.04 us | 92.06 % | 6.14 % | 97.32 % | 64.24 % | 14.50 % | 470.94 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| bf16 | triton | 87.23 us | 92.40 % | 6.14 % | 97.44 % | 64.23 % | 12.75 % | 470.56 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| bf16 | cutile | 87.07 us | 92.27 % | 6.15 % | 97.30 % | 64.15 % | 14.54 % | 471.47 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| fp32 | triton | 86.21 us | 93.10 % | 12.85 % | 98.46 % | 67.59 % | 12.02 % | 984.97 Gbyte/s | 128 | 25 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| fp32 | cutile | 86.14 us | 92.71 % | 12.85 % | 98.11 % | 67.62 % | 13.70 % | 985.64 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+| fp16 | triton | 113.60 us | 91.23 % | 6.13 % | 97.49 % | 64.11 % | 12.59 % | 470.12 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
+| fp16 | cutile | 140.10 us | 92.13 % | 6.16 % | 97.23 % | 64.46 % | 14.52 % | 472.60 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+| bf16 | triton | 113.31 us | 92.52 % | 6.14 % | 97.44 % | 64.25 % | 12.77 % | 470.63 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
+| bf16 | cutile | 139.59 us | 91.47 % | 6.15 % | 97.31 % | 64.29 % | 14.41 % | 471.26 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+| fp32 | triton | 117.24 us | 92.62 % | 12.88 % | 98.42 % | 67.31 % | 11.95 % | 987.89 Gbyte/s | 128 | 25 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
+| fp32 | cutile | 141.50 us | 92.09 % | 12.89 % | 98.24 % | 67.42 % | 13.61 % | 988.70 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+
+## Per-kernel breakdown (multi-kernel pipelines)
+
+End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
+
+| dtype | backend | k# | kernel duration | kernel name |
+|---|---|---|---|---|
+| bf16 | cutile | 1/3 | 86.98 us | `_compute_block_sums_kernel_Kt1_A1bf16_1i16t1_p16_A` |
+| bf16 | cutile | 2/3 | 5.73 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
+| bf16 | cutile | 3/3 | 46.88 us | `_apply_batch_norm_kernel_Kt1_A1bf16_1i16t1_p16_A1b` |
+| bf16 | triton | 1/3 | 87.23 us | `_compute_block_sums_kernel` |
+| bf16 | triton | 2/3 | 5.18 us | `_compute_mean_invstd_kernel` |
+| bf16 | triton | 3/3 | 20.90 us | `_apply_batch_norm_kernel` |
+| fp16 | cutile | 1/3 | 86.88 us | `_compute_block_sums_kernel_Kt1_A1f16_1i16t1_p16_A1` |
+| fp16 | cutile | 2/3 | 5.57 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
+| fp16 | cutile | 3/3 | 47.65 us | `_apply_batch_norm_kernel_Kt1_A1f16_1i16t1_p16_A1f1` |
+| fp16 | triton | 1/3 | 87.30 us | `_compute_block_sums_kernel` |
+| fp16 | triton | 2/3 | 5.15 us | `_compute_mean_invstd_kernel` |
+| fp16 | triton | 3/3 | 21.15 us | `_apply_batch_norm_kernel` |
+| fp32 | cutile | 1/3 | 86.43 us | `_compute_block_sums_kernel_Kt1_A1f32_1i16t1_p16_A1` |
+| fp32 | cutile | 2/3 | 5.50 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
+| fp32 | cutile | 3/3 | 49.57 us | `_apply_batch_norm_kernel_Kt1_A1f32_1i16t1_p16_A1f3` |
+| fp32 | triton | 1/3 | 86.56 us | `_compute_block_sums_kernel` |
+| fp32 | triton | 2/3 | 5.34 us | `_compute_mean_invstd_kernel` |
+| fp32 | triton | 3/3 | 25.34 us | `_apply_batch_norm_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.00× faster** (86.9 µs vs 87.0 µs).
-- **bf16**: cuTile is **1.00× faster** (87.1 µs vs 87.2 µs).
-- **fp32**: cuTile is **1.00× faster** (86.1 µs vs 86.2 µs).
+- **fp16**: Triton is **1.23× faster** (113.6 µs vs 140.1 µs).
+- **bf16**: Triton is **1.23× faster** (113.3 µs vs 139.6 µs).
+- **fp32**: Triton is **1.21× faster** (117.2 µs vs 141.5 µs).
 
 ## NCU's own bottleneck verdict
 
