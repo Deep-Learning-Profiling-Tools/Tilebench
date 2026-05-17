@@ -1,0 +1,122 @@
+# NCU Sweep Summary — all operators
+
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
+**Profile method:** autotune-winner cfg at sweep-max input case, `--set full --import-source on`, `--launch-skip 3 --launch-count 1`
+
+Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<dtype>.ncu-rep` files in that directory.
+
+## Headline duration table (µs)
+
+| op | dtype | Triton (µs) | cuTile (µs) | Triton:cuTile |
+|---|---|---:|---:|---:|
+| 1d_conv | fp16 | 531.2 | 17.8 | 0.03× |
+| 1d_conv | fp32 | 627.8 | 451.2 | 0.72× |
+| 2d_conv | fp16 | 556.1 | 797.6 | 1.43× |
+| 2d_conv | fp32 | 1860.0 | 5390.0 | 2.90× |
+| 2d_max_pooling | fp16 | 229.2 | 598.4 | 2.61× |
+| 2d_max_pooling | bf16 | 228.9 | 578.6 | 2.53× |
+| 2d_max_pooling | fp32 | 265.5 | 592.6 | 2.23× |
+| 3d_conv | fp16 | 21.4 | 251.2 | 11.73× |
+| 3d_conv | fp32 | 235.8 | 216.5 | 0.92× |
+| argmax | fp16 | 30.1 | 47.8 | 1.59× |
+| argmax | fp32 | 40.7 | 39.4 | 0.97× |
+| batch_normalization | fp16 | 86.9 | 87.0 | 1.00× |
+| batch_normalization | bf16 | 87.2 | 87.1 | 1.00× |
+| batch_normalization | fp32 | 86.2 | 86.1 | 1.00× |
+| batched_matmul | fp16 | 29.7 | 30.1 | 1.01× |
+| batched_matmul | bf16 | 28.9 | 29.8 | 1.03× |
+| batched_matmul | fp32 | 118.2 | 18980.0 | 160.60× |
+| bitonic_sort | fp16 | 27.6 | 29.6 | 1.07× |
+| bitonic_sort | fp32 | 31.0 | 34.8 | 1.12× |
+| block_sparse_attention | fp16 | 76.7 | 280.5 | 3.65× |
+| cross_entropy | fp16 | 9.8 | 14.5 | 1.48× |
+| cross_entropy | fp32 | 9.9 | 13.5 | 1.37× |
+| dequantize_rowwise | fp32 | 16.3 | 20.8 | 1.28× |
+| destindex | fp16 | 4.2 | 3.9 | 0.94× |
+| destindex | bf16 | 4.0 | 4.0 | 1.00× |
+| destindex | fp32 | 4.1 | 3.9 | 0.97× |
+| destindex | int8 | 9.0 | 9.0 | 1.00× |
+| dropout | fp16 | 18.3 | 18.1 | 0.99× |
+| dropout | bf16 | 18.2 | 18.2 | 1.00× |
+| dropout | fp32 | 34.6 | 36.1 | 1.04× |
+| flash_attention | fp16 | 22770.0 | 17700.0 | 0.78× |
+| flash_decode | fp32 | 47.4 | 168.3 | 3.55× |
+| fused_activation | fp32 | 47.3 | 48.0 | 1.01× |
+| gaussian_blur | fp16 | 4.8 | 4.6 | 0.97× |
+| gaussian_blur | fp32 | 4.7 | 4.5 | 0.97× |
+| histogramming | int32 | 39.8 | 8.1 | 0.20× |
+| interleave | fp16 | 21.4 | 22.3 | 1.04× |
+| interleave | bf16 | 21.4 | 22.3 | 1.04× |
+| interleave | fp32 | 43.9 | 51.0 | 1.16× |
+| interleave | int8 | 35.5 | 35.3 | 0.99× |
+| jacobi_stencil_2d | fp16 | 155.3 | 135.0 | 0.87× |
+| jacobi_stencil_2d | bf16 | 155.4 | 134.5 | 0.87× |
+| jacobi_stencil_2d | fp32 | 217.4 | 198.3 | 0.91× |
+| kl_divergence | fp32 | 136.9 | 136.1 | 0.99× |
+| l2_norm | fp16 | 17.2 | 18.5 | 1.07× |
+| l2_norm | bf16 | 17.2 | 18.1 | 1.05× |
+| l2_norm | fp32 | 30.3 | 42.5 | 1.40× |
+| layernorm | fp16 | 19.7 | 33.2 | 1.69× |
+| layernorm | bf16 | 21.0 | 33.2 | 1.58× |
+| layernorm | fp32 | 33.1 | 33.6 | 1.01× |
+| leaky_relu | fp16 | 26.3 | 28.0 | 1.06× |
+| leaky_relu | bf16 | 26.9 | 27.5 | 1.02× |
+| leaky_relu | fp32 | 56.2 | 57.2 | 1.02× |
+| linear_self_attention | float32 | 4900.0 | 19580.0 | 4.00× |
+| matmul_fp32_fp16_fp8 | fp32 | 6250.0 | 974.6 | 0.16× |
+| matmul_fp32_fp16_fp8 | fp16 | 675.8 | 510.6 | 0.76× |
+| matmul_fp32_fp16_fp8 | fp8_e4m3fn | 70.8 | 70.9 | 1.00× |
+| matmul_fp32_fp16_fp8 | fp8_e5m2 | 71.1 | 71.5 | 1.01× |
+| matmul_int8 | int8 | 477.4 | 346.9 | 0.73× |
+| matrix_copy | fp16 | 17.8 | 18.1 | 1.02× |
+| matrix_copy | bf16 | 18.0 | 18.0 | 1.00× |
+| matrix_copy | fp32 | 31.2 | 28.0 | 0.90× |
+| matrix_copy | int8 | 9.8 | 17.7 | 1.81× |
+| matrix_transpose | fp16 | 50.2 | 50.0 | 1.00× |
+| matrix_transpose | bf16 | 50.9 | 50.6 | 0.99× |
+| matrix_transpose | fp32 | 98.7 | 102.3 | 1.04× |
+| matrix_transpose | int8 | 29.1 | 34.3 | 1.18× |
+| mean_reduction | fp16 | 17.1 | 19.6 | 1.15× |
+| mean_reduction | bf16 | 17.2 | 26.6 | 1.55× |
+| mean_reduction | fp32 | 29.9 | 32.7 | 1.09× |
+| moe_topk_gating | fp16 | 14.8 | 29.5 | 1.99× |
+| moe_topk_gating | bf16 | 14.7 | 30.3 | 2.07× |
+| moe_topk_gating | fp32 | 14.7 | 29.4 | 2.00× |
+| mul2 | fp16 | 14.8 | 15.3 | 1.03× |
+| mul2 | bf16 | 13.6 | 15.3 | 1.13× |
+| mul2 | fp32 | 22.0 | 22.4 | 1.02× |
+| mul2 | int8 | 9.9 | 15.3 | 1.55× |
+| quantize_global | fp32 | 17.7 | 18.5 | 1.04× |
+| radix_sort | int32 | 4.5 | 4.5 | 0.99× |
+| relu | fp16 | 14.9 | 13.5 | 0.91× |
+| relu | bf16 | 14.8 | 13.2 | 0.89× |
+| relu | fp32 | 22.2 | 22.7 | 1.02× |
+| relu | int8 | 15.1 | 17.2 | 1.14× |
+| reverse_array | fp16 | 16.5 | 14.1 | 0.86× |
+| reverse_array | bf16 | 16.6 | 14.3 | 0.86× |
+| reverse_array | fp32 | 21.5 | 25.0 | 1.16× |
+| reverse_array | int8 | 14.6 | 13.8 | 0.95× |
+| rmsnorm | fp16 | 17.9 | 20.6 | 1.15× |
+| rmsnorm | bf16 | 17.9 | 21.3 | 1.19× |
+| rmsnorm | fp32 | 30.8 | 36.9 | 1.20× |
+| rope | fp16 | 90.8 | 201.7 | 2.22× |
+| rope | fp32 | 131.8 | 212.4 | 1.61× |
+| sigmoid | fp16 | 30.4 | 51.0 | 1.68× |
+| sigmoid | bf16 | 30.2 | 50.9 | 1.68× |
+| sigmoid | fp32 | 55.5 | 64.9 | 1.17× |
+| softmax | fp16 | 27.3 | 44.2 | 1.62× |
+| softmax | fp32 | 36.9 | 49.4 | 1.34× |
+| streamk_matmul | fp16 | 83.5 | 722.2 | 8.65× |
+| streamk_matmul | bf16 | 81.1 | 722.5 | 8.91× |
+| streamk_matmul | fp32 | 328.6 | 873.8 | 2.66× |
+| swiglu | fp16 | 69.1 | 99.5 | 1.44× |
+| swiglu | bf16 | 72.5 | 100.4 | 1.38× |
+| swiglu | fp32 | 136.9 | 147.1 | 1.07× |
+| top_k_selection | fp32 | 5.2 | 6.8 | 1.29× |
+| vector_add | fp16 | 18.1 | 18.6 | 1.03× |
+| vector_add | bf16 | 17.9 | 18.5 | 1.04× |
+| vector_add | fp32 | 33.8 | 34.9 | 1.03× |
+| vector_add | int8 | 36.6 | 36.6 | 1.00× |
+| weight_dequant | fp16 | 62.0 | 326.8 | 5.27× |
+| weight_dequant | bf16 | 62.3 | 328.7 | 5.28× |
+| weight_dequant | fp32 | 117.1 | 326.0 | 2.79× |
