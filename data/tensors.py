@@ -69,7 +69,10 @@ def generate_mul2_inputs(n, dtype=torch.float32, device='cuda'):
 
 
 def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
-    x = torch.randn(n, dtype=dtype, device=device)
+    if dtype == torch.int8:
+        x = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
+    else:
+        x = torch.randn(n, dtype=dtype, device=device)
     return (x,)
 
 
