@@ -11,10 +11,15 @@ ConstInt = ct.Constant[int]
 _last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(block_size=1024, occupancy=8)
+# Excluded cfgs that hang the cuTile codegen indefinitely on B200 / cuTile 1.3.0
+# (observed via per-cfg 60s probe; see tilebench_run/autotune_timing_rerun/
+# softmax_probe.out). Pattern: occupancy=16 with non-1024 block_size.
+_HANG_CFGS = {(512, 16), (1024, 16), (2048, 16)}
 _SEARCH_SPACE_BASE = [
     SimpleNamespace(block_size=bs, occupancy=occ)
     for bs in [512, 1024, 2048]
     for occ in [4, 8, 16]
+    if (bs, occ) not in _HANG_CFGS
 ]
 
 
