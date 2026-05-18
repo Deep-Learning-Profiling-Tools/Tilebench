@@ -105,12 +105,13 @@ matmul_kernel_autotuned = triton.autotune(
             num_warps=nw,
             num_stages=ns,
         )
-        for bm in [64, 128, 256]
+        # Shrunk from 216 cfgs to 16 to match cuTile-side shrink (impl_cutile.py).
+        for bm in [128, 256]
         for bn in [128, 256]
-        for bk in [32, 64, 128]
-        for gs in [4, 8, 16]
+        for bk in [64, 128]
+        for gs in [8]
         for nw in [4, 8]
-        for ns in [3, 4]
+        for ns in [3]
     ],
     key=["M", "N", "K"],
 )(matmul_kernel)

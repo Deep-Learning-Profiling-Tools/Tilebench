@@ -40,13 +40,16 @@ _DEFAULT_CONFIGS = {
 # Note: (tm=32, tn=32) is intentionally excluded — fp32's small-tile sweet
 # spot (32x32x32 per NVIDIA's cuTile guide) is therefore not reachable
 # from autotune, only from _DEFAULT_CONFIGS.
+# Shrunk from 3*2*3*3*3 = 162 cfgs to 2*2*2*1*2 = 16 cfgs so per-op autotune
+# completes in <30min. Triton-side search space (impl_triton.py) is shrunk to
+# the matching 16 cfgs for fair comparison.
 _SEARCH_SPACE = [
     SimpleNamespace(tm=tm, tn=tn, tk=tk, group_size_m=gs, occupancy=occ)
-    for tm in [64, 128, 256]
+    for tm in [128, 256]
     for tn in [128, 256]
-    for tk in [32, 64, 128]
-    for gs in [4, 8, 16]
-    for occ in [4, 8, 16]
+    for tk in [64, 128]
+    for gs in [8]
+    for occ in [4, 8]
 ]
 
 
