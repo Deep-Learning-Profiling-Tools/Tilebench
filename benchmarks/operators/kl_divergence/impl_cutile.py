@@ -23,11 +23,15 @@ _last_autotune_config: dict = {}
 # Cartesian product, mirrors impl_triton.py.
 # Triton sweeps (BLOCK_SIZE, num_warps); cuTile sweeps (tile, occupancy)
 # with nw * occ ~= 64 (Triton's nw in [2, 4, 8] pairs with occ in [32, 16, 8]).
+# Excluded cfgs that hang cuTile codegen indefinitely on B200 / cuTile 1.3.0
+# (observed via per-cfg 60s probe). Pattern: small tile + occupancy >= 16.
+_HANG_CFGS = {(512, 16), (512, 32), (1024, 16)}
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
     for t in [512, 1024, 2048, 4096]
     for occ in [4, 8, 16, 32]
+    if (t, occ) not in _HANG_CFGS
     if t * occ >= 2048
 ]
 

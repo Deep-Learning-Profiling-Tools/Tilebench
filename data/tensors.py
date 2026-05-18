@@ -506,12 +506,15 @@ def generate_histogramming_inputs(
     if dtype != torch.int32:
         raise ValueError("histogramming expects int32 inputs.")
 
-    input_tensor = torch.randint(
-        low=0,
-        high=int(num_bins),
-        size=(int(N),),
-        device=device,
-        dtype=torch.int32,
+    # Deterministic uniform-coverage input: avoids `torch.randint(device=cuda)`
+    # which conflicts with CUDA-graph capture in the engine's timer (RNG state
+    # advancement is rejected inside a graph context, breaking every case after
+    # the first one with "Offset increment outside graph capture encountered
+    # unexpectedly"). arange % num_bins gives near-uniform bin coverage and the
+    # verification check (atol=rtol=0) still passes because all three backends
+    # see the exact same input.
+    input_tensor = (
+        torch.arange(int(N), dtype=torch.int32, device=device) % int(num_bins)
     )
 
     return (input_tensor.contiguous(), int(N), int(num_bins))

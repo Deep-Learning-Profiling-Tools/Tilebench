@@ -13,18 +13,20 @@ _DEFAULT_PARTIAL = SimpleNamespace(block_size=1024, occupancy=8)
 _DEFAULT_REDUCE = SimpleNamespace(block_rows=64, block_bins=256, occupancy=8)
 _NUM_PARTIAL = 256
 
+# Shrunk from 16 partial + 60 reduce to 4 + 8 so per-op autotune
+# completes in <30min. Triton-side autotune (impl_triton.py) is shrunk
+# accordingly to keep the comparison fair.
 _PARTIAL_SEARCH_SPACE = [
     SimpleNamespace(block_size=bs, occupancy=occ)
-    for bs in [512, 1024, 2048, 4096]
-    for occ in [4, 8, 16, 32]
+    for bs in [1024, 2048]
+    for occ in [4, 8]
 ]
 
 _REDUCE_SEARCH_SPACE = [
     SimpleNamespace(block_rows=br, block_bins=bb, occupancy=occ)
-    for br in [32, 64, 128, 256]
-    for bb in [32, 64, 128, 256]
-    for occ in [4, 8, 16, 32]
-    if br * bb <= 256 * 128
+    for br in [64, 128]
+    for bb in [64, 128]
+    for occ in [4, 8]
 ]
 
 
@@ -136,6 +138,12 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             block_size=default_block_size,
             occupancy=_DEFAULT_PARTIAL.occupancy,
         )
+
+    # The autotune sweep above runs the partial kernel many times into the
+    # SAME `partial` buffer (atomic_add'd), so by now `partial` holds wildly
+    # inflated counts. Zero it before the final correctness-yielding launch.
+    if autotune:
+        partial.zero_()
 
     partial_kernel = _partial_tuner.kernel_with_hints(occupancy=partial_cfg.occupancy)
     ct.launch(
