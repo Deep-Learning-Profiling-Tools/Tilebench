@@ -50,7 +50,8 @@ def _kl_divergence_kernel(
 _kl_divergence_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [512, 1024, 2048]
+        # Aligned with cuTile-side tile sweep {512, 1024, 2048, 4096}.
+        for bs in [512, 1024, 2048, 4096]
         for nw in [2, 4, 8]
         for ns in [2, 3, 4]
         if bs >= nw * 32
