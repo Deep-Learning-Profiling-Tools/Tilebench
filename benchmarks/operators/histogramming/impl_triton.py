@@ -72,11 +72,16 @@ def _histogram_reduce_kernel(
 
 _histogram_partial_kernel_autotuned = triton.autotune(
     configs=[
+        # Shrunk from 12 cfgs to 4 to match cuTile-side shrink (impl_cutile.py).
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=1)
-        for bs in [512, 1024, 2048, 4096]
-        for nw in [2, 4, 8]
+        for bs in [1024, 2048]
+        for nw in [4, 8]
     ],
     key=["N", "num_bins"],
+    # Stage 1 uses tl.atomic_add into partial_ptr — each autotune-sweep run
+    # accumulates into the same buffer. Zero it before every cfg trial so the
+    # final replay sees a clean buffer.
+    reset_to_zero=["partial_ptr"],
 )(_histogram_partial_kernel)
 
 
@@ -90,10 +95,11 @@ _histogram_reduce_kernel_autotuned = triton.autotune(
             num_warps=nw,
             num_stages=ns,
         )
-        for br in [32, 64, 128, 256]
-        for bb in [32, 64, 128, 256]
-        for nw in [2, 4, 8]
-        for ns in [1, 2, 3]
+        # Shrunk from ~135 cfgs to 8 to match cuTile-side shrink.
+        for br in [64, 128]
+        for bb in [64, 128]
+        for nw in [4, 8]
+        for ns in [2]
         if br * bb <= 256 * 128
     ],
     key=["num_partials", "num_bins"],
