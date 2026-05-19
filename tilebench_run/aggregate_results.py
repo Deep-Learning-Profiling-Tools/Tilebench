@@ -11,9 +11,16 @@ Columns:
   dtype, mode, n_cases, torch_ms, triton_ms, cutile_ms,
   speedup_triton, speedup_cutile, triton_vs_cutile
 
-`triton_vs_cutile = mean(cutile_ms / triton_ms)` — how many times *faster*
-Triton is than cuTile (= the ratio of cuTile's wall-clock time to Triton's).
->1 means Triton is faster; <1 means Triton is slower (cuTile is faster).
+Speedup / ratio columns are computed from the aggregated means
+(ratio-of-means) — i.e. they're exactly torch_ms / triton_ms etc. computed
+on the values that appear in the same row. This makes the table
+self-readable: every ratio matches the obvious division of the columns
+to its left. Per-case ratios from the source CSV are intentionally NOT
+re-averaged here.
+
+  speedup_triton   = torch_ms  / triton_ms     (>1 => Triton faster than Torch)
+  speedup_cutile   = torch_ms  / cutile_ms
+  triton_vs_cutile = cutile_ms / triton_ms     (>1 => Triton faster than cuTile)
 """
 import csv
 import math
@@ -25,8 +32,7 @@ CSV_DIR = ROOT / "results" / "csv"
 OUT_DIR = ROOT / "results" / "aggregate"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-NUMERIC_COLS = ("torch_ms", "triton_ms", "cutile_ms",
-                "speedup_triton", "speedup_cutile")
+MEAN_COLS = ("torch_ms", "triton_ms", "cutile_ms")
 
 
 def _parse_float(s: str):
@@ -61,24 +67,21 @@ def aggregate_one_op(op: str) -> bool:
         for dt, group in by_dt.items():
             agg = {"dtype": dt, "mode": mode, "n_cases": len(group)}
             means = {}
-            for col in NUMERIC_COLS:
+            for col in MEAN_COLS:
                 vals = [_parse_float(r.get(col, "")) for r in group]
                 vals = [v for v in vals if v is not None]
                 m = sum(vals) / len(vals) if vals else None
                 means[col] = m
                 agg[col] = f"{m:.6g}" if m is not None else ""
-            # Mean-of-per-case Triton/cuTile ratio (computed per case, then
-            # averaged — more meaningful than mean(triton_ms) / mean(cutile_ms)
-            # when per-case latencies span orders of magnitude).
-            ratios = []
-            for r in group:
-                t = _parse_float(r.get("triton_ms", ""))
-                c = _parse_float(r.get("cutile_ms", ""))
-                if c is not None and t not in (None, 0):
-                    ratios.append(c / t)  # cutile/triton — Triton speedup over cuTile
-            agg["triton_vs_cutile"] = (
-                f"{sum(ratios) / len(ratios):.6g}" if ratios else ""
-            )
+            # Ratio columns are computed from the means above (ratio-of-means),
+            # so the table is self-readable: speedup_triton matches the obvious
+            # division of torch_ms by triton_ms shown in the same row.
+            def _ratio(num, den):
+                if num is None or den is None or den == 0: return ""
+                return f"{num / den:.6g}"
+            agg["speedup_triton"]   = _ratio(means["torch_ms"],  means["triton_ms"])
+            agg["speedup_cutile"]   = _ratio(means["torch_ms"],  means["cutile_ms"])
+            agg["triton_vs_cutile"] = _ratio(means["cutile_ms"], means["triton_ms"])
             rows_out.append(agg)
 
     if not rows_out:
@@ -86,7 +89,8 @@ def aggregate_one_op(op: str) -> bool:
     out_path = OUT_DIR / f"{op}.csv"
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["dtype", "mode", "n_cases", *NUMERIC_COLS,
+            f, fieldnames=["dtype", "mode", "n_cases", *MEAN_COLS,
+                           "speedup_triton", "speedup_cutile",
                            "triton_vs_cutile"]
         )
         writer.writeheader()
