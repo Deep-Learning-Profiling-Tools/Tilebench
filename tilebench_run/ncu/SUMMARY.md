@@ -63,11 +63,11 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | leaky_relu | bf16 | 26.9 | 27.5 | 1.02× |
 | leaky_relu | fp32 | 56.2 | 57.2 | 1.02× |
 | linear_self_attention | fp32 | 4890.0 | 19570.0 | 4.00× |
-| matmul_fp32_fp16_fp8 | fp32 | 6240.0 | 965.8 | 0.15× |
-| matmul_fp32_fp16_fp8 | fp16 | 671.9 | 507.4 | 0.76× |
-| matmul_fp32_fp16_fp8 | fp8_e4m3fn | 70.5 | 70.5 | 1.00× |
-| matmul_fp32_fp16_fp8 | fp8_e5m2 | 71.2 | 71.4 | 1.00× |
-| matmul_int8 | int8 | 477.4 | 346.9 | 0.73× |
+| matmul_fp32_fp16_fp8 | fp32 | 6000.0 | 869.8 | 0.14× |
+| matmul_fp32_fp16_fp8 | fp16 | 554.6 | 462.9 | 0.83× |
+| matmul_fp32_fp16_fp8 | fp8_e4m3fn | 70.4 | 70.8 | 1.01× |
+| matmul_fp32_fp16_fp8 | fp8_e5m2 | 71.1 | 71.3 | 1.00× |
+| matmul_int8 | int8 | 475.5 | 342.4 | 0.72× |
 | matrix_copy | fp16 | 17.8 | 18.1 | 1.02× |
 | matrix_copy | bf16 | 18.0 | 18.0 | 1.00× |
 | matrix_copy | fp32 | 31.2 | 28.0 | 0.90× |

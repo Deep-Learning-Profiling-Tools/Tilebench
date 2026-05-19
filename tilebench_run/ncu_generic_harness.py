@@ -59,7 +59,26 @@ def main() -> None:
     if cfg_json:
         cfg = json.loads(cfg_json)
         existing = getattr(impl, "_DEFAULT_CONFIG", None)
-        if isinstance(existing, dict):
+        configs = getattr(impl, "_DEFAULT_CONFIGS", None)  # per-dtype dict, optional
+
+        if existing is None and configs is not None:
+            # Op uses per-dtype `_DEFAULT_CONFIGS[dtype]` (e.g. matmul_fp32_fp16_fp8).
+            # Override the entry for the dtype we're about to run so the kernel
+            # actually picks up `cfg`. Singular `_DEFAULT_CONFIG` is irrelevant
+            # to this impl, so don't bother setting it.
+            td = params.get("dtype")  # this is the torch.dtype already resolved
+            if td in configs:
+                cur = configs[td]
+                if isinstance(cur, dict):
+                    merged = dict(cur); merged.update(cfg)
+                    configs[td] = merged
+                else:
+                    merged = vars(cur).copy(); merged.update(cfg)
+                    configs[td] = SimpleNamespace(**merged)
+            else:
+                # No entry for this dtype — create one wholesale.
+                configs[td] = SimpleNamespace(**cfg)
+        elif isinstance(existing, dict):
             merged = dict(existing); merged.update(cfg)
             impl._DEFAULT_CONFIG = merged
         elif isinstance(existing, SimpleNamespace):
