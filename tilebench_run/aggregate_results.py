@@ -11,8 +11,9 @@ Columns:
   dtype, mode, n_cases, torch_ms, triton_ms, cutile_ms,
   speedup_triton, speedup_cutile, triton_vs_cutile
 
-`triton_vs_cutile = triton_ms / cutile_ms`. >1 means Triton is slower than
-cuTile (takes more time); <1 means Triton is faster.
+`triton_vs_cutile = mean(cutile_ms / triton_ms)` — how many times *faster*
+Triton is than cuTile (= the ratio of cuTile's wall-clock time to Triton's).
+>1 means Triton is faster; <1 means Triton is slower (cuTile is faster).
 """
 import csv
 import math
@@ -73,8 +74,8 @@ def aggregate_one_op(op: str) -> bool:
             for r in group:
                 t = _parse_float(r.get("triton_ms", ""))
                 c = _parse_float(r.get("cutile_ms", ""))
-                if t is not None and c not in (None, 0):
-                    ratios.append(t / c)
+                if c is not None and t not in (None, 0):
+                    ratios.append(c / t)  # cutile/triton — Triton speedup over cuTile
             agg["triton_vs_cutile"] = (
                 f"{sum(ratios) / len(ratios):.6g}" if ratios else ""
             )
