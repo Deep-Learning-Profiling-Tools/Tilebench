@@ -390,14 +390,23 @@ def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda', 
 def generate_matmul_fp32_fp16_fp8_inputs(M, N, K, dtype=torch.float32,
                                          device='cuda', **kwargs):
     """Inputs for plain GEMM tested across fp32 / fp16 / fp8 e4m3fn / fp8 e5m2.
+
+    Inputs are scaled by `1/sqrt(K)` so the matmul output stays O(1) regardless
+    of K. This is the standard initialisation scale for neural-network weights
+    (Xavier / He) and matches cuBLAS-Lt fp8 GEMM samples. Without this:
+      - fp8_e4m3fn (max ±448) overflows once K >= ~8192 — output magnitudes
+        grow as sqrt(K).
+      - fp8_e5m2 (2-bit mantissa, ~25% quantisation step) accumulates rounding
+        errors that exceed the verify atol once K >= ~3072.
     fp8 dtypes don't support torch.randn directly, so generate in fp32 and cast.
     """
+    scale = K ** -0.5
     if dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
-        a = torch.randn(M, K, dtype=torch.float32, device=device).to(dtype)
-        b = torch.randn(K, N, dtype=torch.float32, device=device).to(dtype)
+        a = (torch.randn(M, K, dtype=torch.float32, device=device) * scale).to(dtype)
+        b = (torch.randn(K, N, dtype=torch.float32, device=device) * scale).to(dtype)
     else:
-        a = torch.randn(M, K, dtype=dtype, device=device)
-        b = torch.randn(K, N, dtype=dtype, device=device)
+        a = torch.randn(M, K, dtype=dtype, device=device) * scale
+        b = torch.randn(K, N, dtype=dtype, device=device) * scale
     return (a, b)
 
 
