@@ -82,7 +82,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
     for case_idx, case in enumerate(cases):
         params     = {k: v for k, v in case.items() if k not in ("dtype", "block_size")}
-        dtype_str  = case.get("dtype", "float32")
+        dtype_str  = case.get("dtype", "fp32")
         dtype      = resolve_dtype(dtype_str)
         block_size = case.get("block_size", 1024)
 
