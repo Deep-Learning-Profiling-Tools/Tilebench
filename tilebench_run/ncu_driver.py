@@ -55,6 +55,11 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
 
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
+        # Profile only kernels inside the harness's cudaProfilerStart/Stop
+        # region. The harness puts the impl.run() warmups + final launch
+        # inside this region so input-generator kernels (randn, *scale,
+        # to(dtype), ...) are excluded from NCU's launch counter.
+        "--profile-from-start", "off",
         "--launch-skip", str(skip), "--launch-count", str(count),
         "--force-overwrite",
         "-o", str(out).removesuffix(".ncu-rep"),

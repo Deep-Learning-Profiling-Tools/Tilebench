@@ -22,15 +22,15 @@
 | bf16 | cutile | 22.34 us | 62.48 % | 62.48 % | 61.81 % | 38.46 % | 20.74 % | 4.78 Tbyte/s | 128 | 96 register/thread | 16.40 Kbyte/block | 0 byte/block | 5 block / 7 block |
 | fp32 | triton | 43.94 us | 79.08 % | 79.08 % | 53.56 % | 40.89 % | 19.94 % | 6.06 Tbyte/s | 256 | 22 register/thread | 0 byte/block | 8.19 Kbyte/block | 10 block / 14 block |
 | fp32 | cutile | 50.98 us | 71.44 % | 71.44 % | 56.12 % | 42.96 % | 19.68 % | 5.48 Tbyte/s | 128 | 128 register/thread | 16.40 Kbyte/block | 0 byte/block | 4 block / 7 block |
-| int8 | triton | 35.52 us | 63.66 % | 63.66 % | 24.56 % | 39.10 % | 82.35 % | 4.88 Tbyte/s | 128 | 28 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| int8 | cutile | 35.26 us | 64.05 % | 64.05 % | 24.54 % | 39.43 % | 82.57 % | 4.90 Tbyte/s | 128 | 28 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| int8 | triton | 13.18 us | 41.65 % | 41.65 % | 63.53 % | 32.78 % | 16.51 % | 3.18 Tbyte/s | 128 | 30 register/thread | 0 byte/block | 4.10 Kbyte/block | 16 block / 26 block |
+| int8 | cutile | 16.54 us | 33.87 % | 33.87 % | 42.02 % | 26.67 % | 40.64 % | 2.59 Tbyte/s | 128 | 86 register/thread | 16.40 Kbyte/block | 0 byte/block | 5 block / 7 block |
 
 ## Key findings (auto-derived)
 
 - **fp16**: Triton is **1.04× faster** (21.4 µs vs 22.3 µs).
 - **bf16**: Triton is **1.04× faster** (21.4 µs vs 22.3 µs).
 - **fp32**: Triton is **1.16× faster** (43.9 µs vs 51.0 µs).
-- **int8**: cuTile is **1.01× faster** (35.3 µs vs 35.5 µs).
+- **int8**: Triton is **1.25× faster** (13.2 µs vs 16.5 µs).
 
 ## NCU's own bottleneck verdict
 
@@ -40,8 +40,8 @@
 - **fp16 / triton** — Memory is more heavily utilized than Compute
 - **fp32 / cutile** — Memory is more heavily utilized than Compute
 - **fp32 / triton** — Memory is more heavily utilized than Compute
-- **int8 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
-- **int8 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **int8 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **int8 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 
 ## Reports
 

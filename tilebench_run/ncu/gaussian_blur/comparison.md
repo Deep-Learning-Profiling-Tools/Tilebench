@@ -14,22 +14,22 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 4.77 us | 2.45 % | 0.08 % | 49.64 % | 0.32 % | 0.00 % | 6.44 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| fp16 | cutile | 4.61 us | 2.54 % | 0.09 % | 50.02 % | 0.33 % | 0.00 % | 6.67 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| fp32 | triton | 4.67 us | 2.52 % | 0.05 % | 43.21 % | 0.27 % | 0.00 % | 3.78 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| fp32 | cutile | 4.54 us | 2.58 % | 0.05 % | 44.71 % | 0.28 % | 0.00 % | 3.89 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp16 | triton | 1790.00 us | 53.27 % | 2.84 % | 53.40 % | 4.28 % | 82.88 % | 218.06 Gbyte/s | 256 | 62 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
+| fp16 | cutile | 4600.00 us | 16.12 % | 1.11 % | 16.14 % | 2.30 % | 92.80 % | 84.85 Gbyte/s | 128 | 54 register/thread | 1.04 Kbyte/block | 0 byte/block | 9 block / 30 block |
+| fp32 | triton | 1610.00 us | 93.35 % | 6.53 % | 93.63 % | 8.04 % | 81.94 % | 500.62 Gbyte/s | 256 | 32 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| fp32 | cutile | 5310.00 us | 14.46 % | 1.98 % | 14.48 % | 2.58 % | 94.80 % | 151.89 Gbyte/s | 128 | 56 register/thread | 2.06 Kbyte/block | 0 byte/block | 9 block / 20 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.03× faster** (4.6 µs vs 4.8 µs).
-- **fp32**: cuTile is **1.03× faster** (4.5 µs vs 4.7 µs).
+- **fp16**: Triton is **2.57× faster** (1790.0 µs vs 4600.0 µs).
+- **fp32**: Triton is **3.30× faster** (1610.0 µs vs 5310.0 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp16 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
-- **fp16 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
-- **fp32 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
-- **fp32 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
+- **fp16 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **fp16 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
 
 ## Reports
 
