@@ -48,6 +48,9 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     skip, count = 3 * n_kernels, n_kernels
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
+        # See ncu_driver.py for the rationale; profile only inside the
+        # harness's cudaProfilerStart/Stop region (skips generator launches).
+        "--profile-from-start", "off",
         "--launch-skip", str(skip), "--launch-count", str(count),
         "--force-overwrite",
         "-o", str(out_path).removesuffix(".ncu-rep"),

@@ -16,28 +16,28 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 95.87 us | 83.96 % | 83.96 % | 45.56 % | 40.62 % | 9.69 % | 6.44 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 94.94 us | 84.74 % | 84.74 % | 45.48 % | 41.03 % | 9.50 % | 6.50 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | triton | 51.36 us | 73.45 % | 73.45 % | 43.24 % | 37.09 % | 21.52 % | 5.63 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | cutile | 51.62 us | 73.07 % | 73.07 % | 42.93 % | 36.95 % | 21.66 % | 5.60 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp8_e4m3fn | triton | 168.22 us | 22.15 % | 21.35 % | 22.99 % | 17.35 % | 72.29 % | 1.64 Tbyte/s | 256 | 56 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
-| fp8_e4m3fn | cutile | 168.06 us | 22.18 % | 21.38 % | 22.98 % | 17.38 % | 72.42 % | 1.64 Tbyte/s | 256 | 56 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
-| fp8_e5m2 | triton | 168.42 us | 22.19 % | 21.33 % | 22.99 % | 17.33 % | 72.43 % | 1.64 Tbyte/s | 256 | 56 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
-| fp8_e5m2 | cutile | 168.22 us | 22.22 % | 21.37 % | 22.96 % | 17.37 % | 72.55 % | 1.64 Tbyte/s | 256 | 56 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
+| fp32 | triton | 6010.00 us | 92.35 % | 4.93 % | 93.62 % | 13.57 % | 11.61 % | 378.60 Gbyte/s | 256 | 170 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
+| fp32 | cutile | 872.03 us | 41.19 % | 17.56 % | 72.33 % | 32.38 % | 80.71 % | 1.35 Tbyte/s | 256 | 255 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 561.76 us | 31.23 % | 13.66 % | 56.50 % | 25.81 % | 66.05 % | 1.05 Tbyte/s | 256 | 199 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
+| fp16 | cutile | 467.17 us | 40.93 % | 16.42 % | 72.88 % | 24.57 % | 79.92 % | 1.26 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp8_e4m3fn | triton | 276.58 us | 30.54 % | 13.87 % | 54.87 % | 21.32 % | 64.82 % | 1.06 Tbyte/s | 256 | 192 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
+| fp8_e4m3fn | cutile | 223.20 us | 40.25 % | 17.21 % | 71.88 % | 26.71 % | 78.67 % | 1.32 Tbyte/s | 256 | 255 register/thread | 229.54 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp8_e5m2 | triton | 283.90 us | 30.32 % | 13.55 % | 54.90 % | 22.24 % | 64.35 % | 1.04 Tbyte/s | 256 | 192 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
+| fp8_e5m2 | cutile | 234.08 us | 40.05 % | 16.38 % | 71.85 % | 25.92 % | 78.26 % | 1.26 Tbyte/s | 256 | 255 register/thread | 229.54 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: cuTile is **1.01× faster** (94.9 µs vs 95.9 µs).
-- **fp16**: Triton is **1.01× faster** (51.4 µs vs 51.6 µs).
-- **fp8_e4m3fn**: cuTile is **1.00× faster** (168.1 µs vs 168.2 µs).
-- **fp8_e5m2**: cuTile is **1.00× faster** (168.2 µs vs 168.4 µs).
+- **fp32**: cuTile is **6.89× faster** (872.0 µs vs 6010.0 µs).
+- **fp16**: cuTile is **1.20× faster** (467.2 µs vs 561.8 µs).
+- **fp8_e4m3fn**: cuTile is **1.24× faster** (223.2 µs vs 276.6 µs).
+- **fp8_e5m2**: cuTile is **1.21× faster** (234.1 µs vs 283.9 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp16 / cutile** — Memory is more heavily utilized than Compute
-- **fp16 / triton** — Memory is more heavily utilized than Compute
-- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
-- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
+- **fp16 / cutile** — Compute is more heavily utilized than Memory
+- **fp16 / triton** — Compute is more heavily utilized than Memory
+- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
 - **fp8_e4m3fn / cutile** — Compute is more heavily utilized than Memory
 - **fp8_e4m3fn / triton** — Compute is more heavily utilized than Memory
 - **fp8_e5m2 / cutile** — Compute is more heavily utilized than Memory

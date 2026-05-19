@@ -92,13 +92,21 @@ def main() -> None:
     inputs = GENERATORS[op](**params)
     if not isinstance(inputs, tuple):
         inputs = (inputs,)
+    torch.cuda.synchronize()  # drain all generator launches before profiling
 
+    # Wrap warmups + final launch in cudaProfilerStart/Stop. NCU is invoked
+    # with `--profile-from-start off`, so the generator-side kernel launches
+    # (torch.randn, * scale, .to(dtype), ...) are hidden from NCU's launch
+    # counter. `--launch-skip 3N --launch-count N` then correctly indexes
+    # into the impl.run() launches only.
+    torch.cuda.profiler.start()
     for _ in range(3):
         out = impl.run(*inputs)
         torch.cuda.synchronize()
 
     out = impl.run(*inputs)
     torch.cuda.synchronize()
+    torch.cuda.profiler.stop()
     if isinstance(out, torch.Tensor):
         print(f"{op}/{backend}/{dtype} ok: shape={tuple(out.shape)} dtype={out.dtype}")
     else:

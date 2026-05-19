@@ -15,17 +15,17 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 18.30 us | 68.48 % | 68.48 % | 39.90 % | 39.97 % | 12.36 % | 5.24 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | cutile | 18.11 us | 69.48 % | 69.48 % | 39.99 % | 40.41 % | 12.54 % | 5.32 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| bf16 | triton | 18.24 us | 69.20 % | 69.20 % | 40.33 % | 40.09 % | 12.90 % | 5.29 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| bf16 | cutile | 18.18 us | 69.25 % | 69.25 % | 40.15 % | 40.28 % | 12.80 % | 5.29 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | triton | 18.37 us | 67.64 % | 67.64 % | 40.86 % | 40.03 % | 28.55 % | 5.18 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | cutile | 18.78 us | 66.86 % | 66.86 % | 40.02 % | 39.08 % | 32.68 % | 5.11 Tbyte/s | 128 | 26 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| bf16 | triton | 18.46 us | 68.41 % | 68.41 % | 40.68 % | 39.70 % | 35.40 % | 5.23 Tbyte/s | 256 | 19 register/thread | 0 byte/block | 0 byte/block | 10 block / 32 block |
+| bf16 | cutile | 18.85 us | 66.66 % | 66.66 % | 39.82 % | 38.93 % | 35.31 % | 5.11 Tbyte/s | 128 | 27 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 | fp32 | triton | 34.59 us | 80.75 % | 80.75 % | 38.28 % | 42.60 % | 21.46 % | 6.19 Tbyte/s | 256 | 20 register/thread | 0 byte/block | 0 byte/block | 10 block / 32 block |
 | fp32 | cutile | 36.10 us | 77.72 % | 77.72 % | 36.28 % | 40.87 % | 19.93 % | 5.96 Tbyte/s | 128 | 24 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.01× faster** (18.1 µs vs 18.3 µs).
-- **bf16**: cuTile is **1.00× faster** (18.2 µs vs 18.2 µs).
+- **fp16**: Triton is **1.02× faster** (18.4 µs vs 18.8 µs).
+- **bf16**: Triton is **1.02× faster** (18.5 µs vs 18.9 µs).
 - **fp32**: Triton is **1.04× faster** (34.6 µs vs 36.1 µs).
 
 ## NCU's own bottleneck verdict

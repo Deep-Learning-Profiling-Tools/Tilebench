@@ -22,8 +22,8 @@
 | bf16 | cutile | 16.41 us | 1.69 % | 0.75 % | 41.50 % | 0.91 % | 0.90 % | 57.40 Gbyte/s | 384 | 80 register/thread | 38.91 Kbyte/block | 0 byte/block | 2 block / 3 block |
 | fp32 | triton | 16.80 us | 1.67 % | 0.74 % | 40.10 % | 0.90 % | 0.89 % | 56.48 Gbyte/s | 384 | 80 register/thread | 38.91 Kbyte/block | 0 byte/block | 2 block / 3 block |
 | fp32 | cutile | 16.73 us | 1.63 % | 0.74 % | 41.35 % | 0.91 % | 0.87 % | 56.63 Gbyte/s | 384 | 80 register/thread | 38.91 Kbyte/block | 0 byte/block | 2 block / 3 block |
-| int8 | triton | 10.82 us | 6.93 % | 0.78 % | 25.29 % | 0.59 % | 14.38 % | 59.65 Gbyte/s | 128 | 64 register/thread | 8.19 Kbyte/block | 0 byte/block | 8 block / 14 block |
-| int8 | cutile | 10.82 us | 7.19 % | 0.78 % | 24.73 % | 0.59 % | 14.89 % | 59.24 Gbyte/s | 128 | 64 register/thread | 8.19 Kbyte/block | 0 byte/block | 8 block / 14 block |
+| int8 | triton | 284.16 us | 5.33 % | 4.25 % | 5.45 % | 3.10 % | 17.98 % | 326.20 Gbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
+| int8 | cutile | 283.84 us | 16.31 % | 4.42 % | 16.55 % | 4.48 % | 59.00 % | 339.00 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -43,17 +43,17 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 | fp32 | cutile | 2/2 | 12.22 us | `void DeviceRadixSortOnesweepKernel<policy_hub<long` |
 | fp32 | triton | 1/2 | 4.54 us | `void DeviceRadixSortExclusiveSumKernel<policy_hub<` |
 | fp32 | triton | 2/2 | 12.26 us | `void DeviceRadixSortOnesweepKernel<policy_hub<long` |
-| int8 | cutile | 1/2 | 4.90 us | `void native::<unnamed>::distribution_elementwise_g` |
-| int8 | cutile | 2/2 | 5.92 us | `void at_cuda_detail::DeviceRadixSortHistogramKerne` |
-| int8 | triton | 1/2 | 4.93 us | `void native::<unnamed>::distribution_elementwise_g` |
-| int8 | triton | 2/2 | 5.89 us | `void at_cuda_detail::DeviceRadixSortHistogramKerne` |
+| int8 | cutile | 1/2 | 258.53 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
+| int8 | cutile | 2/2 | 25.31 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
+| int8 | triton | 1/2 | 258.59 us | `_copy_by_dest_kernel` |
+| int8 | triton | 2/2 | 25.57 us | `_copy_by_dest_kernel` |
 
 ## Key findings (auto-derived)
 
 - **fp16**: cuTile is **1.02× faster** (16.3 µs vs 16.6 µs).
 - **bf16**: cuTile is **1.01× faster** (16.4 µs vs 16.6 µs).
 - **fp32**: cuTile is **1.00× faster** (16.7 µs vs 16.8 µs).
-- **int8**: cuTile is **1.00× faster** (10.8 µs vs 10.8 µs).
+- **int8**: cuTile is **1.00× faster** (283.8 µs vs 284.2 µs).
 
 ## NCU's own bottleneck verdict
 
