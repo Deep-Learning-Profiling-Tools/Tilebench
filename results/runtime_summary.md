@@ -2,9 +2,16 @@
 
 **Branch:** `exp/timing` (= `origin/main` + `fix/2operator_bugs` cherry-pick)
 **Hardware:** NVIDIA B200 180GB (dgx003)
-**Date:** 2026-05-15
+**Date:** 2026-05-18 (autotune rows for `softmax`, `matmul_fp32_fp16_fp8`,
+`kl_divergence`, `histogramming` refilled after PR #89 + PR #92 fixes;
+all other rows unchanged from the original 2026-05-15 run)
 **Method:** mean over all sweep cases per op (case_grid expansion × dtypes; NaN cases excluded)
-**Autotune timeout:** 60 minutes per op for `softmax`, `matmul_fp32_fp16_fp8`, `kl_divergence`, `histogramming` (timed out → no autotune data)
+**Autotune timeout (historical):** the 60-min per-op cap originally blocked
+`softmax`, `matmul_fp32_fp16_fp8`, `kl_divergence`, `histogramming`. After
+PR #89 (hang-cfg filter + histogramming generator/reset + matmul/hist
+search-space shrink) and PR #92 (dtype-string standardisation), these
+four ops now complete autotune cleanly — autotune columns are no longer
+TIMEOUT. See per-op CSV under `results/csv/<op>_autotune.csv`.
 
 ## Per-operator mean latency
 
@@ -27,15 +34,15 @@
 | flash_decode | 20 | 0.0349 | 0.0122 | 0.0439 | 0.0136 | 0.0479 | 3.59 → 3.34 | 1.16 → 1.11 |
 | fused_activation | 20 | 0.0531 | 0.0291 | 0.0293 | 0.0292 | 0.0294 | 1.81 → 1.80 | 1.79 → 1.78 |
 | gaussian_blur | 40 | 5.6770 | 0.6083 | 1.8579 | 0.6049 | 1.7773 | 9.10 → 9.14 | 3.04 → 3.24 |
-| histogramming | 20 | 0.2223 | 0.5314 | 0.5551 | TIMEOUT | TIMEOUT | 0.59 → — | 0.83 → — |
+| histogramming | 20 | 0.1995 | 0.5314 | 0.5551 | 0.2470 | 0.4623 | 0.59 → 1.33 | 0.83 → 0.86 |
 | interleave | 80 | 0.0572 | 0.0165 | 0.0176 | 0.0164 | 0.0175 | 3.67 → 3.76 | 3.52 → 3.53 |
 | jacobi_stencil_2d | 60 | 0.5779 | 0.0790 | 0.0665 | 0.0677 | 0.0576 | 6.88 → 8.27 | 8.00 → 9.47 |
-| kl_divergence | 20 | 0.0725 | 0.0271 | 0.0261 | TIMEOUT | TIMEOUT | 2.61 → — | 2.67 → — |
+| kl_divergence | 20 | 0.0725 | 0.0271 | 0.0261 | 0.0240 | 0.0224 | 2.61 → 2.91 | 2.67 → 3.02 |
 | l2_norm | 60 | 0.0753 | 0.0139 | 0.0145 | 0.0128 | 0.0143 | 6.17 → 6.41 | 5.60 → 5.91 |
 | layernorm | 60 | 0.0298 | 0.0165 | 0.0225 | 0.0152 | 0.0192 | 1.77 → 1.99 | 1.37 → 1.61 |
 | leaky_relu | 60 | 0.0739 | 0.0237 | 0.0242 | 0.0233 | 0.0237 | 2.99 → 3.05 | 2.92 → 3.02 |
 | linear_self_attention | 20 | 0.0775 | 1.0034 | 3.8549 | 0.8870 | 3.4412 | 0.27 → 0.46 | 0.08 → 0.14 |
-| matmul_fp32_fp16_fp8 | 49 | 2.7687 | 1.5067 | 0.3626 | TIMEOUT | TIMEOUT | 5.07 → — | 11.37 → — |
+| matmul_fp32_fp16_fp8 | 80 | 4.4077 | 1.5067 | 0.3626 | 1.4247 | 0.3002 | 5.07 → 4.41 | 11.37 → 7.90 |
 | matmul_int8 | 20 | 1.8263 | 0.2999 | 0.5165 | 0.2437 | 0.1802 | 6.13 → 7.49 | 3.57 → 10.14 |
 | matrix_copy | 80 | 0.0089 | 0.0088 | 0.0089 | 0.0084 | 0.0087 | 1.02 → 1.09 | 1.00 → 1.04 |
 | matrix_transpose | 80 | 0.1846 | 0.0369 | 0.0354 | 0.0336 | 0.0346 | 5.57 → 6.05 | 5.47 → 5.69 |
@@ -49,7 +56,7 @@
 | rmsnorm | 60 | 0.1205 | 0.0152 | 0.0164 | 0.0132 | 0.0155 | 8.54 → 9.73 | 7.47 → 8.51 |
 | rope | 40 | 0.3529 | 0.0931 | 0.1222 | 0.0573 | 0.1102 | 4.10 → 6.62 | 2.92 → 3.18 |
 | sigmoid | 60 | 0.0954 | 0.0246 | 0.0304 | 0.0232 | 0.0303 | 4.32 → 4.73 | 3.18 → 3.26 |
-| softmax | 40 | 0.0411 | 0.0182 | 0.0259 | TIMEOUT | TIMEOUT | 2.32 → — | 1.57 → — |
+| softmax | 40 | 0.0412 | 0.0182 | 0.0259 | 0.0166 | 0.0248 | 2.32 → 2.51 | 1.57 → 1.64 |
 | streamk_matmul | 60 | 2.2414 | 1.6256 | 3.4976 | 2.2207 | 3.4963 | 0.83 → 0.66 | 0.53 → 0.53 |
 | swiglu | 60 | 0.0975 | 0.0544 | 0.0702 | 0.0541 | 0.0655 | 1.80 → 1.81 | 1.35 → 1.44 |
 | top_k_selection | 20 | 0.0782 | 0.2861 | 0.3975 | 0.2474 | 0.3086 | 0.28 → 0.34 | 0.20 → 0.27 |
