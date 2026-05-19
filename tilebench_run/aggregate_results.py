@@ -9,7 +9,10 @@ nan (skipped / verification-failed cases) are excluded from the mean.
 
 Columns:
   dtype, mode, n_cases, torch_ms, triton_ms, cutile_ms,
-  speedup_triton, speedup_cutile
+  speedup_triton, speedup_cutile, triton_vs_cutile
+
+`triton_vs_cutile = triton_ms / cutile_ms`. >1 means Triton is slower than
+cuTile (takes more time); <1 means Triton is faster.
 """
 import csv
 import math
@@ -56,10 +59,25 @@ def aggregate_one_op(op: str) -> bool:
             by_dt[r.get("dtype", "?")].append(r)
         for dt, group in by_dt.items():
             agg = {"dtype": dt, "mode": mode, "n_cases": len(group)}
+            means = {}
             for col in NUMERIC_COLS:
                 vals = [_parse_float(r.get(col, "")) for r in group]
                 vals = [v for v in vals if v is not None]
-                agg[col] = f"{sum(vals) / len(vals):.6g}" if vals else ""
+                m = sum(vals) / len(vals) if vals else None
+                means[col] = m
+                agg[col] = f"{m:.6g}" if m is not None else ""
+            # Mean-of-per-case Triton/cuTile ratio (computed per case, then
+            # averaged — more meaningful than mean(triton_ms) / mean(cutile_ms)
+            # when per-case latencies span orders of magnitude).
+            ratios = []
+            for r in group:
+                t = _parse_float(r.get("triton_ms", ""))
+                c = _parse_float(r.get("cutile_ms", ""))
+                if t is not None and c not in (None, 0):
+                    ratios.append(t / c)
+            agg["triton_vs_cutile"] = (
+                f"{sum(ratios) / len(ratios):.6g}" if ratios else ""
+            )
             rows_out.append(agg)
 
     if not rows_out:
@@ -67,7 +85,8 @@ def aggregate_one_op(op: str) -> bool:
     out_path = OUT_DIR / f"{op}.csv"
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["dtype", "mode", "n_cases", *NUMERIC_COLS]
+            f, fieldnames=["dtype", "mode", "n_cases", *NUMERIC_COLS,
+                           "triton_vs_cutile"]
         )
         writer.writeheader()
         # Sort rows: all default rows first, then all autotune rows; within
