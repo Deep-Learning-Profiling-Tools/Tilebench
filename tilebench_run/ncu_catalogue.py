@@ -108,13 +108,21 @@ def collect_op(op_name: str) -> dict:
         except Exception:
             autotune_data = None
 
+    # Some ops write dtype="float32" / "float16" / "bfloat16" in the autotune
+    # log even though the config.yaml dtype field uses the short form. Normalise.
+    DTYPE_ALIASES = {
+        "float32": "fp32", "float16": "fp16", "bfloat16": "bf16",
+    }
+    def _norm(s):
+        return DTYPE_ALIASES.get(s, s)
+
     autotune_by_dtype = {}
     if isinstance(autotune_data, list):
         for dt in dtypes:
             best = None
             best_size = -1
             for entry in autotune_data:
-                if entry.get("dtype") != dt:
+                if _norm(entry.get("dtype")) != _norm(dt):
                     continue
                 ps = entry.get("problem_size", 0)
                 if ps > best_size:

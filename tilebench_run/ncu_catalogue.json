@@ -632,7 +632,20 @@
         "cols": 8192
       }
     },
-    "autotune_winner_per_dtype": {},
+    "autotune_winner_per_dtype": {
+      "fp32": {
+        "params": {
+          "rows": 4096,
+          "cols": 8192
+        },
+        "triton": {
+          "num_warps": 16
+        },
+        "cutile": {
+          "occupancy": 8
+        }
+      }
+    },
     "has_autotune_log": true
   },
   {
@@ -1017,8 +1030,21 @@
           "N": 67108864,
           "num_bins": 64
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "partial_BLOCK_SIZE": 2048,
+          "partial_num_warps": 8,
+          "reduce_BLOCK_ROWS": 128,
+          "reduce_BLOCK_BINS": 64,
+          "reduce_num_warps": 8,
+          "reduce_num_stages": 2
+        },
+        "cutile": {
+          "partial_block_size": 2048,
+          "partial_occupancy": 4,
+          "reduce_block_rows": 128,
+          "reduce_block_bins": 64,
+          "reduce_occupancy": 8
+        }
       }
     },
     "has_autotune_log": true
@@ -1183,7 +1209,23 @@
         "cols": 16384
       }
     },
-    "autotune_winner_per_dtype": {},
+    "autotune_winner_per_dtype": {
+      "fp32": {
+        "params": {
+          "rows": 4096,
+          "cols": 16384
+        },
+        "triton": {
+          "BLOCK_SIZE": 2048,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "cutile": {
+          "tile": 2048,
+          "occupancy": 4
+        }
+      }
+    },
     "has_autotune_log": true
   },
   {
@@ -1411,17 +1453,17 @@
   {
     "op": "linear_self_attention",
     "dtypes": [
-      "float32"
+      "fp32"
     ],
     "default_params_per_dtype": {
-      "float32": {
+      "fp32": {
         "eps": 1e-06,
         "M": 10000,
         "D": 256
       }
     },
     "autotune_winner_per_dtype": {
-      "float32": {
+      "fp32": {
         "params": {
           "eps": 1e-06,
           "M": 10000,
@@ -1479,8 +1521,21 @@
           "N": 4096,
           "K": 20480
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 64,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "cutile": {
+          "tm": 256,
+          "tn": 256,
+          "tk": 64,
+          "group_size_m": 8,
+          "occupancy": 8
+        }
       },
       "fp16": {
         "params": {
@@ -1488,8 +1543,21 @@
           "N": 4096,
           "K": 20480
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 256,
+          "BLOCK_SIZE_K": 64,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "cutile": {
+          "tm": 256,
+          "tn": 256,
+          "tk": 64,
+          "group_size_m": 8,
+          "occupancy": 8
+        }
       },
       "fp8_e4m3fn": {
         "params": {
@@ -1497,8 +1565,21 @@
           "N": 4096,
           "K": 20480
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 256,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "cutile": {
+          "tm": 256,
+          "tn": 256,
+          "tk": 128,
+          "group_size_m": 8,
+          "occupancy": 4
+        }
       },
       "fp8_e5m2": {
         "params": {
@@ -1506,8 +1587,21 @@
           "N": 4096,
           "K": 20480
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 256,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "cutile": {
+          "tm": 256,
+          "tn": 256,
+          "tk": 128,
+          "group_size_m": 8,
+          "occupancy": 4
+        }
       }
     },
     "has_autotune_log": true
@@ -2353,16 +2447,28 @@
           "n_rows": 2048,
           "n_cols": 10240
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE": 2048,
+          "num_warps": 4
+        },
+        "cutile": {
+          "block_size": 2048,
+          "occupancy": 8
+        }
       },
       "fp32": {
         "params": {
           "n_rows": 2048,
           "n_cols": 10240
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "BLOCK_SIZE": 2048,
+          "num_warps": 8
+        },
+        "cutile": {
+          "block_size": 2048,
+          "occupancy": 8
+        }
       }
     },
     "has_autotune_log": true
