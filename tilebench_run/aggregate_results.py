@@ -70,8 +70,9 @@ def aggregate_one_op(op: str) -> bool:
             f, fieldnames=["dtype", "mode", "n_cases", *NUMERIC_COLS]
         )
         writer.writeheader()
-        # Sort rows: dtype ascending, default before autotune
-        rows_out.sort(key=lambda r: (r["dtype"], 0 if r["mode"] == "default" else 1))
+        # Sort rows: all default rows first, then all autotune rows; within
+        # each block, dtype ascending.
+        rows_out.sort(key=lambda r: (0 if r["mode"] == "default" else 1, r["dtype"]))
         writer.writerows(rows_out)
     return True
 
