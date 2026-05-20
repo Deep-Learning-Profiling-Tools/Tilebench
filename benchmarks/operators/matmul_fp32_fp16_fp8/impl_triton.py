@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 
 # Per-dtype default config (used when autotune=False).
 _DEFAULT_CONFIGS = {
@@ -52,27 +54,32 @@ def matmul_kernel(
     start_m = pid_m * BLOCK_SIZE_M
     start_n = pid_n * BLOCK_SIZE_N
 
-    offs_am = start_m + tl.arange(0, BLOCK_SIZE_M)
-    offs_bn = start_n + tl.arange(0, BLOCK_SIZE_N)
-    offs_am = tl.where(offs_am < M, offs_am, 0)
-    offs_bn = tl.where(offs_bn < N, offs_bn, 0)
-    offs_am = tl.max_contiguous(tl.multiple_of(offs_am, BLOCK_SIZE_M), BLOCK_SIZE_M)
-    offs_bn = tl.max_contiguous(tl.multiple_of(offs_bn, BLOCK_SIZE_N), BLOCK_SIZE_N)
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-
-    a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+    a_desc = tl.make_tensor_descriptor(
+        a_ptr,
+        shape=[M, K],
+        strides=[stride_am, stride_ak],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_K],
+    )
+    b_desc = tl.make_tensor_descriptor(
+        b_ptr,
+        shape=[K, N],
+        strides=[stride_bk, stride_bn],
+        block_shape=[BLOCK_SIZE_K, BLOCK_SIZE_N],
+    )
+    c_desc = tl.make_tensor_descriptor(
+        c_ptr,
+        shape=[M, N],
+        strides=[stride_cm, stride_cn],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_N],
+    )
 
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-        # input_precision="tf32" enables TF32 acceleration when inputs are fp32;
-        # ignored for fp16 / fp8 inputs, so this is safe to set unconditionally.
-        accumulator = tl.dot(a, b, accumulator)
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
+        start_k = k * BLOCK_SIZE_K
+        a = a_desc.load([start_m, start_k])
+        b = b_desc.load([start_k, start_n])
+        accumulator = tl.dot(a, b, accumulator, input_precision="tf32")
 
     # Cast accumulator to the output dtype.
     if c_ptr.dtype.element_ty == tl.float8e4nv:
@@ -84,11 +91,7 @@ def matmul_kernel(
     else:
         c = accumulator.to(tl.float16)
 
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = c_ptr + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
+    c_desc.store([start_m, start_n], c)
 
 
 # Single autotune wrapper covering all dtypes. Triton recompiles per-dtype
@@ -120,8 +123,15 @@ matmul_kernel_autotuned = triton.autotune(
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """Triton matmul. Output dtype matches input dtype (fp32 / fp16 / fp8)."""
+    ensure_tma_available()
+
     assert a.shape[1] == b.shape[0], "Incompatible dimensions"
     assert a.dtype == b.dtype, "Incompatible dtypes"
+
+    if not a.is_contiguous():
+        a = a.contiguous()
+    if not b.is_contiguous():
+        b = b.contiguous()
 
     M, K = a.shape
     _, N = b.shape

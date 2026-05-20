@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 32, "num_warps": 8, "num_stages": 4}
 
 
@@ -24,29 +26,29 @@ def _fwd_kernel(
     off_bs_head = tl.program_id(1)
 
     qkv_base_offset = off_bs_head * stride_q_head
-    Q_block_ptr = tl.make_block_ptr(
-        base=Q + qkv_base_offset,
-        shape=(SEQLEN, DIM),
-        strides=(stride_q_seqlen, stride_q_dim),
-        offsets=(start_m * BLOCK_M, 0),
-        block_shape=(BLOCK_M, DIM),
-        order=(1, 0),
+    Q_desc = tl.make_tensor_descriptor(
+        Q + qkv_base_offset,
+        shape=[SEQLEN, DIM],
+        strides=[stride_q_seqlen, stride_q_dim],
+        block_shape=[BLOCK_M, DIM],
     )
-    K_block_ptr = tl.make_block_ptr(
-        base=K + qkv_base_offset,
-        shape=(DIM, SEQLEN),
-        strides=(stride_k_dim, stride_k_seqlen),
-        offsets=(0, 0),
-        block_shape=(DIM, BLOCK_N),
-        order=(0, 1),
+    K_desc = tl.make_tensor_descriptor(
+        K + qkv_base_offset,
+        shape=[SEQLEN, DIM],
+        strides=[stride_k_seqlen, stride_k_dim],
+        block_shape=[BLOCK_N, DIM],
     )
-    V_block_ptr = tl.make_block_ptr(
-        base=V + qkv_base_offset,
-        shape=(SEQLEN, DIM),
-        strides=(stride_k_seqlen, stride_v_dim),
-        offsets=(0, 0),
-        block_shape=(BLOCK_N, DIM),
-        order=(1, 0),
+    V_desc = tl.make_tensor_descriptor(
+        V + qkv_base_offset,
+        shape=[SEQLEN, DIM],
+        strides=[stride_v_seqlen, stride_v_dim],
+        block_shape=[BLOCK_N, DIM],
+    )
+    O_desc = tl.make_tensor_descriptor(
+        O + qkv_base_offset,
+        shape=[SEQLEN, DIM],
+        strides=[stride_o_seqlen, stride_o_dim],
+        block_shape=[BLOCK_M, DIM],
     )
     off_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
     off_n = tl.arange(0, BLOCK_N)
@@ -54,13 +56,13 @@ def _fwd_kernel(
     denom = tl.zeros([BLOCK_M], dtype=tl.float32)
     out_buffer = tl.zeros([BLOCK_M, DIM], dtype=tl.float32)
     qk_scale = sm_scale * 1.44269504
-    q = tl.load(Q_block_ptr)
+    q = Q_desc.load([start_m * BLOCK_M, 0])
     q = (q * qk_scale).to(tl.float16)
     lo = 0
     hi = (start_m + 1) * BLOCK_M if IS_CAUSAL else SEQLEN
     for start_n in range(lo, hi, BLOCK_N):
-        k = tl.load(K_block_ptr)
-        v = tl.load(V_block_ptr)
+        k = tl.trans(K_desc.load([start_n, 0]))
+        v = V_desc.load([start_n, 0])
 
         qk = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
         if IS_CAUSAL:
@@ -75,21 +77,10 @@ def _fwd_kernel(
         out_buffer += tl.dot(nume.to(tl.float16), v)
         denom = denom * alpha + tl.sum(nume, 1)
         max = max_new
-        K_block_ptr = tl.advance(K_block_ptr, (0, BLOCK_N))
-        V_block_ptr = tl.advance(V_block_ptr, (BLOCK_N, 0))
-
     out_buffer = out_buffer / denom[:, None]
     l_ptr = L + off_bs_head * SEQLEN + off_m
     tl.store(l_ptr, max + tl.math.log2(denom))
-    O_block_ptr = tl.make_block_ptr(
-        base=O + qkv_base_offset,
-        shape=(SEQLEN, DIM),
-        strides=(stride_o_seqlen, stride_o_dim),
-        offsets=(start_m * BLOCK_M, 0),
-        block_shape=(BLOCK_M, DIM),
-        order=(1, 0),
-    )
-    tl.store(O_block_ptr, out_buffer.to(tl.float16))
+    O_desc.store([start_m * BLOCK_M, 0], out_buffer.to(tl.float16))
 
 
 _fwd_kernel_autotuned = triton.autotune(
@@ -108,6 +99,14 @@ _fwd_kernel_autotuned = triton.autotune(
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
+
+    ensure_tma_available()
+    if not q.is_contiguous():
+        q = q.contiguous()
+    if not k.is_contiguous():
+        k = k.contiguous()
+    if not v.is_contiguous():
+        v = v.contiguous()
 
     Lq, Lk, Lv = q.shape[-1], k.shape[-1], v.shape[-1]
 

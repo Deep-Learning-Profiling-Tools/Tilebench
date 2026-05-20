@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
@@ -12,15 +14,17 @@ def _swiglu_kernel(
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)
-    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < n_elements
+    block_start = pid * BLOCK_SIZE
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    y_desc = tl.make_tensor_descriptor(y_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    out_desc = tl.make_tensor_descriptor(out_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
 
-    x = tl.load(x_ptr + offsets, mask=mask, other=0.)
-    y = tl.load(y_ptr + offsets, mask=mask, other=0.)
+    x = x_desc.load([block_start, 0])
+    y = y_desc.load([block_start, 0])
     x_f32 = x.to(tl.float32)
     y_f32 = y.to(tl.float32)
     out = x_f32 * tl.sigmoid(x_f32) * y_f32
-    tl.store(out_ptr + offsets, out.to(x.dtype), mask=mask)
+    out_desc.store([block_start, 0], out.to(x.dtype))
 
 
 _swiglu_kernel_autotuned = triton.autotune(
@@ -35,6 +39,7 @@ _swiglu_kernel_autotuned = triton.autotune(
 
 def run(x: torch.Tensor, y: torch.Tensor,
         block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+    ensure_tma_available()
     assert x.shape == y.shape
     x_flat = x.contiguous().view(-1)
     y_flat = y.contiguous().view(-1)

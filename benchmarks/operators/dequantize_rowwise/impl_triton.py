@@ -12,6 +12,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 
 _DEFAULT_CONFIG = {"num_warps": 4}
 
@@ -24,14 +26,24 @@ def _dequantize_rowwise_kernel(
     P2: tl.constexpr,
 ):
     pid = tl.program_id(axis=0)
-    block_start = pid * BLOCK_SIZE
     arange = tl.arange(0, P2)
-    offsets = block_start + arange
     row_mask = arange < BLOCK_SIZE
-    x = tl.load(x_ptr + offsets, mask=row_mask)
+    x_desc = tl.make_tensor_descriptor(
+        x_ptr + pid * BLOCK_SIZE,
+        shape=[BLOCK_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[P2, 1],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        output_ptr + pid * BLOCK_SIZE,
+        shape=[BLOCK_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[P2, 1],
+    )
+    x = x_desc.load([0, 0])[:, 0]
     max_val = tl.load(state_x + pid)
     output = max_val * x * inv_127
-    tl.store(output_ptr + offsets, output, mask=row_mask)
+    out_desc.store([0, 0], tl.where(row_mask, output, 0.0)[:, None])
 
 
 _dequantize_rowwise_kernel_autotuned = triton.autotune(
@@ -45,6 +57,8 @@ _dequantize_rowwise_kernel_autotuned = triton.autotune(
 
 def run(x: torch.Tensor, state_x: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
+    ensure_tma_available()
+    x = x.contiguous()
     rows, cols = x.shape
     output = torch.empty(rows, cols, device=x.device, dtype=torch.float16)
     n_elements = output.numel()

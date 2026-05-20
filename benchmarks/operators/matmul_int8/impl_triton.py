@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 128,
     "BLOCK_SIZE_N": 128,
@@ -50,35 +52,44 @@ def matmul_kernel(
     pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
     pid_n = (pid % num_pid_in_group) // group_size_m
 
-    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-
-    a_base = a_ptr + offs_am[:, None] * stride_am
-    b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+    start_m = pid_m * BLOCK_SIZE_M
+    start_n = pid_n * BLOCK_SIZE_N
 
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.int32)
     one_i8 = tl.full((1,), 1, dtype=tl.int8)
     K_b: tl.constexpr = K // 4
     num_kb_tiles = tl.cdiv(K_b, BLOCK_SIZE_K)
 
+    a_desc = tl.make_tensor_descriptor(
+        a_ptr,
+        shape=[M, K],
+        strides=[stride_am, stride_ak],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_K],
+    )
+    b_desc = tl.make_tensor_descriptor(
+        b_ptr,
+        shape=[K_b, N],
+        strides=[stride_bk, stride_bn],
+        block_shape=[BLOCK_SIZE_K, BLOCK_SIZE_N],
+    )
+    c_desc = tl.make_tensor_descriptor(
+        c_ptr,
+        shape=[M, N],
+        strides=[stride_cm, stride_cn],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_N],
+    )
+
     for j in range(0, num_kb_tiles):
-        b_uint8 = tl.load(b_ptrs, mask=offs_k[:, None] < K_b, other=0)
+        packed_k = j * BLOCK_SIZE_K
+        b_uint8 = b_desc.load([packed_k, start_n])
         for i in range(4):
-            k_pos = i * K_b + j * BLOCK_SIZE_K
-            offs_k_a = k_pos + offs_k
-            a_ptrs = a_base + offs_k_a[None, :] * stride_ak
-            a = tl.load(a_ptrs, mask=offs_k_a[None, :] < K, other=0).to(tl.int8)
+            k_pos = i * K_b + packed_k
+            a = a_desc.load([start_m, k_pos]).to(tl.int8)
             mask_i = 3 << (2 * i)
             b = ((b_uint8 & mask_i) >> (2 * i)).to(tl.int8)
             accumulator += tl.dot(a, b - one_i8, out_dtype=tl.int32)
-        b_ptrs += BLOCK_SIZE_K * stride_bk
 
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = c_ptr + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, accumulator, mask=c_mask)
+    c_desc.store([start_m, start_n], accumulator)
 
 
 matmul_kernel_autotuned = triton.autotune(
@@ -109,11 +120,15 @@ matmul_kernel_autotuned = triton.autotune(
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
     """Triton int8 GEMM with 2-bit packed B."""
+    ensure_tma_available()
+    if not a.is_contiguous():
+        a = a.contiguous()
+    if not b.is_contiguous():
+        b = b.contiguous()
+
     assert a.shape[1] == b.shape[0] * 4, (
         "Incompatible dims: A's K must equal 4 * B's K_b (B is packed 4-per-byte)"
     )
-    assert a.is_contiguous(), "A must be contiguous"
-
     M, K = a.shape
     _, N = b.shape
     c = torch.empty((M, N), device=a.device, dtype=torch.int32)

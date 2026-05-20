@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
@@ -13,8 +15,18 @@ def softmax_online_kernel(
     BLOCK_SIZE: tl.constexpr,
 ):
     row_idx = tl.program_id(0)
-    row_ptr = input_ptr + row_idx * input_row_stride
-    out_ptr = output_ptr + row_idx * output_row_stride
+    input_desc = tl.make_tensor_descriptor(
+        input_ptr + row_idx * input_row_stride,
+        shape=[n_cols, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
+    output_desc = tl.make_tensor_descriptor(
+        output_ptr + row_idx * output_row_stride,
+        shape=[n_cols, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
 
     # Pass 1: online max + sum
     m = -float('inf')
@@ -22,7 +34,8 @@ def softmax_online_kernel(
     for col_start in range(0, n_cols, BLOCK_SIZE):
         offs = col_start + tl.arange(0, BLOCK_SIZE)
         mask = offs < n_cols
-        x = tl.load(row_ptr + offs, mask=mask, other=-float('inf')).to(tl.float32)
+        x = input_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, -float('inf'))
         block_max = tl.max(x, axis=0)
         m_new = tl.maximum(m, block_max)
         l = l * tl.exp(m - m_new) + tl.sum(tl.exp(x - m_new), axis=0)
@@ -32,9 +45,10 @@ def softmax_online_kernel(
     for col_start in range(0, n_cols, BLOCK_SIZE):
         offs = col_start + tl.arange(0, BLOCK_SIZE)
         mask = offs < n_cols
-        x = tl.load(row_ptr + offs, mask=mask, other=0.0).to(tl.float32)
+        x = input_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
         y = tl.exp(x - m) / l
-        tl.store(out_ptr + offs, y.to(output_ptr.dtype.element_ty), mask=mask)
+        output_desc.store([col_start, 0], y[:, None].to(output_ptr.dtype.element_ty))
 
 
 _softmax_kernel_autotuned = triton.autotune(
@@ -50,6 +64,8 @@ _softmax_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
+    ensure_tma_available()
+    x = x.contiguous()
     n_rows, n_cols = x.shape
     output = torch.empty_like(x)
     grid = (n_rows,)

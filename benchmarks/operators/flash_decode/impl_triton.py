@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
 
 
@@ -30,17 +32,29 @@ def _fwd_kernel_flash_decode_stage2(
 
     offs_d = tl.arange(0, BLOCK_DMODEL)
     cur_batch_seq_len = tl.load(B_Seqlen + cur_batch)
-
     block_n_size = tl.where(cur_batch_seq_len <= 0, 0, cur_batch_seq_len + BLOCK_SEQ - 1) // BLOCK_SEQ
+
+    mid_desc = tl.make_tensor_descriptor(
+        Mid_O + cur_batch * stride_mid_ob + cur_head * stride_mid_oh,
+        shape=[block_n_size, head_dim],
+        strides=[stride_mid_os, stride_mid_od],
+        block_shape=[1, BLOCK_DMODEL],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        Out + cur_batch * stride_obs + cur_head * stride_oh,
+        shape=[1, head_dim],
+        strides=[stride_oh, stride_od],
+        block_shape=[1, BLOCK_DMODEL],
+    )
 
     sum_exp = 0.0
     max_logic = -float("inf")
     acc = tl.zeros([BLOCK_DMODEL], dtype=tl.float32)
 
-    offs_v = cur_batch * stride_mid_ob + cur_head * stride_mid_oh + offs_d
     offs_logic = cur_batch * stride_mid_o_eb + cur_head * stride_mid_o_eh
     for block_seq_n in range(0, block_n_size, 1):
-        tv = tl.load(Mid_O + offs_v + block_seq_n * stride_mid_os, mask=offs_d < head_dim, other=0.0)
+        tv = mid_desc.load([block_seq_n, 0])[0, :]
+        tv = tl.where(offs_d < head_dim, tv, 0.0)
         tlogic = tl.load(Mid_O_LogExpSum + offs_logic + block_seq_n)
         new_max_logic = tl.maximum(tlogic, max_logic)
 
@@ -51,7 +65,7 @@ def _fwd_kernel_flash_decode_stage2(
         sum_exp = sum_exp * old_scale + exp_logic
         max_logic = new_max_logic
 
-    tl.store(Out + cur_batch * stride_obs + cur_head * stride_oh + offs_d, acc / sum_exp, mask=offs_d < head_dim)
+    out_desc.store([0, 0], (acc / sum_exp)[None, :])
     return
 
 
@@ -75,6 +89,10 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
                           Can be an int or a scalar Tensor.
         block_size: (Optional) Block size config from benchmark framework, usually ignored here.
     """
+    ensure_tma_available()
+    mid_o = mid_o.contiguous()
+    mid_o_lse = mid_o_lse.contiguous()
+
     # Handle block_seq parameter which might be passed as a Tensor or int
     if isinstance(block_seq_tensor, torch.Tensor):
         block_seq = block_seq_tensor.item()

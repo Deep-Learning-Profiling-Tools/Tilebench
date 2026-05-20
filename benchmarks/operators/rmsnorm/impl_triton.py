@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
@@ -23,8 +25,24 @@ def _rmsnorm_kernel(
     is stored as the original dtype (Triton auto-casts on store).
     """
     pid = tl.program_id(0)
-    row_ptr     = x_ptr   + pid * stride_row
-    out_row_ptr = out_ptr + pid * stride_row
+    x_desc = tl.make_tensor_descriptor(
+        x_ptr + pid * stride_row,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
+    w_desc = tl.make_tensor_descriptor(
+        rms_w_ptr,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        out_ptr + pid * stride_row,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
     # --- Pass 1: sum of squares ---
@@ -32,7 +50,8 @@ def _rmsnorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = tl.load(row_ptr + offs_n, mask=mask, other=0.0).to(tl.float32)
+        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
         var += x * x
     rstd = tl.math.rsqrt(tl.sum(var, axis=0) / N_SIZE + eps)
 
@@ -40,9 +59,11 @@ def _rmsnorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x     = tl.load(row_ptr     + offs_n, mask=mask, other=0.0).to(tl.float32)
-        rms_w = tl.load(rms_w_ptr   + offs_n, mask=mask, other=1.0).to(tl.float32)
-        tl.store(out_row_ptr + offs_n, x * rstd * rms_w, mask=mask)
+        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
+        rms_w = w_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        rms_w = tl.where(mask, rms_w, 1.0)
+        out_desc.store([n_start, 0], (x * rstd * rms_w)[:, None])
 
 
 # ---------------------------------------------------------------------------
@@ -79,12 +100,13 @@ def run(
         eps:      Epsilon for numerical stability.
         autotune: If True, use triton.autotune to search over configs.
     """
+    ensure_tma_available()
     orig_shape = x.shape
     K          = orig_shape[-1]
     batch_M    = x.numel() // K
 
     # Reshape to (batch*M, K) to use a 1-D grid (one CTA per row).
-    x_2d   = x.reshape(batch_M, K)
+    x_2d   = x.contiguous().reshape(batch_M, K)
     out    = torch.empty_like(x)
     out_2d = out.reshape(batch_M, K)
 

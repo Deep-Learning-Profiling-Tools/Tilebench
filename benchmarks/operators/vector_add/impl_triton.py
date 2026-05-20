@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
@@ -9,11 +11,12 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 def _add_kernel(x_ptr, y_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
-    offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < n_elements
-    x = tl.load(x_ptr + offsets, mask=mask)
-    y = tl.load(y_ptr + offsets, mask=mask)
-    tl.store(output_ptr + offsets, x + y, mask=mask)
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    y_desc = tl.make_tensor_descriptor(y_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    x = x_desc.load([block_start, 0])
+    y = y_desc.load([block_start, 0])
+    out_desc.store([block_start, 0], x + y)
 
 
 _add_kernel_autotuned = triton.autotune(
@@ -27,20 +30,23 @@ _add_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    n_elements = x.numel()
-    output = torch.empty_like(x)
+    ensure_tma_available()
+    x_flat = x.contiguous().view(-1)
+    y_flat = y.contiguous().view(-1)
+    n_elements = x_flat.numel()
+    output = torch.empty_like(x_flat)
     if autotune:
         grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-        _add_kernel_autotuned[grid](x, y, output, n_elements)
+        _add_kernel_autotuned[grid](x_flat, y_flat, output, n_elements)
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
         _add_kernel[grid](
-            x, y, output, n_elements,
+            x_flat, y_flat, output, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
         )
-    return output
+    return output.view(x.shape)
 
 
 def get_last_config() -> dict | None:

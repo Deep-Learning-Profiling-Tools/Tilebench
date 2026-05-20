@@ -14,6 +14,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 3}
 
@@ -27,15 +29,27 @@ def _kl_divergence_kernel(
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(axis=0)
-    log_y_pred_ptr += pid * log_y_pred_stride
-    y_true_ptr += pid * y_true_stride
+    log_desc = tl.make_tensor_descriptor(
+        log_y_pred_ptr + pid * log_y_pred_stride,
+        shape=[n_cols, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
+    true_desc = tl.make_tensor_descriptor(
+        y_true_ptr + pid * y_true_stride,
+        shape=[n_cols, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
 
     acc = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
     for col_start in range(0, n_cols, BLOCK_SIZE):
         cols = col_start + tl.arange(0, BLOCK_SIZE)
         mask = cols < n_cols
-        log_y_pred = tl.load(log_y_pred_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        y_true = tl.load(y_true_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        log_y_pred = log_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        y_true = true_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        log_y_pred = tl.where(mask, log_y_pred, 0.0)
+        y_true = tl.where(mask, y_true, 0.0)
         # Where y_true == 0 (true zero or OOB padding), the KL term is 0
         # by convention. Guard the log explicitly so 0 * log(0) -> 0
         # cleanly without relying on NaN-suppression in tl.where.
@@ -64,6 +78,9 @@ _kl_divergence_kernel_autotuned = triton.autotune(
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
+    ensure_tma_available()
+    log_y_pred = log_y_pred.contiguous()
+    y_true = y_true.contiguous()
     rows, cols = log_y_pred.shape
     loss = torch.empty(rows, device=log_y_pred.device, dtype=torch.float32)
     grid = (rows,)

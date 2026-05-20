@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 64,
     "BLOCK_SIZE_N": 64,
@@ -26,40 +28,36 @@ def _bmm_kernel(a_ptr, b_ptr, c_ptr,
     pid0, pid1 = tl.swizzle2d(hw_pid0, hw_pid1, num_programs_pid0, num_programs_pid1, GROUPSIZE)
     pid2 = tl.program_id(2)
 
-    offsets_M = pid0 * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offsets_N = pid1 * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    offsets_K = tl.arange(0, BLOCK_SIZE_K)
+    start_m = pid0 * BLOCK_SIZE_M
+    start_n = pid1 * BLOCK_SIZE_N
 
-    mask_M = offsets_M < M
-    mask_N = offsets_N < N
-    mask_K = offsets_K < K
-
-    A_offsets = pid2 * M * K + offsets_M[:, None] * K + offsets_K[None, :]
-    B_offsets = pid2 * K * N + offsets_K[:, None] * N + offsets_N[None, :]
-
-    A_mask = mask_M[:, None] & mask_K[None, :]
-    B_mask = mask_K[:, None] & mask_N[None, :]
+    a_desc = tl.make_tensor_descriptor(
+        a_ptr + pid2 * M * K,
+        shape=[M, K],
+        strides=[K, 1],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_K],
+    )
+    b_desc = tl.make_tensor_descriptor(
+        b_ptr + pid2 * K * N,
+        shape=[K, N],
+        strides=[N, 1],
+        block_shape=[BLOCK_SIZE_K, BLOCK_SIZE_N],
+    )
+    c_desc = tl.make_tensor_descriptor(
+        c_ptr + pid2 * M * N,
+        shape=[M, N],
+        strides=[N, 1],
+        block_shape=[BLOCK_SIZE_M, BLOCK_SIZE_N],
+    )
 
     accumulator = tl.zeros([BLOCK_SIZE_M, BLOCK_SIZE_N], dtype=tl.float32)
 
     for current_k_index in range(0, K, BLOCK_SIZE_K):
-        if current_k_index + BLOCK_SIZE_K >= K:
-            current_mask_K = (offsets_K + current_k_index) < K
-            A_mask = mask_M[:, None] & current_mask_K[None, :]
-            B_mask = current_mask_K[:, None] & mask_N[None, :]
+        A_data = a_desc.load([start_m, current_k_index])
+        B_data = b_desc.load([current_k_index, start_n])
+        accumulator += tl.dot(A_data, B_data, input_precision="tf32")
 
-        A_data = tl.load(a_ptr + A_offsets, mask=A_mask, other=0.0)
-        B_data = tl.load(b_ptr + B_offsets, mask=B_mask, other=0.0)
-
-        accumulator += tl.dot(A_data, B_data)
-
-        A_offsets += BLOCK_SIZE_K
-        B_offsets += BLOCK_SIZE_K * N
-
-    output_offsets = offsets_M[:, None] * N + offsets_N[None, :]
-    output_mask = mask_M[:, None] & mask_N[None, :]
-
-    tl.store(c_ptr + output_offsets + pid2 * M * N, accumulator, output_mask)
+    c_desc.store([start_m, start_n], accumulator)
 
 
 _bmm_kernel_autotuned = triton.autotune(
@@ -87,6 +85,12 @@ _bmm_kernel_autotuned = triton.autotune(
 def run(A: torch.Tensor, B: torch.Tensor,
         BATCH: int, M: int, N: int, K: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
+    ensure_tma_available()
+    if not A.is_contiguous():
+        A = A.contiguous()
+    if not B.is_contiguous():
+        B = B.contiguous()
+
     C = torch.empty(BATCH * M * N, dtype=A.dtype, device=A.device)
 
     if autotune:

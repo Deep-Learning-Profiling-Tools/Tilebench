@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK": 256, "num_warps": 4}
 
 
@@ -17,10 +19,18 @@ def _compute_block_sums_kernel(
     block_id = tl.program_id(0)
     channel_id = tl.program_id(1)
 
-    row_offsets = block_id * BLOCK_N + tl.arange(0, BLOCK_N)
+    row_start = block_id * BLOCK_N
+    row_offsets = row_start + tl.arange(0, BLOCK_N)
     mask = row_offsets < N
 
-    x = tl.load(input_ptr + row_offsets * C + channel_id, mask=mask, other=0.0).to(tl.float32)
+    input_desc = tl.make_tensor_descriptor(
+        input_ptr + channel_id,
+        shape=[N, 1],
+        strides=[C, 1],
+        block_shape=[BLOCK_N, 1],
+    )
+    x = input_desc.load([row_start, 0])[:, 0].to(tl.float32)
+    x = tl.where(mask, x, 0.0)
 
     local_sum = tl.sum(x, axis=0)
     local_sq_sum = tl.sum(x * x, axis=0)
@@ -47,8 +57,22 @@ def _compute_mean_invstd_kernel(
     block_offsets = tl.arange(0, BLOCK_B)
     mask = block_offsets < NUM_BLOCKS
 
-    sums = tl.load(block_sum_ptr + block_offsets * C + channel_id, mask=mask, other=0.0)
-    sq_sums = tl.load(block_sq_sum_ptr + block_offsets * C + channel_id, mask=mask, other=0.0)
+    sum_desc = tl.make_tensor_descriptor(
+        block_sum_ptr + channel_id,
+        shape=[NUM_BLOCKS, 1],
+        strides=[C, 1],
+        block_shape=[BLOCK_B, 1],
+    )
+    sq_sum_desc = tl.make_tensor_descriptor(
+        block_sq_sum_ptr + channel_id,
+        shape=[NUM_BLOCKS, 1],
+        strides=[C, 1],
+        block_shape=[BLOCK_B, 1],
+    )
+    sums = sum_desc.load([0, 0])[:, 0]
+    sq_sums = sq_sum_desc.load([0, 0])[:, 0]
+    sums = tl.where(mask, sums, 0.0)
+    sq_sums = tl.where(mask, sq_sums, 0.0)
 
     total_sum = tl.sum(sums, axis=0)
     total_sq_sum = tl.sum(sq_sums, axis=0)
@@ -75,19 +99,34 @@ def _apply_batch_norm_kernel(
 ):
     pid = tl.program_id(0)
 
-    offsets = pid * BLOCK + tl.arange(0, BLOCK)
+    block_start = pid * BLOCK
+    offsets = block_start + tl.arange(0, BLOCK)
     mask = offsets < total_elements
 
     channel_id = offsets % C
 
-    x = tl.load(input_ptr + offsets, mask=mask).to(tl.float32)
+    input_desc = tl.make_tensor_descriptor(
+        input_ptr,
+        shape=[total_elements, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK, 1],
+    )
+    output_desc = tl.make_tensor_descriptor(
+        output_ptr,
+        shape=[total_elements, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK, 1],
+    )
+
+    x = input_desc.load([block_start, 0])[:, 0].to(tl.float32)
+    x = tl.where(mask, x, 0.0)
     mean = tl.load(mean_ptr + channel_id, mask=mask)
     inv_std = tl.load(inv_std_ptr + channel_id, mask=mask)
     gamma = tl.load(gamma_ptr + channel_id, mask=mask).to(tl.float32)
     beta = tl.load(beta_ptr + channel_id, mask=mask).to(tl.float32)
 
     y = (x - mean) * inv_std * gamma + beta
-    tl.store(output_ptr + offsets, y, mask=mask)
+    output_desc.store([block_start, 0], y[:, None])
 
 
 # Only the apply kernel is autotuned (dominates total work for large N*C).
@@ -105,6 +144,10 @@ _apply_batch_norm_kernel_autotuned = triton.autotune(
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         N: int, C: int, eps: float,
         block_size: int = 1024, autotune: bool = False, **kwargs):
+    ensure_tma_available()
+    input = input.contiguous().view(-1)
+    gamma = gamma.contiguous().view(-1)
+    beta = beta.contiguous().view(-1)
     output = torch.empty_like(input)
     BLOCK_N = 1024
     NUM_BLOCKS = triton.cdiv(N, BLOCK_N)

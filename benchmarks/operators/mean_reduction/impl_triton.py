@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 # One CTA per row (BLOCK_M=1); column tile size drives memory coalescing.
 _DEFAULT_CONFIG = {"BLOCK_M": 1, "BLOCK_N": 1024, "num_warps": 4, "num_stages": 2}
 
@@ -17,8 +19,18 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
     row_ids  = pid * BLOCK_M + tl.arange(0, BLOCK_M)   # [BLOCK_M]
     row_mask = row_ids < M
 
-    X_row_ptr   = X   + row_ids[:, None] * N            # [BLOCK_M, 1] base ptrs
-    Out_row_ptr = Out + row_ids                          # [BLOCK_M]
+    x_desc = tl.make_tensor_descriptor(
+        X,
+        shape=[M, N],
+        strides=[N, 1],
+        block_shape=[BLOCK_M, BLOCK_N],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        Out,
+        shape=[M, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_M, 1],
+    )
 
     acc = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
 
@@ -27,12 +39,12 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
         col_mask = cols < N
         mask     = row_mask[:, None] & col_mask
 
-        a = tl.load(X_row_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        acc += a
+        a = x_desc.load([pid * BLOCK_M, off]).to(tl.float32)
+        acc += tl.where(mask, a, 0.0)
 
     row_sum = tl.sum(acc, axis=1)                        # [BLOCK_M]
     mean    = row_sum / N                                # [BLOCK_M]
-    tl.store(Out_row_ptr, mean, mask=row_mask)
+    out_desc.store([pid * BLOCK_M, 0], mean[:, None])
 
 
 _mean_rowwise_kernel_autotuned = triton.autotune(
@@ -47,6 +59,7 @@ _mean_rowwise_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    ensure_tma_available()
     assert x.is_cuda
 
     if x.ndim == 2 and dim == 1:

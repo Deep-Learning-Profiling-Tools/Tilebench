@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 8, "num_stages": 2}
 
 
@@ -22,8 +24,30 @@ def _layernorm_kernel(
     All accumulators use float32 for numerical stability.
     """
     pid = tl.program_id(0)
-    row_ptr     = x_ptr   + pid * stride_row
-    out_row_ptr = out_ptr + pid * stride_row
+    x_desc = tl.make_tensor_descriptor(
+        x_ptr + pid * stride_row,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
+    weight_desc = tl.make_tensor_descriptor(
+        weight_ptr,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
+    bias_desc = tl.make_tensor_descriptor(
+        bias_ptr,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        out_ptr + pid * stride_row,
+        shape=[N_SIZE, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N_SIZE, 1],
+    )
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
     # --- Pass 1: compute mean and variance ---
@@ -32,7 +56,8 @@ def _layernorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = tl.load(row_ptr + offs_n, mask=mask, other=0.0).to(tl.float32)
+        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
         sum_x  += x
         sum_x2 += x * x
 
@@ -45,11 +70,14 @@ def _layernorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x      = tl.load(row_ptr      + offs_n, mask=mask, other=0.0).to(tl.float32)
-        weight = tl.load(weight_ptr   + offs_n, mask=mask, other=1.0).to(tl.float32)
-        bias   = tl.load(bias_ptr     + offs_n, mask=mask, other=0.0).to(tl.float32)
-        y      = (x - mean_val) * rstd * weight + bias
-        tl.store(out_row_ptr + offs_n, y, mask=mask)
+        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
+        weight = weight_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        weight = tl.where(mask, weight, 1.0)
+        bias = bias_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        bias = tl.where(mask, bias, 0.0)
+        y = (x - mean_val) * rstd * weight + bias
+        out_desc.store([n_start, 0], y[:, None])
 
 
 _layernorm_kernel_autotuned = triton.autotune(
@@ -70,6 +98,7 @@ def run(
     eps: float = 1e-5,
     autotune: bool = False,
 ) -> torch.Tensor:
+    ensure_tma_available()
     orig_shape = x.shape
     K          = orig_shape[-1]
     batch_M    = x.numel() // K

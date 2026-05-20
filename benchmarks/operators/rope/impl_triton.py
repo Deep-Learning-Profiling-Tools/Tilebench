@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 next_power_of_2 = triton.next_power_of_2
 
 _DEFAULT_CONFIG = {"ROPE_GROUP_SIZE": 4, "num_warps": 4, "num_stages": 2}
@@ -31,10 +33,20 @@ def _rope_embedding(
     half_head_dim = head_dim // 2
     mask = col_offsets < half_head_dim
 
-    sin1 = tl.load(sin + (row_position % seqlen)*sin_row_stride + col_offsets,
-                   mask=mask, other=0)
-    cos1 = tl.load(cos + (row_position % seqlen)*cos_row_stride + col_offsets,
-                   mask=mask, other=0)
+    sin_desc = tl.make_tensor_descriptor(
+        sin + (row_position % seqlen) * sin_row_stride,
+        shape=[half_head_dim, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
+    cos_desc = tl.make_tensor_descriptor(
+        cos + (row_position % seqlen) * cos_row_stride,
+        shape=[half_head_dim, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_SIZE, 1],
+    )
+    sin1 = sin_desc.load([0, 0])[:, 0]
+    cos1 = cos_desc.load([0, 0])[:, 0]
 
     if BACKWARD_PASS:
         sin1 = -sin1
@@ -43,14 +55,18 @@ def _rope_embedding(
     head_end = min((head_start + ROPE_GROUP_SIZE), n_heads)
 
     for k in range(head_start, head_end):
-        offs_q1 = row_position * Q_row_stride + k * head_dim + col_offsets
-        offs_q2 = row_position * Q_row_stride + k * head_dim + col_offsets + half_head_dim
+        q_desc = tl.make_tensor_descriptor(
+            Q + row_position * Q_row_stride + k * head_dim,
+            shape=[head_dim, 1],
+            strides=[1, 1],
+            block_shape=[BLOCK_SIZE, 1],
+        )
 
-        Q1 = tl.load(Q + offs_q1, mask=mask, other=0).to(sin1.dtype)
-        Q2 = tl.load(Q + offs_q2, mask=mask, other=0).to(sin1.dtype)
+        Q1 = q_desc.load([0, 0])[:, 0].to(sin1.dtype)
+        Q2 = q_desc.load([half_head_dim, 0])[:, 0].to(sin1.dtype)
 
-        tl.store(Q + offs_q1, Q1*cos1 - Q2*sin1, mask=mask)
-        tl.store(Q + offs_q2, Q2*cos1 + Q1*sin1, mask=mask)
+        q_desc.store([0, 0], (Q1 * cos1 - Q2 * sin1)[:, None])
+        q_desc.store([half_head_dim, 0], (Q2 * cos1 + Q1 * sin1)[:, None])
 
 
 _rope_embedding_autotuned = triton.autotune(
@@ -67,6 +83,9 @@ _rope_embedding_autotuned = triton.autotune(
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
+    ensure_tma_available()
+    cos = cos.contiguous()
+    sin = sin.contiguous()
     # RoPE is in-place; clone so the caller's q stays pristine across backends.
     output = q.clone().contiguous()
     batch, seq_len, n_heads, head_dim = output.shape

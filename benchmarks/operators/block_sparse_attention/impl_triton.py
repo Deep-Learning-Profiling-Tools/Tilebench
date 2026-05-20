@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
 
 
@@ -55,22 +57,39 @@ def block_sparse_attention_kernel(
     head_groups = num_heads // num_kv_heads
     off_h_kv = off_h // head_groups
 
-    Q += off_b * stride_qb + off_h * stride_qh
-    K += off_b * stride_kb + off_h_kv * stride_kh
-    V += off_b * stride_vb + off_h_kv * stride_vh
+    q_base = Q + off_b * stride_qb + off_h * stride_qh
+    k_base = K + off_b * stride_kb + off_h_kv * stride_kh
+    v_base = V + off_b * stride_vb + off_h_kv * stride_vh
+    o_base = out + off_b * stride_ob + off_h * stride_oh
+
+    q_desc = tl.make_tensor_descriptor(
+        q_base,
+        shape=[q_seq_len, BLOCK_D * NUM_D_BLOCKS],
+        strides=[stride_qm, 1],
+        block_shape=[BLOCK_M, BLOCK_D],
+    )
+    k_desc = tl.make_tensor_descriptor(
+        k_base,
+        shape=[total_seq_len, BLOCK_D * NUM_D_BLOCKS],
+        strides=[stride_kn, 1],
+        block_shape=[BLOCK_N, BLOCK_D],
+    )
+    v_desc = tl.make_tensor_descriptor(
+        v_base,
+        shape=[total_seq_len, BLOCK_D * NUM_D_BLOCKS],
+        strides=[stride_vn, 1],
+        block_shape=[BLOCK_N, BLOCK_D],
+    )
+    out_desc = tl.make_tensor_descriptor(
+        o_base,
+        shape=[q_seq_len, BLOCK_D * NUM_D_BLOCKS],
+        strides=[stride_om, 1],
+        block_shape=[BLOCK_M, BLOCK_D],
+    )
 
     # Initialize offsets
     offs_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
     offs_n = tl.arange(0, BLOCK_N)
-    offs_d = tl.arange(0, BLOCK_D)
-    off_q = offs_m[:, None] * stride_qm + offs_d[None, :]  # [BLOCK_M, BLOCK_D]
-    off_k = offs_n[None, :] * stride_kn + offs_d[:, None]  # [BLOCK_D, BLOCK_N]
-    off_v = offs_n[:, None] * stride_vn + offs_d[None, :]  # [BLOCK_N, BLOCK_D]
-
-    # Initialize pointers to query, key, value
-    q_ptrs = Q + off_q
-    k_ptrs = K + off_k
-    v_ptrs = V + off_v
 
     # Initialize pointer to m and l
     m_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float("inf")
@@ -80,14 +99,9 @@ def block_sparse_attention_kernel(
         acc2 = tl.zeros([BLOCK_M, BLOCK_D], dtype=tl.float32)
 
     # Load q: it will stay in SRAM throughout
-    if EVEN_M:
-        q = tl.load(q_ptrs)
-        if NUM_D_BLOCKS >= 2:
-            q2 = tl.load(q_ptrs + BLOCK_D)
-    else:
-        q = tl.load(q_ptrs, mask=offs_m[:, None] < q_seq_len)
-        if NUM_D_BLOCKS >= 2:
-            q2 = tl.load(q_ptrs + BLOCK_D, mask=offs_m[:, None] < q_seq_len)
+    q = q_desc.load([start_m * BLOCK_M, 0])
+    if NUM_D_BLOCKS >= 2:
+        q2 = q_desc.load([start_m * BLOCK_M, BLOCK_D])
 
     layout_h = off_h % num_layout
 
@@ -101,18 +115,12 @@ def block_sparse_attention_kernel(
         col_idx = tl.load(layout_csr_col_indices + layout_h * layout_csr_col_stride_h + col_idx_idx).to(tl.int32)
         start_n = col_idx * BLOCK_N
         # -- compute qk ----
-        if EVEN_N:
-            k = tl.load(k_ptrs + start_n * stride_kn)
-        else:
-            k = tl.load(k_ptrs + start_n * stride_kn, mask=offs_n[None, :] + start_n < total_seq_len)
+        k = tl.trans(k_desc.load([start_n, 0]))
         qk = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
         qk += tl.dot(q, k)
 
         if NUM_D_BLOCKS >= 2:
-            if EVEN_N:
-                k = tl.load(k_ptrs + start_n * stride_kn + BLOCK_D)
-            else:
-                k = tl.load(k_ptrs + start_n * stride_kn + BLOCK_D, mask=offs_n[None, :] + start_n < total_seq_len)
+            k = tl.trans(k_desc.load([start_n, BLOCK_D]))
             qk += tl.dot(q2, k)
 
         qk *= softmax_scale
@@ -139,28 +147,20 @@ def block_sparse_attention_kernel(
             acc2 = acc2 * acc_scale[:, None]
         p = p.to(Q.dtype.element_ty)
         # update acc
-        if EVEN_N:
-            v = tl.load(v_ptrs + start_n * stride_vn)
-        else:
-            v = tl.load(v_ptrs + start_n * stride_vn, mask=offs_n[:, None] + start_n < total_seq_len)
+        v = v_desc.load([start_n, 0])
         acc += tl.dot(p, v)
 
         if NUM_D_BLOCKS >= 2:
-            if EVEN_N:
-                v = tl.load(v_ptrs + start_n * stride_vn + BLOCK_D)
-            else:
-                v = tl.load(v_ptrs + start_n * stride_vn + BLOCK_D, mask=offs_n[:, None] + start_n < total_seq_len)
+            v = v_desc.load([start_n, BLOCK_D])
             acc2 += tl.dot(p, v)
 
         # update m_i and l_i
         l_i = l_i_new
         m_i = m_i_new
 
-    off_o = off_b * stride_ob + off_h * stride_oh + offs_m[:, None] * stride_om + offs_d[None, :]
-    out_ptrs = out + off_o
-    tl.store(out_ptrs, acc, mask=offs_m[:, None] < q_seq_len)
+    out_desc.store([start_m * BLOCK_M, 0], acc)
     if NUM_D_BLOCKS >= 2:
-        tl.store(out_ptrs + BLOCK_D, acc2, mask=offs_m[:, None] < q_seq_len)
+        out_desc.store([start_m * BLOCK_M, BLOCK_D], acc2)
 
 
 _block_sparse_attention_kernel_autotuned = triton.autotune(
@@ -181,6 +181,14 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
     """
     Wrapper function to launch the Triton Block Sparse Attention kernel.
     """
+    ensure_tma_available()
+    if not Q.is_contiguous():
+        Q = Q.contiguous()
+    if not K.is_contiguous():
+        K = K.contiguous()
+    if not V.is_contiguous():
+        V = V.contiguous()
+
     q_seq_len = total_seq_len
     batch_size = Q.shape[0]
 

@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"num_warps": 8, "num_stages": 2}
 
 
@@ -19,8 +21,14 @@ def _cross_entropy_kernel(
     cls_offsets = tl.arange(0, BLOCK_CLASSES)
     cls_mask = cls_offsets < num_classes
 
-    row_ptr = logits_ptr + pid * stride_bn + cls_offsets * stride_bc
-    logits = tl.load(row_ptr, mask=cls_mask, other=-float("inf")).to(tl.float32)
+    logits_desc = tl.make_tensor_descriptor(
+        logits_ptr + pid * stride_bn,
+        shape=[num_classes, 1],
+        strides=[stride_bc, 1],
+        block_shape=[BLOCK_CLASSES, 1],
+    )
+    logits = logits_desc.load([0, 0])[:, 0].to(tl.float32)
+    logits = tl.where(cls_mask, logits, -float("inf"))
 
     row_max = tl.max(logits, axis=0)
     exp_shifted = tl.exp(logits - row_max)
@@ -52,6 +60,8 @@ def run(
     block_size: int = 1024,
     autotune: bool = False,
 ) -> torch.Tensor:
+    ensure_tma_available()
+    logits = logits.contiguous()
     batch_size, num_classes = logits.shape
     output = torch.empty((batch_size,), device=logits.device, dtype=logits.dtype)
     grid = (batch_size,)

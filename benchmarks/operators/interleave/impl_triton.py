@@ -2,27 +2,24 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
 def interleave_kernel(A_ptr, B_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(axis=0)
+    block_start = pid * BLOCK_SIZE
 
-    a_offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    b_offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    a_desc = tl.make_tensor_descriptor(A_ptr, shape=[N, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    b_desc = tl.make_tensor_descriptor(B_ptr, shape=[N, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[N, 2], strides=[2, 1], block_shape=[BLOCK_SIZE, 2])
 
-    a_mask = a_offsets < N
-    b_mask = b_offsets < N
-
-    a_local = tl.load(A_ptr + a_offsets, a_mask)
-    b_local = tl.load(B_ptr + b_offsets, b_mask)
-
+    a_local = a_desc.load([block_start, 0])
+    b_local = b_desc.load([block_start, 0])
     output_local = tl.interleave(a_local, b_local)
-
-    output_offsets = pid * 2 * BLOCK_SIZE + tl.arange(0, 2 * BLOCK_SIZE)
-
-    tl.store(output_ptr + output_offsets, output_local, output_offsets < 2 * N)
+    out_desc.store([block_start, 0], output_local)
 
 
 _interleave_kernel_autotuned = triton.autotune(
@@ -38,6 +35,9 @@ _interleave_kernel_autotuned = triton.autotune(
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
+    ensure_tma_available()
+    A = A.contiguous().view(-1)
+    B = B.contiguous().view(-1)
     output = torch.empty(2 * N, dtype=A.dtype, device=A.device)
 
     if autotune:

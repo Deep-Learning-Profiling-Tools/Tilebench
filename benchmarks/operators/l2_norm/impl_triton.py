@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_N": 1024, "num_warps": 4, "num_stages": 3}
 
 
@@ -16,14 +18,25 @@ def _l2_norm_fwd_kernel(
 ):
     """One CTA normalises one row with tiled two-pass L2 norm."""
     row = tl.program_id(0)
-    X += row * stride_x_row
-    Y += row * stride_x_row
+    x_desc = tl.make_tensor_descriptor(
+        X + row * stride_x_row,
+        shape=[N, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N, 1],
+    )
+    y_desc = tl.make_tensor_descriptor(
+        Y + row * stride_x_row,
+        shape=[N, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N, 1],
+    )
 
     # Pass 1: accumulate sum(x²).
     acc = tl.zeros([BLOCK_N], dtype=tl.float32)
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
-        x = tl.load(X + cols, mask=cols < N, other=0.0).to(tl.float32)
+        x = x_desc.load([off, 0])[:, 0].to(tl.float32)
+        x = tl.where(cols < N, x, 0.0)
         acc += x * x
     rstd = 1 / tl.sqrt(tl.sum(acc, axis=0) + eps)
 
@@ -31,9 +44,10 @@ def _l2_norm_fwd_kernel(
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
         mask = cols < N
-        x = tl.load(X + cols, mask=mask, other=0.0).to(tl.float32)
+        x = x_desc.load([off, 0])[:, 0].to(tl.float32)
+        x = tl.where(mask, x, 0.0)
         y = x * rstd
-        tl.store(Y + cols, y.to(X.dtype.element_ty), mask=mask)
+        y_desc.store([off, 0], y[:, None].to(X.dtype.element_ty))
 
 
 _l2_norm_fwd_kernel_autotuned = triton.autotune(
@@ -48,6 +62,7 @@ _l2_norm_fwd_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
+    ensure_tma_available()
     orig_shape = x.shape
     x_2d = x.reshape(-1, x.shape[-1])
     if x_2d.stride(-1) != 1:

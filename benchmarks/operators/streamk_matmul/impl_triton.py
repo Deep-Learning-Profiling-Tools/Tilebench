@@ -24,6 +24,8 @@ import torch
 import triton
 from triton import language as tl
 
+from core.triton_tma import ensure_tma_available
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32, "GROUP_M": 8,
@@ -71,31 +73,39 @@ def first_wave(
         end_iter = tl.minimum(start_iter + rem, last_iter)
 
         pid_m, pid_n = _swizzle_tile(tile_id, M, N, BLOCK_M, BLOCK_N, GROUP_M)
-        rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-        rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-        rk = tl.arange(0, BLOCK_K)
-        mask_m = rm < M
-        mask_n = rn < N
-
+        start_m = pid_m * BLOCK_M
+        start_n = pid_n * BLOCK_N
         iter_in_tile = start_iter % iters_per_tile
-        A_ptrs = A + (rm[:, None] * stride_am + rk[None, :] * stride_ak) \
-                 + iter_in_tile * BLOCK_K * stride_ak
-        B_ptrs = B + (rk[:, None] * stride_bk + rn[None, :] * stride_bn) \
-                 + iter_in_tile * BLOCK_K * stride_bk
+
+        a_desc = tl.make_tensor_descriptor(
+            A,
+            shape=[M, K],
+            strides=[stride_am, stride_ak],
+            block_shape=[BLOCK_M, BLOCK_K],
+        )
+        b_desc = tl.make_tensor_descriptor(
+            B,
+            shape=[K, N],
+            strides=[stride_bk, stride_bn],
+            block_shape=[BLOCK_K, BLOCK_N],
+        )
+        c_desc = tl.make_tensor_descriptor(
+            C,
+            shape=[M, N],
+            strides=[stride_cm, stride_cn],
+            block_shape=[BLOCK_M, BLOCK_N],
+        )
 
         acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
         for current_iter in range(start_iter, end_iter):
-            mask_k = rk + iter_in_tile * BLOCK_K < K
-            a = tl.load(A_ptrs, mask=mask_m[:, None] & mask_k[None, :], other=0.0)
-            b = tl.load(B_ptrs, mask=mask_k[:, None] & mask_n[None, :], other=0.0)
+            start_k = iter_in_tile * BLOCK_K
+            a = a_desc.load([start_m, start_k])
+            b = b_desc.load([start_k, start_n])
             acc += tl.dot(a, b, input_precision="tf32")
-            A_ptrs += BLOCK_K * stride_ak
-            B_ptrs += BLOCK_K * stride_bk
             iter_in_tile += 1
 
         acc_typed = acc.to(C.dtype.element_ty)
-        C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
-        tl.atomic_add(C_, acc_typed, mask=mask_m[:, None] & mask_n[None, :])
+        c_desc.atomic_add([start_m, start_n], acc_typed)
 
         start_iter = end_iter
 
@@ -139,26 +149,37 @@ def full_tiles(
         return
 
     pid_m, pid_n = _swizzle_tile(tile_id, M, N, BLOCK_M, BLOCK_N, GROUP_M)
-    rm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    rn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    rk = tl.arange(0, BLOCK_K)
-    mask_m = rm < M
-    mask_n = rn < N
+    start_m = pid_m * BLOCK_M
+    start_n = pid_n * BLOCK_N
 
-    A_ptrs = A + (rm[:, None] * stride_am + rk[None, :] * stride_ak)
-    B_ptrs = B + (rk[:, None] * stride_bk + rn[None, :] * stride_bn)
+    a_desc = tl.make_tensor_descriptor(
+        A,
+        shape=[M, K],
+        strides=[stride_am, stride_ak],
+        block_shape=[BLOCK_M, BLOCK_K],
+    )
+    b_desc = tl.make_tensor_descriptor(
+        B,
+        shape=[K, N],
+        strides=[stride_bk, stride_bn],
+        block_shape=[BLOCK_K, BLOCK_N],
+    )
+    c_desc = tl.make_tensor_descriptor(
+        C,
+        shape=[M, N],
+        strides=[stride_cm, stride_cn],
+        block_shape=[BLOCK_M, BLOCK_N],
+    )
+
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
     for k in range(0, tl.cdiv(K, BLOCK_K)):
-        mask_k = rk + k * BLOCK_K < K
-        a = tl.load(A_ptrs, mask=mask_m[:, None] & mask_k[None, :], other=0.0)
-        b = tl.load(B_ptrs, mask=mask_k[:, None] & mask_n[None, :], other=0.0)
+        start_k = k * BLOCK_K
+        a = a_desc.load([start_m, start_k])
+        b = b_desc.load([start_k, start_n])
         acc += tl.dot(a, b, input_precision="tf32")
-        A_ptrs += BLOCK_K * stride_ak
-        B_ptrs += BLOCK_K * stride_bk
 
     acc_typed = acc.to(C.dtype.element_ty)
-    C_ = C + (rm[:, None] * stride_cm + rn[None, :] * stride_cn)
-    tl.store(C_, acc_typed, mask=mask_m[:, None] & mask_n[None, :])
+    c_desc.store([start_m, start_n], acc_typed)
 
 
 def _device_sm_count() -> int:
@@ -176,7 +197,11 @@ def _streamk_partition(M, N, BLK_M, BLK_N, NUM_SMS):
 
 def run(a: torch.Tensor, b: torch.Tensor,
         block_size: int = None, autotune: bool = False, **kwargs):
-    assert a.is_contiguous() and b.is_contiguous()
+    ensure_tma_available()
+    if not a.is_contiguous():
+        a = a.contiguous()
+    if not b.is_contiguous():
+        b = b.contiguous()
     assert a.shape[1] == b.shape[0]
 
     M, K = a.shape

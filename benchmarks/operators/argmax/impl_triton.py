@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_N": 256, "num_warps": 4, "num_stages": 2}
 
 
@@ -14,17 +16,22 @@ def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
     Each program handles one row.
     """
     row = tl.program_id(0)
-    offs = tl.arange(0, BLOCK_N)
     neg_inf = float("-inf")
+
+    x_desc = tl.make_tensor_descriptor(
+        X + row * N,
+        shape=[N, 1],
+        strides=[1, 1],
+        block_shape=[BLOCK_N, 1],
+    )
 
     best_val = neg_inf
     best_idx = tl.full((), 0, dtype=tl.int64)
 
     for start in range(0, N, BLOCK_N):
-        cols = start + offs
-        mask = cols < N
-        x = tl.load(X + row * N + cols, mask=mask, other=neg_inf).to(tl.float32)
-
+        cols = start + tl.arange(0, BLOCK_N)
+        x = x_desc.load([start, 0])[:, 0].to(tl.float32)
+        x = tl.where(cols < N, x, neg_inf)
         tile_max = tl.max(x, axis=0)
         tile_arg = tl.argmax(x, axis=0).to(tl.int64)
 
@@ -47,6 +54,7 @@ _argmax_rowwise_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    ensure_tma_available()
     assert x.is_cuda, "Input must be on CUDA"
 
     if dim == 1:

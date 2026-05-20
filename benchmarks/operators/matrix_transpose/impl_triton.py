@@ -2,6 +2,8 @@ import torch
 import triton
 import triton.language as tl
 
+from core.triton_tma import ensure_tma_available
+
 _DEFAULT_CONFIG = {"BLOCK_TILE": 64, "num_warps": 4}
 
 
@@ -20,15 +22,24 @@ def _transpose_kernel(
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
 
-    offs_m = pid_m * BLOCK_TILE + tl.arange(0, BLOCK_TILE)
-    offs_n = pid_n * BLOCK_TILE + tl.arange(0, BLOCK_TILE)
-    mask = (offs_m[:, None] < m) & (offs_n[None, :] < n)
+    start_m = pid_m * BLOCK_TILE
+    start_n = pid_n * BLOCK_TILE
 
-    x_ptrs = x_ptr + offs_m[:, None] * stride_xm + offs_n[None, :] * stride_xn
-    values = tl.load(x_ptrs, mask=mask)
+    x_desc = tl.make_tensor_descriptor(
+        x_ptr,
+        shape=[m, n],
+        strides=[stride_xm, stride_xn],
+        block_shape=[BLOCK_TILE, BLOCK_TILE],
+    )
+    output_desc = tl.make_tensor_descriptor(
+        output_ptr,
+        shape=[n, m],
+        strides=[stride_om, stride_on],
+        block_shape=[BLOCK_TILE, BLOCK_TILE],
+    )
 
-    out_ptrs = output_ptr + offs_n[None, :] * stride_om + offs_m[:, None] * stride_on
-    tl.store(out_ptrs, values, mask=mask)
+    values = x_desc.load([start_m, start_n])
+    output_desc.store([start_n, start_m], tl.trans(values))
 
 
 _transpose_kernel_autotuned = triton.autotune(
@@ -42,6 +53,10 @@ _transpose_kernel_autotuned = triton.autotune(
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+    ensure_tma_available()
+    if not x.is_contiguous():
+        x = x.contiguous()
+
     m, n = x.shape
     output = torch.empty((n, m), device=x.device, dtype=x.dtype)
 
