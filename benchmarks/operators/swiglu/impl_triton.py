@@ -15,16 +15,16 @@ def _swiglu_kernel(
 ):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
-    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    y_desc = tl.make_tensor_descriptor(y_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    out_desc = tl.make_tensor_descriptor(out_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    y_desc = tl.make_tensor_descriptor(y_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    out_desc = tl.make_tensor_descriptor(out_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
 
-    x = x_desc.load([block_start, 0])
-    y = y_desc.load([block_start, 0])
+    x = x_desc.load([block_start])
+    y = y_desc.load([block_start])
     x_f32 = x.to(tl.float32)
     y_f32 = y.to(tl.float32)
     out = x_f32 * tl.sigmoid(x_f32) * y_f32
-    out_desc.store([block_start, 0], out.to(x.dtype))
+    out_desc.store([block_start], out.to(x.dtype))
 
 
 _swiglu_kernel_autotuned = triton.autotune(

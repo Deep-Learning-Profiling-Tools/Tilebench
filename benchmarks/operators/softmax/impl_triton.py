@@ -17,15 +17,15 @@ def softmax_online_kernel(
     row_idx = tl.program_id(0)
     input_desc = tl.make_tensor_descriptor(
         input_ptr + row_idx * input_row_stride,
-        shape=[n_cols, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[n_cols],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
     output_desc = tl.make_tensor_descriptor(
         output_ptr + row_idx * output_row_stride,
-        shape=[n_cols, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[n_cols],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
 
     # Pass 1: online max + sum
@@ -34,7 +34,7 @@ def softmax_online_kernel(
     for col_start in range(0, n_cols, BLOCK_SIZE):
         offs = col_start + tl.arange(0, BLOCK_SIZE)
         mask = offs < n_cols
-        x = input_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        x = input_desc.load([col_start]).to(tl.float32)
         x = tl.where(mask, x, -float('inf'))
         block_max = tl.max(x, axis=0)
         m_new = tl.maximum(m, block_max)
@@ -45,10 +45,10 @@ def softmax_online_kernel(
     for col_start in range(0, n_cols, BLOCK_SIZE):
         offs = col_start + tl.arange(0, BLOCK_SIZE)
         mask = offs < n_cols
-        x = input_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        x = input_desc.load([col_start]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
         y = tl.exp(x - m) / l
-        output_desc.store([col_start, 0], y[:, None].to(output_ptr.dtype.element_ty))
+        output_desc.store([col_start], y.to(output_ptr.dtype.element_ty))
 
 
 _softmax_kernel_autotuned = triton.autotune(

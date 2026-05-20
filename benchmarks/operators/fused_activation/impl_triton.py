@@ -21,17 +21,17 @@ def _fused_activation_kernel(
 ):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
-    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    gate_desc = tl.make_tensor_descriptor(gate_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    bias_desc = tl.make_tensor_descriptor(bias_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    out_desc = tl.make_tensor_descriptor(out_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    gate_desc = tl.make_tensor_descriptor(gate_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    bias_desc = tl.make_tensor_descriptor(bias_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    out_desc = tl.make_tensor_descriptor(out_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
 
-    x = x_desc.load([block_start, 0]).to(tl.float32)
-    gate = gate_desc.load([block_start, 0]).to(tl.float32)
-    bias = bias_desc.load([block_start, 0]).to(tl.float32)
+    x = x_desc.load([block_start]).to(tl.float32)
+    gate = gate_desc.load([block_start]).to(tl.float32)
+    bias = bias_desc.load([block_start]).to(tl.float32)
     z = x * gate + bias
     out = z * tl.sigmoid(z)  # SiLU
-    out_desc.store([block_start, 0], out)
+    out_desc.store([block_start], out)
 
 
 _fused_activation_kernel_autotuned = triton.autotune(

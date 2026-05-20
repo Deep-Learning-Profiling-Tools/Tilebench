@@ -11,10 +11,10 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 def _mul2_kernel(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
-    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    x = x_desc.load([block_start, 0])
-    out_desc.store([block_start, 0], x * 2)
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    x = x_desc.load([block_start])
+    out_desc.store([block_start], x * 2)
 
 
 _mul2_kernel_autotuned = triton.autotune(

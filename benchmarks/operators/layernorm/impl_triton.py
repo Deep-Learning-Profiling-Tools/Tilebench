@@ -26,27 +26,27 @@ def _layernorm_kernel(
     pid = tl.program_id(0)
     x_desc = tl.make_tensor_descriptor(
         x_ptr + pid * stride_row,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     weight_desc = tl.make_tensor_descriptor(
         weight_ptr,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     bias_desc = tl.make_tensor_descriptor(
         bias_ptr,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     out_desc = tl.make_tensor_descriptor(
         out_ptr + pid * stride_row,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
@@ -56,7 +56,7 @@ def _layernorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([n_start]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
         sum_x  += x
         sum_x2 += x * x
@@ -70,14 +70,14 @@ def _layernorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([n_start]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
-        weight = weight_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        weight = weight_desc.load([n_start]).to(tl.float32)
         weight = tl.where(mask, weight, 1.0)
-        bias = bias_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        bias = bias_desc.load([n_start]).to(tl.float32)
         bias = tl.where(mask, bias, 0.0)
         y = (x - mean_val) * rstd * weight + bias
-        out_desc.store([n_start, 0], y[:, None])
+        out_desc.store([n_start], y)
 
 
 _layernorm_kernel_autotuned = triton.autotune(

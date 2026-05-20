@@ -34,12 +34,6 @@ def _fwd_kernel_flash_decode_stage2(
     cur_batch_seq_len = tl.load(B_Seqlen + cur_batch)
     block_n_size = tl.where(cur_batch_seq_len <= 0, 0, cur_batch_seq_len + BLOCK_SEQ - 1) // BLOCK_SEQ
 
-    mid_desc = tl.make_tensor_descriptor(
-        Mid_O + cur_batch * stride_mid_ob + cur_head * stride_mid_oh,
-        shape=[block_n_size, head_dim],
-        strides=[stride_mid_os, stride_mid_od],
-        block_shape=[1, BLOCK_DMODEL],
-    )
     out_desc = tl.make_tensor_descriptor(
         Out + cur_batch * stride_obs + cur_head * stride_oh,
         shape=[1, head_dim],
@@ -53,8 +47,11 @@ def _fwd_kernel_flash_decode_stage2(
 
     offs_logic = cur_batch * stride_mid_o_eb + cur_head * stride_mid_o_eh
     for block_seq_n in range(0, block_n_size, 1):
-        tv = mid_desc.load([block_seq_n, 0])[0, :]
-        tv = tl.where(offs_d < head_dim, tv, 0.0)
+        tv = tl.load(
+            Mid_O + cur_batch * stride_mid_ob + cur_head * stride_mid_oh + block_seq_n * stride_mid_os + offs_d * stride_mid_od,
+            mask=offs_d < head_dim,
+            other=0.0,
+        )
         tlogic = tl.load(Mid_O_LogExpSum + offs_logic + block_seq_n)
         new_max_logic = tl.maximum(tlogic, max_logic)
 

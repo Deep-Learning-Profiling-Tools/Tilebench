@@ -35,18 +35,18 @@ def _rope_embedding(
 
     sin_desc = tl.make_tensor_descriptor(
         sin + (row_position % seqlen) * sin_row_stride,
-        shape=[half_head_dim, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[half_head_dim],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
     cos_desc = tl.make_tensor_descriptor(
         cos + (row_position % seqlen) * cos_row_stride,
-        shape=[half_head_dim, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[half_head_dim],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
-    sin1 = sin_desc.load([0, 0])[:, 0]
-    cos1 = cos_desc.load([0, 0])[:, 0]
+    sin1 = sin_desc.load([0])
+    cos1 = cos_desc.load([0])
 
     if BACKWARD_PASS:
         sin1 = -sin1
@@ -57,16 +57,16 @@ def _rope_embedding(
     for k in range(head_start, head_end):
         q_desc = tl.make_tensor_descriptor(
             Q + row_position * Q_row_stride + k * head_dim,
-            shape=[head_dim, 1],
-            strides=[1, 1],
-            block_shape=[BLOCK_SIZE, 1],
+            shape=[head_dim],
+            strides=[1],
+            block_shape=[BLOCK_SIZE],
         )
 
-        Q1 = q_desc.load([0, 0])[:, 0].to(sin1.dtype)
-        Q2 = q_desc.load([half_head_dim, 0])[:, 0].to(sin1.dtype)
+        Q1 = q_desc.load([0]).to(sin1.dtype)
+        Q2 = q_desc.load([half_head_dim]).to(sin1.dtype)
 
-        q_desc.store([0, 0], (Q1 * cos1 - Q2 * sin1)[:, None])
-        q_desc.store([half_head_dim, 0], (Q2 * cos1 + Q1 * sin1)[:, None])
+        q_desc.store([0], Q1 * cos1 - Q2 * sin1)
+        q_desc.store([half_head_dim], Q2 * cos1 + Q1 * sin1)
 
 
 _rope_embedding_autotuned = triton.autotune(

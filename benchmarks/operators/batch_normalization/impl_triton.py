@@ -23,14 +23,7 @@ def _compute_block_sums_kernel(
     row_offsets = row_start + tl.arange(0, BLOCK_N)
     mask = row_offsets < N
 
-    input_desc = tl.make_tensor_descriptor(
-        input_ptr + channel_id,
-        shape=[N, 1],
-        strides=[C, 1],
-        block_shape=[BLOCK_N, 1],
-    )
-    x = input_desc.load([row_start, 0])[:, 0].to(tl.float32)
-    x = tl.where(mask, x, 0.0)
+    x = tl.load(input_ptr + row_offsets * C + channel_id, mask=mask, other=0.0).to(tl.float32)
 
     local_sum = tl.sum(x, axis=0)
     local_sq_sum = tl.sum(x * x, axis=0)
@@ -57,22 +50,8 @@ def _compute_mean_invstd_kernel(
     block_offsets = tl.arange(0, BLOCK_B)
     mask = block_offsets < NUM_BLOCKS
 
-    sum_desc = tl.make_tensor_descriptor(
-        block_sum_ptr + channel_id,
-        shape=[NUM_BLOCKS, 1],
-        strides=[C, 1],
-        block_shape=[BLOCK_B, 1],
-    )
-    sq_sum_desc = tl.make_tensor_descriptor(
-        block_sq_sum_ptr + channel_id,
-        shape=[NUM_BLOCKS, 1],
-        strides=[C, 1],
-        block_shape=[BLOCK_B, 1],
-    )
-    sums = sum_desc.load([0, 0])[:, 0]
-    sq_sums = sq_sum_desc.load([0, 0])[:, 0]
-    sums = tl.where(mask, sums, 0.0)
-    sq_sums = tl.where(mask, sq_sums, 0.0)
+    sums = tl.load(block_sum_ptr + block_offsets * C + channel_id, mask=mask, other=0.0)
+    sq_sums = tl.load(block_sq_sum_ptr + block_offsets * C + channel_id, mask=mask, other=0.0)
 
     total_sum = tl.sum(sums, axis=0)
     total_sq_sum = tl.sum(sq_sums, axis=0)
@@ -107,18 +86,18 @@ def _apply_batch_norm_kernel(
 
     input_desc = tl.make_tensor_descriptor(
         input_ptr,
-        shape=[total_elements, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK, 1],
+        shape=[total_elements],
+        strides=[1],
+        block_shape=[BLOCK],
     )
     output_desc = tl.make_tensor_descriptor(
         output_ptr,
-        shape=[total_elements, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK, 1],
+        shape=[total_elements],
+        strides=[1],
+        block_shape=[BLOCK],
     )
 
-    x = input_desc.load([block_start, 0])[:, 0].to(tl.float32)
+    x = input_desc.load([block_start]).to(tl.float32)
     x = tl.where(mask, x, 0.0)
     mean = tl.load(mean_ptr + channel_id, mask=mask)
     inv_std = tl.load(inv_std_ptr + channel_id, mask=mask)
@@ -126,7 +105,7 @@ def _apply_batch_norm_kernel(
     beta = tl.load(beta_ptr + channel_id, mask=mask).to(tl.float32)
 
     y = (x - mean) * inv_std * gamma + beta
-    output_desc.store([block_start, 0], y[:, None])
+    output_desc.store([block_start], y)
 
 
 # Only the apply kernel is autotuned (dominates total work for large N*C).

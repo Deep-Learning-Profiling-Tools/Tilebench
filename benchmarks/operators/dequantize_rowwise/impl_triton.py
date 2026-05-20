@@ -30,20 +30,20 @@ def _dequantize_rowwise_kernel(
     row_mask = arange < BLOCK_SIZE
     x_desc = tl.make_tensor_descriptor(
         x_ptr + pid * BLOCK_SIZE,
-        shape=[BLOCK_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[P2, 1],
+        shape=[1, BLOCK_SIZE],
+        strides=[BLOCK_SIZE, 1],
+        block_shape=[1, P2],
     )
     out_desc = tl.make_tensor_descriptor(
         output_ptr + pid * BLOCK_SIZE,
-        shape=[BLOCK_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[P2, 1],
+        shape=[1, BLOCK_SIZE],
+        strides=[BLOCK_SIZE, 1],
+        block_shape=[1, P2],
     )
-    x = x_desc.load([0, 0])[:, 0]
+    x = x_desc.load([0, 0])
     max_val = tl.load(state_x + pid)
     output = max_val * x * inv_127
-    out_desc.store([0, 0], tl.where(row_mask, output, 0.0)[:, None])
+    out_desc.store([0, 0], tl.where(row_mask[None, :], output, 0.0))
 
 
 _dequantize_rowwise_kernel_autotuned = triton.autotune(

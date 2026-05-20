@@ -31,23 +31,23 @@ def _kl_divergence_kernel(
     pid = tl.program_id(axis=0)
     log_desc = tl.make_tensor_descriptor(
         log_y_pred_ptr + pid * log_y_pred_stride,
-        shape=[n_cols, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[n_cols],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
     true_desc = tl.make_tensor_descriptor(
         y_true_ptr + pid * y_true_stride,
-        shape=[n_cols, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[n_cols],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
 
     acc = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
     for col_start in range(0, n_cols, BLOCK_SIZE):
         cols = col_start + tl.arange(0, BLOCK_SIZE)
         mask = cols < n_cols
-        log_y_pred = log_desc.load([col_start, 0])[:, 0].to(tl.float32)
-        y_true = true_desc.load([col_start, 0])[:, 0].to(tl.float32)
+        log_y_pred = log_desc.load([col_start]).to(tl.float32)
+        y_true = true_desc.load([col_start]).to(tl.float32)
         log_y_pred = tl.where(mask, log_y_pred, 0.0)
         y_true = tl.where(mask, y_true, 0.0)
         # Where y_true == 0 (true zero or OOB padding), the KL term is 0

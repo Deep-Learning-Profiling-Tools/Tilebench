@@ -20,22 +20,22 @@ def _l2_norm_fwd_kernel(
     row = tl.program_id(0)
     x_desc = tl.make_tensor_descriptor(
         X + row * stride_x_row,
-        shape=[N, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N, 1],
+        shape=[N],
+        strides=[1],
+        block_shape=[BLOCK_N],
     )
     y_desc = tl.make_tensor_descriptor(
         Y + row * stride_x_row,
-        shape=[N, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N, 1],
+        shape=[N],
+        strides=[1],
+        block_shape=[BLOCK_N],
     )
 
     # Pass 1: accumulate sum(x²).
     acc = tl.zeros([BLOCK_N], dtype=tl.float32)
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
-        x = x_desc.load([off, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([off]).to(tl.float32)
         x = tl.where(cols < N, x, 0.0)
         acc += x * x
     rstd = 1 / tl.sqrt(tl.sum(acc, axis=0) + eps)
@@ -44,10 +44,10 @@ def _l2_norm_fwd_kernel(
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
         mask = cols < N
-        x = x_desc.load([off, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([off]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
         y = x * rstd
-        y_desc.store([off, 0], y[:, None].to(X.dtype.element_ty))
+        y_desc.store([off], y.to(X.dtype.element_ty))
 
 
 _l2_norm_fwd_kernel_autotuned = triton.autotune(

@@ -27,21 +27,21 @@ def _rmsnorm_kernel(
     pid = tl.program_id(0)
     x_desc = tl.make_tensor_descriptor(
         x_ptr + pid * stride_row,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     w_desc = tl.make_tensor_descriptor(
         rms_w_ptr,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     out_desc = tl.make_tensor_descriptor(
         out_ptr + pid * stride_row,
-        shape=[N_SIZE, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N_SIZE, 1],
+        shape=[N_SIZE],
+        strides=[1],
+        block_shape=[BLOCK_N_SIZE],
     )
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
@@ -50,7 +50,7 @@ def _rmsnorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([n_start]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
         var += x * x
     rstd = tl.math.rsqrt(tl.sum(var, axis=0) / N_SIZE + eps)
@@ -59,11 +59,11 @@ def _rmsnorm_kernel(
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
-        x = x_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([n_start]).to(tl.float32)
         x = tl.where(mask, x, 0.0)
-        rms_w = w_desc.load([n_start, 0])[:, 0].to(tl.float32)
+        rms_w = w_desc.load([n_start]).to(tl.float32)
         rms_w = tl.where(mask, rms_w, 1.0)
-        out_desc.store([n_start, 0], (x * rstd * rms_w)[:, None])
+        out_desc.store([n_start], x * rstd * rms_w)
 
 
 # ---------------------------------------------------------------------------

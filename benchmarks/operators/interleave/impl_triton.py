@@ -12,14 +12,14 @@ def interleave_kernel(A_ptr, B_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(axis=0)
     block_start = pid * BLOCK_SIZE
 
-    a_desc = tl.make_tensor_descriptor(A_ptr, shape=[N, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    b_desc = tl.make_tensor_descriptor(B_ptr, shape=[N, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[N, 2], strides=[2, 1], block_shape=[BLOCK_SIZE, 2])
+    a_desc = tl.make_tensor_descriptor(A_ptr, shape=[N], strides=[1], block_shape=[BLOCK_SIZE])
+    b_desc = tl.make_tensor_descriptor(B_ptr, shape=[N], strides=[1], block_shape=[BLOCK_SIZE])
+    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[2 * N], strides=[1], block_shape=[2 * BLOCK_SIZE])
 
-    a_local = a_desc.load([block_start, 0])
-    b_local = b_desc.load([block_start, 0])
+    a_local = a_desc.load([block_start])
+    b_local = b_desc.load([block_start])
     output_local = tl.interleave(a_local, b_local)
-    out_desc.store([block_start, 0], output_local)
+    out_desc.store([2 * block_start], output_local)
 
 
 _interleave_kernel_autotuned = triton.autotune(

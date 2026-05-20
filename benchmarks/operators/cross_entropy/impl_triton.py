@@ -23,11 +23,11 @@ def _cross_entropy_kernel(
 
     logits_desc = tl.make_tensor_descriptor(
         logits_ptr + pid * stride_bn,
-        shape=[num_classes, 1],
-        strides=[stride_bc, 1],
-        block_shape=[BLOCK_CLASSES, 1],
+        shape=[num_classes],
+        strides=[stride_bc],
+        block_shape=[BLOCK_CLASSES],
     )
-    logits = logits_desc.load([0, 0])[:, 0].to(tl.float32)
+    logits = logits_desc.load([0]).to(tl.float32)
     logits = tl.where(cls_mask, logits, -float("inf"))
 
     row_max = tl.max(logits, axis=0)

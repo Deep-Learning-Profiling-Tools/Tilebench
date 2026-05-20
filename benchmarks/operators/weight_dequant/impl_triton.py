@@ -19,15 +19,15 @@ def dequant_kernel(X, S, Y, M: tl.constexpr, N: tl.constexpr,
 
     x_desc = tl.make_tensor_descriptor(
         X,
-        shape=[M * N, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[M * N],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
     y_desc = tl.make_tensor_descriptor(
         Y,
-        shape=[M * N, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_SIZE, 1],
+        shape=[M * N],
+        strides=[1],
+        block_shape=[BLOCK_SIZE],
     )
 
     row = offsets // N
@@ -36,13 +36,13 @@ def dequant_kernel(X, S, Y, M: tl.constexpr, N: tl.constexpr,
     s_row = row // TILE_SIZE
     s_col = col // TILE_SIZE
 
-    x = x_desc.load([block_start, 0])[:, 0].to(tl.float32)
+    x = x_desc.load([block_start]).to(tl.float32)
     x = tl.where(mask, x, 0.0)
     scale = tl.load(S + s_row * S_COLS + s_col, mask=mask).to(tl.float32)
 
     y = x * scale
 
-    y_desc.store([block_start, 0], y[:, None])
+    y_desc.store([block_start], y)
 
 
 _dequant_kernel_autotuned = triton.autotune(

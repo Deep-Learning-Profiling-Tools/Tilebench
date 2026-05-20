@@ -25,13 +25,6 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
         strides=[N, 1],
         block_shape=[BLOCK_M, BLOCK_N],
     )
-    out_desc = tl.make_tensor_descriptor(
-        Out,
-        shape=[M, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_M, 1],
-    )
-
     acc = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
 
     for off in range(0, N, BLOCK_N):
@@ -44,7 +37,7 @@ def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.conste
 
     row_sum = tl.sum(acc, axis=1)                        # [BLOCK_M]
     mean    = row_sum / N                                # [BLOCK_M]
-    out_desc.store([pid * BLOCK_M, 0], mean[:, None])
+    tl.store(Out + row_ids, mean, mask=row_mask)
 
 
 _mean_rowwise_kernel_autotuned = triton.autotune(

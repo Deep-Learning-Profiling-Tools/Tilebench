@@ -18,13 +18,13 @@ def _dropout_kernel(
 ):
     pid = tl.program_id(axis=0)
     block_start = pid * BLOCK_SIZE
-    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    keep_desc = tl.make_tensor_descriptor(x_keep_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[n_elements, 1], strides=[1, 1], block_shape=[BLOCK_SIZE, 1])
-    x = x_desc.load([block_start, 0])
-    x_keep = keep_desc.load([block_start, 0])
+    x_desc = tl.make_tensor_descriptor(x_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    keep_desc = tl.make_tensor_descriptor(x_keep_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    out_desc = tl.make_tensor_descriptor(output_ptr, shape=[n_elements], strides=[1], block_shape=[BLOCK_SIZE])
+    x = x_desc.load([block_start])
+    x_keep = keep_desc.load([block_start])
     output = tl.where(x_keep.to(tl.int1), x / (1 - p), 0.0)
-    out_desc.store([block_start, 0], output)
+    out_desc.store([block_start], output)
 
 
 _dropout_kernel_autotuned = triton.autotune(

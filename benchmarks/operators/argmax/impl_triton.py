@@ -20,9 +20,9 @@ def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
 
     x_desc = tl.make_tensor_descriptor(
         X + row * N,
-        shape=[N, 1],
-        strides=[1, 1],
-        block_shape=[BLOCK_N, 1],
+        shape=[N],
+        strides=[1],
+        block_shape=[BLOCK_N],
     )
 
     best_val = neg_inf
@@ -30,7 +30,7 @@ def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
 
     for start in range(0, N, BLOCK_N):
         cols = start + tl.arange(0, BLOCK_N)
-        x = x_desc.load([start, 0])[:, 0].to(tl.float32)
+        x = x_desc.load([start]).to(tl.float32)
         x = tl.where(cols < N, x, neg_inf)
         tile_max = tl.max(x, axis=0)
         tile_arg = tl.argmax(x, axis=0).to(tl.int64)
