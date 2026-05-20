@@ -124,6 +124,7 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         N: int, C: int, eps: float,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     ensure_tma_available()
+    input_shape = input.shape
     input = input.contiguous().view(-1)
     gamma = gamma.contiguous().view(-1)
     beta = beta.contiguous().view(-1)
@@ -166,7 +167,7 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
             num_warps=cfg["num_warps"],
         )
 
-    return output
+    return output.view(input_shape)
 
 
 def get_last_config() -> dict | None:
