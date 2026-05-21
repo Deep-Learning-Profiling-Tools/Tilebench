@@ -77,7 +77,7 @@ def _proton_time_rotating(
     for inp in inputs_list[:warmup]:
         if flush_l2:
             _flush_l2_cache()
-        impl_run(*inp, autotune=True)
+        impl_run(*inp)
     torch.cuda.synchronize()
 
     # Measurement session.
@@ -88,7 +88,7 @@ def _proton_time_rotating(
             if flush_l2:
                 _flush_l2_cache()
             with proton.scope(scope_name):
-                impl_run(*inp, autotune=True)
+                impl_run(*inp)
         torch.cuda.synchronize()
     finally:
         proton.finalize(session=session_id)
@@ -148,6 +148,15 @@ _FORBIDDEN_PATTERNS = [
     # Importing the reference back-door.
     r"\bimpl_torch\b",
     r"\bfrom\s+\.\s*impl_torch\b",
+    # Autotune machinery — the pipeline does its own iterative refinement
+    # and the LLM must pick ONE configuration per iteration. Letting the
+    # LLM defer to Triton's / cuTile's built-in autotuners would conflate
+    # "LLM picked a good cfg" with "autotuner found a good cfg".
+    r"\btriton\.autotune\b",
+    r"\bCutileAutotuner\b",
+    r"\bcore\.cutile_autotune\b",
+    r"\bct\.tune\.exhaustive_search\b",
+    r"\bct_experimental\.autotune_launch\b",
 ]
 
 
@@ -171,13 +180,14 @@ def _try_load_impl(iter_dir: Path, backend: str) -> tuple[object | None, str | N
         hits = _scan_for_forbidden(src)
         if hits:
             return None, (
-                f"DELEGATED-COMPUTATION CHEAT DETECTED in {path.name}: "
-                f"the source contains forbidden patterns {sorted(set(hits))}. "
-                "Your run() must compute the operator's output through a "
-                "@triton.jit / @ct.kernel function defined in this file, "
-                "not by calling torch.nn.functional / torch.matmul / cuDNN. "
-                "See framework_guide.md '⛔️ FORBIDDEN: delegating the actual "
-                "computation to PyTorch / cuDNN / cuBLAS'."
+                f"FORBIDDEN PATTERN DETECTED in {path.name}: "
+                f"the source contains {sorted(set(hits))}. "
+                "Either (a) your run() delegates the operator's computation "
+                "to torch.nn.functional / torch.matmul / cuDNN instead of "
+                "your @triton.jit / @ct.kernel — see framework_guide.md "
+                "'⛔️ FORBIDDEN: delegating the actual computation'; or "
+                "(b) you used triton.autotune / CutileAutotuner — see "
+                "'⛔️ No autotune — you pick one configuration per iteration'."
             )
     try:
         return _load_module(f"llmgen_impl_{backend}", path), None
@@ -194,7 +204,7 @@ def _resolve_dtype_in_params(params: dict) -> dict:
 
 def _run_one_case(impl, op: str, case: dict, impl_torch_run, per_case_cap_s: int):
     """Run one case for one backend. Returns dict with keys:
-        compile_ok, verify_ok, latency_s, error, output_hash, autotune_cfg
+        compile_ok, verify_ok, latency_s, torch_latency_s, error, cfg
     """
     case = _resolve_dtype_in_params(case)
     generator = GENERATORS[op]
@@ -206,23 +216,23 @@ def _run_one_case(impl, op: str, case: dict, impl_torch_run, per_case_cap_s: int
     ref = impl_torch_run(*inputs)
     torch.cuda.synchronize()
 
-    # Bound autotune+verify+timing via a SIGALRM. This catches infinite-loop
-    # autotune configs without spawning sub-subprocesses for every case.
+    # Bound verify+timing via a SIGALRM so a pathological kernel cfg
+    # (infinite loop, OOM compile) cannot stall the whole sweep.
     prev_handler = signal.signal(signal.SIGALRM, _alarm_raise)
     signal.alarm(int(per_case_cap_s))
     try:
-        t_autotune = time.time()
-        output = impl.run(*inputs, autotune=True)
+        # ---- Verify on the first call ----
+        # No autotune in this pipeline: the LLM-chosen cfg is hard-coded in
+        # impl.run, and the first call IS the cfg's actual execution.
+        output = impl.run(*inputs)
         torch.cuda.synchronize()
-        autotune_elapsed = time.time() - t_autotune
         cfg = getattr(impl, "get_last_config", lambda: None)()
         ok, err = verify(output, ref)
         if not ok:
             signal.alarm(0)
             return {
                 "compile_ok": True, "verify_ok": False, "latency_s": None,
-                "error": err, "autotune_cfg": cfg,
-                "autotune_elapsed_s": autotune_elapsed,
+                "torch_latency_s": None, "error": err, "cfg": cfg,
             }
 
         # ---- Anti-cache check ----
@@ -238,15 +248,16 @@ def _run_one_case(impl, op: str, case: dict, impl_torch_run, per_case_cap_s: int
             fresh_inputs = (fresh_inputs,)
         torch.cuda.synchronize()
         fresh_ref = impl_torch_run(*fresh_inputs)
-        fresh_out = impl.run(*fresh_inputs, autotune=True)
+        fresh_out = impl.run(*fresh_inputs)
         torch.cuda.synchronize()
         ok2, err2 = verify(fresh_out, fresh_ref)
         if not ok2:
             signal.alarm(0)
             return {
                 "compile_ok": True, "verify_ok": False, "latency_s": None,
+                "torch_latency_s": None,
                 "error": f"verify failed on fresh-input check (likely output-caching cheat): {err2}",
-                "autotune_cfg": cfg, "autotune_elapsed_s": autotune_elapsed,
+                "cfg": cfg,
             }
 
         # ---- Timing: Proton with rotating fresh inputs ----
@@ -256,27 +267,35 @@ def _run_one_case(impl, op: str, case: dict, impl_torch_run, per_case_cap_s: int
             impl.run, generator, case,
             warmup=5, repeat=20, flush_l2=True, scope_name="launch",
         )
+        # Time the torch reference under the same methodology so we can
+        # report `speedup_vs_torch = torch_latency / kernel_latency`.
+        torch_latency_ms = _proton_time_rotating(
+            impl_torch_run, generator, case,
+            warmup=5, repeat=20, flush_l2=True, scope_name="launch",
+        )
 
         signal.alarm(0)
         return {
             "compile_ok": True, "verify_ok": True,
             "latency_s": latency_ms / 1000.0,
-            "error": None, "autotune_cfg": cfg,
-            "autotune_elapsed_s": autotune_elapsed,
+            "torch_latency_s": torch_latency_ms / 1000.0,
+            "error": None, "cfg": cfg,
         }
     except TimeoutError as e:
         signal.alarm(0)
         return {
             "compile_ok": True, "verify_ok": False, "latency_s": None,
+            "torch_latency_s": None,
             "error": f"timeout ({per_case_cap_s}s) — {e}",
-            "autotune_cfg": None,
+            "cfg": None,
         }
     except Exception:
         signal.alarm(0)
         return {
             "compile_ok": True, "verify_ok": False, "latency_s": None,
+            "torch_latency_s": None,
             "error": traceback.format_exc(),
-            "autotune_cfg": None,
+            "cfg": None,
         }
     finally:
         signal.signal(signal.SIGALRM, prev_handler)
@@ -333,11 +352,14 @@ def main():
     stop_top_k = int(metrics_cfg.get("stop_top_k", 3))
 
     compile_errors = {"triton": triton_compile_err, "cutile": cutile_compile_err}
+    # Per-backend wall-clock-timeout bucket — kept under the legacy name
+    # `autotune_errors` so downstream code (evaluator.is_backend_*_met,
+    # prompt_builder._format_feedback) doesn't need renaming. Despite the
+    # name, this catches any per-case timeout now (autotune sweeps are gone).
     autotune_errors = {}
     verify_failures = []
     roofline_per_combo = []
     eval_total_t0 = time.time()
-    sum_autotune_s = 0.0
 
     for backend, mod in [("triton", triton_mod), ("cutile", cutile_mod)]:
         if mod is None:
@@ -353,7 +375,6 @@ def main():
             params_for_eval["problem_size"] = infer_problem_size(op, case)
 
             res = _run_one_case(mod, op, case, torch_mod.run, per_case_cap_s)
-            sum_autotune_s += res.get("autotune_elapsed_s", 0.0) or 0.0
 
             params_repr = _params_repr(case)
 
@@ -381,13 +402,17 @@ def main():
                 params=params_for_eval, dtype_str=dtype_str,
                 latency_s=res["latency_s"], peak=peak,
             )
+            kernel_ms = res["latency_s"] * 1000
+            torch_ms = (res.get("torch_latency_s") or 0) * 1000
+            speedup = (torch_ms / kernel_ms) if (torch_ms > 0 and kernel_ms > 0) else None
             roofline_per_combo.append({
                 "backend": backend, "dtype": dtype_str,
                 "params": params_repr,
                 "problem_size": params_for_eval["problem_size"],
-                "latency_ms": res["latency_s"] * 1000,
-                "autotune_cfg": res.get("autotune_cfg"),
-                "autotune_elapsed_s": res.get("autotune_elapsed_s"),
+                "latency_ms": kernel_ms,
+                "torch_latency_ms": torch_ms if torch_ms > 0 else None,
+                "speedup_vs_torch": speedup,
+                "cfg": res.get("cfg"),
                 **{k: v for k, v in r.items() if k != "error"},
             })
 
@@ -460,8 +485,6 @@ def main():
         "n_stop_combos_cutile":         n_stop_cutile,
         "timing_breakdown": {
             "evaluator_total_s": eval_elapsed_s,
-            "autotune_total_s": sum_autotune_s,
-            "other_s": max(0.0, eval_elapsed_s - sum_autotune_s),
         },
     }
     output_json.parent.mkdir(parents=True, exist_ok=True)

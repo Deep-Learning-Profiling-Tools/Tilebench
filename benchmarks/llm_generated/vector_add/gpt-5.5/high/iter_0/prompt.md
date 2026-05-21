@@ -25,126 +25,142 @@ reference implementation. Your `run()` function's signature MUST match
 ## Required exports (both impls)
 
 ```python
-def run(*args, autotune: bool = False, **kwargs):
+def run(*args, **kwargs):
     """Execute the operator. Must produce a single torch.Tensor (or tuple
     of tensors) that bit-equivalently matches impl_torch.run() within the
     tolerances in config.yaml's `verify:` section."""
 
 def get_last_config() -> dict | None:
-    """Return the autotune-winner config as a flat dict, or None if no
-    autotune has run yet. Engine uses this to log per-case best cfgs."""
+    """Return the configuration this run() actually used, as a flat dict
+    (e.g. {'BLOCK_M': 128, 'BLOCK_N': 64, 'num_warps': 4, 'num_stages': 2}).
+    The harness logs this so the iterative-refinement loop can show you
+    the trajectory of configurations you've tried."""
 ```
 
-When called with `autotune=True`, `run()` must perform autotune internally.
-When called with `autotune=False`, `run()` must use SOME default config —
-since you are NOT required to write `_DEFAULT_CONFIG`, the simplest path
-is to ALWAYS run autotune. The harness's autotune cache makes repeated
-runs cheap (autotune sweeps once per shape, then caches).
+## ⛔️ No autotune — you pick one configuration per iteration
 
-## Autotune convention
+The harness does **NOT** call autotune. Your kernel runs with a single
+hard-coded configuration that **YOU** choose. The 10-iteration refinement
+loop is the search mechanism: at each iteration you see the previous
+iteration's `(config → roofline_pct, latency_ms, speedup_vs_torch)`, and
+you propose the next configuration based on that signal.
 
-### Triton
+The following are **FORBIDDEN** in your code and will be rejected at load:
+
+- `triton.autotune(...)` decorator
+- `from core.cutile_autotune import CutileAutotuner` (or any use of `CutileAutotuner`)
+- `ct.tune.exhaustive_search` / `ct_experimental.autotune_launch`
+- Any other in-kernel autotune-style search
+
+If you import autotune machinery the harness rejects the file before it
+is ever executed.
+
+## Triton template (no autotune)
 
 ```python
+import torch
 import triton
 import triton.language as tl
 
+_LAST_CFG: dict = {}     # populated by run(); read by get_last_config()
+
+
 @triton.jit
-def _op_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
-    # ... kernel body ...
+def _op_kernel(x_ptr, out_ptr, n_elements,
+               BLOCK_SIZE: tl.constexpr,
+               # ... other constexpr params your kernel needs
+               ):
+    pid = tl.program_id(0)
+    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offs < n_elements
+    x = tl.load(x_ptr + offs, mask=mask)
+    # ... your computation ...
+    tl.store(out_ptr + offs, x, mask=mask)
 
-_op_kernel_autotuned = triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [512, 1024, 2048]      # keep cfg space small (<= 30 cfgs)
-        for nw in [2, 4, 8]              # autotune budget is 15min per backend
-        for ns in [2, 3]
-    ],
-    key=["n_elements"],                  # cache key: which problem dims trigger re-tune
-)(_op_kernel)
 
-def run(x, autotune: bool = False):
+def run(x):
     output = torch.empty_like(x)
     n_elements = x.numel()
-    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-    _op_kernel_autotuned[grid](x, output, n_elements)
+
+    # Pick ONE configuration. Iterate to refine across iterations.
+    BLOCK_SIZE = 2048
+    num_warps  = 4
+    num_stages = 2
+
+    grid = (triton.cdiv(n_elements, BLOCK_SIZE),)
+    _op_kernel[grid](
+        x, output, n_elements,
+        BLOCK_SIZE=BLOCK_SIZE,
+        num_warps=num_warps,
+        num_stages=num_stages,
+    )
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({"BLOCK_SIZE": BLOCK_SIZE,
+                      "num_warps":  num_warps,
+                      "num_stages": num_stages})
     return output
 
+
 def get_last_config() -> dict | None:
-    cfg = getattr(_op_kernel_autotuned, "best_config", None)
-    if cfg is None:
-        return None
-    return {
-        "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
-        "num_warps":  cfg.num_warps,
-        "num_stages": cfg.num_stages,
-    }
+    return dict(_LAST_CFG) if _LAST_CFG else None
 ```
 
 **Rules:**
-- `triton.autotune` caches `best_config` on the kernel object automatically.
-- Do NOT use a module-level `_last_config` global — read `kernel.best_config`.
-- Keep total cfg space ≤ 30; bigger spaces blow the 15-minute autotune cap.
-- `num_warps` and `num_stages` are **optional** — include them only if your
-  kernel actually benefits from a non-default value (e.g. a software-pipelined
-  matmul gains from `num_stages` sweep; a one-pass elementwise rarely does).
-  Reasonable ranges when you do sweep them: `num_warps` ∈ {2, 4, 8},
-  `num_stages` ∈ {1, 2, 3, 4}.
+- `_LAST_CFG` is a module-level `dict` — mutate with `.clear()` + `.update()`,
+  never use the `global` keyword.
+- Record EVERY parameter that influenced the kernel launch (block sizes,
+  `num_warps`, `num_stages`, group size for grouped-launch matmuls, etc.)
+  so the iterative-refinement loop can see exactly what you tried.
 
-### cuTile
+## cuTile template (no autotune)
 
 ```python
-from types import SimpleNamespace
+import torch
 import cuda.tile as ct
-from core.cutile_autotune import CutileAutotuner
+import numpy as np
 
 ConstInt = ct.Constant[int]
 
-# Module-level dict — DO NOT use `global` keyword; use .clear() + .update().
-_last_autotune_config: dict = {}
+_LAST_CFG: dict = {}     # populated by run(); read by get_last_config()
 
-_SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [512, 1024, 2048]            # keep search space small
-    for occ in [4, 8, 16]                  # nw * occ ≈ 64 on B200
-]
 
 @ct.kernel
 def _op_kernel(x, output, TILE: ConstInt):
     bid = ct.bid(0)
-    x_tile = ct.load(x, index=(bid,), shape=(TILE,))
-    ct.store(output, index=(bid,), tile=x_tile)   # ... your compute ...
+    x_tile = ct.load(x, index=(bid,), shape=(TILE,),
+                     padding_mode=ct.PaddingMode.ZERO)
+    # ... your computation ...
+    ct.store(output, index=(bid,), tile=x_tile)
 
-_tuner = CutileAutotuner(_op_kernel)
 
-def run(x, autotune: bool = False):
+def run(x):
     output = torch.empty_like(x)
     n_elements = x.numel()
     stream = torch.cuda.current_stream()
-    cfg = _tuner.tune_or_cached(
-        shape_key=(n_elements,),
-        search_space=_SEARCH_SPACE,
-        stream=stream,
-        grid_fn=lambda cfg: (ct.cdiv(n_elements, cfg.tile), 1, 1),
-        args_fn=lambda cfg: (x, output, cfg.tile),
-        hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-    )
-    _last_autotune_config.clear()
-    _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(stream,
-              (ct.cdiv(n_elements, cfg.tile), 1, 1),
-              kernel,
-              (x, output, cfg.tile))
+
+    # Pick ONE configuration. Iterate to refine across iterations.
+    TILE       = 2048
+    occupancy  = 8
+
+    grid = (ct.cdiv(n_elements, TILE), 1, 1)
+    # `kernel_with_hints` is how cuTile communicates occupancy / num_warps
+    # to the launcher. Build it from the bare `@ct.kernel` directly.
+    kernel = _op_kernel.with_hints(occupancy=occupancy)
+    ct.launch(stream, grid, kernel, (x, output, TILE))
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({"TILE": TILE, "occupancy": occupancy})
     return output
 
+
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) if _last_autotune_config else None
+    return dict(_LAST_CFG) if _LAST_CFG else None
 ```
 
 **Rules:**
-- `_last_autotune_config` must be a module-level `dict` mutated via
-  `.clear()` + `.update()`. Never use `global _last_autotune_config`.
+- `_LAST_CFG` is a module-level `dict` — mutate with `.clear()` + `.update()`,
+  never use the `global` keyword.
 - cuTile tile-shape dimensions MUST be powers of 2.
 - For non-power-of-2 problem dims: use `padding_mode=ct.PaddingMode.ZERO`
   on `ct.load`, and `ct.store` silently drops OOB writes.
@@ -153,16 +169,13 @@ def get_last_config() -> dict | None:
 - `ct.store()` only accepts static indices. For runtime-computed scatter
   indices, use `ct.scatter()`.
 
-## Choosing meaningful tile / BLOCK sizes
+## Choosing tile / BLOCK sizes
 
-A common LLM mistake is to throw every small tile size into the autotune
-search space "to be thorough". Tiles below the thresholds below are
-provably suboptimal on B200 (each thread loads / computes too few elements
-to amortise launch overhead, miss memory coalescing windows, or fall off
-the Tensor Core path). Including them wastes autotune budget on configs
-that cannot win.
+Tiles below the thresholds below are provably suboptimal on B200 (each
+thread loads / computes too few elements to amortise launch overhead,
+miss memory coalescing windows, or fall off the Tensor Core path).
 
-**Lower bounds — do NOT sweep below these.** All values must be powers of 2.
+**Lower bounds — do NOT pick below these.** All values must be powers of 2.
 
 | Operator shape | Triton `BLOCK_SIZE` / cuTile `tile` | Triton matmul `BLOCK_M`,`BLOCK_N` | Triton matmul `BLOCK_K` | cuTile matmul `tm`,`tn` | cuTile matmul `tk` |
 |---|---|---|---|---|---|
@@ -171,7 +184,7 @@ that cannot win.
 | Stencil / 2D conv (sliding window) | ≥ **256** along the spatial inner dim | — | — | — | — |
 | Matmul / attention (Tensor Core) | — | ≥ **64** | ≥ **32** | ≥ **64** | ≥ **32** |
 
-**Upper bounds — do NOT sweep above these.** Larger tiles run out of
+**Upper bounds — do NOT pick above these.** Larger tiles run out of
 registers / shared memory on B200 (sm_100, 228 KB shmem, 64 K registers
 per CTA).
 
@@ -181,24 +194,20 @@ per CTA).
 | Matmul tile area | `BLOCK_M × BLOCK_N` ≤ **256 × 256** for fp16, ≤ **128 × 256** for fp32, ≤ **256 × 256** for fp8/int8 |
 | Matmul K-tile | `BLOCK_K` ≤ **128** for fp16/fp8/int8, ≤ **64** for fp32 |
 
-**Recommended sweep ranges (start here, prune if 30-cfg budget is tight):**
+**Sensible starting points for iter 0:**
 
-| Use case | Recommended config space |
+| Use case | Reasonable iter-0 cfg |
 |---|---|
-| 1D pointwise (Triton) | `BLOCK_SIZE` ∈ {512, 1024, 2048, 4096}, `num_warps` ∈ {4, 8} |
-| 1D pointwise (cuTile) | `tile` ∈ {512, 1024, 2048, 4096}, `occupancy` ∈ {4, 8, 16} |
-| Per-row reduction (Triton, 1 CTA per row) | `BLOCK_N` ∈ {256, 512, 1024, 2048}, `num_warps` ∈ {2, 4, 8} |
-| Matmul (Triton, fp16/bf16) | `BLOCK_M`,`BLOCK_N` ∈ {64, 128, 256}, `BLOCK_K` ∈ {32, 64, 128}, `num_warps` ∈ {4, 8}, `num_stages` ∈ {2, 3, 4} — prune to ≤ 30 cfgs |
-| Matmul (cuTile, fp16/bf16) | `tm`,`tn` ∈ {64, 128, 256}, `tk` ∈ {32, 64, 128}, `occupancy` ∈ {4, 8, 16}, `group_size_m` ∈ {8} |
+| 1D pointwise (Triton) | `BLOCK_SIZE=2048, num_warps=4, num_stages=2` |
+| 1D pointwise (cuTile) | `tile=2048, occupancy=8` |
+| Per-row reduction (Triton, 1 CTA per row) | `BLOCK_N=1024, num_warps=4` |
+| Matmul (Triton, fp16/bf16) | `BLOCK_M=128, BLOCK_N=128, BLOCK_K=64, num_warps=8, num_stages=3` |
+| Matmul (cuTile, fp16/bf16) | `tm=128, tn=128, tk=64, occupancy=8` |
+| Matmul (Triton, fp32) | `BLOCK_M=128, BLOCK_N=64, BLOCK_K=32, num_warps=4, num_stages=2` |
 
-**Why this matters.** A `BLOCK_SIZE=128` config for a 20M-element fp32
-pointwise has only 32 elements per warp (1 element per thread with
-`num_warps=4`), missing vectorised loads, missing memory coalescing,
-and forcing 156× more CTAs than `BLOCK_SIZE=2048`. The autotune
-sweep will dutifully benchmark this config and reject it, but every
-small config you include costs roughly 1-15 seconds of compile +
-benchmark time per problem shape — for matmul, that adds tens of
-minutes per iteration with no chance of a win.
+These are reasonable defaults — your job across the 10 iterations is to
+beat them by trying configurations that fit the operator's arithmetic
+intensity and problem size better.
 
 ## Multi-dtype support
 
@@ -214,6 +223,11 @@ of them** in a single `run()` call. Two acceptable patterns:
 
 For mixed-dtype matmul (e.g. fp32 + fp16 + fp8 in one op), look at
 `benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py` for reference.
+
+Note: because there is no autotune, a *single* configuration must work
+acceptably for every dtype in the grid. If fp32 needs a smaller tile
+than fp16 (typical), branch on `a.dtype` and record both branches'
+choices in `_LAST_CFG` (e.g. `{"BLOCK_M_fp32": 128, "BLOCK_M_fp16": 256, ...}`).
 
 ## Hardware constraints to remember (B200, sm_100)
 
@@ -260,9 +274,9 @@ Valid uses of `torch.*` inside `run()` are limited to: tensor allocation
 (`torch.empty`, `torch.empty_like`, `torch.zeros`, `torch.zeros_like`),
 shape manipulation that does not compute (`.contiguous()`, `.view()`,
 `.reshape()`, `.transpose()`, `.unsqueeze()`, `.permute()` — but
-\textbf{not} as a substitute for the operator), stream / event
+**not** as a substitute for the operator), stream / event
 management (`torch.cuda.current_stream`, `torch.cuda.synchronize`), and
-dtype-only casts on metadata (\textbf{not} on the data path that should
+dtype-only casts on metadata (**not** on the data path that should
 be computed by your kernel).
 
 ## ⛔️ FORBIDDEN: caching outputs across `run()` calls
@@ -278,15 +292,13 @@ throughput exceeds the hardware roofline as a cache cheat.
 
 Every `run()` call must perform the actual GPU work — no Python shortcuts,
 no `_OUTPUT_CACHE`-style dicts, no `is`/`data_ptr`/`_version` shortcuts that
-skip the kernel launch. Triton's per-cfg compilation cache and cuTile's
-autotune cache are fine (they cache the **compiled kernel + best cfg**, not
-the **output tensor**).
+skip the kernel launch.
 
 ## Common pitfalls (the harness rejects these)
 
 1. **Importing modules you didn't list**: stay within `torch`, `triton`,
    `triton.language`, `cuda.tile`, `cuda.tile_experimental` (optional),
-   `core.cutile_autotune`, `math`, `numpy as np`.
+   `math`, `numpy as np`. Do NOT import `core.cutile_autotune`.
 2. **Wrong `run()` signature**: if `impl_torch.run(x, y, BATCH, M, N, K)`
    takes 6 positional args, your `run()` must take the same 6.
 3. **Returning a list when impl_torch returns a tensor** (or vice versa).
@@ -301,26 +313,33 @@ the **output tensor**).
 
 For each `(case, dtype)` from `config.yaml`'s `case_grid`:
 1. Generates inputs via `data/tensors.py`'s `GENERATORS[<op>]`.
-2. Calls `impl_torch.run(*inputs)` → reference output.
-3. Calls `impl_triton.run(*inputs, autotune=True)` → triton output.
-4. `verify(triton_output, ref_output, atol, rtol)` with per-dtype tolerances
-   (see `core/verifier.py`). On failure, no timing is collected for that backend.
-5. If verify passes: times `impl_triton.run(*inputs, autotune=True)` over
-   `repeat=100` iterations using NVIDIA Proton. Mean latency is recorded.
-6. Same flow for `impl_cutile.run()`.
+2. Calls `impl_torch.run(*inputs)` and times it via NVIDIA Proton (the
+   PyTorch baseline used for the `speedup_vs_torch` column).
+3. Calls `impl_triton.run(*inputs)` once for verify; checks output
+   matches the torch reference within `verify:` tolerances. On failure,
+   no timing is collected for that backend.
+4. If verify passes: times `impl_triton.run(*inputs)` over a rotating
+   sequence of fresh inputs (defeats output-caching cheats), 5 warmup
+   + 20 measured iterations, inside a `proton.scope("launch")`. Mean
+   latency from the Proton hatchet tree is reported.
+5. Same flow for `impl_cutile.run()`.
+6. `get_last_config()` is called once per backend per case and the
+   returned dict is included in the per-iteration feedback so the next
+   iteration's prompt shows what you tried.
 
-The metric for stopping is the **geometric mean of `roofline_pct` across
-all `(backend, dtype, case)` combinations** ≥ 0.80, where `roofline_pct`
-= measured_FLOPS_per_sec / `min(peak_compute_dtype, peak_bw × AI)`.
+The metric for stopping is per-backend: each of Triton and cuTile is
+frozen independently when its `stop_score` (arithmetic mean of capped
+`roofline_pct` over the top-3 largest cases per dtype for that backend)
+reaches ≥ 0.80 AND that iteration is verify-clean for that backend.
 
 ## TL;DR checklist before you return code
 
 - [ ] Two files: `impl_triton.py` and `impl_cutile.py`
 - [ ] Each exports `run(...)` and `get_last_config() -> dict | None`
-- [ ] `run()` signature matches `impl_torch.run()` exactly
-- [ ] Triton autotune via `triton.autotune` decorator, ≤ 30 cfgs
-- [ ] cuTile autotune via `CutileAutotuner`, ≤ 30 cfgs
-- [ ] No `_DEFAULT_CONFIG`, no `global` keyword for `_last_autotune_config`
+- [ ] `run()` signature matches `impl_torch.run()` exactly (no `autotune` kwarg)
+- [ ] **NO** `triton.autotune` decorator, **NO** `CutileAutotuner` import
+- [ ] One hard-coded configuration, recorded in `_LAST_CFG`
+- [ ] No `_DEFAULT_CONFIG`, no `global` keyword for `_LAST_CFG`
 - [ ] Multi-dtype handled in a single `run()`
 - [ ] OOB / non-pow-2 handled with masks (Triton) or `padding_mode` (cuTile)
 - [ ] No in-place mutation of inputs
@@ -331,6 +350,8 @@ all `(backend, dtype, case)` combinations** ≥ 0.80, where `roofline_pct`
 # Triton (triton / triton.language) API Reference
 
 Treat the API reference below as authoritative for the Triton version installed in this repo (3.6.0); do NOT use APIs from later versions you may have seen in training data. When writing `impl_triton.py`, every `tl.*` / `triton.*` symbol you use must appear in this reference.
+
+**IMPORTANT — autotune sections of this reference do NOT apply.** The reference below was written as a general Triton programming guide and discusses `triton.autotune` / `triton.Config` / `_DEFAULT_CONFIG` extensively. In THIS pipeline you must NOT use any of them — see the 'No autotune' rule in the TileBench framework conventions above. Use the reference for kernel-body syntax (tl.load, tl.store, tl.dot, masking, make_block_ptr, make_tensor_descriptor, etc.); ignore everything about cfg search / autotune wrappers.
 
 # Triton Comprehensive Programming Guide
 
@@ -1975,6 +1996,8 @@ Existing TileBench impls worth cribbing from:
 # cuTile (cuda.tile) API Reference
 
 The cuTile DSL is newer than Triton and likely sparse in your training data. Treat the API reference below as authoritative; do NOT invent attributes by analogy with Triton (e.g. `tl.range` has no `ct.range` equivalent --- use plain Python `for` loops). When writing `impl_cutile.py`, every `ct.*` symbol you use must appear in this reference.
+
+**IMPORTANT — autotune sections of this reference do NOT apply.** The reference below discusses `CutileAutotuner`, `ct_experimental.autotune_launch`, and `ct.tune.exhaustive_search`. In THIS pipeline you must NOT use any of them — see the 'No autotune' rule in the TileBench framework conventions above. Use the reference for kernel-body syntax (ct.load, ct.store, ct.mma, ct.bid, padding_mode, etc.); ignore everything about tuners and search spaces.
 
 # cuTile (cuda.tile) Comprehensive Programming Guide
 
