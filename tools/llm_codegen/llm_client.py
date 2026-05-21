@@ -63,9 +63,9 @@ class LLMClient:
 
     def _init_anthropic(self):
         from anthropic import Anthropic
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_API_KEY")
         if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY not set")
+            raise RuntimeError("ANTHROPIC_API_KEY (or CLAUDE_API_KEY) not set")
         self._client = Anthropic(api_key=api_key, timeout=1800.0, max_retries=0)
 
     def generate(
