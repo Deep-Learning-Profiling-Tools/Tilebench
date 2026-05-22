@@ -349,14 +349,11 @@ def main():
     metrics_cfg = config.get("metrics", {})
     flops_expr = metrics_cfg.get("flops_expr")
     bytes_expr = metrics_cfg.get("bytes_expr")
-    stop_top_k = int(metrics_cfg.get("stop_top_k", 3))
-
     compile_errors = {"triton": triton_compile_err, "cutile": cutile_compile_err}
-    # Per-backend wall-clock-timeout bucket — kept under the legacy name
-    # `autotune_errors` so downstream code (evaluator.is_backend_*_met,
-    # prompt_builder._format_feedback) doesn't need renaming. Despite the
-    # name, this catches any per-case timeout now (autotune sweeps are gone).
-    autotune_errors = {}
+    # Per-backend wall-clock-timeout bucket. Set when a single (backend,
+    # case) exceeds per_case_cap_s — usually means a pathological cfg
+    # (too-small tile, too-deep pipeline) made the kernel run forever.
+    case_timeout_errors: dict[str, str] = {}
     verify_failures = []
     roofline_per_combo = []
     eval_total_t0 = time.time()
@@ -386,7 +383,7 @@ def main():
                 # Distinguish timeout vs verification failure.
                 err = res.get("error", "")
                 if "timeout" in err.lower() or "exceeded" in err.lower():
-                    autotune_errors[backend] = err
+                    case_timeout_errors[backend] = err
                 else:
                     verify_failures.append({
                         "backend": backend,
@@ -419,38 +416,24 @@ def main():
     eval_elapsed_s = time.time() - eval_total_t0
 
     # ---- Aggregate metrics (per backend) ----
-    # report_mean: arithmetic mean of capped roofline_pct over ALL combos
-    # for this backend (full coverage; used for final reporting).
-    # stop_score: arithmetic mean of capped roofline_pct over the top-K
-    # largest cases per dtype for this backend (drives per-backend freezing).
-    def _report_mean(combos: list[dict]) -> float:
+    # The LLM-codegen pipeline trims case_grid to a single largest case per
+    # dtype (see _copy_framework_files), so each (backend, dtype) contributes
+    # exactly one roofline_pct. report_mean and stop_score are therefore
+    # numerically identical here — both are the arithmetic mean of capped
+    # roofline_pct across the per-dtype largest case for that backend. We
+    # keep both field names for backward compat with downstream readers; the
+    # top-K-per-dtype logic that used to differentiate them collapses to a
+    # plain mean since K (=1 case/dtype) ≥ 1.
+    def _mean_roofline(combos: list[dict]) -> float:
         pcts = [min(r["roofline_pct"], 1.0) for r in combos
                 if r.get("roofline_pct", 0) > 0]
         return sum(pcts) / len(pcts) if pcts else 0.0
 
-    def _stop_score(combos: list[dict]) -> tuple[float, int]:
-        # Top-K largest cases per (backend, dtype). Restricting to the
-        # largest inputs measures the kernel where roofline is actually
-        # reachable; small-N cases are launch-bound.
-        by_bk_dt: dict[tuple[str, str], list[dict]] = {}
-        for r in combos:
-            if r.get("roofline_pct", 0) > 0:
-                by_bk_dt.setdefault((r["backend"], r["dtype"]), []).append(r)
-        stop_combos = []
-        for rs in by_bk_dt.values():
-            rs_sorted = sorted(rs, key=lambda r: -(r.get("problem_size") or 0))
-            stop_combos.extend(rs_sorted[:stop_top_k])
-        pcts = [min(r["roofline_pct"], 1.0) for r in stop_combos]
-        return (sum(pcts) / len(pcts) if pcts else 0.0), len(pcts)
-
     combos_triton = [r for r in roofline_per_combo if r["backend"] == "triton"]
     combos_cutile = [r for r in roofline_per_combo if r["backend"] == "cutile"]
 
-    report_mean_triton = _report_mean(combos_triton)
-    report_mean_cutile = _report_mean(combos_cutile)
-
-    stop_score_triton, n_stop_triton = _stop_score(combos_triton)
-    stop_score_cutile, n_stop_cutile = _stop_score(combos_cutile)
+    stop_score_triton = report_mean_triton = _mean_roofline(combos_triton)
+    stop_score_cutile = report_mean_cutile = _mean_roofline(combos_cutile)
 
     verify_failures_triton = [v for v in verify_failures if v["backend"] == "triton"]
     verify_failures_cutile = [v for v in verify_failures if v["backend"] == "cutile"]
@@ -465,24 +448,22 @@ def main():
         "n_combos_succeeded": len(roofline_per_combo),
         "skipped_backends": sorted(skip_backends),
         "compile_errors": compile_errors,
-        "autotune_errors": autotune_errors,
+        "case_timeout_errors": case_timeout_errors,
         "verify_failures":         verify_failures,
         "verify_failures_triton":  verify_failures_triton,
         "verify_failures_cutile":  verify_failures_cutile,
         "roofline_per_combo": roofline_per_combo,
-        # Per-backend scores: arithmetic mean of min(roofline_pct, 1.0).
-        # report_arith_mean_<b> covers all combos; stop_score_<b> restricts
-        # to the top-K largest cases per dtype (the regime where roofline is
-        # actually reachable). Per-backend freezing reads stop_score_<b>;
-        # see evaluator.is_backend_stopping_met.
+        # Per-backend score: arithmetic mean of min(roofline_pct, 1.0) over
+        # one case per dtype (the largest, as trimmed by
+        # generate._trim_case_grid_to_largest). Per-backend freezing reads
+        # stop_score_<b>; see evaluator.is_backend_stopping_met.
+        # `report_arith_mean_<b>` is kept as an alias of `stop_score_<b>`
+        # because downstream readers (run_summary.json post-hoc analysis)
+        # already reference both names; they are numerically identical now.
         "report_arith_mean_triton":     report_mean_triton,
         "report_arith_mean_cutile":     report_mean_cutile,
         "stop_score_triton":            stop_score_triton,
         "stop_score_cutile":            stop_score_cutile,
-        "aggregation":                  "arithmetic_mean",
-        "stop_top_k":                   stop_top_k,
-        "n_stop_combos_triton":         n_stop_triton,
-        "n_stop_combos_cutile":         n_stop_cutile,
         "timing_breakdown": {
             "evaluator_total_s": eval_elapsed_s,
         },

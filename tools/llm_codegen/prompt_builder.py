@@ -260,7 +260,7 @@ def build_feedback_prompt(
     files_to_emit = ", ".join(f"`impl_{b}.py`" for b in backends)
     intro = (
         f"Your previous iteration ({iter_idx-1}) did not yet meet the stopping "
-        f"criterion (`stop_score` ≥ 80% on the **largest 3 cases per dtype**) "
+        f"criterion (`stop_score` ≥ 80% on the **single largest case per dtype**) "
         f"for {', '.join(f'`{b}`' for b in backends)}. "
         "Read the trajectory below carefully — if your last iteration **regressed** "
         "vs the best verify-clean iter so far, you should consider going back to "
@@ -493,10 +493,9 @@ def _format_feedback(
             lines.append("```")
             lines.append("")
 
-    # Per-case wall-clock timeouts (field kept under the legacy name
-    # `autotune_errors` for backward-compat; no autotune happens anymore).
-    autotune_errs = feedback.get("autotune_errors", {})
-    for backend, err in autotune_errs.items():
+    # Per-case wall-clock timeouts.
+    timeout_errs = feedback.get("case_timeout_errors", {})
+    for backend, err in timeout_errs.items():
         if err and backend in backends:
             lines.append(f"### ⏱ `{backend}` exceeded per-case wall-clock cap")
             lines.append("```")

@@ -1,3 +1,5 @@
+Fixing the `with_hints` error by applying occupancy as a decorator argument, and bumping tile size for better bandwidth.
+
 ```python title="impl_cutile.py"
 import torch
 import cuda.tile as ct
@@ -38,4 +40,4 @@ def get_last_config() -> dict | None:
     return dict(_LAST_CFG) if _LAST_CFG else None
 ```
 
-Fixed the `with_hints` attribute error by using the `@ct.kernel(occupancy=4)` decorator form for the optimization hint, then launching the kernel directly.
+Removed broken `with_hints` call; occupancy is now set via the `@ct.kernel(occupancy=4)` decorator argument. Kept TILE=4096 as a solid starting point for memory-bound 1D pointwise on B200.

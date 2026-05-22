@@ -52,13 +52,104 @@ def _final_dir(op: str, model: str, effort: str) -> Path:
     return _REPO_ROOT / "benchmarks" / "llm_generated" / op / model / effort / "final"
 
 
+def _trim_case_grid_to_largest(cfg_text: str) -> str:
+    """Trim each `case_grid` swept variable down to its largest single value.
+
+    The main benchmark engine sweeps ~20 sizes per op to characterise scaling,
+    but the LLM-codegen pipeline picks ONE hard-coded cfg per iter — there's
+    no per-size autotune, so the small cases just re-run the same kernel with
+    the cfg tuned for the largest case. Evaluating them adds eval time
+    without giving the LLM new information. Trimming to the largest matches
+    the NCU sweep's `default_params_per_dtype` (so LLM-codegen and NCU
+    results are directly comparable) and cuts evaluator time ~7-20x.
+
+    Handles two YAML shapes:
+
+      var:
+        expr: "[N * i for i in range(1, 21)]"     →  var: [N*20]
+      var: [a, b, c, d]                            →  var: [max(...)]
+
+    All other lines (comments, case_defaults, metrics, verify, etc.) are
+    preserved verbatim. The original `benchmarks/operators/<op>/config.yaml`
+    is NOT modified; only the copy under `benchmarks/llm_generated/...`.
+    """
+    import re
+
+    out_lines: list[str] = []
+    lines = cfg_text.splitlines(keepends=True)
+    i = 0
+    in_case_grid = False
+    case_grid_indent = -1
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.rstrip("\n")
+
+        # Track case_grid block boundaries: starts at unindented `case_grid:`,
+        # ends when we hit another top-level key.
+        if re.match(r"^case_grid:\s*$", stripped):
+            in_case_grid = True
+            case_grid_indent = 0
+            out_lines.append(line)
+            i += 1
+            continue
+        if in_case_grid:
+            # End of case_grid block: top-level key or end of file
+            if stripped and not stripped.startswith(" ") and not stripped.startswith("#"):
+                in_case_grid = False
+
+        if in_case_grid:
+            # Pattern A: explicit list  `  <var>: [a, b, c]`
+            m = re.match(r"^(\s+)(\w+):\s*\[([^\]]+)\]\s*(#.*)?$", line)
+            if m and m.group(2) != "dtype":
+                indent, var, body, comment = m.groups()
+                items = [s.strip() for s in body.split(",") if s.strip()]
+                # Try to parse as ints; if any item isn't an int, leave alone.
+                try:
+                    ints = [int(s) for s in items]
+                    largest = max(ints)
+                    comment = (" " + comment.strip()) if comment else ""
+                    out_lines.append(f"{indent}{var}: [{largest}]{comment}\n")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+
+            # Pattern B: `  <var>:\n    expr: "[...]"`
+            m = re.match(r"^(\s+)(\w+):\s*$", line)
+            if m and m.group(2) != "dtype" and i + 1 < len(lines):
+                nxt = lines[i + 1]
+                mexpr = re.match(r"^(\s+)expr:\s*\"([^\"]+)\"\s*(#.*)?$", nxt)
+                if mexpr:
+                    indent_outer, var = m.group(1), m.group(2)
+                    _indent_inner, expr_body, comment = mexpr.groups()
+                    try:
+                        values = eval(expr_body, {"range": range})
+                        largest = max(values)
+                        comment = (" " + comment.strip()) if comment else ""
+                        out_lines.append(
+                            f"{indent_outer}{var}: [{largest}]{comment}\n"
+                        )
+                        i += 2
+                        continue
+                    except Exception:
+                        pass
+
+        out_lines.append(line)
+        i += 1
+    return "".join(out_lines)
+
+
 def _copy_framework_files(op: str, dest: Path) -> None:
     """Bring impl_torch.py and config.yaml into the iter dir so the evaluator
-    has everything it needs in one place."""
+    has everything it needs in one place. The copied config.yaml has its
+    case_grid trimmed to a single largest-case per swept variable (matches
+    the NCU sweep's default_params_per_dtype). The source file under
+    benchmarks/operators/<op>/ is left untouched."""
     src = _REPO_ROOT / "benchmarks" / "operators" / op
     dest.mkdir(parents=True, exist_ok=True)
-    for fname in ("impl_torch.py", "config.yaml"):
-        shutil.copy2(src / fname, dest / fname)
+    shutil.copy2(src / "impl_torch.py", dest / "impl_torch.py")
+    cfg_text = (src / "config.yaml").read_text()
+    (dest / "config.yaml").write_text(_trim_case_grid_to_largest(cfg_text))
 
 
 def _read_prev_impls(iter_dir: Path) -> tuple[str, str]:
@@ -76,10 +167,10 @@ def _short_feedback_summary(feedback: dict, active_backends: tuple[str, ...]) ->
     bad_compile = [b for b, e in ce.items() if e and b in active_backends]
     if bad_compile:
         parts.append(f"compile_fail={bad_compile}")
-    ae = feedback.get("autotune_errors", {})
-    bad_autotune = [b for b in ae if b in active_backends]
-    if bad_autotune:
-        parts.append(f"autotune_timeout={bad_autotune}")
+    te = feedback.get("case_timeout_errors", {})
+    bad_timeout = [b for b in te if b in active_backends]
+    if bad_timeout:
+        parts.append(f"case_timeout={bad_timeout}")
     for b in active_backends:
         score = feedback.get(f"stop_score_{b}", 0.0)
         vf = len(feedback.get(f"verify_failures_{b}", []))

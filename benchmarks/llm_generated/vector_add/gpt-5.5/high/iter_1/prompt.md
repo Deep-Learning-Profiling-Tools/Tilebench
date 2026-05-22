@@ -1,16 +1,16 @@
 # Task: improve operator `vector_add` for TileBench (iteration 1)
 
-Your previous iteration (0) did not yet meet the stopping criterion (`stop_score` ≥ 80% on the **largest 3 cases per dtype**) for `cutile`. Read the trajectory below carefully — if your last iteration **regressed** vs the best verify-clean iter so far, you should consider going back to that approach as your starting point and trying a different optimization. Then re-emit `impl_cutile.py`.
+Your previous iteration (0) did not yet meet the stopping criterion (`stop_score` ≥ 80% on the **single largest case per dtype**) for `cutile`. Read the trajectory below carefully — if your last iteration **regressed** vs the best verify-clean iter so far, you should consider going back to that approach as your starting point and trying a different optimization. Then re-emit `impl_cutile.py`.
 
 ## Frozen backends
 
-- `triton` froze at iter 0 with stop_score=85.9%. Do NOT regenerate it; focus only on `impl_cutile.py`.
+- `triton` froze at iter 0 with stop_score=86.1%. Do NOT regenerate it; focus only on `impl_cutile.py`.
 
 ## Iteration trajectory so far
 
 | iter | triton cfg | triton score | triton speedup_vs_torch | triton verify | cutile cfg | cutile score | cutile speedup_vs_torch | cutile verify |
 |---|---|---|---|---|---|---|---|---|
-| 0 | {BLOCK_SIZE:2048, num_warps:4, num_stages:2} | 85.9% | 1.06× | ✓ | — | 0.0% | — | ✗80 |
+| 0 | {BLOCK_SIZE:2048, num_warps:4, num_stages:2} | 86.1% | 1.04× | ✓ | — | 0.0% | — | ✗4 |
 
 _`cfg` is the configuration your kernel actually used, as returned by `get_last_config()`. `speedup_vs_torch` is `torch_latency / kernel_latency` — values >1 mean your kernel beat the PyTorch reference; <1 means torch is still faster._
 
@@ -18,78 +18,35 @@ _`cfg` is the configuration your kernel actually used, as returned by `get_last_
 
 ## Feedback from iteration 0
 
-### ❌ Verification failures (80 cases)
-- `cutile` / dtype=`fp16` / params={'n': 1048576, 'dtype': 'fp16'}: Traceback (most recent call last):
+### ❌ Verification failures (4 cases)
+- `cutile` / dtype=`fp16` / params={'n': 20971520, 'dtype': 'fp16'}: Traceback (most recent call last):
   File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
     output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
+  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 40, in run
     kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
 AttributeError: 'kernel' object has no attribute 'with_hints'
 
-- `cutile` / dtype=`bf16` / params={'n': 1048576, 'dtype': 'bf16'}: Traceback (most recent call last):
+- `cutile` / dtype=`bf16` / params={'n': 20971520, 'dtype': 'bf16'}: Traceback (most recent call last):
   File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
     output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
+  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 40, in run
     kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
 AttributeError: 'kernel' object has no attribute 'with_hints'
 
-- `cutile` / dtype=`fp32` / params={'n': 1048576, 'dtype': 'fp32'}: Traceback (most recent call last):
+- `cutile` / dtype=`fp32` / params={'n': 20971520, 'dtype': 'fp32'}: Traceback (most recent call last):
   File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
     output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
+  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 40, in run
     kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
 AttributeError: 'kernel' object has no attribute 'with_hints'
 
-- `cutile` / dtype=`int8` / params={'n': 1048576, 'dtype': 'int8'}: Traceback (most recent call last):
+- `cutile` / dtype=`int8` / params={'n': 20971520, 'dtype': 'int8'}: Traceback (most recent call last):
   File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
     output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
+  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 40, in run
     kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
 AttributeError: 'kernel' object has no attribute 'with_hints'
 
-- `cutile` / dtype=`fp16` / params={'n': 2097152, 'dtype': 'fp16'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-- `cutile` / dtype=`bf16` / params={'n': 2097152, 'dtype': 'bf16'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-- `cutile` / dtype=`fp32` / params={'n': 2097152, 'dtype': 'fp32'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-- `cutile` / dtype=`int8` / params={'n': 2097152, 'dtype': 'int8'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-- `cutile` / dtype=`fp16` / params={'n': 3145728, 'dtype': 'fp16'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-- `cutile` / dtype=`bf16` / params={'n': 3145728, 'dtype': 'bf16'}: Traceback (most recent call last):
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py", line 227, in _run_one_case
-    output = impl.run(*inputs)
-  File "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/vector_add/gpt-5.5/high/iter_0/impl_cutile.py", line 42, in run
-    kernel = _vector_add_kernel.with_hints(occupancy=occupancy)
-AttributeError: 'kernel' object has no attribute 'with_hints'
-
-  ... and 70 more.
 
 ### `cutile` performance — stop_score=**0.0%** (target ≥ 80%), report_mean=0.0%
 
@@ -117,18 +74,16 @@ def _vector_add_kernel(x, y, output, TILE: ConstInt):
         index=(bid,),
         shape=(TILE,),
         padding_mode=ct.PaddingMode.ZERO,
-        allow_tma=False,
     )
     y_tile = ct.load(
         y,
         index=(bid,),
         shape=(TILE,),
         padding_mode=ct.PaddingMode.ZERO,
-        allow_tma=False,
     )
 
     out_tile = x_tile + y_tile
-    ct.store(output, index=(bid,), tile=out_tile, allow_tma=False)
+    ct.store(output, index=(bid,), tile=out_tile)
 
 
 def run(x, y):
@@ -367,21 +322,26 @@ intensity and problem size better.
 
 If `config.yaml`'s `case_grid.dtype` lists multiple dtypes (e.g.
 `["fp16", "bf16", "fp32"]`), your `run()` function must work for **all
-of them** in a single `run()` call. Two acceptable patterns:
+of them** in a single `run()` call with **ONE configuration shared across
+all dtypes**. Use a single kernel that is dtype-polymorphic:
 
-1. **Single kernel, dtype-polymorphic** — Triton's `tl.dot` and cuTile's
-   `ct.mma` adapt to input dtype automatically. The cleanest path.
-2. **Per-dtype branches inside `run()`** — if e.g. fp8 needs different
-   cast logic, branch on `a.dtype` in the Python wrapper, NOT in two
-   separate kernels.
+- Triton's `tl.dot` and cuTile's `ct.mma` adapt to input dtype
+  automatically.
+- Do NOT branch `BLOCK_M`, `num_warps`, etc. on `a.dtype`; pick one
+  tile that is correct for **all** dtypes in the grid.
+
+**Picking a tile that works for every dtype**: the binding constraint is
+usually fp32 (4 bytes/element × 3 stages × the tile area must fit in
+228 KB shared memory on B200). If your fp16 tile would not fit in fp32,
+shrink the tile so it fits fp32 — then fp16/bf16 just use spare
+capacity. Concretely, a Triton matmul with `BLOCK_M=128, BLOCK_N=128,
+BLOCK_K=64, num_stages=3` needs ~192 KB shmem in fp32 (close to the
+limit); the safe default is `BLOCK_K=32, num_stages=2` for fp32-capable
+matmul configs, which leaves room for the TMA descriptor and async
+copy slots.
 
 For mixed-dtype matmul (e.g. fp32 + fp16 + fp8 in one op), look at
 `benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py` for reference.
-
-Note: because there is no autotune, a *single* configuration must work
-acceptably for every dtype in the grid. If fp32 needs a smaller tile
-than fp16 (typical), branch on `a.dtype` and record both branches'
-choices in `_LAST_CFG` (e.g. `{"BLOCK_M_fp32": 128, "BLOCK_M_fp16": 256, ...}`).
 
 ## Hardware constraints to remember (B200, sm_100)
 
@@ -482,9 +442,10 @@ For each `(case, dtype)` from `config.yaml`'s `case_grid`:
    iteration's prompt shows what you tried.
 
 The metric for stopping is per-backend: each of Triton and cuTile is
-frozen independently when its `stop_score` (arithmetic mean of capped
-`roofline_pct` over the top-3 largest cases per dtype for that backend)
-reaches ≥ 0.80 AND that iteration is verify-clean for that backend.
+frozen independently when its `stop_score` (capped `roofline_pct` on
+the single largest case for that backend's dtype — averaged across
+dtypes if the op has multiple) reaches ≥ 0.80 AND that iteration is
+verify-clean for that backend.
 
 ## TL;DR checklist before you return code
 

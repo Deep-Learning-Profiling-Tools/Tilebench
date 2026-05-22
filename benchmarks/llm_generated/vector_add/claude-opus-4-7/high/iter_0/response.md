@@ -1,4 +1,4 @@
-Memory-bound vector add: use large tiles to saturate HBM bandwidth on B200.
+Memory-bound vector add: large tiles with high occupancy to saturate HBM bandwidth on B200.
 
 ```python title="impl_triton.py"
 import torch

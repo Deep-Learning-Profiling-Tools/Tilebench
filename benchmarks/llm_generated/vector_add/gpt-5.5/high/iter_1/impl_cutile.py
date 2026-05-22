@@ -7,7 +7,7 @@ ConstInt = ct.Constant[int]
 _LAST_CFG: dict = {}
 
 
-@ct.kernel(occupancy=8, opt_level=3)
+@ct.kernel(occupancy=8)
 def _vector_add_kernel(x, y, output, TILE: ConstInt):
     bid = ct.bid(0)
 

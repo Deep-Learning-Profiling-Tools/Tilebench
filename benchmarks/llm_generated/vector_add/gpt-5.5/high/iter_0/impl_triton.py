@@ -9,14 +9,14 @@ _LAST_CFG: dict = {}
 def _vector_add_kernel(x_ptr, y_ptr, out_ptr, n_elements,
                        BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
-    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < n_elements
+    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offs < n_elements
 
-    x = tl.load(x_ptr + offsets, mask=mask, other=0)
-    y = tl.load(y_ptr + offsets, mask=mask, other=0)
+    x = tl.load(x_ptr + offs, mask=mask, other=0.0)
+    y = tl.load(y_ptr + offs, mask=mask, other=0.0)
     out = x + y
 
-    tl.store(out_ptr + offsets, out, mask=mask)
+    tl.store(out_ptr + offs, out, mask=mask)
 
 
 def run(x, y):

@@ -16,18 +16,16 @@ def _vector_add_kernel(x, y, output, TILE: ConstInt):
         index=(bid,),
         shape=(TILE,),
         padding_mode=ct.PaddingMode.ZERO,
-        allow_tma=False,
     )
     y_tile = ct.load(
         y,
         index=(bid,),
         shape=(TILE,),
         padding_mode=ct.PaddingMode.ZERO,
-        allow_tma=False,
     )
 
     out_tile = x_tile + y_tile
-    ct.store(output, index=(bid,), tile=out_tile, allow_tma=False)
+    ct.store(output, index=(bid,), tile=out_tile)
 
 
 def run(x, y):
