@@ -1,0 +1,111 @@
+{
+  "op": "block_sparse_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/claude-opus-4-7/high/iter_2",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/claude-opus-4-7/high/iter_2/impl_cutile.py\", line 10, in run\n    raise NotImplementedError(\nNotImplementedError: cuTile's compile-time-unrolled Python for-loops cannot express the runtime-bounded CSR-driven iteration over data-dependent column block indices required by block-sparse attention; iterating over all column blocks and masking would violate the operator's 'must skip masked column blocks' requirement.\n"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/claude-opus-4-7/high/iter_2/impl_cutile.py\", line 10, in run\n    raise NotImplementedError(\nNotImplementedError: cuTile's compile-time-unrolled Python for-loops cannot express the runtime-bounded CSR-driven iteration over data-dependent column block indices required by block-sparse attention; iterating over all column blocks and masking would violate the operator's 'must skip masked column blocks' requirement.\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "problem_size": 20971520,
+      "latency_ms": 0.07504614999999999,
+      "torch_latency_ms": 39.4993163,
+      "speedup_vs_torch": 526.3336800089012,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "HEAD_DIM": 128,
+        "num_warps": 4,
+        "num_stages": 3,
+        "evict_policy": "evict_last",
+        "prescale_q": true
+      },
+      "flops": 16005464064.0,
+      "bytes": 104857600.0,
+      "AI": 152.64,
+      "measured_bw_GBs": 1397.2415640242705,
+      "measured_perf_TFLOPS": 213.27495233266467,
+      "ceiling_TFLOPS": 998.1740159999998,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.21366510138915967,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.21366510138915967,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.21366510138915967,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 6.1445629596710205,
+    "iter_total_s": 107.6637830734253
+  },
+  "elapsed_s": 8.925606489181519,
+  "llm_usage": {
+    "elapsed_s": 98.69398832321167,
+    "ttft_s": 67.81390976905823,
+    "input_tokens": 61581,
+    "cached_input_tokens": 0,
+    "output_tokens": 7958,
+    "reasoning_tokens": null,
+    "response_chars": 6664
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

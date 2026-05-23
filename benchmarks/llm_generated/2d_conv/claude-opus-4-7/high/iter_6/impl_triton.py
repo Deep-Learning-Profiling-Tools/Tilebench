@@ -1,0 +1,149 @@
+import torch
+import triton
+import triton.language as tl
+
+torch.backends.cudnn.allow_tf32 = False
+torch.backends.cuda.matmul.allow_tf32 = False
+
+_LAST_CFG: dict = {}
+
+
+@triton.jit
+def _conv2d_kernel(
+    input_ptr, weight_ptr, output_ptr,
+    batch, H, W, OH, OW, M, N, K,
+    IC: tl.constexpr, OC: tl.constexpr,
+    KS: tl.constexpr, STRIDE: tl.constexpr, PADDING: tl.constexpr,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_C: tl.constexpr,
+    NUM_C_BLOCKS: tl.constexpr,
+    GROUP_M: tl.constexpr,
+    PRECISION: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    num_pid_m = tl.cdiv(M, BLOCK_M)
+    num_pid_n = tl.cdiv(N, BLOCK_N)
+    num_pid_in_group = GROUP_M * num_pid_n
+    group_id = pid // num_pid_in_group
+    first_pid_m = group_id * GROUP_M
+    group_size_m = min(num_pid_m - first_pid_m, GROUP_M)
+    pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
+    pid_n = (pid % num_pid_in_group) // group_size_m
+
+    offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+
+    OHW = OH * OW
+    b = offs_m // OHW
+    rem_m = offs_m % OHW
+    oh = rem_m // OW
+    ow = rem_m % OW
+
+    m_mask = offs_m < M
+    n_mask = offs_n < N
+
+    HW = H * W
+    ICHW = IC * HW
+    KSKS: tl.constexpr = KS * KS
+
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+
+    b_base = b * ICHW
+    offs_c_base = tl.arange(0, BLOCK_C)
+
+    TOTAL_ITERS: tl.constexpr = KSKS * NUM_C_BLOCKS
+
+    # (kh, kw) outer + c_blk inner, flat-iterated to enable num_stages pipelining.
+    # Iteration order: it = kk*NUM_C_BLOCKS + c_blk, so kk advances every NUM_C_BLOCKS iters
+    # → consecutive iters share (kh,kw,ih,iw,in_bounds) → compiler can CSE the index math.
+    for it in tl.range(0, TOTAL_ITERS, num_stages=3):
+        kk = it // NUM_C_BLOCKS
+        c_blk = it % NUM_C_BLOCKS
+        kh = kk // KS
+        kw = kk % KS
+
+        ih = oh * STRIDE + kh - PADDING
+        iw = ow * STRIDE + kw - PADDING
+        in_bounds_m = (ih >= 0) & (ih < H) & (iw >= 0) & (iw < W) & m_mask
+        ihw = ih * W + iw
+
+        ic_start = c_blk * BLOCK_C
+        ic = ic_start + offs_c_base
+        ic_mask = ic < IC
+
+        a_offs = b_base[:, None] + ihw[:, None] + ic[None, :] * HW
+        a_mask = in_bounds_m[:, None] & ic_mask[None, :]
+        a = tl.load(input_ptr + a_offs, mask=a_mask, other=0.0)
+
+        w_offs = offs_n[None, :] * K + ic[:, None] * KSKS + kk
+        w_mask_t = ic_mask[:, None] & n_mask[None, :]
+        w = tl.load(weight_ptr + w_offs, mask=w_mask_t, other=0.0)
+
+        acc = tl.dot(a, w, acc, input_precision=PRECISION)
+
+    out_offs = (b[:, None] * (OC * OHW)
+                + offs_n[None, :] * OHW
+                + oh[:, None] * OW
+                + ow[:, None])
+    out_mask = m_mask[:, None] & n_mask[None, :]
+    tl.store(output_ptr + out_offs,
+             acc.to(output_ptr.dtype.element_ty),
+             mask=out_mask)
+
+
+def run(input, weight, stride=1, padding=1, groups=1, **kwargs):
+    torch.backends.cudnn.allow_tf32 = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+
+    batch, IC, H, W = input.shape
+    OC = weight.shape[0]
+    KS = weight.shape[2]
+    OH = (H + 2 * padding - KS) // stride + 1
+    OW = (W + 2 * padding - KS) // stride + 1
+
+    output = torch.empty((batch, OC, OH, OW), dtype=input.dtype, device=input.device)
+
+    M = batch * OH * OW
+    N = OC
+    K = (IC // groups) * KS * KS
+
+    input = input.contiguous()
+    weight = weight.contiguous()
+
+    # (kh,kw) outer + c_blk inner with BLOCK_C=64. For IC=128, NUM_C_BLOCKS=2.
+    # Total dots = 9 * 2 = 18 of shape [128,128]x[128,64] — bigger K-tile than before (was 32).
+    # fp32 shmem: (128*64 + 64*128)*4*3stages = 96 KB. Fits in 228 KB.
+    # fp16 shmem: half of that. Fits.
+    BLOCK_M = 128
+    BLOCK_N = 128
+    BLOCK_C = 64
+    NUM_C_BLOCKS = triton.cdiv(IC, BLOCK_C)
+    GROUP_M = 8
+    num_warps = 8
+    num_stages = 3
+
+    grid = (triton.cdiv(M, BLOCK_M) * triton.cdiv(N, BLOCK_N),)
+
+    _conv2d_kernel[grid](
+        input, weight, output,
+        batch, H, W, OH, OW, M, N, K,
+        IC=IC, OC=OC,
+        KS=KS, STRIDE=stride, PADDING=padding,
+        BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, BLOCK_C=BLOCK_C,
+        NUM_C_BLOCKS=NUM_C_BLOCKS,
+        GROUP_M=GROUP_M,
+        PRECISION="ieee",
+        num_warps=num_warps, num_stages=num_stages,
+    )
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({
+        "BLOCK_M": BLOCK_M, "BLOCK_N": BLOCK_N, "BLOCK_C": BLOCK_C,
+        "NUM_C_BLOCKS": NUM_C_BLOCKS,
+        "GROUP_M": GROUP_M, "num_warps": num_warps, "num_stages": num_stages,
+        "PRECISION": "ieee", "layout": "khkw_split",
+    })
+    return output
+
+
+def get_last_config():
+    return dict(_LAST_CFG) if _LAST_CFG else None

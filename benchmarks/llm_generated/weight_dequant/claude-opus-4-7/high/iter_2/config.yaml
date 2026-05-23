@@ -1,0 +1,31 @@
+# Weight Dequantization — tile-scaled element-wise multiply
+# Y[i,j] = X[i,j] * S[i//T, j//T]
+# No verify section needed: single multiply per element, per-dtype defaults suffice.
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  TILE_SIZE: 128
+
+case_grid:
+  M: [10240] # 512, 1024, ..., 10240 (20 points, N=M)
+  dtype: ["fp16", "bf16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions  (N = M, square matrices)
+#   Read X (M*M) + Read S (≈ tiny) + Write Y (M*M) ≈ 2*M*M elements
+#   FLOPs: 1 multiply per element
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "M * M"
+  bytes_expr: "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

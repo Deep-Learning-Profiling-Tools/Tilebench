@@ -1,0 +1,89 @@
+{
+  "op": "top_k_selection",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/top_k_selection/claude-opus-4-7/high/iter_6",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "N": 1048576,
+        "k": 1024,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/top_k_selection/claude-opus-4-7/high/iter_6/impl_cutile.py\", line 85, in run\n    ct.launch(stream, (num_blocks, 1, 1), _topk_stage_kernel, (src, dst, k))\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_execution.py\", line 114, in _compile\n    result = compile_tile(self._annotated_function, (signature,),\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 85, in wrapper\n    return func(*args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 361, in compile_tile\n    bytecode_buf ="
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "N": 1048576,
+        "k": 1024,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/top_k_selection/claude-opus-4-7/high/iter_6/impl_cutile.py\", line 85, in run\n    ct.launch(stream, (num_blocks, 1, 1), _topk_stage_kernel, (src, dst, k))\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_execution.py\", line 114, in _compile\n    result = compile_tile(self._annotated_function, (signature,),\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 85, in wrapper\n    return func(*args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 361, in compile_tile\n    bytecode_buf ="
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "N": 1048576,
+        "k": 1024,
+        "dtype": "fp32"
+      },
+      "problem_size": 1048576,
+      "latency_ms": 0.16913645000000002,
+      "torch_latency_ms": 0.18084804999999998,
+      "speedup_vs_torch": 1.069243501326887,
+      "cfg": {
+        "CHUNK": 4096,
+        "num_warps": 32,
+        "num_stages": 4
+      },
+      "flops": 1048576.0,
+      "bytes": 4198400.0,
+      "AI": 0.2497560975609756,
+      "measured_bw_GBs": 24.82256190194366,
+      "measured_perf_TFLOPS": 0.006199586192095197,
+      "ceiling_TFLOPS": 1.633255024390244,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.0037958470046095456,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.0037958470046095456,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.0037958470046095456,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 2.5424599647521973,
+    "iter_total_s": 487.3488612174988
+  },
+  "elapsed_s": 5.66775107383728,
+  "llm_usage": {
+    "elapsed_s": 481.6259698867798,
+    "ttft_s": 455.12352299690247,
+    "input_tokens": 58585,
+    "cached_input_tokens": 0,
+    "output_tokens": 38202,
+    "reasoning_tokens": null,
+    "response_chars": 6171
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

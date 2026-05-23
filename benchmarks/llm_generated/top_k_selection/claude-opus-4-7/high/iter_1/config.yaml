@@ -1,0 +1,33 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Top-k via bitonic sort: pad input to next power of two with -inf, run a
+# multi-launch bitonic sort, then return the first k elements.
+#
+# Practical range for top-k selection:
+#   N (input size): from MoE-routing scale (~1K) up to recommendation /
+#                   vector-retrieval scale (~256K). All values are
+#                   powers of 2 to keep bitonic padding trivial.
+#   k:              8 (MoE-small / kNN-tight), 32 (LLM beam search),
+#                   128 (MoE-large), 512 (recommendation top-k).
+# 5 N x 4 k x 1 dtype = 20 cases.
+case_grid:
+  N: [1048576]
+  k: [1024]
+  dtype: ["fp32"]
+
+verify:
+  atol: 1.0e-5
+  rtol: 1.0e-5
+
+metrics:
+  flops_expr: "N"
+  bytes_expr: "(N + k) * dtype_size"
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

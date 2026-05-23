@@ -1,0 +1,116 @@
+{
+  "op": "top_k_selection",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/top_k_selection/gpt-5.5/high/iter_7",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "N": 1048576,
+        "k": 1024,
+        "dtype": "fp32"
+      },
+      "problem_size": 1048576,
+      "latency_ms": 0.016689700000000002,
+      "torch_latency_ms": 0.15821079999999998,
+      "speedup_vs_torch": 9.47954726567883,
+      "cfg": {
+        "SELECT_BLOCK": 1024,
+        "LOG_SELECT": 10,
+        "FINAL_BLOCK": 2048,
+        "LOG_FINAL": 11,
+        "LOCAL_K": 8,
+        "K_CONST": 1024,
+        "MERGE_SIZE": 2048,
+        "LOG_MERGE": 11,
+        "select_warps": 4,
+        "stage_warps": 8,
+        "merge_warps": 8,
+        "num_stages": 4,
+        "candidate_len": 8192,
+        "local_candidate_path": 1,
+        "exact_merge_path": 0,
+        "select_launches": 1,
+        "final_stage_launches": 1,
+        "merge_launches": 2
+      },
+      "flops": 1048576.0,
+      "bytes": 4198400.0,
+      "AI": 0.2497560975609756,
+      "measured_bw_GBs": 251.55634912550855,
+      "measured_perf_TFLOPS": 0.06282773207427335,
+      "ceiling_TFLOPS": 1.633255024390244,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.038467802722804624,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "N": 1048576,
+        "k": 1024,
+        "dtype": "fp32"
+      },
+      "problem_size": 1048576,
+      "latency_ms": 0.60701215,
+      "torch_latency_ms": 0.17002479999999998,
+      "speedup_vs_torch": 0.28010114789300344,
+      "cfg": {
+        "TILE": 2048,
+        "occupancy": 8,
+        "sort_len": 1048576,
+        "passes": 210,
+        "local_passes": 165,
+        "global_passes": 45,
+        "coalesced_global": 1,
+        "local_candidate_path": 0,
+        "exact_merge_path": 0,
+        "full_sort_fallback": 1
+      },
+      "flops": 1048576.0,
+      "bytes": 4198400.0,
+      "AI": 0.2497560975609756,
+      "measured_bw_GBs": 6.9165007652647486,
+      "measured_perf_TFLOPS": 0.0017274382399100252,
+      "ceiling_TFLOPS": 1.633255024390244,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.0010576659579265297,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.038467802722804624,
+  "report_arith_mean_cutile": 0.0010576659579265297,
+  "stop_score_triton": 0.038467802722804624,
+  "stop_score_cutile": 0.0010576659579265297,
+  "timing_breakdown": {
+    "evaluator_total_s": 12.078298807144165,
+    "iter_total_s": 306.419944524765
+  },
+  "elapsed_s": 15.140469312667847,
+  "llm_usage": {
+    "elapsed_s": 291.22645139694214,
+    "ttft_s": 250.44262266159058,
+    "input_tokens": 43004,
+    "cached_input_tokens": 0,
+    "output_tokens": 20470,
+    "reasoning_tokens": 14502,
+    "response_chars": 21589
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

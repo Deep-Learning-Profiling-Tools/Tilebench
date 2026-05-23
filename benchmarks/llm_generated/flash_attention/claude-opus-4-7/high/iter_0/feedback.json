@@ -1,0 +1,99 @@
+{
+  "op": "flash_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_0",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 75, in run\n    kernel = _fmha_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 75, in run\n    kernel = _fmha_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 335544320,
+      "latency_ms": 30.90959205,
+      "torch_latency_ms": 13.98834,
+      "speedup_vs_torch": 0.45255660370321843,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "num_warps": 8,
+        "num_stages": 3
+      },
+      "flops": 27487790694400.0,
+      "bytes": 2684354560.0,
+      "AI": 10240.0,
+      "measured_bw_GBs": 86.84535711949003,
+      "measured_perf_TFLOPS": 889.2964569035779,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.3952428697349235,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.3952428697349235,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.3952428697349235,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 3.920466661453247,
+    "iter_total_s": 280.43040013313293
+  },
+  "elapsed_s": 7.984241724014282,
+  "llm_usage": {
+    "elapsed_s": 272.38424253463745,
+    "ttft_s": 236.21040678024292,
+    "input_tokens": 53865,
+    "cached_input_tokens": 0,
+    "output_tokens": 23912,
+    "reasoning_tokens": null,
+    "response_chars": 7450
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "op": "histogramming",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/histogramming/claude-opus-4-7/high/iter_9",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "int32",
+      "params": {
+        "N": 67108864,
+        "num_bins": 4096,
+        "dtype": "int32"
+      },
+      "problem_size": 67108864,
+      "latency_ms": 7.3744074,
+      "torch_latency_ms": 0.62671145,
+      "speedup_vs_torch": 0.08498465246170153,
+      "cfg": {
+        "BLOCK_SIZE": 2048,
+        "ITERS": 8,
+        "NUM_PARTS": 64,
+        "NUM_BINS": 4096,
+        "BIN_BLOCK": 256,
+        "num_warps": 8,
+        "num_stages": 2,
+        "method": "tl.histogram local + partitioned vector atomic flush"
+      },
+      "flops": 67108864.0,
+      "bytes": 268451840.0,
+      "AI": 0.24998474214220323,
+      "measured_bw_GBs": 36.40317457915331,
+      "measured_perf_TFLOPS": 0.009100238210327245,
+      "ceiling_TFLOPS": 1.634750222764724,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.005566745355713567,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "int32",
+      "params": {
+        "N": 67108864,
+        "num_bins": 4096,
+        "dtype": "int32"
+      },
+      "problem_size": 67108864,
+      "latency_ms": 0.14670525,
+      "torch_latency_ms": 0.62508985,
+      "speedup_vs_torch": 4.260855354528893,
+      "cfg": {
+        "TILE": 4096,
+        "NUM_PARTS": 128,
+        "ITERS": 8,
+        "BIN_TILE": 256,
+        "occupancy": 4
+      },
+      "flops": 67108864.0,
+      "bytes": 268451840.0,
+      "AI": 0.24998474214220323,
+      "measured_bw_GBs": 1829.8720734261383,
+      "measured_perf_TFLOPS": 0.45744009842865196,
+      "ceiling_TFLOPS": 1.634750222764724,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.27982262492371446,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.005566745355713567,
+  "report_arith_mean_cutile": 0.27982262492371446,
+  "stop_score_triton": 0.005566745355713567,
+  "stop_score_cutile": 0.27982262492371446,
+  "timing_breakdown": {
+    "evaluator_total_s": 18.642280101776123,
+    "iter_total_s": 162.90308332443237
+  },
+  "elapsed_s": 21.72599697113037,
+  "llm_usage": {
+    "elapsed_s": 141.13036179542542,
+    "ttft_s": 113.29222083091736,
+    "input_tokens": 59754,
+    "cached_input_tokens": 0,
+    "output_tokens": 12474,
+    "reasoning_tokens": null,
+    "response_chars": 6138
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

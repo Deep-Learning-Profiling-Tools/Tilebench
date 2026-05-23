@@ -1,0 +1,110 @@
+{
+  "op": "flash_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/gpt-5.5/high/iter_5",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 335544320,
+      "latency_ms": 25.01427875,
+      "torch_latency_ms": 14.70274545,
+      "speedup_vs_torch": 0.5877741108166071,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "num_warps": 8,
+        "num_stages": 3,
+        "warp_specialize": true,
+        "causal": true,
+        "EVEN_Q": true,
+        "EVEN_KV": true
+      },
+      "flops": 27487790694400.0,
+      "bytes": 2684354560.0,
+      "AI": 10240.0,
+      "measured_bw_GBs": 107.31289064250952,
+      "measured_perf_TFLOPS": 1098.8840001792976,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.48839288896857674,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 335544320,
+      "latency_ms": 27.41688795,
+      "torch_latency_ms": 14.196048800000002,
+      "speedup_vs_torch": 0.5177848348758344,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 128,
+        "BLOCK_D": 128,
+        "occupancy": 1,
+        "causal": true,
+        "EVEN_Q": true,
+        "EVEN_KV": true
+      },
+      "flops": 27487790694400.0,
+      "bytes": 2684354560.0,
+      "AI": 10240.0,
+      "measured_bw_GBs": 97.90879858047494,
+      "measured_perf_TFLOPS": 1002.5860974640633,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.44559382109513923,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.48839288896857674,
+  "report_arith_mean_cutile": 0.44559382109513923,
+  "stop_score_triton": 0.48839288896857674,
+  "stop_score_cutile": 0.44559382109513923,
+  "timing_breakdown": {
+    "evaluator_total_s": 8.563896417617798,
+    "iter_total_s": 313.3503532409668
+  },
+  "elapsed_s": 10.926556825637817,
+  "llm_usage": {
+    "elapsed_s": 302.3837535381317,
+    "ttft_s": 266.80724596977234,
+    "input_tokens": 40174,
+    "cached_input_tokens": 0,
+    "output_tokens": 18679,
+    "reasoning_tokens": 14010,
+    "response_chars": 16556
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

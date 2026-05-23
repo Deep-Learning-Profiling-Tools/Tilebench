@@ -1,0 +1,99 @@
+{
+  "op": "matmul_int8",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_int8/gpt-5.5/high/iter_6",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "int8",
+      "params": {
+        "M": 2048,
+        "N": 2048,
+        "K": 20480,
+        "dtype": "int8"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_int8/gpt-5.5/high/iter_6/impl_cutile.py\", line 64, in run\n    kernel = _matmul_int8_packed_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "int8",
+      "params": {
+        "M": 2048,
+        "N": 2048,
+        "K": 20480,
+        "dtype": "int8"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_int8/gpt-5.5/high/iter_6/impl_cutile.py\", line 64, in run\n    kernel = _matmul_int8_packed_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "int8",
+      "params": {
+        "M": 2048,
+        "N": 2048,
+        "K": 20480,
+        "dtype": "int8"
+      },
+      "problem_size": 171798691840,
+      "latency_ms": 0.48790095,
+      "torch_latency_ms": 3.43830115,
+      "speedup_vs_torch": 7.04712944297403,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 256,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "LOOP_STAGES": 4,
+        "num_warps": 8,
+        "num_stages": 4,
+        "LOAD_MASKS": 0,
+        "U8_SHIFT_DECODE": 1,
+        "CONTIGUOUS_STRIDES": 1
+      },
+      "flops": 171798691840.0,
+      "bytes": 69206016.0,
+      "AI": 2482.4242424242425,
+      "measured_bw_GBs": 141.8443969006414,
+      "measured_perf_TFLOPS": 352.1179695181983,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.07824843767071074,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.07824843767071074,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.07824843767071074,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 1.7417492866516113,
+    "iter_total_s": 245.098806142807
+  },
+  "elapsed_s": 4.427162170410156,
+  "llm_usage": {
+    "elapsed_s": 240.62513422966003,
+    "ttft_s": 226.3040897846222,
+    "input_tokens": 39515,
+    "cached_input_tokens": 0,
+    "output_tokens": 12482,
+    "reasoning_tokens": 10830,
+    "response_chars": 5366
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}
