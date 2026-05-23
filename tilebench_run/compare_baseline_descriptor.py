@@ -99,6 +99,13 @@ def main():
                 # Per-backend delta-pct (descriptor vs baseline)
                 for c in ("torch_ms", "triton_ms", "cutile_ms"):
                     row[f"{c}_delta_pct"] = _pct_delta(dp[c], bp[c])
+                # Triton-only descriptor-vs-baseline speedup: > 1 if descriptor
+                # is faster, < 1 if descriptor is slower. Only Triton is
+                # affected by the TMA refactor, so we report just this ratio.
+                if bp["triton_ms"] is not None and dp["triton_ms"] is not None and dp["triton_ms"] > 0:
+                    row["descriptor_vs_baseline_speedup"] = f"{bp['triton_ms'] / dp['triton_ms']:.6g}"
+                else:
+                    row["descriptor_vs_baseline_speedup"] = ""
                 case_rows.append(row)
 
                 # accumulate aggregate
@@ -124,6 +131,15 @@ def main():
                     bm = sum(bvals) / len(bvals) if bvals else None
                     dm = sum(dvals) / len(dvals) if dvals else None
                     arow[f"{c}_delta_pct"] = _pct_delta(dm, bm)
+                # Triton-only descriptor-vs-baseline speedup (ratio of
+                # mean baseline_triton_ms / mean descriptor_triton_ms).
+                bvals, dvals = acc["triton_ms"]
+                bm = sum(bvals) / len(bvals) if bvals else None
+                dm = sum(dvals) / len(dvals) if dvals else None
+                if bm is not None and dm is not None and dm > 0:
+                    arow["descriptor_vs_baseline_speedup"] = f"{bm / dm:.6g}"
+                else:
+                    arow["descriptor_vs_baseline_speedup"] = ""
                 agg_rows.append(arow)
 
     # Write outputs
