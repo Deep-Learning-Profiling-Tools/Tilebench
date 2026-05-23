@@ -134,7 +134,13 @@ METRICS = {
         "smsp__branch_targets_threads_divergent.sum",
         "smsp__sass_branch_targets_threads_divergent.sum",
     ],
-
+    "branch_instructions": [
+        "smsp__inst_executed_op_branch.sum",
+        "smsp__inst_executed_op_branch.avg",
+    ],
+    "branch_instruction_pct": [
+        "derived__smsp__inst_executed_op_branch_pct",
+    ],
     # IPC.
     "executed_ipc_active": [
         "sm__inst_executed.avg.per_cycle_active",
@@ -230,6 +236,14 @@ DTYPE_ORDER = [
     "int32",
 ]
 
+DTYPE_ALIASES = {
+    "float16": "fp16",
+    "float32": "fp32",
+    "float64": "fp64",
+    "bfloat16": "bf16",
+    "half": "fp16",
+}
+
 
 def normalize_col(c: str) -> str:
     return str(c).strip()
@@ -282,6 +296,11 @@ def parse_metadata_from_filename(path: Path) -> dict:
         if d in rest:
             dtype = d
             break
+    if dtype == "unknown":
+        for alias, canonical in DTYPE_ALIASES.items():
+            if alias in rest:
+                dtype = canonical
+                break
 
     mode = "unknown"
     if "autotune" in rest:
@@ -516,6 +535,30 @@ def summarize_kernel(path: Path, kernel_entry: dict) -> dict:
     row["tma_inst_total"] = np.nansum([tma_ld, tma_st])
     row["uses_tma_counter"] = bool(np.isfinite(row["tma_inst_total"]) and row["tma_inst_total"] > 0)
 
+    # Branch-efficiency validity: only treat branch efficiency as meaningful when
+    # there is evidence of branch activity in the profile.
+    branch = row.get("branch_efficiency_pct", np.nan)
+    branch_inst = row.get("branch_instructions", np.nan)
+    branch_pct = row.get("branch_instruction_pct", np.nan)
+    div_targets = row.get("divergent_branch_targets", np.nan)
+
+    branch_activity = False
+    if np.isfinite(branch_inst) and branch_inst > 0:
+        branch_activity = True
+    if np.isfinite(branch_pct) and branch_pct > 0.1:
+        branch_activity = True
+    if np.isfinite(div_targets) and div_targets > 0:
+        branch_activity = True
+
+    branch_metric_valid = (
+        np.isfinite(branch)
+        and branch > 0
+        and branch_activity
+    )
+
+    row["branch_activity"] = branch_activity
+    row["branch_metric_valid"] = branch_metric_valid
+
     row["bank_conflict_severity"] = severity_from_ratio(row["conflict_per_wavefront"])
     row["diagnosis"] = diagnose(row)
 
@@ -526,54 +569,59 @@ def summarize_kernel(path: Path, kernel_entry: dict) -> dict:
 # Kernel selection
 # ---------------------------------------------------------------------
 
-EXCLUDE_KERNEL_SUBSTRINGS = [
-    "void at::",
-    "at::native",
-    "vectorized_elementwise_kernel",
-    "copy_kernel",
-    "fill_kernel",
-    "memset",
-    "cudaMemset",
-    "cudaMemcpy",
+AUXILIARY_KERNEL_PATTERNS = [
+    r"void\s+(at::)?vectorized_elementwise_kernel",
+    r"void\s+unrolled_elementwise_kernel",
+    r"copy_kernel_cuda",
+    r"direct_copy_kernel_cuda",
+    r"cudaMemcpy",
+    r"cudaMemset",
+    r"at::native",
+    r"DeviceRadixSort",
+    r"cub::",
+    r"thrust::",
 ]
-
 
 def is_auxiliary_kernel(kernel_name: str) -> bool:
     s = str(kernel_name)
-    return any(x in s for x in EXCLUDE_KERNEL_SUBSTRINGS)
+    for pat in AUXILIARY_KERNEL_PATTERNS:
+        if re.search(pat, s):
+            return True
+    return False
 
 
 def select_primary_kernel(rows: list[dict]) -> list[dict]:
-    """
-    Pick the primary implementation kernel from one CSV/report.
-
-    Heuristic:
-      1. Prefer non-ATen/non-copy kernels.
-      2. Among them, choose largest gpu_time_us.
-      3. If gpu_time_us unavailable, choose largest inst_executed.
-      4. If still unavailable, choose first.
-    """
     if not rows:
         return []
 
-    candidates = [r for r in rows if not is_auxiliary_kernel(r.get("kernel_name", ""))]
-    if not candidates:
-        candidates = rows
+    valid = [r for r in rows if not is_auxiliary_kernel(r.get("kernel_name", ""))]
+    aux = [r for r in rows if is_auxiliary_kernel(r.get("kernel_name", ""))]
 
     def key_fn(r):
         t = r.get("gpu_time_us", np.nan)
         inst = r.get("inst_executed", np.nan)
         if np.isfinite(t):
-            return (1, t)
+            return (2, t)
         if np.isfinite(inst):
-            return (0, inst)
-        return (-1, 0)
+            return (1, inst)
+        return (0, 0)
 
-    best = max(candidates, key=key_fn)
-    best = dict(best)
-    best["kernel_policy_selected"] = "primary"
+    if valid:
+        best = max(valid, key=key_fn)
+        best = dict(best)
+        best["kernel_policy_selected"] = "primary"
+        best["selected_is_auxiliary"] = False
+        best["profile_valid_for_tilebench_kernel"] = True
+    else:
+        # Keep the largest aux row for auditing, but mark invalid.
+        best = max(aux, key=key_fn)
+        best = dict(best)
+        best["kernel_policy_selected"] = "auxiliary_only"
+        best["selected_is_auxiliary"] = True
+        best["profile_valid_for_tilebench_kernel"] = False
+
     best["num_kernels_in_report"] = len(rows)
-    best["num_non_aux_kernels_in_report"] = len(candidates)
+    best["num_non_aux_kernels_in_report"] = len(valid)
     return [best]
 
 
@@ -602,8 +650,10 @@ def diagnose(row: dict) -> str:
     source_overhead = row.get("source_shared_wavefront_overhead", np.nan)
     tc_wf = row.get("tc_shared_wavefronts_total", np.nan)
 
-    branch_confounded = np.isfinite(branch) and branch < 95.0
-    branch_mild = np.isfinite(branch) and 95.0 <= branch < 99.0
+    branch_valid = bool(row.get("branch_metric_valid", False))
+
+    branch_confounded = branch_valid and branch < 95.0
+    branch_mild = branch_valid and 95.0 <= branch < 99.0
 
     # No LSU shared wavefronts but TC/TMA path may exist.
     if (not np.isfinite(shared_wf) or shared_wf <= 0):
