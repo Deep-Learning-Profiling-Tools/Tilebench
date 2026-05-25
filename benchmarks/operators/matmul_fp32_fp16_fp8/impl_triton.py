@@ -108,13 +108,17 @@ matmul_kernel_autotuned = triton.autotune(
             num_warps=nw,
             num_stages=ns,
         )
-        # Shrunk from 216 cfgs to 16 to match cuTile-side shrink (impl_cutile.py).
+        # Cfg space must fit the worst dtype (fp32, 4 bytes/elem). Shmem per
+        # cfg = (bm*bk + bk*bn) * 4 * ns; B200 limit is ~228 KB/block. The
+        # filter below skips (256, 256, 64) which is the only combination
+        # that overflows fp32 even at ns=2.
         for bm in [128, 256]
         for bn in [128, 256]
-        for bk in [64, 128]
+        for bk in [32, 64]
         for gs in [8]
         for nw in [4, 8]
-        for ns in [3]
+        for ns in [2]
+        if not (bm == 256 and bn == 256 and bk == 64)
     ],
     key=["M", "N", "K"],
 )(matmul_kernel)
