@@ -33,8 +33,8 @@ def evaluate(
     """Run the evaluation subprocess. Returns the feedback dict.
 
     `iter_dir` must contain: impl_torch.py, config.yaml, and impl_<b>.py for
-    every backend `b` not in `skip_backends`. Skipped (frozen) backends are
-    not loaded or timed; their per-backend score fields remain 0.0.
+    every backend `b` not in `skip_backends`. Skipped backends are not
+    loaded or timed; their per-backend score fields remain 0.0.
     """
     output_json = iter_dir / "feedback.json"
     env = dict(os.environ)
@@ -98,24 +98,6 @@ def is_verify_clean(feedback: dict) -> bool:
     if feedback.get("verify_failures"):
         return False
     return True
-
-
-def is_backend_stopping_met(
-    feedback: dict, backend: str, threshold: float = 0.80
-) -> bool:
-    """Per-backend freeze condition: backend hit threshold AND is verify-clean
-    AND has no compile / per-case-timeout errors for this backend specifically.
-    """
-    if feedback.get("fatal"):
-        return False
-    if feedback.get("compile_errors", {}).get(backend):
-        return False
-    if feedback.get("case_timeout_errors", {}).get(backend):
-        return False
-    if feedback.get(f"verify_failures_{backend}"):
-        return False
-    score = feedback.get(f"stop_score_{backend}", 0.0)
-    return score >= threshold
 
 
 def is_backend_verify_clean(feedback: dict, backend: str) -> bool:
