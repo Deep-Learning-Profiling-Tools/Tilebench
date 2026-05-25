@@ -32,12 +32,7 @@ SYSTEM = (Path(__file__).resolve().parent / "system_prompt.md").read_text()
 
 
 def _output_instruction(backends: tuple[str, ...]) -> str:
-    """Build the strict output-format instruction for the requested backends.
-
-    When only one backend is active (the other is frozen), this instructs the
-    LLM to emit a single code block — the frozen backend is preserved from
-    its earlier verified iter, not regenerated.
-    """
+    """Build the strict output-format instruction for the requested backends."""
     n = len(backends)
     blocks = "\n\n".join(
         f'    ```python title="impl_{b}.py"\n    # full Python file content here\n    ```'
@@ -157,8 +152,7 @@ def build_initial_prompt(
     """First-iteration prompt: framework guide + (cuTile reference if cuTile
     requested) + problem desc + config + torch impl.
 
-    `backends` is normally both ("triton", "cutile"). It can be restricted to
-    a single backend if the other one is already frozen from an earlier run.
+    `backends` is normally both ("triton", "cutile").
     """
     framework_guide = _read(_THIS_DIR / "framework_guide.md")
     op_dir = _REPO_ROOT / "benchmarks" / "operators" / op
@@ -228,7 +222,6 @@ def build_feedback_prompt(
     history: list[dict] | None = None,
     best_so_far: dict | None = None,
     backends: tuple[str, ...] = ("triton", "cutile"),
-    frozen_info: dict | None = None,
 ) -> str:
     """Build the prompt for iteration N>0 — repeats the framework guide and
     focuses on what went wrong in iter N-1, plus a regression-detection
@@ -241,12 +234,8 @@ def build_feedback_prompt(
     `best_so_far`  — per-backend dict {<b>: {iter, stop_score, impl_<b>}}
                      of the best verify-clean iter for each backend (a
                      backend key may be absent if no clean iter exists yet).
-    `backends`     — backends still being generated this iter (frozen
-                     backends are excluded — their impl is copied from the
-                     earlier iter where they froze).
-    `frozen_info`  — {<b>: {iter, stop_score}} for already-frozen backends;
-                     surfaced in the prompt so the LLM knows to focus only
-                     on `backends`.
+    `backends`     — backends to regenerate this iter (the loop always
+                     regenerates both Triton and cuTile).
     """
     framework_guide = _read(_THIS_DIR / "framework_guide.md")
     op_dir = _REPO_ROOT / "benchmarks" / "operators" / op
@@ -259,32 +248,19 @@ def build_feedback_prompt(
 
     files_to_emit = ", ".join(f"`impl_{b}.py`" for b in backends)
     intro = (
-        f"Your previous iteration ({iter_idx-1}) did not yet meet the stopping "
-        f"criterion (`stop_score` ≥ 80% on the **single largest case per dtype**) "
-        f"for {', '.join(f'`{b}`' for b in backends)}. "
-        "Read the trajectory below carefully — if your last iteration **regressed** "
-        "vs the best verify-clean iter so far, you should consider going back to "
-        "that approach as your starting point and trying a different optimization. "
+        f"This is iteration {iter_idx} of the refinement loop. "
+        "Your previous iteration's results are reported below. "
+        "Read the trajectory carefully: if your last iteration regressed "
+        "vs the best verify-clean iter so far, consider going back to that "
+        "approach as your starting point and trying a different optimization. "
         f"Then re-emit {files_to_emit}."
     )
-
-    frozen_blurb = ""
-    if frozen_info:
-        frozen_lines = []
-        for b, info in frozen_info.items():
-            frozen_lines.append(
-                f"- `{b}` froze at iter {info['iter']} with stop_score="
-                f"{info.get('stop_score', 0)*100:.1f}%. Do NOT regenerate it; "
-                f"focus only on {files_to_emit}."
-            )
-        frozen_blurb = "## Frozen backends\n\n" + "\n".join(frozen_lines) + "\n"
 
     sections = [
         f"# Task: improve operator `{op}` for TileBench (iteration {iter_idx})",
         "",
         intro,
         "",
-        frozen_blurb,
         trajectory_text,
         "",
         "## Feedback from iteration " + str(iter_idx - 1),
@@ -425,7 +401,7 @@ def _format_trajectory(
         for b in ("triton", "cutile"):
             pb = h.get("per_backend", {}).get(b, {})
             if pb.get("skipped"):
-                row.extend(["(frozen)", "(frozen)", "—", "—"])
+                row.extend(["(skipped)", "(skipped)", "—", "—"])
             else:
                 row.append(_fmt_cfg(pb.get("cfg")))
                 row.append(f"{pb.get('stop_score', 0)*100:.1f}%")
@@ -521,8 +497,8 @@ def _format_feedback(
         score = feedback.get(f"stop_score_{b}", 0.0)
         rep = feedback.get(f"report_arith_mean_{b}", 0.0)
         lines.append(
-            f"### `{b}` performance — stop_score=**{score*100:.1f}%** "
-            f"(target ≥ 80%), report_mean={rep*100:.1f}%"
+            f"### `{b}` performance — mean roofline utilization = "
+            f"**{score*100:.1f}%** (report_mean={rep*100:.1f}%)"
         )
     lines.append("")
     rl = [r for r in feedback.get("roofline_per_combo", []) if r.get("backend") in backends]

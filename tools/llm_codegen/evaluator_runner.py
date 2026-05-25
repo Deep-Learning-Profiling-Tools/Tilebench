@@ -321,7 +321,8 @@ def main():
     op = os.environ["LLMGEN_OP"]
     output_json = Path(os.environ["LLMGEN_OUTPUT_JSON"])
     per_case_cap_s = int(os.environ.get("LLMGEN_PER_CASE_CAP_S", "900"))
-    # Backends that are frozen this iter — skip loading/evaluating them.
+    # Backends to skip this iter (currently unused by the main loop, but
+    # kept as a hook for callers that want to evaluate only a subset).
     skip_backends = {
         b for b in os.environ.get("LLMGEN_SKIP_BACKENDS", "").split(",") if b
     }
@@ -330,7 +331,8 @@ def main():
     config = yaml.safe_load((iter_dir / "config.yaml").read_text())
     cases = expand_cases(op, config)
 
-    # Load impls (skip frozen backends — their files may not be present).
+    # Load impls (skip backends listed in LLMGEN_SKIP_BACKENDS; their
+    # impl files may not be present).
     triton_mod, triton_compile_err = (None, None) if "triton" in skip_backends \
         else _try_load_impl(iter_dir, "triton")
     cutile_mod, cutile_compile_err = (None, None) if "cutile" in skip_backends \
@@ -455,8 +457,8 @@ def main():
         "roofline_per_combo": roofline_per_combo,
         # Per-backend score: arithmetic mean of min(roofline_pct, 1.0) over
         # one case per dtype (the largest, as trimmed by
-        # generate._trim_case_grid_to_largest). Per-backend freezing reads
-        # stop_score_<b>; see evaluator.is_backend_stopping_met.
+        # generate._trim_case_grid_to_largest). Reported as feedback to the
+        # next iteration; no longer used for early stopping.
         # `report_arith_mean_<b>` is kept as an alias of `stop_score_<b>`
         # because downstream readers (run_summary.json post-hoc analysis)
         # already reference both names; they are numerically identical now.

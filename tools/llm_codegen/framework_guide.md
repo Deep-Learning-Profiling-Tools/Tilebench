@@ -324,11 +324,14 @@ For each `(case, dtype)` from `config.yaml`'s `case_grid`:
    returned dict is included in the per-iteration feedback so the next
    iteration's prompt shows what you tried.
 
-The metric for stopping is per-backend: each of Triton and cuTile is
-frozen independently when its `stop_score` (capped `roofline_pct` on
-the single largest case for that backend's dtype — averaged across
-dtypes if the op has multiple) reaches ≥ 0.80 AND that iteration is
-verify-clean for that backend.
+The refinement loop runs the full iteration budget (default 10 iters).
+There is no roofline-based early stopping; both Triton and cuTile are
+regenerated every iteration. After the budget is exhausted, the best
+verify-clean iteration per backend is promoted as the final result.
+Each iteration's `stop_score` (capped `roofline_pct` on the single
+largest case per dtype, averaged across the supported dtypes) is
+reported as feedback so the next iteration can see how close to peak
+the previous attempt got.
 
 ## TL;DR checklist before you return code
 

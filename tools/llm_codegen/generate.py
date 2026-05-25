@@ -2,7 +2,7 @@
 
 Usage:
     PYTHONPATH=. python tools/llm_codegen/generate.py \
-        --operator vector_add --model gpt-5.5 --max-iters 10 --threshold 0.8
+        --operator vector_add --model gpt-5.5 --max-iters 10
 
 For each iteration:
   1. Build a prompt (initial vs feedback).
@@ -10,8 +10,12 @@ For each iteration:
   3. Parse out impl_triton.py + impl_cutile.py.
   4. Copy impl_torch.py + config.yaml from benchmarks/operators/<op>/.
   5. Run evaluator (subprocess; 15-min per-case autotune cap).
-  6. Save feedback.json. Check stopping condition.
-  7. If stopped: promote to benchmarks/llm_generated/<op>/<model>/final/.
+  6. Save feedback.json.
+
+The loop runs the full max_iters budget for both backends every iter;
+there is no early-stopping based on roofline / stop_score thresholds.
+After the budget is exhausted, the best verify-clean iter for each
+backend is promoted to benchmarks/llm_generated/<op>/<model>/final/.
 
 Each iteration is saved verbatim to benchmarks/llm_generated/<op>/<model>/iter_N/.
 """
@@ -30,7 +34,6 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from tools.llm_codegen.evaluator import (
     evaluate,
-    is_backend_stopping_met,
     is_backend_verify_clean,
 )
 from tools.llm_codegen.llm_client import LLMClient
@@ -187,12 +190,10 @@ def run_one_iter(
     client: LLMClient,
     prev_feedback: dict | None,
     active_backends: tuple[str, ...],
-    frozen_info: dict | None = None,
     history: list[dict] | None = None,
     best_so_far: dict | None = None,
 ) -> dict:
-    """Run one iteration: build prompt → LLM → parse → eval. Only generates
-    impl files for `active_backends`; frozen backends are skipped end-to-end.
+    """Run one iteration: build prompt → LLM → parse → eval.
 
     Returns feedback, augmented with `llm_usage` and `timing_breakdown`.
     """
@@ -217,7 +218,6 @@ def run_one_iter(
             history=history or [],
             best_so_far=best_so_far,
             backends=active_backends,
-            frozen_info=frozen_info,
         )
     prompt_path.write_text(prompt)
 
@@ -268,7 +268,7 @@ def run_one_iter(
     # ---- Copy reference + config ----
     _copy_framework_files(op, iter_dir)
 
-    # ---- Evaluate (skip frozen backends entirely) ----
+    # ---- Evaluate ----
     skip_backends = [b for b in BACKENDS if b not in active_backends]
     print(f"  [iter {iter_idx}] evaluating (skip={skip_backends}) ...", flush=True)
     feedback = evaluate(op=op, iter_dir=iter_dir, skip_backends=skip_backends)
@@ -298,55 +298,39 @@ def main():
         help="Reasoning effort level (default xhigh). 'high' is ~3-5× faster.",
     )
     ap.add_argument("--max-iters", type=int, default=10)
-    ap.add_argument(
-        "--threshold", type=float, default=0.80,
-        help="Geo-mean roofline_pct to stop (default 0.80 = 80%%)",
-    )
     args = ap.parse_args()
 
     client = LLMClient(model=args.model, effort=args.effort)
 
     print(
         f"=== LLM codegen: op={args.operator} model={args.model} "
-        f"effort={args.effort} threshold={args.threshold} ===",
+        f"effort={args.effort} max_iters={args.max_iters} ===",
         flush=True,
     )
 
     prev_feedback = None
     history: list[dict] = []
     # Per-backend state.
-    #   frozen[b]: iter index where backend `b` first met the stop condition,
-    #              or None if not yet frozen. Once frozen, `b` is skipped end-
-    #              to-end in subsequent iters (no LLM, no eval).
     #   best_clean[b]: highest stop_score_<b> among verify-clean iters for `b`
     #                  (carries impl source so the feedback prompt can show it
     #                  for regression-recovery), plus iter index.
     #   best_any[b]:   highest stop_score_<b> regardless of verify cleanliness
     #                  (fallback for promotion).
-    frozen: dict[str, int | None] = {b: None for b in BACKENDS}
-    frozen_score: dict[str, float] = {b: 0.0 for b in BACKENDS}
+    # There is no roofline-based early stopping; the loop runs the full
+    # max_iters budget. Both backends are regenerated every iter.
     best_clean: dict[str, dict] = {}
     best_any: dict[str, dict] = {}
 
     for i in range(args.max_iters):
-        active_backends = tuple(b for b in BACKENDS if frozen[b] is None)
-        if not active_backends:
-            print(f"\n✅ All backends frozen by iter {i-1}; stopping pipeline.", flush=True)
-            break
+        active_backends = BACKENDS  # both backends generated every iter
 
-        frozen_info = {
-            b: {"iter": frozen[b], "stop_score": frozen_score[b]}
-            for b in BACKENDS if frozen[b] is not None
-        }
-        print(f"\n=== Iteration {i} (active={list(active_backends)}, "
-              f"frozen={list(frozen_info.keys())}) ===", flush=True)
+        print(f"\n=== Iteration {i} ===", flush=True)
         iter_t0 = time.time()
         try:
             feedback = run_one_iter(
                 op=args.operator, model=args.model, effort=args.effort,
                 iter_idx=i, client=client, prev_feedback=prev_feedback,
                 active_backends=active_backends,
-                frozen_info=frozen_info or None,
                 history=history,
                 best_so_far=best_clean or None,
             )
@@ -369,12 +353,9 @@ def main():
         (iter_dir / "feedback.json").write_text(json.dumps(feedback, indent=2, default=str))
         prev_feedback = feedback
 
-        # ---- Track per-backend history + bests + freezing ----
+        # ---- Track per-backend history + bests ----
         per_backend_h: dict[str, dict] = {}
         for b in BACKENDS:
-            if b not in active_backends:
-                per_backend_h[b] = {"skipped": True, "frozen_at": frozen[b]}
-                continue
             score = feedback.get(f"stop_score_{b}", 0.0)
             rep = feedback.get(f"report_arith_mean_{b}", 0.0)
             vf_count = len(feedback.get(f"verify_failures_{b}", []))
@@ -407,11 +388,6 @@ def main():
                     "iter": i, "stop_score": score, "report_mean": rep,
                     f"impl_{b}": src_path.read_text() if src_path.exists() else "",
                 }
-            # Freeze if this iter hit threshold AND is verify-clean for `b`.
-            if is_backend_stopping_met(feedback, b, threshold=args.threshold):
-                frozen[b] = i
-                frozen_score[b] = score
-                print(f"  🥶 `{b}` froze at iter {i} (stop_score={score*100:.1f}%)", flush=True)
 
         history_entry = {
             "iter": i,
@@ -422,16 +398,11 @@ def main():
         }
         history.append(history_entry)
 
-        if all(frozen[b] is not None for b in BACKENDS):
-            print(f"\n✅ All backends frozen at iter {i}; stopping pipeline.", flush=True)
-            break
-    else:
-        print(
-            f"\n⏹ Max iterations ({args.max_iters}) reached. "
-            f"frozen={ {b: frozen[b] for b in BACKENDS if frozen[b] is not None} } | "
-            f"best_clean={ {b: best_clean[b]['iter'] for b in best_clean} }",
-            flush=True,
-        )
+    print(
+        f"\n⏹ Iteration budget exhausted ({args.max_iters} iters). "
+        f"best_clean={ {b: best_clean[b]['iter'] for b in best_clean} }",
+        flush=True,
+    )
 
     # ---- Promote per-backend best ----
     final_dir = _final_dir(args.operator, args.model, args.effort)
@@ -467,11 +438,9 @@ def main():
         "op": args.operator,
         "model": args.model,
         "effort": args.effort,
-        "threshold": args.threshold,
         "max_iters": args.max_iters,
         "backends": list(BACKENDS),
         "history": history,
-        "frozen": {b: frozen[b] for b in BACKENDS},
         "best_clean": {
             b: {k: v for k, v in best_clean[b].items() if not k.startswith("impl_")}
             for b in best_clean
