@@ -32,6 +32,8 @@ _conv1d_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["input_size", "kernel_size"],
+    warmup=1,
+    rep=3,
 )(conv1d_kernel)
 
 

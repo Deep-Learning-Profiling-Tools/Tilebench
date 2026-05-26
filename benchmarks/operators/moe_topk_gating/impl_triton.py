@@ -61,6 +61,8 @@ _moe_topk_gating_kernel_autotuned = triton.autotune(
         for nw in [1, 2, 4]
     ],
     key=["E", "K"],
+    warmup=1,
+    rep=3,
 )(_moe_topk_gating_kernel)
 
 

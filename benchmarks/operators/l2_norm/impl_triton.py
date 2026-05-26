@@ -44,6 +44,8 @@ _l2_norm_fwd_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(_l2_norm_fwd_kernel)
 
 
