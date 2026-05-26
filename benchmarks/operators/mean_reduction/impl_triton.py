@@ -43,6 +43,8 @@ _mean_rowwise_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["M", "N"],
+    warmup=1,
+    rep=3,
 )(_mean_rowwise_kernel)
 
 

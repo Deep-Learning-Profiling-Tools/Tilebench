@@ -149,6 +149,8 @@ _out_kernel_autotuned = triton.autotune(
         for ns in [1, 2, 3]
     ],
     key=["M", "D"],
+    warmup=1,
+    rep=3,
 )(_out_kernel)
 
 

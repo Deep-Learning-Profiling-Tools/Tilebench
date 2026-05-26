@@ -170,6 +170,8 @@ _block_sparse_attention_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["total_seq_len"],
+    warmup=1,
+    rep=3,
 )(block_sparse_attention_kernel)
 
 

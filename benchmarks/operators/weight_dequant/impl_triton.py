@@ -35,6 +35,8 @@ _dequant_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["M", "N"],
+    warmup=1,
+    rep=3,
 )(dequant_kernel)
 
 

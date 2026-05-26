@@ -114,6 +114,8 @@ matmul_kernel_autotuned = triton.autotune(
         for ns in [3]
     ],
     key=["M", "N", "K"],
+    warmup=1,
+    rep=3,
 )(matmul_kernel)
 
 
