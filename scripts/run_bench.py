@@ -134,8 +134,12 @@ def main():
             f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}"
         )
 
-    # Save summary as CSV
-    csv_path = f"results/csv/{args.operator}_summary.csv"
+    # Save summary as CSV. Filename suffix mirrors the run mode so default
+    # and autotune sweeps don't overwrite each other:
+    #   results/csv/<op>_default.csv   (no --autotune)
+    #   results/csv/<op>_autotune.csv  (--autotune)
+    mode_suffix = "autotune" if args.autotune else "default"
+    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
