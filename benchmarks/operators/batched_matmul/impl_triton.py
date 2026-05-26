@@ -51,7 +51,9 @@ def _bmm_kernel(a_ptr, b_ptr, c_ptr,
         A_data = tl.load(a_ptr + A_offsets, mask=A_mask, other=0.0)
         B_data = tl.load(b_ptr + B_offsets, mask=B_mask, other=0.0)
 
-        accumulator += tl.dot(A_data, B_data)
+        # input_precision="tf32" enables TF32 tensor cores when inputs are fp32;
+        # ignored for fp16 / bf16 inputs, so this is safe to set unconditionally.
+        accumulator += tl.dot(A_data, B_data, input_precision="tf32")
 
         A_offsets += BLOCK_SIZE_K
         B_offsets += BLOCK_SIZE_K * N

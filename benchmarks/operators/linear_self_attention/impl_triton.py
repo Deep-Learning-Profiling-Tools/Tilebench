@@ -94,7 +94,7 @@ def _z_kernel(
 @triton.jit
 def _out_kernel(
     O_ptr, Q_ptr, S_ptr, Z_ptr,
-    M, D, eps,
+    M, D, eps: tl.constexpr,
     stride_qm, stride_qd,
     stride_om, stride_od,
     stride_sm, stride_sd,

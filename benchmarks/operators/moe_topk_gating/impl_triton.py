@@ -11,7 +11,7 @@ def _moe_topk_gating_kernel(
     topk_w_ptr,
     topk_idx_ptr,
     E,
-    K,
+    K: tl.constexpr,
     BLOCK_SIZE_E: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
 ):

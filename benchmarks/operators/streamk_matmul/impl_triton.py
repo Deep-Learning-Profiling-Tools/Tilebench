@@ -47,7 +47,7 @@ def _swizzle_tile(tile_id, M, N,
 
 @triton.jit
 def first_wave(
-    A, B, C, M, N, K, NUM_SMS,
+    A, B, C, M, N, K, NUM_SMS: tl.constexpr,
     stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
     BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
     GROUP_M: tl.constexpr, ACC_TYPE: tl.constexpr,
@@ -124,7 +124,7 @@ _first_wave_autotuned = triton.autotune(
 
 @triton.jit
 def full_tiles(
-    A, B, C, M, N, K, NUM_SMS,
+    A, B, C, M, N, K, NUM_SMS: tl.constexpr,
     stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
     BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
     GROUP_M: tl.constexpr, ACC_TYPE: tl.constexpr,
