@@ -15,8 +15,8 @@ def block_sparse_attention_kernel(
     layout_csr_col_indices,  # block mask CSR format. Shape is [L, num_rows * num_cols] where num_cols = max_seq_len / BLOCK_N
     layout_csr_row_stride_h,  # stride per head for csr_row_indices, i.e. num_rows + 1
     layout_csr_col_stride_h,  # stride per head for csr_col_indices, i.e. num_rows * num_cols
-    num_layout,  # number of sparse layout (L)
-    softmax_scale,
+    num_layout: tl.constexpr,  # number of sparse layout (L)
+    softmax_scale: tl.constexpr,
     stride_qb,
     stride_qh,
     stride_qm,
@@ -29,9 +29,9 @@ def block_sparse_attention_kernel(
     stride_ob,
     stride_oh,
     stride_om,
-    num_heads,
-    num_kv_heads,
-    total_seq_len,  # Total sequence length including past sequence length and query sequence length.
+    num_heads: tl.constexpr,
+    num_kv_heads: tl.constexpr,
+    total_seq_len: tl.constexpr,  # Total sequence length including past sequence length and query sequence length.
     BLOCK_M: tl.constexpr,  # block size for q_seq_len
     EVEN_M: tl.constexpr,  # whether q_seq_len % BLOCK_M == 0
     BLOCK_N: tl.constexpr,  # block size for k_seq_len
