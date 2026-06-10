@@ -205,21 +205,26 @@ intensity and problem size better.
 
 If `config.yaml`'s `case_grid.dtype` lists multiple dtypes (e.g.
 `["fp16", "bf16", "fp32"]`), your `run()` function must work for **all
-of them** in a single `run()` call. Two acceptable patterns:
+of them** in a single `run()` call with **ONE configuration shared across
+all dtypes**. Use a single kernel that is dtype-polymorphic:
 
-1. **Single kernel, dtype-polymorphic** — Triton's `tl.dot` and cuTile's
-   `ct.mma` adapt to input dtype automatically. The cleanest path.
-2. **Per-dtype branches inside `run()`** — if e.g. fp8 needs different
-   cast logic, branch on `a.dtype` in the Python wrapper, NOT in two
-   separate kernels.
+- Triton's `tl.dot` and cuTile's `ct.mma` adapt to input dtype
+  automatically.
+- Do NOT branch `BLOCK_M`, `num_warps`, etc. on `a.dtype`; pick one
+  tile that is correct for **all** dtypes in the grid.
+
+**Picking a tile that works for every dtype**: the binding constraint is
+usually fp32 (4 bytes/element × 3 stages × the tile area must fit in
+228 KB shared memory on B200). If your fp16 tile would not fit in fp32,
+shrink the tile so it fits fp32 — then fp16/bf16 just use spare
+capacity. Concretely, a Triton matmul with `BLOCK_M=128, BLOCK_N=128,
+BLOCK_K=64, num_stages=3` needs ~192 KB shmem in fp32 (close to the
+limit); the safe default is `BLOCK_K=32, num_stages=2` for fp32-capable
+matmul configs, which leaves room for the TMA descriptor and async
+copy slots.
 
 For mixed-dtype matmul (e.g. fp32 + fp16 + fp8 in one op), look at
 `benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py` for reference.
-
-Note: because there is no autotune, a *single* configuration must work
-acceptably for every dtype in the grid. If fp32 needs a smaller tile
-than fp16 (typical), branch on `a.dtype` and record both branches'
-choices in `_LAST_CFG` (e.g. `{"BLOCK_M_fp32": 128, "BLOCK_M_fp16": 256, ...}`).
 
 ## Hardware constraints to remember (B200, sm_100)
 
@@ -320,9 +325,10 @@ For each `(case, dtype)` from `config.yaml`'s `case_grid`:
    iteration's prompt shows what you tried.
 
 The metric for stopping is per-backend: each of Triton and cuTile is
-frozen independently when its `stop_score` (arithmetic mean of capped
-`roofline_pct` over the top-3 largest cases per dtype for that backend)
-reaches ≥ 0.80 AND that iteration is verify-clean for that backend.
+frozen independently when its `stop_score` (capped `roofline_pct` on
+the single largest case for that backend's dtype — averaged across
+dtypes if the op has multiple) reaches ≥ 0.80 AND that iteration is
+verify-clean for that backend.
 
 ## TL;DR checklist before you return code
 
