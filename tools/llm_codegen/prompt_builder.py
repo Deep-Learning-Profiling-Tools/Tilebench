@@ -96,7 +96,16 @@ _BACKEND_REF_PREAMBLES = {
         "version installed in this repo (3.6.0); do NOT use APIs from later "
         "versions you may have seen in training data. When writing "
         "`impl_triton.py`, every `tl.*` / `triton.*` symbol you use must "
-        "appear in this reference."
+        "appear in this reference.\n\n"
+        "**IMPORTANT — autotune sections of this reference do NOT apply.** "
+        "The reference below was written as a general Triton programming "
+        "guide and discusses `triton.autotune` / `triton.Config` / "
+        "`_DEFAULT_CONFIG` extensively. In THIS pipeline you must NOT use "
+        "any of them — see the 'No autotune' rule in the TileBench "
+        "framework conventions above. Use the reference for kernel-body "
+        "syntax (tl.load, tl.store, tl.dot, masking, make_block_ptr, "
+        "make_tensor_descriptor, etc.); ignore everything about cfg "
+        "search / autotune wrappers."
     ),
     "cutile": (
         "The cuTile DSL is newer than Triton and likely sparse in your "
@@ -104,7 +113,15 @@ _BACKEND_REF_PREAMBLES = {
         "NOT invent attributes by analogy with Triton (e.g. `tl.range` has "
         "no `ct.range` equivalent --- use plain Python `for` loops). When "
         "writing `impl_cutile.py`, every `ct.*` symbol you use must appear "
-        "in this reference."
+        "in this reference.\n\n"
+        "**IMPORTANT — autotune sections of this reference do NOT apply.** "
+        "The reference below discusses `CutileAutotuner`, "
+        "`ct_experimental.autotune_launch`, and `ct.tune.exhaustive_search`. "
+        "In THIS pipeline you must NOT use any of them — see the 'No "
+        "autotune' rule in the TileBench framework conventions above. "
+        "Use the reference for kernel-body syntax (ct.load, ct.store, "
+        "ct.mma, ct.bid, padding_mode, etc.); ignore everything about "
+        "tuners and search spaces."
     ),
 }
 
@@ -368,6 +385,16 @@ def build_feedback_prompt(
     return "\n".join(sections)
 
 
+def _fmt_cfg(cfg: dict | None) -> str:
+    """One-line repr of a config dict, e.g. {BLOCK_M:128, num_warps:4}."""
+    if not cfg:
+        return "—"
+    parts = []
+    for k, v in cfg.items():
+        parts.append(f"{k}:{v}")
+    return "{" + ", ".join(parts) + "}"
+
+
 def _format_trajectory(
     history: list[dict],
     best_so_far: dict | None,
@@ -376,34 +403,46 @@ def _format_trajectory(
     """Render a compact per-backend iteration trajectory + best-so-far summary.
 
     `history` entries should each contain `per_backend: {triton: {stop_score,
-    verify_clean, verify_fail_count, skipped}, cutile: ...}` plus a top-level
-    `iter` and optional `iter_total_s`. `best_so_far` is keyed by backend:
-    `{triton: {iter, stop_score}, cutile: {iter, stop_score}}` (a backend
-    key may be absent if no verify-clean iter exists yet).
+    verify_clean, verify_fail_count, skipped, cfg, speedup_vs_torch}, cutile:
+    ...}` plus a top-level `iter` and optional `iter_total_s`. `best_so_far`
+    is keyed by backend: `{triton: {iter, stop_score}, cutile: {iter,
+    stop_score}}` (a backend key may be absent if no verify-clean iter
+    exists yet).
     """
     if not history:
         return ""
     lines = ["## Iteration trajectory so far", ""]
     header = ["iter"]
     for b in ("triton", "cutile"):
+        header.append(f"{b} cfg")
         header.append(f"{b} score")
+        header.append(f"{b} speedup_vs_torch")
         header.append(f"{b} verify")
     lines.append("| " + " | ".join(header) + " |")
-    lines.append("|" + "---:|" * (len(header)))
+    lines.append("|" + "---|" * (len(header)))
     for h in history:
         row = [str(h["iter"])]
         for b in ("triton", "cutile"):
             pb = h.get("per_backend", {}).get(b, {})
             if pb.get("skipped"):
-                row.append("(frozen)")
-                row.append("—")
+                row.extend(["(frozen)", "(frozen)", "—", "—"])
             else:
+                row.append(_fmt_cfg(pb.get("cfg")))
                 row.append(f"{pb.get('stop_score', 0)*100:.1f}%")
+                sp = pb.get("speedup_vs_torch")
+                row.append(f"{sp:.2f}×" if isinstance(sp, (int, float)) and sp > 0 else "—")
                 if pb.get("verify_clean"):
                     row.append("✓")
                 else:
                     row.append(f"✗{pb.get('verify_fail_count', 0)}")
         lines.append("| " + " | ".join(row) + " |")
+    lines.append("")
+    lines.append(
+        "_`cfg` is the configuration your kernel actually used, as returned "
+        "by `get_last_config()`. `speedup_vs_torch` is "
+        "`torch_latency / kernel_latency` — values >1 mean your kernel beat "
+        "the PyTorch reference; <1 means torch is still faster._"
+    )
     lines.append("")
 
     # Best-so-far + regression notes, per still-active backend.
@@ -454,15 +493,18 @@ def _format_feedback(
             lines.append("```")
             lines.append("")
 
-    # Autotune errors
+    # Per-case wall-clock timeouts (field kept under the legacy name
+    # `autotune_errors` for backward-compat; no autotune happens anymore).
     autotune_errs = feedback.get("autotune_errors", {})
     for backend, err in autotune_errs.items():
         if err and backend in backends:
-            lines.append(f"### ⏱ `{backend}` autotune failed or exceeded 15-minute cap")
+            lines.append(f"### ⏱ `{backend}` exceeded per-case wall-clock cap")
             lines.append("```")
             lines.append(err.strip()[:3000])
             lines.append("```")
-            lines.append("→ Action: shrink your autotune search space (≤ 20 cfgs) and avoid configs that hang.")
+            lines.append("→ Action: your configuration likely produced a very slow kernel "
+                         "(too-small tile, way too many CTAs, or a bad pipeline depth). "
+                         "Pick a more aggressive tile size next iteration.")
             lines.append("")
 
     # Verify failures (only for backends still being generated)
@@ -491,9 +533,12 @@ def _format_feedback(
         for r in rl_sorted[:20]:
             pct = r.get("roofline_pct", 0.0) * 100
             bound = r.get("bound_by", "?")
+            sp = r.get("speedup_vs_torch")
+            sp_str = f"{sp:.2f}× torch" if isinstance(sp, (int, float)) and sp > 0 else "no torch baseline"
+            cfg_str = _fmt_cfg(r.get("cfg"))
             lines.append(
                 f"- `{r['backend']}` / `{r['dtype']}` / {r['params']}: "
-                f"{pct:.1f}% of roofline ({bound})"
+                f"{pct:.1f}% of roofline ({bound}), {sp_str}, cfg={cfg_str}"
             )
         if len(rl_sorted) > 20:
             lines.append(f"  ... and {len(rl_sorted) - 20} more cases.")

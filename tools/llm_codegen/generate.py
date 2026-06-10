@@ -288,12 +288,23 @@ def main():
             rep = feedback.get(f"report_arith_mean_{b}", 0.0)
             vf_count = len(feedback.get(f"verify_failures_{b}", []))
             clean = is_backend_verify_clean(feedback, b)
+            # Pick a representative cfg + speedup for this backend in this iter:
+            # use the LARGEST verify-clean case (last in problem-size sort).
+            # If all combos failed verify, leave cfg/speedup as None.
+            backend_combos = [
+                r for r in feedback.get("roofline_per_combo", [])
+                if r.get("backend") == b
+            ]
+            backend_combos.sort(key=lambda r: -(r.get("problem_size") or 0))
+            rep_combo = backend_combos[0] if backend_combos else {}
             per_backend_h[b] = {
                 "skipped": False,
                 "stop_score": score,
                 "report_mean": rep,
                 "verify_clean": clean,
                 "verify_fail_count": vf_count,
+                "cfg": rep_combo.get("cfg"),
+                "speedup_vs_torch": rep_combo.get("speedup_vs_torch"),
             }
             # best_any: highest score regardless of verify
             if b not in best_any or score > best_any[b]["stop_score"]:
