@@ -31,7 +31,7 @@ def _eval_expr(expr: str | None, ctx: dict) -> float | None:
         return None
 
 
-BACKENDS = ("torch", "triton", "cutile", "tilelang")
+BACKENDS = ("torch", "triton", "cutile", "tilelang", "nki")
 
 
 def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = None) -> dict[str, dict[str, float]]:

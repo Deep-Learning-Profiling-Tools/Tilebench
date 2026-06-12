@@ -26,6 +26,16 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
     except ImportError as e:
         print(f"  TileLang import skipped: {e}")
         impl_tilelang = None
+    try:
+        impl_nki = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_nki")
+        # Conforming impls set a module-level `nki = None` when the Neuron SDK is
+        # missing (see NKI authoring guide §3); treat that like an absent backend.
+        if getattr(impl_nki, "nki", object()) is None:
+            print("  NKI import skipped: Neuron SDK not installed")
+            impl_nki = None
+    except ImportError as e:
+        print(f"  NKI import skipped: {e}")
+        impl_nki = None
 
     generate_inputs = get_generator(operator_name)
 
@@ -190,6 +200,42 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
                 tilelang_stats = None
                 print(f"  TileLang execution FAILED: {tilelang_err}")
 
+        # --- NKI (AWS Trainium; timed via XLA wall-clock, not Proton) ---
+        nki_cfg = None
+        if impl_nki is None:
+            nki_ok = False
+            nki_err = "NKI not available (no impl or Neuron SDK not installed)"
+            nki_ms = float("nan")
+            nki_stats = None
+            print("  NKI skipped (not available)")
+        else:
+            try:
+                # Deferred import: GPU-only machines have no torch_xla installed.
+                from core.nki_timer import bench_nki, to_cpu, to_xla_device
+
+                nki_kw = _run_kwargs(impl_nki.run, block_size)
+                nki_inputs = to_xla_device(inputs)
+                nki_output = impl_nki.run(*nki_inputs, **nki_kw)
+                # ref_output lives on the GPU/CPU, NKI output on the XLA device —
+                # compare on CPU.
+                nki_ok, nki_err = verify(to_cpu(nki_output), to_cpu(ref_output), atol=verify_atol, rtol=verify_rtol)
+                nki_cfg = getattr(impl_nki, "get_last_config", lambda: None)() if autotune else None
+                if nki_cfg:
+                    print(f"  NKI     autotune → {nki_cfg}")
+                if not nki_ok:
+                    print(f"  NKI verification FAILED: {nki_err}")
+                nki_stats = (
+                    bench_nki(impl_nki.run, nki_inputs, nki_kw, warmup=warmup, repeat=repeat)
+                    if nki_ok else None
+                )
+                nki_ms = nki_stats["mean"] if nki_stats is not None else float("nan")
+            except Exception as e:
+                nki_ok    = False
+                nki_err   = str(e)
+                nki_ms    = float("nan")
+                nki_stats = None
+                print(f"  NKI execution FAILED: {nki_err}")
+
         results.append({
             "params":                params,
             "problem_size":          infer_problem_size(operator_name, params),
@@ -211,9 +257,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "tilelang_ok":           tilelang_ok,
             "tilelang_err":          tilelang_err,
             "tilelang_autotune_cfg": tilelang_cfg,
+            "nki_ms":                nki_ms,
+            "nki_stats":             nki_stats or {},
+            "nki_ok":                nki_ok,
+            "nki_err":               nki_err,
+            "nki_autotune_cfg":      nki_cfg,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
+            "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
         })
 
     return results
