@@ -24,7 +24,7 @@ Available derived metrics (from core/metrics.py):
     tflops              arithmetic throughput (needs flops_expr)
     pct_peak_tflops     % of peak TFLOPS (needs flops_expr + peak_tflops map)
     arithmetic_intensity FLOP/Byte ratio (needs both expressions)
-    speedup             vs PyTorch baseline (triton & cutile only)
+    speedup             vs PyTorch baseline (triton, cutile & tilelang only)
 """
 from __future__ import annotations
 
@@ -54,12 +54,13 @@ from core.metrics import compute_derived, load_peak_config  # noqa: E402
 # constants
 # ---------------------------------------------------------------------------
 
-BACKENDS = ["torch", "triton", "cutile"]
+BACKENDS = ["torch", "triton", "cutile", "tilelang"]
 
 _STYLE: dict[str, dict] = {
     "torch":  {"color": "#1f77b4", "marker": "o", "linestyle": "-",  "label": "PyTorch"},
     "triton": {"color": "#2ca02c", "marker": "s", "linestyle": "--", "label": "Triton"},
     "cutile": {"color": "#ff7f0e", "marker": "^", "linestyle": ":",  "label": "cuTile"},
+    "tilelang": {"color": "#9467bd", "marker": "D", "linestyle": "-.", "label": "TileLang"},
 }
 
 _METRIC_LABEL: dict[str, str] = {
@@ -213,7 +214,7 @@ def _plot_one_metric(
 # ---------------------------------------------------------------------------
 
 # Jitter scale for X axis (separates backend points at the same AI value)
-_JITTER_FACTORS = {"torch": 0.85, "triton": 1.0, "cutile": 1.18}
+_JITTER_FACTORS = {"torch": 0.78, "triton": 0.93, "cutile": 1.08, "tilelang": 1.25}
 
 
 def _plot_roofline(
