@@ -21,6 +21,11 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
     except ImportError as e:
         print(f"  cuTile import skipped: {e}")
         impl_cutile = None
+    try:
+        impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
+    except ImportError as e:
+        print(f"  TileLang import skipped: {e}")
+        impl_tilelang = None
 
     generate_inputs = get_generator(operator_name)
 
@@ -154,6 +159,37 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
                 cutile_stats = None
                 print(f"  cuTile execution FAILED: {cutile_err}")
 
+        # --- TileLang ---
+        tilelang_cfg = None
+        if impl_tilelang is None:
+            tilelang_ok = False
+            tilelang_err = "TileLang not available (import failed)"
+            tilelang_ms = float("nan")
+            tilelang_stats = None
+            print("  TileLang skipped (not available)")
+        else:
+            try:
+                tilelang_kw = _run_kwargs(impl_tilelang.run, block_size)
+                tilelang_output = impl_tilelang.run(*inputs, **tilelang_kw)
+                torch.cuda.synchronize()
+                tilelang_ok, tilelang_err = verify(tilelang_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                tilelang_cfg = getattr(impl_tilelang, "get_last_config", lambda: None)() if autotune else None
+                if tilelang_cfg:
+                    print(f"  TileLang autotune → {tilelang_cfg}")
+                if not tilelang_ok:
+                    print(f"  TileLang verification FAILED: {tilelang_err}")
+                tilelang_stats = (
+                    _bench(impl_tilelang.run, inputs, tilelang_kw, label=f"{lbl}_tilelang")
+                    if tilelang_ok else None
+                )
+                tilelang_ms = tilelang_stats["mean"] if tilelang_stats is not None else float("nan")
+            except Exception as e:
+                tilelang_ok    = False
+                tilelang_err   = str(e)
+                tilelang_ms    = float("nan")
+                tilelang_stats = None
+                print(f"  TileLang execution FAILED: {tilelang_err}")
+
         results.append({
             "params":                params,
             "problem_size":          infer_problem_size(operator_name, params),
@@ -170,8 +206,14 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "cutile_ok":             cutile_ok,
             "cutile_err":            cutile_err,
             "cutile_autotune_cfg":   cutile_cfg,
+            "tilelang_ms":           tilelang_ms,
+            "tilelang_stats":        tilelang_stats or {},
+            "tilelang_ok":           tilelang_ok,
+            "tilelang_err":          tilelang_err,
+            "tilelang_autotune_cfg": tilelang_cfg,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
+            "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
         })
 
     return results
