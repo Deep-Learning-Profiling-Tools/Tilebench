@@ -9,11 +9,12 @@ _TIMING_KEYS = {
     "torch_ms", "torch_stats",
     "triton_ms", "triton_stats", "triton_ok", "triton_err",
     "cutile_ms", "cutile_stats", "cutile_ok", "cutile_err",
-    "speedup_triton", "speedup_cutile",
+    "tilelang_ms", "tilelang_stats", "tilelang_ok", "tilelang_err",
+    "speedup_triton", "speedup_cutile", "speedup_tilelang",
 }
 _AUTOTUNE_KEYS = {
     "params", "problem_size", "dtype",
-    "triton_autotune_cfg", "cutile_autotune_cfg",
+    "triton_autotune_cfg", "cutile_autotune_cfg", "tilelang_autotune_cfg",
 }
 
 
@@ -124,28 +125,35 @@ def main():
     print("\nSummary:")
     print(
         f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10} | "
-        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'Speedup(T)':>10} | {'Speedup(C)':>10}"
+        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'TileLang(ms)':>12} | "
+        f"{'Speedup(T)':>10} | {'Speedup(C)':>10} | {'Speedup(TL)':>11}"
     )
-    print("-" * (col_w + 75))
+    print("-" * (col_w + 102))
     for r in timing_results:
         print(
             f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
-            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | "
-            f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}"
+            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | {r['tilelang_ms']:12.4f} | "
+            f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f} | "
+            f"{r['speedup_tilelang']:11.2f}"
         )
 
-    # Save summary as CSV
-    csv_path = f"results/csv/{args.operator}_summary.csv"
+    # Save summary as CSV. Filename suffix mirrors the run mode so default
+    # and autotune sweeps don't overwrite each other:
+    #   results/csv/<op>_default.csv   (no --autotune)
+    #   results/csv/<op>_autotune.csv  (--autotune)
+    mode_suffix = "autotune" if args.autotune else "default"
+    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms",
-                         "speedup_triton", "speedup_cutile"])
+        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "tilelang_ms",
+                         "speedup_triton", "speedup_cutile", "speedup_tilelang"])
         for r in timing_results:
             writer.writerow([
                 _fmt_params(r), r["dtype"],
                 f"{r['torch_ms']:.4f}", f"{r['triton_ms']:.4f}", f"{r['cutile_ms']:.4f}",
-                f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
+                f"{r['tilelang_ms']:.4f}", f"{r['speedup_triton']:.2f}",
+                f"{r['speedup_cutile']:.2f}", f"{r['speedup_tilelang']:.2f}",
             ])
     print(f"Summary CSV     → {csv_path}")
 
