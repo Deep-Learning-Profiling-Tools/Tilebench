@@ -27,7 +27,7 @@ _DEFAULT_CONFIGS = {
 @triton.jit
 def matmul_kernel(
     a_ptr, b_ptr, c_ptr,
-    M, N, K,
+    M, N, K: tl.constexpr,
     stride_am, stride_ak,
     stride_bk, stride_bn,
     stride_cm, stride_cn,
@@ -70,7 +70,7 @@ def matmul_kernel(
         b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
         # input_precision="tf32" enables TF32 acceleration when inputs are fp32;
         # ignored for fp16 / fp8 inputs, so this is safe to set unconditionally.
-        accumulator = tl.dot(a, b, accumulator)
+        accumulator = tl.dot(a, b, accumulator, input_precision="tf32")
         a_ptrs += BLOCK_SIZE_K * stride_ak
         b_ptrs += BLOCK_SIZE_K * stride_bk
 
@@ -114,6 +114,8 @@ matmul_kernel_autotuned = triton.autotune(
         for ns in [3]
     ],
     key=["M", "N", "K"],
+    warmup=1,
+    rep=3,
 )(matmul_kernel)
 
 
