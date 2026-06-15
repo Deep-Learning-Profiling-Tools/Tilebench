@@ -9,33 +9,60 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-def run_benchmark_suite(operator_name, benchmark_overrides=None):
+def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    # Which tile-language backends to run this invocation. torch always runs —
+    # it is the speedup baseline. None → all (backward-compatible default).
+    if enabled_backends is None:
+        enabled_backends = {"triton", "cutile", "tilelang", "nki"}
+    else:
+        enabled_backends = set(enabled_backends)
+
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
-    impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
-    try:
-        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
-    except ImportError as e:
-        print(f"  cuTile import skipped: {e}")
+
+    if "triton" in enabled_backends:
+        impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
+    else:
+        impl_triton = None
+        print("  Triton not selected (--tile-language)")
+
+    if "cutile" in enabled_backends:
+        try:
+            impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+        except ImportError as e:
+            print(f"  cuTile import skipped: {e}")
+            impl_cutile = None
+    else:
         impl_cutile = None
-    try:
-        impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
-    except ImportError as e:
-        print(f"  TileLang import skipped: {e}")
+        print("  cuTile not selected (--tile-language)")
+
+    if "tilelang" in enabled_backends:
+        try:
+            impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
+        except ImportError as e:
+            print(f"  TileLang import skipped: {e}")
+            impl_tilelang = None
+    else:
         impl_tilelang = None
-    try:
-        impl_nki = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_nki")
-        # Conforming impls set a module-level `nki = None` when the Neuron SDK is
-        # missing (see NKI authoring guide §3); treat that like an absent backend.
-        if getattr(impl_nki, "nki", object()) is None:
-            print("  NKI import skipped: Neuron SDK not installed")
+        print("  TileLang not selected (--tile-language)")
+
+    if "nki" in enabled_backends:
+        try:
+            impl_nki = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_nki")
+            # Conforming impls set a module-level `nki = None` when the Neuron SDK is
+            # missing (see NKI authoring guide §3); treat that like an absent backend.
+            if getattr(impl_nki, "nki", object()) is None:
+                print("  NKI import skipped: Neuron SDK not installed")
+                impl_nki = None
+        except ImportError as e:
+            print(f"  NKI import skipped: {e}")
             impl_nki = None
-    except ImportError as e:
-        print(f"  NKI import skipped: {e}")
+    else:
         impl_nki = None
+        print("  NKI not selected (--tile-language)")
 
     generate_inputs = get_generator(operator_name)
 
@@ -123,20 +150,27 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         torch_ms    = torch_stats["mean"]
 
         # --- Triton ---
-        triton_kw = _run_kwargs(impl_triton.run, block_size)
-        triton_output = impl_triton.run(*inputs, **triton_kw)
-        torch.cuda.synchronize()
-        triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-        triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
-        if triton_cfg:
-            print(f"  Triton autotune → {triton_cfg}")
-        if not triton_ok:
-            print(f"  Triton verification FAILED: {triton_err}")
-        triton_stats = (
-            _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
-            if triton_ok else None
-        )
-        triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+        triton_cfg = None
+        if impl_triton is None:
+            triton_ok = False
+            triton_err = "Triton not selected (--tile-language)"
+            triton_ms = float("nan")
+            triton_stats = None
+        else:
+            triton_kw = _run_kwargs(impl_triton.run, block_size)
+            triton_output = impl_triton.run(*inputs, **triton_kw)
+            torch.cuda.synchronize()
+            triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+            triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
+            if triton_cfg:
+                print(f"  Triton autotune → {triton_cfg}")
+            if not triton_ok:
+                print(f"  Triton verification FAILED: {triton_err}")
+            triton_stats = (
+                _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                if triton_ok else None
+            )
+            triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
 
         # --- cuTile ---
         cutile_cfg = None

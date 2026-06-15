@@ -53,11 +53,36 @@ def main():
                         help="Enable autotune (overrides config.yaml autotune setting)")
     parser.add_argument("--case-indices", type=str, default=None,
                         help="Comma-separated case indices to run, e.g. 0,1,3")
+    parser.add_argument("--tile-language", type=str, default=None,
+                        help="Comma-separated tile-language backends to run: "
+                             "triton, cutile, tilelang, nki (or 'all'). torch "
+                             "always runs as the speedup baseline. Default: all.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
                         help="Directory to store kept Proton files (default: system temp dir)")
     args = parser.parse_args()
+
+    # Resolve which tile-language backends to run. torch is always on (speedup
+    # baseline); omitting the flag runs them all (backward-compatible).
+    _TILE_LANGUAGES = ("triton", "cutile", "tilelang", "nki")
+    if args.tile_language is None:
+        enabled_backends = set(_TILE_LANGUAGES)
+    else:
+        tokens = [t.strip().lower() for t in args.tile_language.split(",") if t.strip()]
+        if "all" in tokens:
+            enabled_backends = set(_TILE_LANGUAGES)
+        else:
+            enabled_backends = set()
+            for t in tokens:
+                if t == "torch":
+                    continue  # always on; ignore if explicitly listed
+                if t not in _TILE_LANGUAGES:
+                    parser.error(
+                        f"unknown --tile-language backend '{t}'; "
+                        f"choose from {', '.join(_TILE_LANGUAGES)} (or 'all')"
+                    )
+                enabled_backends.add(t)
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -94,7 +119,11 @@ def main():
     )
 
     print(f"Starting benchmark for operator: {args.operator}")
-    results = run_benchmark_suite(args.operator, benchmark_overrides=overrides)
+    print(f"Tile-language backends: torch (baseline) + "
+          f"{', '.join(sorted(enabled_backends)) or '(none)'}")
+    results = run_benchmark_suite(
+        args.operator, benchmark_overrides=overrides, enabled_backends=enabled_backends
+    )
 
     timing_results, autotune_results = _split(results)
 
