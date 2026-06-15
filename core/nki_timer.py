@@ -3,15 +3,21 @@
 Proton cannot observe NeuronDevices, so the NKI backend is timed with an
 XLA-synchronised wall-clock loop around ``impl_nki.run()``:
 
-1. ``warmup`` calls, closed by one full device sync (absorbs Neuron
-   compilation and XLA graph tracing).
-2. ``repeat`` calls timed as one batch, closed by a single
-   ``xm.mark_step()`` + ``xm.wait_device_ops()``;
+1. ``warmup`` calls, each closed by ``xm.mark_step()`` (compiles and caches
+   the single-call graph now, so compilation stays out of the timed region),
+   then one ``wait_device_ops()`` to drain.
+2. ``repeat`` calls, each closed by ``xm.mark_step()`` **while its output is
+   still referenced**, then one final ``wait_device_ops()``;
    mean latency = elapsed / repeat.
 
-Batching the timed calls under one sync amortises XLA dispatch overhead
-that would otherwise dominate microsecond-scale kernels. The trade-off is
-that the result is throughput-derived end-to-end latency, which may include
+Stepping every iteration is load-bearing: XLA is lazy and prunes graphs with
+no live output tensor, so discarding each ``run()`` result before a single
+end-of-loop barrier would skip most of the kernel work and yield invalid
+near-zero timings (PR #102 review). Marking a step each iteration while the
+output is alive forces every repeat to be dispatched; ``mark_step`` is async,
+so the loop still pipelines and the final ``wait_device_ops`` drains the tail.
+
+The result is throughput-derived end-to-end latency, which may include
 graph-level overhead that the Proton numbers for the GPU backends do not
 contain. Pure device-kernel latency would require ``nki.benchmark``'s
 ``nc_latency`` — but that wraps the raw kernel with numpy inputs, and the
@@ -58,15 +64,23 @@ def bench_nki(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
     xm = _xm()
     kwargs = kwargs or {}
 
+    # Warmup: step each iteration while the output is live so the per-call graph
+    # is compiled, cached, and actually executed (not pruned).
     for _ in range(max(1, warmup)):
-        fn(*inputs, **kwargs)
-    xm.mark_step()
+        out = fn(*inputs, **kwargs)
+        xm.mark_step()
+        del out
     xm.wait_device_ops()
 
+    # Timed: step each iteration with its output still referenced, so every
+    # repeat is dispatched. mark_step is async (the loop pipelines); the final
+    # wait_device_ops drains the queue. See module docstring for why a single
+    # end-of-loop barrier would under-measure.
     start = time.perf_counter()
     for _ in range(max(1, repeat)):
-        fn(*inputs, **kwargs)
-    xm.mark_step()
+        out = fn(*inputs, **kwargs)
+        xm.mark_step()
+        del out
     xm.wait_device_ops()
     elapsed_ms = (time.perf_counter() - start) * 1e3
 

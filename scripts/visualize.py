@@ -48,7 +48,7 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import compute_derived, load_peak_config  # noqa: E402
+from core.metrics import NON_GPU_BACKENDS, compute_derived, load_peak_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # constants
@@ -259,16 +259,21 @@ def _plot_roofline(
 
     any_data_in_figure = False
 
+    # The roofline ceilings are GPU peaks; non-GPU backends (e.g. NKI on
+    # Trainium) must not be plotted against them — that would be a
+    # cross-hardware comparison (see PR #102 review).
+    roofline_backends = [b for b in BACKENDS if b not in NON_GPU_BACKENDS]
+
     for ax_idx, dtype in enumerate(dtypes):
         row, col = divmod(ax_idx, ncols)
         ax = axes[row][col]
         rows = grouped[dtype]
 
         # Collect (AI, TFLOPS) for each backend
-        points: dict[str, tuple[list, list]] = {b: ([], []) for b in BACKENDS}
+        points: dict[str, tuple[list, list]] = {b: ([], []) for b in roofline_backends}
         ai_vals = []
         for _, _, derived in rows:
-            for backend in BACKENDS:
+            for backend in roofline_backends:
                 ai = derived.get(backend, {}).get("arithmetic_intensity")
                 tf = derived.get(backend, {}).get("tflops")
                 if ai and tf and not math.isnan(tf):
@@ -313,7 +318,7 @@ def _plot_roofline(
                     linestyle="-", label=f"Mem BW ({peak_bw_GBs:.0f} GB/s)", zorder=1)
 
         # --- Data points (jitter X so backends don't overlap) ---
-        for backend in BACKENDS:
+        for backend in roofline_backends:
             xs, ys = points[backend]
             if not xs:
                 continue
