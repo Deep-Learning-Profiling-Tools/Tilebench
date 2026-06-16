@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
