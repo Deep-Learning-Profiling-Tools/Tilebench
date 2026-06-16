@@ -20,7 +20,7 @@ if nki is not None:
 
         partition_index = nl.arange(PMAX)[:, None]
 
-        for j in range(num_blocks):
+        for j in range(num_free_blocks):
             free_offset = j * free_dim
 
             free_dim_index = nl.arange(free_dim)[None, :]
