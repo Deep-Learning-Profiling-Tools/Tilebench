@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
@@ -36,3 +35,6 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> to
     x_2d = x.reshape(-1, 1)
     result = mul2_kernel(x_2d)
     return result.reshape(-1)
+
+def get_last_config() -> dict | None:
+    return None
