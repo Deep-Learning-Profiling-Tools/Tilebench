@@ -10,11 +10,12 @@ _TIMING_KEYS = {
     "triton_ms", "triton_stats", "triton_ok", "triton_err",
     "cutile_ms", "cutile_stats", "cutile_ok", "cutile_err",
     "tilelang_ms", "tilelang_stats", "tilelang_ok", "tilelang_err",
-    "speedup_triton", "speedup_cutile", "speedup_tilelang",
+    "nki_ms", "nki_stats", "nki_ok", "nki_err",
+    "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki",
 }
 _AUTOTUNE_KEYS = {
     "params", "problem_size", "dtype",
-    "triton_autotune_cfg", "cutile_autotune_cfg", "tilelang_autotune_cfg",
+    "triton_autotune_cfg", "cutile_autotune_cfg", "tilelang_autotune_cfg", "nki_autotune_cfg",
 }
 
 
@@ -52,11 +53,36 @@ def main():
                         help="Enable autotune (overrides config.yaml autotune setting)")
     parser.add_argument("--case-indices", type=str, default=None,
                         help="Comma-separated case indices to run, e.g. 0,1,3")
+    parser.add_argument("--tile-language", type=str, default=None,
+                        help="Comma-separated tile-language backends to run: "
+                             "triton, cutile, tilelang, nki (or 'all'). torch "
+                             "always runs as the speedup baseline. Default: all.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
                         help="Directory to store kept Proton files (default: system temp dir)")
     args = parser.parse_args()
+
+    # Resolve which tile-language backends to run. torch is always on (speedup
+    # baseline); omitting the flag runs them all (backward-compatible).
+    _TILE_LANGUAGES = ("triton", "cutile", "tilelang", "nki")
+    if args.tile_language is None:
+        enabled_backends = set(_TILE_LANGUAGES)
+    else:
+        tokens = [t.strip().lower() for t in args.tile_language.split(",") if t.strip()]
+        if "all" in tokens:
+            enabled_backends = set(_TILE_LANGUAGES)
+        else:
+            enabled_backends = set()
+            for t in tokens:
+                if t == "torch":
+                    continue  # always on; ignore if explicitly listed
+                if t not in _TILE_LANGUAGES:
+                    parser.error(
+                        f"unknown --tile-language backend '{t}'; "
+                        f"choose from {', '.join(_TILE_LANGUAGES)} (or 'all')"
+                    )
+                enabled_backends.add(t)
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -93,7 +119,11 @@ def main():
     )
 
     print(f"Starting benchmark for operator: {args.operator}")
-    results = run_benchmark_suite(args.operator, benchmark_overrides=overrides)
+    print(f"Tile-language backends: torch (baseline) + "
+          f"{', '.join(sorted(enabled_backends)) or '(none)'}")
+    results = run_benchmark_suite(
+        args.operator, benchmark_overrides=overrides, enabled_backends=enabled_backends
+    )
 
     timing_results, autotune_results = _split(results)
 
@@ -125,16 +155,16 @@ def main():
     print("\nSummary:")
     print(
         f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10} | "
-        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'TileLang(ms)':>12} | "
-        f"{'Speedup(T)':>10} | {'Speedup(C)':>10} | {'Speedup(TL)':>11}"
+        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'TileLang(ms)':>12} | {'NKI(ms)':>10} | "
+        f"{'Speedup(T)':>10} | {'Speedup(C)':>10} | {'Speedup(TL)':>11} | {'Speedup(N)':>10}"
     )
-    print("-" * (col_w + 102))
+    print("-" * (col_w + 131))
     for r in timing_results:
         print(
             f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
-            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | {r['tilelang_ms']:12.4f} | "
+            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | {r['tilelang_ms']:12.4f} | {r['nki_ms']:10.4f} | "
             f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f} | "
-            f"{r['speedup_tilelang']:11.2f}"
+            f"{r['speedup_tilelang']:11.2f} | {r['speedup_nki']:10.2f}"
         )
 
     # Save summary as CSV. Filename suffix mirrors the run mode so default
@@ -146,14 +176,15 @@ def main():
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "tilelang_ms",
-                         "speedup_triton", "speedup_cutile", "speedup_tilelang"])
+        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "tilelang_ms", "nki_ms",
+                         "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki"])
         for r in timing_results:
             writer.writerow([
                 _fmt_params(r), r["dtype"],
                 f"{r['torch_ms']:.4f}", f"{r['triton_ms']:.4f}", f"{r['cutile_ms']:.4f}",
-                f"{r['tilelang_ms']:.4f}", f"{r['speedup_triton']:.2f}",
-                f"{r['speedup_cutile']:.2f}", f"{r['speedup_tilelang']:.2f}",
+                f"{r['tilelang_ms']:.4f}", f"{r['nki_ms']:.4f}",
+                f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
+                f"{r['speedup_tilelang']:.2f}", f"{r['speedup_nki']:.2f}",
             ])
     print(f"Summary CSV     → {csv_path}")
 

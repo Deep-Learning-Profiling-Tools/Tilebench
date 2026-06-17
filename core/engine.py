@@ -9,23 +9,60 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-def run_benchmark_suite(operator_name, benchmark_overrides=None):
+def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    # Which tile-language backends to run this invocation. torch always runs —
+    # it is the speedup baseline. None → all (backward-compatible default).
+    if enabled_backends is None:
+        enabled_backends = {"triton", "cutile", "tilelang", "nki"}
+    else:
+        enabled_backends = set(enabled_backends)
+
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
-    impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
-    try:
-        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
-    except ImportError as e:
-        print(f"  cuTile import skipped: {e}")
+
+    if "triton" in enabled_backends:
+        impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
+    else:
+        impl_triton = None
+        print("  Triton not selected (--tile-language)")
+
+    if "cutile" in enabled_backends:
+        try:
+            impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+        except ImportError as e:
+            print(f"  cuTile import skipped: {e}")
+            impl_cutile = None
+    else:
         impl_cutile = None
-    try:
-        impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
-    except ImportError as e:
-        print(f"  TileLang import skipped: {e}")
+        print("  cuTile not selected (--tile-language)")
+
+    if "tilelang" in enabled_backends:
+        try:
+            impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
+        except ImportError as e:
+            print(f"  TileLang import skipped: {e}")
+            impl_tilelang = None
+    else:
         impl_tilelang = None
+        print("  TileLang not selected (--tile-language)")
+
+    if "nki" in enabled_backends:
+        try:
+            impl_nki = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_nki")
+            # Conforming impls set a module-level `nki = None` when the Neuron SDK is
+            # missing (see NKI authoring guide §3); treat that like an absent backend.
+            if getattr(impl_nki, "nki", object()) is None:
+                print("  NKI import skipped: Neuron SDK not installed")
+                impl_nki = None
+        except ImportError as e:
+            print(f"  NKI import skipped: {e}")
+            impl_nki = None
+    else:
+        impl_nki = None
+        print("  NKI not selected (--tile-language)")
 
     generate_inputs = get_generator(operator_name)
 
@@ -113,20 +150,27 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
         torch_ms    = torch_stats["mean"]
 
         # --- Triton ---
-        triton_kw = _run_kwargs(impl_triton.run, block_size)
-        triton_output = impl_triton.run(*inputs, **triton_kw)
-        torch.cuda.synchronize()
-        triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-        triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
-        if triton_cfg:
-            print(f"  Triton autotune → {triton_cfg}")
-        if not triton_ok:
-            print(f"  Triton verification FAILED: {triton_err}")
-        triton_stats = (
-            _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
-            if triton_ok else None
-        )
-        triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+        triton_cfg = None
+        if impl_triton is None:
+            triton_ok = False
+            triton_err = "Triton not selected (--tile-language)"
+            triton_ms = float("nan")
+            triton_stats = None
+        else:
+            triton_kw = _run_kwargs(impl_triton.run, block_size)
+            triton_output = impl_triton.run(*inputs, **triton_kw)
+            torch.cuda.synchronize()
+            triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+            triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
+            if triton_cfg:
+                print(f"  Triton autotune → {triton_cfg}")
+            if not triton_ok:
+                print(f"  Triton verification FAILED: {triton_err}")
+            triton_stats = (
+                _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                if triton_ok else None
+            )
+            triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
 
         # --- cuTile ---
         cutile_cfg = None
@@ -190,6 +234,42 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
                 tilelang_stats = None
                 print(f"  TileLang execution FAILED: {tilelang_err}")
 
+        # --- NKI (AWS Trainium; timed via XLA wall-clock, not Proton) ---
+        nki_cfg = None
+        if impl_nki is None:
+            nki_ok = False
+            nki_err = "NKI not available (no impl or Neuron SDK not installed)"
+            nki_ms = float("nan")
+            nki_stats = None
+            print("  NKI skipped (not available)")
+        else:
+            try:
+                # Deferred import: GPU-only machines have no torch_xla installed.
+                from core.nki_timer import bench_nki, to_cpu, to_xla_device
+
+                nki_kw = _run_kwargs(impl_nki.run, block_size)
+                nki_inputs = to_xla_device(inputs)
+                nki_output = impl_nki.run(*nki_inputs, **nki_kw)
+                # ref_output lives on the GPU/CPU, NKI output on the XLA device —
+                # compare on CPU.
+                nki_ok, nki_err = verify(to_cpu(nki_output), to_cpu(ref_output), atol=verify_atol, rtol=verify_rtol)
+                nki_cfg = getattr(impl_nki, "get_last_config", lambda: None)() if autotune else None
+                if nki_cfg:
+                    print(f"  NKI     autotune → {nki_cfg}")
+                if not nki_ok:
+                    print(f"  NKI verification FAILED: {nki_err}")
+                nki_stats = (
+                    bench_nki(impl_nki.run, nki_inputs, nki_kw, warmup=warmup, repeat=repeat)
+                    if nki_ok else None
+                )
+                nki_ms = nki_stats["mean"] if nki_stats is not None else float("nan")
+            except Exception as e:
+                nki_ok    = False
+                nki_err   = str(e)
+                nki_ms    = float("nan")
+                nki_stats = None
+                print(f"  NKI execution FAILED: {nki_err}")
+
         results.append({
             "params":                params,
             "problem_size":          infer_problem_size(operator_name, params),
@@ -211,9 +291,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "tilelang_ok":           tilelang_ok,
             "tilelang_err":          tilelang_err,
             "tilelang_autotune_cfg": tilelang_cfg,
+            "nki_ms":                nki_ms,
+            "nki_stats":             nki_stats or {},
+            "nki_ok":                nki_ok,
+            "nki_err":               nki_err,
+            "nki_autotune_cfg":      nki_cfg,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
+            "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
         })
 
     return results
