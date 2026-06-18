@@ -5,33 +5,29 @@ try:
     import neuronxcc.nki.language as nl
     import neuronxcc.nki.isa as nisa
     PMAX = nl.tile_size.pmax
-    FMAX_SBUF = 64000
 except ImportError:
     nki = None
 
 if nki is not None:
     @nki.jit
     def relu_kernel(a_input):
-        free_dim = min(a_input.shape[1], FMAX_SBUF)
-
-        num_free_blocks = (a_input.shape[1] + (free_dim - 1)) // free_dim
+        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
 
         hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
 
-        partition_index = nl.arange(PMAX)[:, None]
+        for i in range(num_blocks):
+            offset = i * PMAX
 
-        for j in range(num_free_blocks):
-            free_offset = j * free_dim
-
-            free_dim_index = nl.arange(free_dim)[None, :]
+            partition_index = nl.arange(PMAX)[:, None]
+            free_dim_index = nl.arange(a_input.shape[1])[None, :]
             
-            free_mask = free_dim_index < (a_input.shape[1] - free_offset)
+            mask = free_dim_index < (a_input.shape[0] - offset)
 
-            a_tile = nl.load(a_input[partition_index, free_offset + free_dim_index], mask=free_mask)
+            a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask)
 
-            result_tile = nl.maximum(a_tile, 0, mask=free_mask)
+            result_tile = nl.maximum(a_tile, 0, mask=mask)
             
-            nl.store(hbm_result_tile[partition_index, free_offset + free_dim_index], value=result_tile, mask=free_mask)
+            nl.store(hbm_result_tile[offset + partition_index, free_dim_index], value=result_tile, mask=mask)
 
         return hbm_result_tile
 
