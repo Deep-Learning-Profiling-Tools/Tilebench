@@ -31,7 +31,7 @@ if nki is not None:
 
         return hbm_result_tile
 
-def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
+def run(x: torch.Tensor, N: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("sigmoid NKI: int8 not supported")
     
