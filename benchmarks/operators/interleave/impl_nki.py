@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
@@ -40,7 +39,17 @@ if nki is not None:
         return hbm_result_tile
 
 def run(a: torch.Tensor, b: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
-    a_2d = a.reshape(-1, 1)
-    b_2d = b.reshape(-1, 1)
+    free_dim = (n + (PMAX - 1)) // PMAX
+    padded_size = PMAX * free_dim
+
+    if padded_size > n:
+        a = torch.nn.functional.pad(a, (0, padded_size - n))
+        b = torch.nn.functional.pad(b, (0, padded_size - n))
+
+    a_2d = a.reshape(PMAX, free_dim)
+    b_2d = b.reshape(PMAX, free_dim)
     result = interleave_kernel(a_2d, b_2d)
-    return result.reshape(-1)
+    return result.reshape(-1)[:2 * n]
+
+def get_last_config() -> dict | None:
+    return None
