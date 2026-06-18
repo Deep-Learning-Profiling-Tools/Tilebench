@@ -35,7 +35,7 @@ if nki is not None:
 
         return hbm_result_tile
 
-def run(x: torch.Tensor, n_rows: int = None, n_cols: int = None, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
+def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     return softmax_online_kernel(x)
 
 def get_last_config() -> dict | None:
