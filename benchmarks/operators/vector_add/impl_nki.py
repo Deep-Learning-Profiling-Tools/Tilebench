@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
@@ -23,14 +22,13 @@ if nki is not None:
             offset = i*PMAX
 
             partition_index = nl.arange(PMAX)[:, None]
-            free_dim_index = nl.arange(1)[None, :]
+            free_dim_index = nl.arange(a_input.shape[1])[None, :]
 
             mask = partition_index < (a_input.shape[0] - offset)
 
             a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask)
             b_tile = nl.load(b_input[offset + partition_index, free_dim_index], mask=mask)
 
-            # nl.add handles partial tiles correctly
             result_tile = nl.add(a_tile, b_tile, mask=mask)
 
             nl.store(hbm_result_tile[offset + partition_index, free_dim_index], value=result_tile, mask=mask)
@@ -38,10 +36,18 @@ if nki is not None:
         return hbm_result_tile
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    x_2d = x.reshape(-1, 1)
-    y_2d = y.reshape(-1, 1)
+    n = x.numel()
+    free_dim = (n + (PMAX - 1)) // PMAX
+    padded_size = PMAX * free_dim
+
+    if padded_size > n:
+        x = torch.nn.functional.pad(x, (0, padded_size - n))
+        y = torch.nn.functional.pad(y, (0, padded_size - n))
+    
+    x_2d = x.reshape(PMAX, free_dim)
+    y_2d = y.reshape(PMAX, free_dim)
     result = add_kernel(x_2d, y_2d)
-    return result.reshape(-1)
+    return result.reshape(-1)[:n]
 
 
 def get_last_config() -> dict | None:
