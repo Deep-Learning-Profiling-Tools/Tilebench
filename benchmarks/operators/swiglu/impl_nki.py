@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
@@ -36,7 +35,6 @@ if nki is not None:
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     return swiglu_kernel(x, y)
-
 
 def get_last_config() -> dict | None:
     return None
