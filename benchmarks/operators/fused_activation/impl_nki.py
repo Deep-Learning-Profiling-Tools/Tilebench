@@ -1,5 +1,4 @@
 import torch
-from torch_xla.core import xla_model as xm
 
 try:
     import neuronxcc.nki as nki
@@ -41,8 +40,21 @@ if nki is not None:
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("fused_activation NKI: int8 not supported")
-    x_2d = x.reshape(-1, 1)
-    x_gate_2d = gate.reshape(-1, 1)
-    bias_2d = bias.reshape(-1, 1)
+    
+    n = x.numel()
+    free_dim = (n + (PMAX - 1)) // PMAX
+    padded_size = PMAX * free_dim
+
+    if padded_size > n:
+        x = torch.nn.functional.pad(x, (0, padded_size - n))
+        gate = torch.nn.functional.pad(gate, (0, padded_size - n))
+        bias = torch.nn.functional.pad(bias, (0, padded_size - n))
+
+    x_2d = x.reshape(PMAX, free_dim)
+    x_gate_2d = gate.reshape(PMAX, free_dim)
+    bias_2d = bias.reshape(PMAX, free_dim)
     result = fused_activation_kernel(x_2d, x_gate_2d, bias_2d)
-    return result.reshape(-1)
+    return result.reshape(-1)[:n]
+
+def get_last_config() -> dict | None:
+    return None
