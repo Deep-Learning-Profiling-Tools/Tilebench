@@ -4,7 +4,7 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def fused_activation_configs():
@@ -20,7 +20,7 @@ def fused_activation_configs():
 @tilelang.autotune(configs=fused_activation_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def fused_activation_kernel(x, gate, bias, output, in_dtype, out_dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements,), in_dtype)
     gate: T.Tensor((n_elements,), in_dtype)
     bias: T.Tensor((n_elements,), in_dtype)
@@ -36,7 +36,6 @@ def fused_activation_kernel(x, gate, bias, output, in_dtype, out_dtype, BLOCK_SI
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     if x.shape != gate.shape or x.shape != bias.shape:
         raise ValueError("All input tensors must have the same shape.")
@@ -50,10 +49,11 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, autotune: bool 
     if autotune:
         with set_autotune_inputs(x, gate, bias, output):
             kernel = fused_activation_kernel.compile(x, gate, bias, output, in_dtype=in_dtype, out_dtype=out_dtype)
-        _last_autotune_config = dict(kernel.config or {})
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(x, gate, bias, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         fused_activation_kernel(
             x, gate, bias, output, in_dtype=in_dtype, out_dtype=out_dtype,
@@ -65,4 +65,4 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, autotune: bool 
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
