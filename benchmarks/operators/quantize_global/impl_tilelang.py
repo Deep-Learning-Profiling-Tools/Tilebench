@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 def quantize_global_configs():
     BLOCK_SIZE = [2048, 4096, 8192, 16384]
     threads = [64, 128, 256]
@@ -19,7 +19,7 @@ def quantize_global_configs():
 
 
 def quantize_global_kernel(x, output, in_dtype, out_dtype, BLOCK_SIZE: int = 2048, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements, ), in_dtype)
     output: T.Tensor((n_elements, ), out_dtype)
 
@@ -30,7 +30,6 @@ def quantize_global_kernel(x, output, in_dtype, out_dtype, BLOCK_SIZE: int = 204
                 output[idx] = T.cast(x[idx], "float16")
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
     in_dtype = str(x.dtype).removeprefix("torch.")
     output = torch.empty(x.shape, device = x.device, dtype = torch.float16)
     out_dtype = str(output.dtype).removeprefix("torch.")
@@ -39,10 +38,11 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
             kernel = quantize_global_kernel.compile(x, output, 
                                                      in_dtype = in_dtype, 
                                                      out_dtype = out_dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(x, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         quantize_global_kernel(
             x, output, in_dtype = in_dtype, out_dtype = out_dtype,
@@ -51,4 +51,4 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
         )
     return output
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
