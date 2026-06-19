@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 def vector_add_configs():
     BLOCK_SIZE = [512, 1024, 2048]
     threads = [64, 128, 256]
@@ -17,7 +17,7 @@ def vector_add_configs():
 @tilelang.jit
 
 def add_kernel(x, y, output, dtype, BLOCK_SIZE: int =  1024, threads: int = 128 ):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements, ), dtype)
     y: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
@@ -31,16 +31,16 @@ def add_kernel(x, y, output, dtype, BLOCK_SIZE: int =  1024, threads: int = 128 
 
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
     dtype = str(x.dtype).removeprefix("torch.")
     output = torch.empty_like(x)
     if autotune:
         with set_autotune_inputs(x, y, output):
             kernel = add_kernel.compile(x, y, output, dtype=dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(x, y, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         add_kernel(
             x, y, output, dtype = dtype,
@@ -50,4 +50,4 @@ def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool
     return output
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
