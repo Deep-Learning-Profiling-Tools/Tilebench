@@ -4,7 +4,7 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def interleave_configs():
@@ -20,7 +20,7 @@ def interleave_configs():
 @tilelang.autotune(configs=interleave_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def interleave_kernel(A, B, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     A: T.Tensor((n_elements,), dtype)
     B: T.Tensor((n_elements,), dtype)
     output: T.Tensor((2 * n_elements,), dtype)
@@ -34,17 +34,17 @@ def interleave_kernel(A, B, output, dtype, BLOCK_SIZE: int = 1024, threads: int 
 
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     dtype = str(A.dtype).removeprefix("torch.")
     output = torch.empty(2 * N, dtype=A.dtype, device=A.device)
     if autotune:
         with set_autotune_inputs(A, B, output):
             kernel = interleave_kernel.compile(A, B, output, dtype=dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(A, B, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         interleave_kernel(
             A, B, output, dtype=dtype,
@@ -55,4 +55,4 @@ def run(A: torch.Tensor, B: torch.Tensor, N: int, block_size: int = 1024, autotu
     return output
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
