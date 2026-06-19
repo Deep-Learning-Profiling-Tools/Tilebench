@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def matrix_copy_configs():
@@ -20,7 +20,7 @@ def matrix_copy_configs():
 @tilelang.autotune(configs = matrix_copy_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def matrix_copy_kernel(A, B, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     A: T.Tensor((n_elements, ), dtype)
     B: T.Tensor((n_elements, ), dtype)
 
@@ -32,7 +32,6 @@ def matrix_copy_kernel(A, B, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
                 
 # flatten to 1d as torch + cuTile implentation does the same
 def run(A: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
     dtype = str(A.dtype).removeprefix("torch.")
     B = torch.empty_like(A)
     A_flat = A.view(-1)
@@ -40,10 +39,11 @@ def run(A: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False
     if autotune:
         with set_autotune_inputs(A_flat, B_flat):
             kernel = matrix_copy_kernel.compile(A_flat, B_flat, dtype = dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(A_flat, B_flat)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         matrix_copy_kernel(
             A_flat, B_flat, dtype = dtype,
@@ -54,4 +54,4 @@ def run(A: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
