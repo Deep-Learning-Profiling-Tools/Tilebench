@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def reverse_array_configs():
@@ -19,7 +19,7 @@ def reverse_array_configs():
 @tilelang.autotune(configs = reverse_array_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def reverse_array_kernel(input, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     input: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
 
@@ -30,16 +30,16 @@ def reverse_array_kernel(input, output, dtype, BLOCK_SIZE: int = 1024, threads: 
                 output[idx] = input[n_elements - 1 - idx]
                 
 def run(input: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
     dtype = str(input.dtype).removeprefix("torch.")
     output = torch.empty_like(input)
     if autotune:
         with set_autotune_inputs(input, output):
             kernel = reverse_array_kernel.compile(input, output, dtype = dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(input, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         reverse_array_kernel(
             input, output, dtype = dtype,
@@ -50,4 +50,4 @@ def run(input: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = F
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
