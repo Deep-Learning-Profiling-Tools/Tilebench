@@ -4,7 +4,7 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def sigmoid_configs():
@@ -20,7 +20,7 @@ def sigmoid_configs():
 @tilelang.autotune(configs = sigmoid_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def sigmoid_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
 
@@ -32,7 +32,6 @@ def sigmoid_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128)
 
 
 def run(X: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     dtype = str(X.dtype).removeprefix("torch.")
     output = torch.empty_like(X)
@@ -40,10 +39,11 @@ def run(X: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False,
     if autotune:
         with set_autotune_inputs(X, output):
             kernel = sigmoid_kernel.compile(X, output, dtype = dtype)
-        _last_autotune_config = dict(kernel.config or {})
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(X, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         sigmoid_kernel(
             X, output, dtype = dtype,
@@ -54,4 +54,4 @@ def run(X: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
