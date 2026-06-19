@@ -4,7 +4,7 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 def swiglu_configs():
@@ -20,7 +20,7 @@ def swiglu_configs():
 @tilelang.autotune(configs=swiglu_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def swiglu_kernel(x, y, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements,), dtype)
     y: T.Tensor((n_elements,), dtype)
     output: T.Tensor((n_elements,), dtype)
@@ -35,7 +35,6 @@ def swiglu_kernel(x, y, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 12
 
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    global _last_autotune_config
 
     if x.shape != y.shape:
         raise ValueError("Input tensors must have the same shape.")
@@ -48,10 +47,11 @@ def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool
     if autotune:
         with set_autotune_inputs(x_flat, y_flat, output):
             kernel = swiglu_kernel.compile(x_flat, y_flat, output, dtype=dtype)
-        _last_autotune_config = dict(kernel.config or {})
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(x_flat, y_flat, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         swiglu_kernel(
             x_flat, y_flat, output, dtype=dtype,
@@ -63,4 +63,4 @@ def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
