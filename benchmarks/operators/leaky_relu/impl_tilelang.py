@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128, "num_stages": 2}
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 def leaky_relu_configs():
     BLOCK_SIZE = [512, 1024, 2048]
     threads = [64, 128, 256]
@@ -19,7 +19,7 @@ def leaky_relu_configs():
 
 
 def leaky_relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.const("n_elements")
+    n_elements = T.dynamic("n_elements")
     x: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
 
@@ -31,16 +31,16 @@ def leaky_relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 1
                 else: output[idx] = x[idx]
 
 def run(x: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
-    global _last_autotune_config
     dtype = str(x.dtype).removeprefix("torch.")
     output = torch.empty_like(x)
     if autotune:
         with set_autotune_inputs(x, output):
             kernel = leaky_relu_kernel.compile(x, output, dtype = dtype)
-        _last_autotune_config = dict(kernel.config)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
         kernel(x, output)
     else:
-        _last_autotune_config = None
+        _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         leaky_relu_kernel(
             x, output, dtype = dtype,
@@ -49,4 +49,4 @@ def run(x: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False)
         )
     return output
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
