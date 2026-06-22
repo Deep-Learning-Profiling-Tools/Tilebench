@@ -125,6 +125,14 @@ def main():
         args.operator, benchmark_overrides=overrides, enabled_backends=enabled_backends
     )
 
+    if not results:
+        print(
+            f"\nNo cases produced results for '{args.operator}' — every case was "
+            f"skipped (see the 'Skipped:' messages above). Refusing to overwrite "
+            f"existing logs/CSV with empty data."
+        )
+        return
+
     timing_results, autotune_results = _split(results)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

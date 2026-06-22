@@ -1,37 +1,69 @@
 """Timing helpers for the NKI (AWS Neuron / Trainium) backend.
 
-Proton cannot observe NeuronDevices, so the NKI backend is timed with an
-XLA-synchronised wall-clock loop around ``impl_nki.run()``:
+Proton cannot observe NeuronDevices (its backends are CUPTI/RocTracer only), so
+the NKI backend is timed with **AWS neuron-profile**, which uses on-chip
+profiling hardware to report true on-device kernel latency — the Trainium analog
+of Proton/NCU on NVIDIA. This is now the ONLY NKI timing mode (the earlier XLA
+wall-clock loop was removed: it included graph-dispatch / host overhead and was
+not apples-to-apples with the Proton numbers used for the GPU backends).
 
-1. ``warmup`` calls, each closed by ``xm.mark_step()`` (compiles and caches
-   the single-call graph now, so compilation stays out of the timed region),
-   then one ``wait_device_ops()`` to drain.
-2. ``repeat`` calls, each closed by ``xm.mark_step()`` **while its output is
-   still referenced**, then one final ``wait_device_ops()``;
-   mean latency = elapsed / repeat.
+Pipeline (per ``bench_nki`` call):
+  1. Run ``impl_nki.run()`` once on the XLA device to compile the kernel and make
+     the Neuron compiler emit the NEFF artifact.
+  2. ``neuron-profile capture`` re-executes that NEFF on the device and writes an
+     NTFF execution trace (``--profile-nth-exec`` skips warmup executions).
+  3. ``neuron-profile view --output-format summary-json`` reads the trace and
+     reports ``total_time`` (on-device execution time); we return it as ``mean``.
 
-Stepping every iteration is load-bearing: XLA is lazy and prunes graphs with
-no live output tensor, so discarding each ``run()`` result before a single
-end-of-loop barrier would skip most of the kernel work and yield invalid
-near-zero timings (PR #102 review). Marking a step each iteration while the
-output is alive forces every repeat to be dispatched; ``mark_step`` is async,
-so the loop still pipelines and the final ``wait_device_ops`` drains the tail.
+DEBUG ENV (auto-set below): the Neuron compiler only saves the NEFF (consumed in
+step 2) when NEURON_FRAMEWORK_DEBUG=1; XLA_IR_DEBUG/XLA_HLO_DEBUG add the HLO/IR
+info that source-correlates the profile. This module sets all three via
+os.environ.setdefault at import — early enough because the engine imports it
+BEFORE the first impl_nki.run() compiles the kernel — so callers normally only
+need their platform selector, e.g.:
 
-The result is throughput-derived end-to-end latency, which may include
-graph-level overhead that the Proton numbers for the GPU backends do not
-contain. Pure device-kernel latency would require ``nki.benchmark``'s
-``nc_latency`` — but that wraps the raw kernel with numpy inputs, and the
-impl contract deliberately hides the kernel behind ``run()`` (which owns
-input adaptation, e.g. reshapes). Revisit if per-kernel device latency
-becomes a requirement.
+    NEURON_PLATFORM_TARGET_OVERRIDE=trn2 PYTHONPATH=. \\
+    python scripts/run_bench.py --operator <op> --tile-language nki
 
-NOTE: structurally validated only — the failure paths are exercised on GPU
-machines, but the happy path needs a run on a trn1/trn2 instance before NKI
-numbers are trusted.
+(setdefault preserves any value you export yourself; exporting at launch is the
+most robust if torch_xla happens to get imported before this module.)
+
+STATUS: written against the neuron-profile docs but NOT yet run on a trn1/trn2
+box. The items most likely to need adjustment there are marked ``# VERIFY ON
+TRN2``:
+  - the NEFF location/name emitted by a torch_xla run,
+  - the exact ``neuron-profile`` capture/view flags, the summary-json schema, and
+    the ``total_time`` field + its units (docs say seconds),
+  - whether the installed binary is ``neuron-profile`` or ``neuron-explorer``
+    (override with the ``NEURON_PROFILE_BIN`` env var).
+
+Refs: AWS Neuron docs — "Profile a NKI Kernel" and "Neuron Profile User Guide".
 """
+import glob
+import json
+import os
+import subprocess
+import tempfile
 import time
 
 import torch
+
+# The Neuron compiler saves the NEFF (consumed by neuron-profile below) only when
+# NEURON_FRAMEWORK_DEBUG is set; XLA_IR_DEBUG/XLA_HLO_DEBUG add HLO/IR debug info
+# for source-correlated profiles. Set them here so callers don't need the
+# launch-time env: these are read when the kernel is first COMPILED (the first
+# impl_nki.run()), which the engine triggers AFTER importing this module, so
+# import-time setdefault is early enough. setdefault preserves user-exported values.
+for _flag in ("NEURON_FRAMEWORK_DEBUG", "XLA_IR_DEBUG", "XLA_HLO_DEBUG"):
+    os.environ.setdefault(_flag, "1")
+
+# Binary that exposes the `capture` / `view` subcommands. Recent SDKs ship it as
+# `neuron-profile`; the newest docs also use `neuron-explorer`. Override via env.
+NEURON_PROFILE_BIN = os.environ.get("NEURON_PROFILE_BIN", "neuron-profile")
+# Optional explicit NEFF path; otherwise we auto-discover the freshest *.neff.
+NEFF_PATH_ENV = "NKI_NEFF_PATH"
+# Directories the Neuron compiler may drop the NEFF into (relative to CWD).  # VERIFY ON TRN2
+_NEFF_SEARCH_DIRS = (".", "compiler_workdir", "./neuronxcc-*", os.environ.get("NEURON_CC_FLAGS_CACHE_DIR", ""))
 
 
 def _xm():
@@ -55,8 +87,59 @@ def to_cpu(out):
     return out
 
 
+def _find_neff(min_mtime: float) -> str:
+    """Locate the NEFF the compiler just emitted (newest *.neff at/after min_mtime).
+
+    Honors $NKI_NEFF_PATH if set. Raises if none found (usually means the Neuron
+    debug env was not set at launch — see module docstring).  # VERIFY ON TRN2
+    """
+    explicit = os.environ.get(NEFF_PATH_ENV)
+    if explicit:
+        if not os.path.exists(explicit):
+            raise RuntimeError(f"{NEFF_PATH_ENV}={explicit!r} does not exist")
+        return explicit
+    candidates = []
+    for d in _NEFF_SEARCH_DIRS:
+        if not d:
+            continue
+        candidates += glob.glob(os.path.join(d, "**", "*.neff"), recursive=True)
+        candidates += glob.glob(os.path.join(d, "*.neff"))
+    fresh = sorted({c for c in candidates if os.path.getmtime(c) >= min_mtime - 1.0},
+                   key=os.path.getmtime)
+    if not fresh:
+        raise RuntimeError(
+            "No NEFF found after running the kernel. Launch with "
+            "NEURON_FRAMEWORK_DEBUG=1 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 so the "
+            f"compiler saves the NEFF, or set ${NEFF_PATH_ENV}."
+        )
+    return fresh[-1]
+
+
+def _run_cli(cmd: list[str]) -> str:
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"`{' '.join(cmd)}` failed (rc={r.returncode}): {r.stderr.strip()[:300]}")
+    return r.stdout
+
+
+def _total_time_ms(summary_json_text: str) -> float:
+    """Extract on-device total_time (docs: seconds) from `view` summary-json.  # VERIFY ON TRN2
+
+    The summary may be a dict or a list of per-NeuronCore rows; take the max
+    total_time across rows and convert seconds -> ms.
+    """
+    data = json.loads(summary_json_text)
+    rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
+    if isinstance(rows, dict):
+        rows = [rows]
+    times = [float(r["total_time"]) for r in rows if isinstance(r, dict) and "total_time" in r]
+    if not times:
+        raise RuntimeError(f"no 'total_time' in neuron-profile summary-json: {summary_json_text[:300]}")
+    return max(times) * 1e3  # seconds -> ms
+
+
 def bench_nki(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
-    """Time ``fn(*inputs, **kwargs)`` on the XLA device.
+    """Time ``fn(*inputs, **kwargs)`` on the Neuron device via neuron-profile.
 
     Returns a stats dict whose ``"mean"`` key (ms) matches what
     ``core.timer.report_benchmark`` returns for the GPU backends.
@@ -64,30 +147,43 @@ def bench_nki(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
     xm = _xm()
     kwargs = kwargs or {}
 
-    # Warmup: step each iteration while the output is live so the per-call graph
-    # is compiled, cached, and actually executed (not pruned).
-    for _ in range(max(1, warmup)):
-        out = fn(*inputs, **kwargs)
-        xm.mark_step()
-        del out
+    # 1) Run once to compile the kernel and emit the NEFF (must execute, not be
+    #    pruned: keep the output live across mark_step, then drain).
+    t0 = time.time()
+    out = fn(*inputs, **kwargs)
+    xm.mark_step()
+    del out
     xm.wait_device_ops()
 
-    # Timed: step each iteration with its output still referenced, so every
-    # repeat is dispatched. mark_step is async (the loop pipelines); the final
-    # wait_device_ops drains the queue. See module docstring for why a single
-    # end-of-loop barrier would under-measure.
-    start = time.perf_counter()
-    for _ in range(max(1, repeat)):
-        out = fn(*inputs, **kwargs)
-        xm.mark_step()
-        del out
-    xm.wait_device_ops()
-    elapsed_ms = (time.perf_counter() - start) * 1e3
+    neff = _find_neff(t0)
 
-    n = max(1, repeat)
+    with tempfile.TemporaryDirectory(prefix="nki_prof_") as td:
+        nth = max(2, int(warmup) + 1)  # profile a warm execution
+        ntff_stem = os.path.join(td, "profile")
+        # 2) Capture an on-device execution trace of the NEFF.  # VERIFY ON TRN2
+        _run_cli([
+            NEURON_PROFILE_BIN, "capture",
+            "-n", neff, "-s", f"{ntff_stem}.ntff",
+            f"--profile-nth-exec={nth}",
+        ])
+        ntff = f"{ntff_stem}_exec_{nth}.ntff"
+        if not os.path.exists(ntff):  # naming fallback
+            found = glob.glob(os.path.join(td, "*.ntff"))
+            if not found:
+                raise RuntimeError("neuron-profile capture produced no .ntff")
+            ntff = found[-1]
+        # 3) Read the summary and pull out on-device total_time.  # VERIFY ON TRN2
+        summary = _run_cli([
+            NEURON_PROFILE_BIN, "view",
+            "--output-format", "summary-json",
+            "-n", neff, "-s", ntff,
+        ])
+
+    mean_ms = _total_time_ms(summary)
     return {
-        "mean": elapsed_ms / n,
-        "total_ms": elapsed_ms,
-        "repeat": n,
-        "method": "xla_wallclock",
+        "mean": mean_ms,
+        "total_ms": mean_ms,
+        "repeat": 1,          # neuron-profile reports a single hardware-timed exec
+        "method": "neuron_profile",
+        "neff": neff,
     }
