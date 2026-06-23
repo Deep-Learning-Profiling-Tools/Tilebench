@@ -24,8 +24,8 @@ def weight_dequant_kernel(
     N, TILE_SIZE,
     BLOCK_SIZE: int = 1024, threads: int = 128,
 ):
-    n_elements = T.dynamic("n_elements")
-    S_rows, S_cols = T.dynamic("S_rows, S_cols")
+    n_elements = T.const("n_elements")
+    S_rows, S_cols = T.const("S_rows, S_cols")
     X: T.Tensor((n_elements,), dtype)
     S: T.Tensor((S_rows, S_cols), dtype)
     output: T.Tensor((n_elements,), dtype)
