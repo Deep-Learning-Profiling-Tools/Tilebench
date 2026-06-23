@@ -20,7 +20,7 @@ def sigmoid_configs():
 @tilelang.autotune(configs = sigmoid_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def sigmoid_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.dynamic("n_elements")
+    n_elements = T.const("n_elements")
     x: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
 
