@@ -19,7 +19,7 @@ def quantize_global_configs():
 
 
 def quantize_global_kernel(x, output, in_dtype, out_dtype, BLOCK_SIZE: int = 2048, threads: int = 128):
-    n_elements = T.dynamic("n_elements")
+    n_elements = T.const("n_elements")
     x: T.Tensor((n_elements, ), in_dtype)
     output: T.Tensor((n_elements, ), out_dtype)
 
