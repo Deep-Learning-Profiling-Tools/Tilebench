@@ -19,7 +19,7 @@ def relu_configs():
 
 
 def relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.dynamic("n_elements")
+    n_elements = T.const("n_elements")
     x: T.Tensor((n_elements, ), dtype)
     output: T.Tensor((n_elements, ), dtype)
 
