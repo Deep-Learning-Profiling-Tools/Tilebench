@@ -44,7 +44,6 @@ import json
 import os
 import subprocess
 import tempfile
-import time
 
 import torch
 
@@ -87,11 +86,15 @@ def to_cpu(out):
     return out
 
 
-def _find_neff(min_mtime: float) -> str:
-    """Locate the NEFF the compiler just emitted (newest *.neff at/after min_mtime).
+def _find_neff() -> str:
+    """Locate the NEFF for the kernel under test (newest *.neff in the search dirs).
 
-    Honors $NKI_NEFF_PATH if set. Raises if none found (usually means the Neuron
-    debug env was not set at launch — see module docstring).  # VERIFY ON TRN2
+    Honors $NKI_NEFF_PATH if set. The NEFF is written when the kernel is first
+    COMPILED — in the engine flow that is the correctness run *preceding*
+    bench_nki, not a write inside it (the timed call reuses the cached graph) —
+    so we take the newest artifact rather than gating on a bench-local timestamp.
+    Raises if none found (usually means the Neuron debug env was not active at
+    compile time — but this module auto-sets it; see the module docstring).  # VERIFY ON TRN2
     """
     explicit = os.environ.get(NEFF_PATH_ENV)
     if explicit:
@@ -104,15 +107,13 @@ def _find_neff(min_mtime: float) -> str:
             continue
         candidates += glob.glob(os.path.join(d, "**", "*.neff"), recursive=True)
         candidates += glob.glob(os.path.join(d, "*.neff"))
-    fresh = sorted({c for c in candidates if os.path.getmtime(c) >= min_mtime - 1.0},
-                   key=os.path.getmtime)
-    if not fresh:
+    if not candidates:
         raise RuntimeError(
-            "No NEFF found after running the kernel. Launch with "
-            "NEURON_FRAMEWORK_DEBUG=1 XLA_IR_DEBUG=1 XLA_HLO_DEBUG=1 so the "
-            f"compiler saves the NEFF, or set ${NEFF_PATH_ENV}."
+            "No NEFF found. The compiler saves it only with NEURON_FRAMEWORK_DEBUG=1 "
+            f"(auto-set by this module); if it still isn't emitted, set ${NEFF_PATH_ENV} "
+            "to the NEFF path explicitly."
         )
-    return fresh[-1]
+    return max(set(candidates), key=os.path.getmtime)
 
 
 def _run_cli(cmd: list[str]) -> str:
@@ -147,15 +148,17 @@ def bench_nki(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
     xm = _xm()
     kwargs = kwargs or {}
 
-    # 1) Run once to compile the kernel and emit the NEFF (must execute, not be
-    #    pruned: keep the output live across mark_step, then drain).
-    t0 = time.time()
+    # 1) Run once so the kernel is compiled and the NEFF exists on disk. The
+    #    engine's correctness run usually compiled it already; this is harmless
+    #    if the graph is cached (no recompile), and self-contained if bench_nki
+    #    is ever called without a prior run. Keep the output live across
+    #    mark_step so the graph isn't pruned, then drain.
     out = fn(*inputs, **kwargs)
     xm.mark_step()
     del out
     xm.wait_device_ops()
 
-    neff = _find_neff(t0)
+    neff = _find_neff()
 
     with tempfile.TemporaryDirectory(prefix="nki_prof_") as td:
         nth = max(2, int(warmup) + 1)  # profile a warm execution

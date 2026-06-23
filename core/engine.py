@@ -151,7 +151,9 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         try:
             ref_output = impl_torch.run(*inputs)
             _sync()
-        except (RuntimeError, TypeError) as e:
+        except (RuntimeError, TypeError, AssertionError) as e:
+            # AssertionError: some torch references are CUDA-only (assert .is_cuda);
+            # on a non-CUDA host inputs are on CPU, so skip rather than abort the suite.
             print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
