@@ -20,7 +20,7 @@ def swiglu_configs():
 @tilelang.autotune(configs=swiglu_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def swiglu_kernel(x, y, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.dynamic("n_elements")
+    n_elements = T.const("n_elements")
     x: T.Tensor((n_elements,), dtype)
     y: T.Tensor((n_elements,), dtype)
     output: T.Tensor((n_elements,), dtype)
