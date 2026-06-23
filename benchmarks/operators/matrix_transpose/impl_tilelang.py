@@ -21,7 +21,7 @@ def matrix_transpose_kernel(
     x, output, dtype, 
     BLOCK_TILE: int = 64, threads: int = 128
 ):
-    M, N = T.dynamic("M, N")
+    M, N = T.const("M, N")
     x: T.Tensor((M, N), dtype)
     output: T.Tensor((N, M), dtype)
 
