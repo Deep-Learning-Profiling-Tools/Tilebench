@@ -20,7 +20,7 @@ def matrix_copy_configs():
 @tilelang.autotune(configs = matrix_copy_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def matrix_copy_kernel(A, B, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
-    n_elements = T.dynamic("n_elements")
+    n_elements = T.const("n_elements")
     A: T.Tensor((n_elements, ), dtype)
     B: T.Tensor((n_elements, ), dtype)
 
