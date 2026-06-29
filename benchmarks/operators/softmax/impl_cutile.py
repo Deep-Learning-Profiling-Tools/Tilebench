@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -39,15 +38,15 @@ def softmax_online_kernel(
     row_idx = ct.bid(0)
 
     # Pass 1: online max + sum
-    m = ct.full((), -float('inf'), dtype=np.float32)
-    l = ct.full((), 0.0, dtype=np.float32)
+    m = ct.full((), -float('inf'), dtype=ct.float32)
+    l = ct.full((), 0.0, dtype=ct.float32)
 
     for i in range(N_TILES):
         tile = ct.load(
             input_tensor, index=(row_idx, i), shape=(1, BLOCK_SIZE),
             padding_mode=ct.PaddingMode.NEG_INF,
         )
-        tile = ct.astype(tile, np.float32)
+        tile = ct.astype(tile, ct.float32)
 
         block_max = ct.max(tile)
         m_new = ct.maximum(m, block_max)
@@ -61,7 +60,7 @@ def softmax_online_kernel(
             input_tensor, index=(row_idx, i), shape=(1, BLOCK_SIZE),
             padding_mode=ct.PaddingMode.ZERO,
         )
-        tile = ct.astype(tile, np.float32)
+        tile = ct.astype(tile, ct.float32)
 
         y = ct.exp(tile - m) / l
         y = ct.astype(y, output_tensor.dtype)

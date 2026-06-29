@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -25,7 +24,7 @@ def _next_pow2(n: int) -> int:
 def _pad_kernel(data_ptr, work_ptr, N, M, TILE: ConstInt):
     """Copy data[0:N] → work[0:N], fill work[N:M] with +inf (mirrors Triton's pad_kernel)."""
     bid = ct.bid(0)
-    offs = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offs = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     # ct.gather returns padding_value for OOB indices (>= N or negative).
     vals = ct.gather(data_ptr, offs, padding_value=float("inf"))
     # Tile-aligned store; silently drops the OOB tail (offs >= M).
@@ -48,7 +47,7 @@ def _bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
     the no-op-write pattern.
     """
     bid = ct.bid(0)
-    offs = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offs = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     ixj = offs ^ j
 
     active = (ixj > offs) & (ixj < M) & (offs < M)

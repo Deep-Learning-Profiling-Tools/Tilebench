@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE: ConstInt):
+def dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE: ConstInt):
     bid = ct.bid(0)
     base = bid * TILE
     offsets = ct.arange(TILE, dtype=ct.int32) + base
@@ -46,7 +46,7 @@ def _dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TIL
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_dequant_kernel)
+_tuner = CutileAutotuner(dequant_kernel)
 
 
 def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,

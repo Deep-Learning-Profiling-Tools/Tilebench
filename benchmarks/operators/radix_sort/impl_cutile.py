@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -19,13 +18,13 @@ _BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (matches Triton
 @ct.kernel
 def _count_ones_in_block(input_ptr, block_sum_ptr, N, bit, TILE: ConstInt):
     bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < N
 
     idx_safe = ct.where(mask, offset, -1)
     block = ct.gather(input_ptr, idx_safe, padding_value=0)
 
-    bit_mask = ct.astype((block >> bit) & 1, np.int32)
+    bit_mask = ct.astype((block >> bit) & 1, ct.int32)
     local_sum = ct.sum(bit_mask, axis=0, keepdims=True)  # (1,)
     ct.store(block_sum_ptr, index=(bid,), tile=local_sum)
 
@@ -33,7 +32,7 @@ def _count_ones_in_block(input_ptr, block_sum_ptr, N, bit, TILE: ConstInt):
 @ct.kernel
 def _count_ones_per_block_blocks(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
     bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < K
 
     idx_safe = ct.where(mask, offset, -1)
@@ -44,9 +43,9 @@ def _count_ones_per_block_blocks(first_sum_ptr, block_block_sum_ptr, K, TILE: Co
 
 
 @ct.kernel
-def _compute_prefix_sums_bb(block_block_sum_ptr, global_ones_ptr, L, TILE_BB: ConstInt):
+def _compute_prefix_sums_per_block_of_blocks(block_block_sum_ptr, global_ones_ptr, L, TILE_BB: ConstInt):
     # Grid of 1 process.
-    offset = ct.arange(TILE_BB, dtype=np.int32)
+    offset = ct.arange(TILE_BB, dtype=ct.int32)
     mask = offset < L
 
     idx_safe = ct.where(mask, offset, -1)
@@ -68,7 +67,7 @@ def _compute_prefix_sums_bb(block_block_sum_ptr, global_ones_ptr, L, TILE_BB: Co
 @ct.kernel
 def _compute_prefix_sums_per_block(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
     bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < K
 
     idx_safe = ct.where(mask, offset, -1)
@@ -90,7 +89,7 @@ def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
                        bit, N, TILE: ConstInt):
     """Scatter each element to its correct position based on the current bit."""
     bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < N
 
     # Scalar prefix sums for this block.
@@ -101,7 +100,7 @@ def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
     idx_safe = ct.where(mask, offset, -1)
     block = ct.gather(input_ptr, idx_safe, padding_value=0)
 
-    mask_bits = ct.astype((block >> bit) & 1, np.int32)
+    mask_bits = ct.astype((block >> bit) & 1, ct.int32)
 
     ones_in_block = ct.cumsum(mask_bits, axis=0)
     ones_rank = ones_in_block - mask_bits
@@ -115,8 +114,8 @@ def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
 
     offset_values = ct.where(
         mask_bits == 0,
-        ct.astype(zeros_before, np.int32) + zeros_rank,
-        ct.astype(global_zeros, np.int32) + ct.astype(ones_before, np.int32) + ones_rank,
+        ct.astype(zeros_before, ct.int32) + zeros_rank,
+        ct.astype(global_zeros, ct.int32) + ct.astype(ones_before, ct.int32) + ones_rank,
     )
 
     # Scatter to destination; inactive lanes route to N (OOB, silently dropped).
@@ -185,7 +184,7 @@ def run(input: torch.Tensor, N: int,
                   (work, first_layer, N, bit, _BLOCK_SIZE))
         ct.launch(stream, grid_second, _count_ones_per_block_blocks,
                   (first_layer, second_layer, K, _BLOCK_SIZE))
-        ct.launch(stream, grid_third, _compute_prefix_sums_bb,
+        ct.launch(stream, grid_third, _compute_prefix_sums_per_block_of_blocks,
                   (second_layer, global_ones, L, _BLOCK_BB))
         ct.launch(stream, grid_second, _compute_prefix_sums_per_block,
                   (first_layer, second_layer, K, _BLOCK_SIZE))

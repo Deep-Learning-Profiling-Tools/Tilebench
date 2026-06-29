@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -18,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _conv3d_stencil_kernel(
+def _conv3d_kernel(
     input_flat,
     kernel_flat,
     output_flat,
@@ -44,7 +43,7 @@ def _conv3d_stencil_kernel(
     silently drops OOB writes.
     """
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
 
     # Decompose flat output offset into (od, or, oc)
     output_plane = output_rows * output_cols
@@ -56,18 +55,18 @@ def _conv3d_stencil_kernel(
     input_plane = input_rows * input_cols
     kernel_plane = kernel_rows * kernel_cols
 
-    acc = ct.zeros((TILE,), dtype=np.float32)
+    acc = ct.zeros((TILE,), dtype=ct.float32)
 
     for kd in range(kernel_depth):          # compile-time unrolled
         for kr in range(kernel_rows):       # compile-time unrolled
             for kc in range(kernel_cols):   # compile-time unrolled
                 input_idx = (od + kd) * input_plane + (oh + kr) * input_cols + (ow + kc)
                 x = ct.gather(input_flat, input_idx, padding_value=0.0)
-                x = ct.astype(x, np.float32)
+                x = ct.astype(x, ct.float32)
 
                 kernel_idx = kd * kernel_plane + kr * kernel_cols + kc
                 w_scalar = ct.load(kernel_flat, index=(kernel_idx,), shape=())
-                w_scalar = ct.astype(w_scalar, np.float32)
+                w_scalar = ct.astype(w_scalar, ct.float32)
 
                 acc = acc + x * w_scalar
 
@@ -76,7 +75,7 @@ def _conv3d_stencil_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_conv3d_stencil_kernel)
+_tuner = CutileAutotuner(_conv3d_kernel)
 
 
 def run(input, kernel, input_depth, input_rows, input_cols,

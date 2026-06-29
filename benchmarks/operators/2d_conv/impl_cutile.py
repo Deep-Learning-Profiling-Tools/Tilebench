@@ -13,7 +13,6 @@ pattern, just spelled with cuTile primitives.
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -64,8 +63,8 @@ def _conv2d_kernel(
     kHkW = kH * kW
 
     # bhw_offsets [BLOCK_BHW], oc_offsets [BLOCK_OUT]
-    bhw_offsets = pid_bhw * BLOCK_BHW + ct.arange(BLOCK_BHW, dtype=np.int32)
-    oc_offsets = pid_oc * BLOCK_OUT + ct.arange(BLOCK_OUT, dtype=np.int32)
+    bhw_offsets = pid_bhw * BLOCK_BHW + ct.arange(BLOCK_BHW, dtype=ct.int32)
+    oc_offsets = pid_oc * BLOCK_OUT + ct.arange(BLOCK_OUT, dtype=ct.int32)
 
     # Decode bhw -> (b, oh, ow)
     b_idx = bhw_offsets // out_HW
@@ -82,7 +81,7 @@ def _conv2d_kernel(
     acc = ct.full((BLOCK_BHW, BLOCK_OUT), 0.0, dtype=ct.float32)
 
     for in_feat_start in range(0, ct.cdiv(total_in_feat, BLOCK_IN)):
-        in_feat_offsets = in_feat_start * BLOCK_IN + ct.arange(BLOCK_IN, dtype=np.int32)
+        in_feat_offsets = in_feat_start * BLOCK_IN + ct.arange(BLOCK_IN, dtype=ct.int32)
 
         # Decode in_feat -> (ic_local, kh, kw)
         ic_local = in_feat_offsets // kHkW

@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import numpy as np
 import torch
 import cuda.tile as ct
 
@@ -22,8 +21,8 @@ _SEARCH_SPACE = [
 @ct.kernel
 def _swiglu_kernel(x, y, output, TILE: ConstInt):
     bid = ct.bid(0)
-    x_tile = ct.astype(ct.load(x, index=(bid,), shape=(TILE,)), np.float32)
-    y_tile = ct.astype(ct.load(y, index=(bid,), shape=(TILE,)), np.float32)
+    x_tile = ct.astype(ct.load(x, index=(bid,), shape=(TILE,)), ct.float32)
+    y_tile = ct.astype(ct.load(y, index=(bid,), shape=(TILE,)), ct.float32)
     sigmoid_x = 1.0 / (1.0 + ct.exp(-x_tile))
     out_tile = ct.astype(x_tile * sigmoid_x * y_tile, x.dtype)
     ct.store(output, index=(bid,), tile=out_tile)

@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -18,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _gaussian_blur_stencil_kernel(
+def _gaussian_blur_kernel(
     input_flat,
     kernel_flat,
     output_flat,
@@ -37,7 +36,7 @@ def _gaussian_blur_stencil_kernel(
       - ct.gather's padding_value handles zero-padded boundaries.
     """
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offsets < total_elements
 
     row = offsets // input_cols
@@ -46,7 +45,7 @@ def _gaussian_blur_stencil_kernel(
     center_r = kernel_rows // 2
     center_c = kernel_cols // 2
 
-    acc = ct.zeros((TILE,), dtype=np.float32)
+    acc = ct.zeros((TILE,), dtype=ct.float32)
 
     for kr in range(kernel_rows):  # compile-time unrolled
         for kc in range(kernel_cols):
@@ -57,10 +56,10 @@ def _gaussian_blur_stencil_kernel(
             # ct.where clamps invalid positions to -1; ct.gather treats negatives as OOB → 0.0
             input_idx = ct.where(valid, in_r * input_cols + in_c, -1)
             x = ct.gather(input_flat, input_idx, padding_value=0.0)
-            x = ct.astype(x, np.float32)
+            x = ct.astype(x, ct.float32)
 
             w_scalar = ct.load(kernel_flat, index=(kr * kernel_cols + kc,), shape=())
-            w_scalar = ct.astype(w_scalar, np.float32)
+            w_scalar = ct.astype(w_scalar, ct.float32)
 
             acc = acc + x * w_scalar
 
@@ -69,7 +68,7 @@ def _gaussian_blur_stencil_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_gaussian_blur_stencil_kernel)
+_tuner = CutileAutotuner(_gaussian_blur_kernel)
 
 
 def run(input, kernel, input_rows, input_cols,

@@ -4,15 +4,15 @@ Mirrors impl_triton.py: two kernels, scheduler computed INSIDE each
 kernel from M/N/K/NUM_SMS/TM/TN/TK so the autotuner can sweep TM/TN/TK
 freely without desynchronising any host-side scheduler state.
 
-  first_wave_kernel - launches NUM_SMS programs; each owns a contiguous
+  first_wave - launches NUM_SMS programs; each owns a contiguous
                       range of K-iterations spanning multiple (M, N)
                       tiles. Combines partials via ct.atomic_add into a
                       pre-zeroed C — order-independent, no locks.
-  full_tiles_kernel - data-parallel; one program per leftover whole
+  full_tiles - data-parallel; one program per leftover whole
                       tile. Writes pre-zeroed disjoint regions via
                       ct.store (non-atomic).
 
-Only first_wave_kernel is autotuned; full_tiles_kernel reuses the
+Only first_wave is autotuned; full_tiles reuses the
 winning TM/TN/TK so both kernels' tile partitions agree.
 
 Boundary handling: `ct.load(..., padding_mode=ZERO)` returns 0 for OOB
@@ -72,7 +72,7 @@ def _streamk_partition(M, N, TM, TN, NUM_SMS):
 
 
 @ct.kernel
-def first_wave_kernel(
+def first_wave(
     A, B, C,
     NUM_SMS: ConstInt,
     TM: ConstInt, TN: ConstInt, TK: ConstInt,
@@ -130,7 +130,7 @@ def first_wave_kernel(
 
 
 @ct.kernel
-def full_tiles_kernel(
+def full_tiles(
     A, B, C,
     NUM_SMS: ConstInt,
     TM: ConstInt, TN: ConstInt, TK: ConstInt,
@@ -171,8 +171,8 @@ def full_tiles_kernel(
     ct.store(C, index=(pid_m, pid_n), tile=acc_casted)
 
 
-_first_wave_tuner = CutileAutotuner(first_wave_kernel)
-_full_tiles_tuner = CutileAutotuner(full_tiles_kernel)
+_first_wave_tuner = CutileAutotuner(first_wave)
+_full_tiles_tuner = CutileAutotuner(full_tiles)
 
 
 def _device_sm_count() -> int:

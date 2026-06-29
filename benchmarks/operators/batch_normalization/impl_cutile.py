@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -34,14 +33,14 @@ def _compute_block_sums_kernel(
     block_id = ct.bid(0)
     channel_id = ct.bid(1)
 
-    row_offsets = block_id * BLOCK_N + ct.arange(BLOCK_N, dtype=np.int32)
+    row_offsets = block_id * BLOCK_N + ct.arange(BLOCK_N, dtype=ct.int32)
     mask = row_offsets < N
 
     # x[row, channel] = input[row * C + channel] in flat layout.
     input_idx = row_offsets * C + channel_id
     idx_safe = ct.where(mask, input_idx, -1)
     x = ct.gather(input_ptr, idx_safe, padding_value=0.0)
-    x = ct.astype(x, np.float32)
+    x = ct.astype(x, ct.float32)
 
     local_sum = ct.sum(x, axis=0, keepdims=True)        # (1,)
     local_sq_sum = ct.sum(x * x, axis=0, keepdims=True) # (1,)
@@ -67,7 +66,7 @@ def _compute_mean_invstd_kernel(
     """Finish per-channel reduction and emit mean / inv_std — mirror of Triton kernel 2."""
     channel_id = ct.bid(0)
 
-    block_offsets = ct.arange(BLOCK_B, dtype=np.int32)
+    block_offsets = ct.arange(BLOCK_B, dtype=ct.int32)
     mask = block_offsets < NUM_BLOCKS
 
     idx = block_offsets * C + channel_id
@@ -101,11 +100,11 @@ def _apply_batch_norm_kernel(
 ):
     """Element-wise apply y = (x - mean) * inv_std * gamma + beta — mirror of Triton kernel 3."""
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
 
     # Tile-aligned x load (OOB tail → 0.0; corresponding output write silently dropped).
     x = ct.load(input_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
-    x = ct.astype(x, np.float32)
+    x = ct.astype(x, ct.float32)
 
     # Per-element gather of the per-channel parameters.
     # channel_id = offsets % C is always in [0, C), so no OOB clamping needed.
@@ -114,8 +113,8 @@ def _apply_batch_norm_kernel(
     inv_std = ct.gather(inv_std_ptr, channel_id)
     gamma = ct.gather(gamma_ptr, channel_id)
     beta = ct.gather(beta_ptr, channel_id)
-    gamma = ct.astype(gamma, np.float32)
-    beta = ct.astype(beta, np.float32)
+    gamma = ct.astype(gamma, ct.float32)
+    beta = ct.astype(beta, ct.float32)
 
     y = (x - mean) * inv_std * gamma + beta
     y_out = ct.astype(y, output_ptr.dtype)

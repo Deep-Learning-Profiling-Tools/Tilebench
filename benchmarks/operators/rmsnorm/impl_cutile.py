@@ -21,7 +21,6 @@ Autotune parameters: TILE_SIZE (tile width, must be power of 2), occupancy.
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -46,13 +45,13 @@ def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
     # Pass 1: accumulate sum(x²); padding_mode=ZERO handles the last partial tile.
-    _rms = ct.full((1, TILE_SIZE), 0.0, dtype=np.float32)
+    _rms = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         _rms = _rms + xj * xj
 
@@ -64,13 +63,13 @@ def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
             ct.load(rms_w, index=(j,), shape=(TILE_SIZE,),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         yj = ct.astype(xj * rstd * wj, x.dtype)
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)

@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _interleave_kernel(a_ptr, b_ptr, out_ptr, TILE: ConstInt):
+def interleave_kernel(a_ptr, b_ptr, out_ptr, TILE: ConstInt):
     """
     In-tile interleave matching Triton's tl.interleave method:
       1. Coalesced load of TILE consecutive elements from A and B.
@@ -44,7 +44,7 @@ def _interleave_kernel(a_ptr, b_ptr, out_ptr, TILE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_interleave_kernel)
+_tuner = CutileAutotuner(interleave_kernel)
 
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int,

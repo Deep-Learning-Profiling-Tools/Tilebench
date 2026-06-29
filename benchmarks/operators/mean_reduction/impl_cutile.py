@@ -17,7 +17,6 @@ the mean is computed correctly: sum(real) / N (not sum / TILE_SIZE).
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -41,20 +40,20 @@ def _mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
     row       = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
-    _acc = ct.full((1, TILE_SIZE), 0.0, dtype=np.float32)
+    _acc = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         _acc = _acc + xj
 
     mean = ct.sum(_acc, axis=1, keepdims=False) / N
 
     # Write a single value per row into the compact (M, 1) output buffer.
-    out_tile = ct.full((1, 1), 0.0, dtype=np.float32) + mean
+    out_tile = ct.full((1, 1), 0.0, dtype=ct.float32) + mean
     ct.store(out, index=(row, 0), tile=out_tile, allow_tma=False, latency=1)
 
 
