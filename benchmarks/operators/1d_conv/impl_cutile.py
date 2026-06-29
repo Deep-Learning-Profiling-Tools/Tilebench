@@ -39,7 +39,7 @@ def conv1d_kernel(
 
         acc = acc + x * w_scalar
 
-    ct.store(output_flat, index=(bid,), tile=acc)
+    ct.store(output_flat, index=(bid,), tile=ct.astype(acc, output_flat.dtype))
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
