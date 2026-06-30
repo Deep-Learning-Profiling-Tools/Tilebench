@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import numpy as np
 import torch
 import cuda.tile as ct
 
@@ -22,8 +21,8 @@ _SEARCH_SPACE = [
 @ct.kernel
 def _dropout_kernel(x, x_keep, output, scale, TILE: ConstInt):
     bid = ct.bid(0)
-    x_tile      = ct.astype(ct.load(x,      index=(bid,), shape=(TILE,)), np.float32)
-    x_keep_tile = ct.astype(ct.load(x_keep, index=(bid,), shape=(TILE,)), np.float32)
+    x_tile      = ct.astype(ct.load(x,      index=(bid,), shape=(TILE,)), ct.float32)
+    x_keep_tile = ct.astype(ct.load(x_keep, index=(bid,), shape=(TILE,)), ct.float32)
     out_tile = ct.astype(x_keep_tile * x_tile * scale, x.dtype)
     ct.store(output, index=(bid,), tile=out_tile)
 
