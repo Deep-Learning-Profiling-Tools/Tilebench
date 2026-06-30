@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -34,21 +33,21 @@ def _argmax_rowwise_kernel(
     row = ct.bid(0)
     base = row * N
 
-    best_val = ct.full((), -float("inf"), dtype=np.float32)
-    best_idx = ct.full((), 0, dtype=np.int64)
+    best_val = ct.full((), -float("inf"), dtype=ct.float32)
+    best_idx = ct.full((), 0, dtype=ct.int64)
 
     for i in range(N_TILES):
         start = i * BLOCK_N
-        offsets = start + ct.arange(BLOCK_N, dtype=np.int32)
+        offsets = start + ct.arange(BLOCK_N, dtype=ct.int32)
         valid = offsets < N
 
         idx = base + offsets
         idx_safe = ct.where(valid, idx, -1)
         chunk = ct.gather(input_flat, idx_safe, padding_value=-float("inf"))
-        chunk = ct.astype(chunk, np.float32)
+        chunk = ct.astype(chunk, ct.float32)
 
         tile_max = ct.max(chunk)
-        tile_arg = ct.astype(ct.argmax(chunk), np.int64)
+        tile_arg = ct.astype(ct.argmax(chunk), ct.int64)
 
         better = tile_max > best_val
         best_val = ct.where(better, tile_max, best_val)
