@@ -9,13 +9,11 @@ _TIMING_KEYS = {
     "torch_ms", "torch_stats",
     "triton_ms", "triton_stats", "triton_ok", "triton_err",
     "cutile_ms", "cutile_stats", "cutile_ok", "cutile_err",
-    "tilelang_ms", "tilelang_stats", "tilelang_ok", "tilelang_err",
-    "nki_ms", "nki_stats", "nki_ok", "nki_err",
-    "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki",
+    "speedup_triton", "speedup_cutile",
 }
 _AUTOTUNE_KEYS = {
     "params", "problem_size", "dtype",
-    "triton_autotune_cfg", "cutile_autotune_cfg", "tilelang_autotune_cfg", "nki_autotune_cfg",
+    "triton_autotune_cfg", "cutile_autotune_cfg",
 }
 
 
@@ -56,7 +54,7 @@ def main():
     parser.add_argument("--tile-language", type=str, default=None,
                         help="Comma-separated tile-language backends to run: "
                              "triton, cutile, tilelang, nki (or 'all'). torch "
-                             "always runs as the speedup baseline. Default: all.")
+                             "always runs as the speedup baseline. Default: triton, cutile.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
@@ -66,8 +64,10 @@ def main():
     # Resolve which tile-language backends to run. torch is always on (speedup
     # baseline); omitting the flag runs them all (backward-compatible).
     _TILE_LANGUAGES = ("triton", "cutile", "tilelang", "nki")
+    # Default to triton + cutile only; tilelang/nki run only when explicitly
+    # requested via --tile-language.
     if args.tile_language is None:
-        enabled_backends = set(_TILE_LANGUAGES)
+        enabled_backends = {"triton", "cutile"}
     else:
         tokens = [t.strip().lower() for t in args.tile_language.split(",") if t.strip()]
         if "all" in tokens:
@@ -160,16 +160,15 @@ def main():
     print("\nSummary:")
     print(
         f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10} | "
-        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'TileLang(ms)':>12} | {'NKI(ms)':>10} | "
-        f"{'Speedup(T)':>10} | {'Speedup(C)':>10} | {'Speedup(TL)':>11} | {'Speedup(N)':>10}"
+        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | "
+        f"{'Speedup(T)':>10} | {'Speedup(C)':>10} | {'C/T':>8}"
     )
-    print("-" * (col_w + 131))
+    print("-" * (col_w + 70))
     for r in timing_results:
         print(
             f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
-            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | {r['tilelang_ms']:12.4f} | {r['nki_ms']:10.4f} | "
-            f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f} | "
-            f"{r['speedup_tilelang']:11.2f} | {r['speedup_nki']:10.2f}"
+            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | "
+            f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f} | {_t_vs_c(r):8.4f}"
         )
 
     # Save summary as CSV. Filename suffix mirrors the run mode so default
@@ -181,16 +180,13 @@ def main():
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "tilelang_ms", "nki_ms",
-                         "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki",
-                         "triton_vs_cutile"])
+        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms",
+                         "speedup_triton", "speedup_cutile", "triton_vs_cutile"])
         for r in timing_results:
             writer.writerow([
                 _fmt_params(r), r["dtype"],
                 f"{r['torch_ms']:.4f}", f"{r['triton_ms']:.4f}", f"{r['cutile_ms']:.4f}",
-                f"{r['tilelang_ms']:.4f}", f"{r['nki_ms']:.4f}",
                 f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
-                f"{r['speedup_tilelang']:.2f}", f"{r['speedup_nki']:.2f}",
                 f"{_t_vs_c(r):.4f}",
             ])
     print(f"Summary CSV     → {csv_path}")
