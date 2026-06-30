@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def conv1d_kernel(input_ptr, kernel_ptr, output_ptr, input_size, kernel_size, BLOCK_SIZE: tl.constexpr):
+def conv1d_kernel(input_ptr, kernel_ptr, output_ptr, input_size, kernel_size: tl.constexpr, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
 
     output_size = input_size - kernel_size + 1
@@ -32,6 +32,8 @@ _conv1d_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["input_size", "kernel_size"],
+    warmup=1,
+    rep=3,
 )(conv1d_kernel)
 
 
