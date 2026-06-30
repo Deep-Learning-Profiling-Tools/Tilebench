@@ -15,7 +15,6 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 19.68 us | 41.89 % | 29.36 % | 54.87 % | 26.17 % | 45.97 % | 2.25 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
 | fp16 | cutile | 33.22 us | 20.84 % | 17.52 % | 25.87 % | 15.65 % | 37.35 % | 1.34 Tbyte/s | 128 | 62 register/thread | 28 byte/block | 0 byte/block | 8 block / 28 block |
 | bf16 | triton | 21.02 us | 39.70 % | 27.52 % | 50.33 % | 24.05 % | 46.78 % | 2.11 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
 | bf16 | cutile | 33.22 us | 20.86 % | 17.40 % | 25.06 % | 15.63 % | 37.87 % | 1.33 Tbyte/s | 128 | 62 register/thread | 28 byte/block | 0 byte/block | 8 block / 28 block |
@@ -24,7 +23,6 @@
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.69× faster** (19.7 µs vs 33.2 µs).
 - **bf16**: Triton is **1.58× faster** (21.0 µs vs 33.2 µs).
 - **fp32**: Triton is **1.01× faster** (33.1 µs vs 33.6 µs).
 
@@ -33,7 +31,6 @@
 - **bf16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp32 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 
@@ -43,7 +40,6 @@
 - `cutile_fp16.ncu-rep`
 - `cutile_fp32.ncu-rep`
 - `triton_bf16.ncu-rep`
-- `triton_fp16.ncu-rep`
 - `triton_fp32.ncu-rep`
 
 ## Notes

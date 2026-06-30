@@ -14,7 +14,7 @@
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | int32 | triton | 2390.19 us | 70.19 % | 31.98 % | 77.57 % | 21.07 % | 53.98 % | 2.45 Tbyte/s | 128 | 48 register/thread | 0 byte/block | 8.19 Kbyte/block | 10 block / 14 block |
-| int32 | cutile | 2989.88 us | 73.46 % | 23.36 % | 78.58 % | 19.61 % | 71.74 % | 1.79 Tbyte/s | 128 | 64 register/thread | 4.11 Kbyte/block | 0 byte/block | 8 block / 19 block |
+| int32 | cutile | 187.78 us | 73.39 % | 23.63 % | 78.76 % | 19.71 % | 71.67 % | 1.81 Tbyte/s | 128 | 64 register/thread | 4.11 Kbyte/block | 0 byte/block | 8 block / 19 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -22,166 +22,16 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| int32 | cutile | 1/160 | 4.86 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 2/160 | 62.14 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 3/160 | 16.77 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 4/160 | 4.90 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 5/160 | 4.10 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 6/160 | 4.93 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 7/160 | 62.78 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 8/160 | 16.61 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 9/160 | 4.61 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 10/160 | 4.38 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 11/160 | 4.90 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 12/160 | 63.01 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 13/160 | 16.86 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 14/160 | 4.67 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 15/160 | 4.45 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 16/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 17/160 | 62.98 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 18/160 | 16.77 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 19/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 20/160 | 4.32 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 21/160 | 4.74 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 22/160 | 62.98 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 23/160 | 16.64 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 24/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 25/160 | 4.13 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 26/160 | 4.93 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 27/160 | 62.69 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 28/160 | 16.64 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 29/160 | 4.90 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 30/160 | 4.29 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 31/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 32/160 | 63.10 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 33/160 | 16.90 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 34/160 | 4.93 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 35/160 | 4.58 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 36/160 | 4.93 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 37/160 | 63.14 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 38/160 | 16.67 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 39/160 | 4.51 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 40/160 | 4.29 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 41/160 | 4.86 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 42/160 | 62.91 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 43/160 | 16.42 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 44/160 | 4.77 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 45/160 | 4.10 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 46/160 | 4.70 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 47/160 | 62.69 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 48/160 | 16.51 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 49/160 | 4.61 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 50/160 | 4.26 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 51/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 52/160 | 63.20 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 53/160 | 16.74 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 54/160 | 4.54 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 55/160 | 4.67 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 56/160 | 4.99 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 57/160 | 62.98 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 58/160 | 17.02 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 59/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 60/160 | 4.32 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 61/160 | 4.70 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 62/160 | 62.91 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 63/160 | 16.42 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 64/160 | 4.74 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 65/160 | 4.16 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 66/160 | 4.93 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 67/160 | 62.59 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 68/160 | 16.70 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 69/160 | 4.96 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 70/160 | 4.26 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 71/160 | 4.86 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 72/160 | 62.88 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 73/160 | 16.74 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 74/160 | 4.61 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 75/160 | 4.42 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 76/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 77/160 | 63.10 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 78/160 | 16.86 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 79/160 | 4.51 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 80/160 | 4.45 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 81/160 | 4.99 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 82/160 | 62.82 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 83/160 | 16.48 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 84/160 | 4.61 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 85/160 | 4.10 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 86/160 | 4.90 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 87/160 | 62.85 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 88/160 | 16.61 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 89/160 | 4.64 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 90/160 | 4.58 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 91/160 | 4.90 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 92/160 | 63.14 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 93/160 | 16.83 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 94/160 | 4.64 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 95/160 | 4.51 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 96/160 | 4.80 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 97/160 | 63.26 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 98/160 | 16.70 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 99/160 | 4.45 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 100/160 | 4.29 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 101/160 | 4.67 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 102/160 | 62.72 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 103/160 | 16.58 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 104/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 105/160 | 4.26 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 106/160 | 4.96 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 107/160 | 62.66 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 108/160 | 16.86 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 109/160 | 4.64 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 110/160 | 4.32 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 111/160 | 4.96 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 112/160 | 62.85 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 113/160 | 16.77 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 114/160 | 4.96 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 115/160 | 4.45 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 116/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 117/160 | 62.88 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 118/160 | 16.54 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 119/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 120/160 | 4.29 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 121/160 | 4.70 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 122/160 | 62.91 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 123/160 | 16.42 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 124/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 125/160 | 4.13 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 126/160 | 4.80 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 127/160 | 62.69 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 128/160 | 16.58 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 129/160 | 4.64 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 130/160 | 4.29 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 131/160 | 4.86 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 132/160 | 62.91 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 133/160 | 16.74 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 134/160 | 4.58 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 135/160 | 4.45 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 136/160 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 137/160 | 63.52 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 138/160 | 16.58 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 139/160 | 4.51 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 140/160 | 4.51 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 141/160 | 4.74 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 142/160 | 63.07 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 143/160 | 16.42 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 144/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 145/160 | 4.35 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 146/160 | 4.74 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 147/160 | 62.59 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 148/160 | 16.64 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 149/160 | 4.61 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 150/160 | 4.26 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 151/160 | 5.09 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 152/160 | 62.98 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 153/160 | 17.28 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 154/160 | 4.83 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 155/160 | 4.70 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
-| int32 | cutile | 156/160 | 4.90 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
-| int32 | cutile | 157/160 | 63.20 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
-| int32 | cutile | 158/160 | 16.93 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
-| int32 | cutile | 159/160 | 4.48 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
-| int32 | cutile | 160/160 | 4.32 us | `_compute_prefix_sums_bb_Kt1_A1i32_1t1_p16_A1i32_1t` |
+| int32 | cutile | 1/10 | 16.80 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
+| int32 | cutile | 2/10 | 4.74 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
+| int32 | cutile | 3/10 | 4.74 us | `_compute_prefix_sums_per_block_of_blocks_Kt1_A1i32` |
+| int32 | cutile | 4/10 | 4.83 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
+| int32 | cutile | 5/10 | 63.07 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
+| int32 | cutile | 6/10 | 16.70 us | `_count_ones_in_block_Kt1_A1i32_1i16t1_p16_A1i32_1t` |
+| int32 | cutile | 7/10 | 4.51 us | `_count_ones_per_block_blocks_Kt1_A1i32_1t1_p16_A1i` |
+| int32 | cutile | 8/10 | 4.35 us | `_compute_prefix_sums_per_block_of_blocks_Kt1_A1i32` |
+| int32 | cutile | 9/10 | 4.90 us | `_compute_prefix_sums_per_block_Kt1_A1i32_1t1_p16_A` |
+| int32 | cutile | 10/10 | 63.14 us | `_radix_sort_kernel_Kt1_A1i32_1i16t1_p16_A1i32_1i16` |
 | int32 | triton | 1/160 | 4.93 us | `_compute_prefix_sums_per_block` |
 | int32 | triton | 2/160 | 44.64 us | `_radix_sort_kernel` |
 | int32 | triton | 3/160 | 15.58 us | `_count_ones_in_block` |
@@ -345,7 +195,7 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 ## Key findings (auto-derived)
 
-- **int32**: Triton is **1.25× faster** (2390.2 µs vs 2989.9 µs).
+- **int32**: cuTile is **12.73× faster** (187.8 µs vs 2390.2 µs).
 
 ## NCU's own bottleneck verdict
 

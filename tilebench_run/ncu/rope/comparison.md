@@ -15,9 +15,9 @@
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | fp16 | triton | 90.78 us | 40.82 % | 40.82 % | 28.05 % | 21.70 % | 25.87 % | 3.13 Tbyte/s | 64 | 20 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp16 | cutile | 201.73 us | 33.84 % | 18.48 % | 34.73 % | 11.51 % | 73.44 % | 1.42 Tbyte/s | 128 | 29 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | cutile | 201.70 us | 33.77 % | 18.49 % | 34.70 % | 11.53 % | 73.30 % | 1.42 Tbyte/s | 128 | 29 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 | fp32 | triton | 131.81 us | 62.47 % | 62.47 % | 35.84 % | 31.74 % | 22.49 % | 4.79 Tbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp32 | cutile | 212.38 us | 38.84 % | 38.84 % | 33.72 % | 19.39 % | 58.81 % | 2.98 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | cutile | 212.38 us | 38.84 % | 38.84 % | 33.70 % | 19.40 % | 58.71 % | 2.98 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 
 ## Key findings (auto-derived)
 

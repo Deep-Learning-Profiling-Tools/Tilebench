@@ -14,11 +14,11 @@
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | int8 | triton | 475.49 us | 50.98 % | 1.50 % | 56.68 % | 12.69 % | 40.42 % | 115.29 Gbyte/s | 128 | 255 register/thread | 0 byte/block | 36.86 Kbyte/block | 2 block / 3 block |
-| int8 | cutile | 342.37 us | 55.01 % | 2.19 % | 65.13 % | 34.00 % | 29.98 % | 168.00 Gbyte/s | 256 | 255 register/thread | 141.71 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| int8 | cutile | 345.57 us | 55.18 % | 2.16 % | 65.15 % | 33.27 % | 30.07 % | 165.65 Gbyte/s | 256 | 255 register/thread | 141.71 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **int8**: cuTile is **1.39× faster** (342.4 µs vs 475.5 µs).
+- **int8**: cuTile is **1.38× faster** (345.6 µs vs 475.5 µs).
 
 ## NCU's own bottleneck verdict
 

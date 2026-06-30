@@ -13,12 +13,12 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 4890.00 us | 99.41 % | 0.05 % | 99.93 % | 65.01 % | 11.59 % | 4.19 Gbyte/s | 32 | 29 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
-| fp32 | cutile | 19570.00 us | 99.46 % | 0.01 % | 99.92 % | 50.97 % | 22.46 % | 1.06 Gbyte/s | 128 | 28 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | triton | 4900.00 us | 99.48 % | 0.05 % | 99.92 % | 65.00 % | 11.60 % | 4.18 Gbyte/s | 32 | 29 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
+| fp32 | cutile | 19570.00 us | 99.43 % | 0.01 % | 99.92 % | 50.75 % | 22.46 % | 1.07 Gbyte/s | 128 | 28 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **4.00× faster** (4890.0 µs vs 19570.0 µs).
+- **fp32**: Triton is **3.99× faster** (4900.0 µs vs 19570.0 µs).
 
 ## NCU's own bottleneck verdict
 

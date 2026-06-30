@@ -13,17 +13,17 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 136.26 us | 47.00 % | 47.00 % | 32.63 % | 25.98 % | 65.50 % | 3.61 Tbyte/s | 1024 | 31 register/thread | 0 byte/block | 128 byte/block | 2 block / 7 block |
-| fp32 | cutile | 136.90 us | 46.80 % | 46.80 % | 32.63 % | 25.84 % | 65.60 % | 3.59 Tbyte/s | 1024 | 31 register/thread | 0 byte/block | 128 byte/block | 2 block / 7 block |
+| fp32 | triton | 95.01 us | 74.13 % | 74.13 % | 18.14 % | 49.06 % | 71.20 % | 5.69 Tbyte/s | 128 | 64 register/thread | 0 byte/block | 16 byte/block | 8 block / 28 block |
+| fp32 | cutile | 88.83 us | 79.35 % | 79.35 % | 22.37 % | 52.80 % | 71.50 % | 6.08 Tbyte/s | 256 | 64 register/thread | 49.25 Kbyte/block | 0 byte/block | 4 block / 4 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **1.00× faster** (136.3 µs vs 136.9 µs).
+- **fp32**: cuTile is **1.07× faster** (88.8 µs vs 95.0 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp32 / cutile** — Compute is more heavily utilized than Memory
-- **fp32 / triton** — Compute is more heavily utilized than Memory
+- **fp32 / cutile** — Compute and Memory are well-balanced
+- **fp32 / triton** — Compute and Memory are well-balanced
 
 ## Reports
 

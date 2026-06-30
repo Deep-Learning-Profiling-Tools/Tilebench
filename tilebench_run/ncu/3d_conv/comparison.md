@@ -15,9 +15,9 @@
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | fp16 | triton | 264.03 us | 83.73 % | 5.58 % | 85.46 % | 9.68 % | 90.66 % | 428.24 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | cutile | 251.17 us | 43.41 % | 3.73 % | 44.21 % | 11.65 % | 78.00 % | 285.90 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| fp16 | cutile | 251.30 us | 43.41 % | 3.71 % | 44.22 % | 11.62 % | 78.04 % | 284.21 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
 | fp32 | triton | 235.84 us | 94.43 % | 9.48 % | 96.34 % | 16.82 % | 76.86 % | 727.04 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 216.51 us | 52.16 % | 10.37 % | 53.37 % | 19.59 % | 74.69 % | 795.40 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| fp32 | cutile | 216.67 us | 52.11 % | 10.45 % | 53.32 % | 19.58 % | 74.64 % | 801.52 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -30,8 +30,8 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.05× faster** (251.2 µs vs 264.0 µs).
-- **fp32**: cuTile is **1.09× faster** (216.5 µs vs 235.8 µs).
+- **fp16**: cuTile is **1.05× faster** (251.3 µs vs 264.0 µs).
+- **fp32**: cuTile is **1.09× faster** (216.7 µs vs 235.8 µs).
 
 ## NCU's own bottleneck verdict
 
