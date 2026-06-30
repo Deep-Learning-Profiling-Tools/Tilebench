@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -45,7 +44,7 @@ def _max_pool2d_kernel(
     ct.gather returns -inf and does not affect the max.
     """
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offsets < total_out
 
     # Decompose flat output offset into (n, c, oh, ow)
@@ -54,7 +53,7 @@ def _max_pool2d_kernel(
     c = (offsets // (H_out * W_out)) % C
     n = offsets // (C * H_out * W_out)
 
-    acc = ct.full((TILE,), -float("inf"), dtype=np.float32)
+    acc = ct.full((TILE,), -float("inf"), dtype=ct.float32)
 
     for kh in range(kernel_size):        # compile-time unrolled
         for kw in range(kernel_size):    # compile-time unrolled
@@ -67,7 +66,7 @@ def _max_pool2d_kernel(
             # Clamp invalid indices so ct.gather returns padding_value=-inf
             input_idx_safe = ct.where(valid, input_idx, -1)
             x = ct.gather(input_flat, input_idx_safe, padding_value=-float("inf"))
-            x = ct.astype(x, np.float32)
+            x = ct.astype(x, ct.float32)
 
             acc = ct.maximum(acc, x)
 
