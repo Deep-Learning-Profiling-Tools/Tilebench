@@ -31,7 +31,8 @@ op = sys.argv[1] if len(sys.argv) > 1 else None
 folder = NCU_DIR / op if op else NCU_DIR
 if not folder.is_dir():
     sys.exit(f"error: {folder} is not a directory")
-path_in_repo = op if op else "."
+# Reports live under ncu_report_main/ in the repo (ncu_tma/ is a separate set).
+path_in_repo = f"ncu_report_main/{op}" if op else "ncu_report_main"
 
 api = HfApi(token=token)
 api.create_repo(REPO_ID, repo_type="dataset", private=True, exist_ok=True)
