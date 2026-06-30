@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -31,8 +30,8 @@ def _jacobi_stencil_kernel(input_2d, output_2d, rows, cols,
     bid_r = ct.bid(0)
     bid_c = ct.bid(1)
 
-    offs_r = bid_r * TILE_R + ct.arange(TILE_R, dtype=np.int32)
-    offs_c = bid_c * TILE_C + ct.arange(TILE_C, dtype=np.int32)
+    offs_r = bid_r * TILE_R + ct.arange(TILE_R, dtype=ct.int32)
+    offs_c = bid_c * TILE_C + ct.arange(TILE_C, dtype=ct.int32)
     offs_r_2d = offs_r[:, None]   # (TILE_R, 1)
     offs_c_2d = offs_c[None, :]   # (1, TILE_C)
 
