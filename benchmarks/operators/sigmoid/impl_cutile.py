@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -29,7 +28,7 @@ def _sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
     """
     bid = ct.bid(0)
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
-    x_f32 = ct.astype(x_tile, np.float32)
+    x_f32 = ct.astype(x_tile, ct.float32)
 
     y_f32 = 1.0 / (1.0 + ct.exp(-x_f32))
 
