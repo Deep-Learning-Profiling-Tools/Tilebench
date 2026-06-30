@@ -17,7 +17,6 @@ Algorithm (one CTA per (token, head) pair) — mirrors Triton's d-axis loop:
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -45,7 +44,7 @@ def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstIn
     dest_index = ct.gather(dest_loc, token_id)
 
     for d_start in range(0, HEAD_DIM, BLOCK_D):
-        offsets = d_start + ct.arange(BLOCK_D, dtype=np.int32)
+        offsets = d_start + ct.arange(BLOCK_D, dtype=ct.int32)
         # padding_value=0 (int literal) is dtype-agnostic — cuTile auto-casts it
         # to kv.dtype, working for fp16/bf16/fp32 and int8 alike. Handles BLOCK_D
         # > HEAD_DIM; OOB scatter writes are silently dropped by cuTile, so
