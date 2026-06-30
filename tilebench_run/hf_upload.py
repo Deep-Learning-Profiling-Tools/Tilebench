@@ -1,11 +1,16 @@
-"""Upload all NCU reports (.ncu-rep) and comparison docs (.md) to the
-private HuggingFace dataset `bcui2/NCU_report`, preserving directory layout.
+"""Upload NCU `.ncu-rep` binaries to the private HuggingFace dataset
+`bcui2/NCU_report`, preserving the per-op directory layout.
 
-Auth: $HUGGING_FACE (env var holds the HF API token).
-Code (.py / .json / .out under tilebench_run/ncu/) is NOT uploaded.
+The `.md` reports (comparison.md / SUMMARY.md) are NOT uploaded — they live in
+git now (the NCU_analysis branch). Only the large, git-ignored `.ncu-rep`
+binaries go to HF. `upload_folder` is diff-based, so unchanged reports are
+skipped.
+
+Auth: $HUGGING_FACE holds the HF API token.
 
 Run:
-  PYTHONPATH=. python tilebench_run/hf_upload.py
+  PYTHONPATH=. python tilebench_run/hf_upload.py            # all ops
+  PYTHONPATH=. python tilebench_run/hf_upload.py 1d_conv    # just one op (incremental)
 """
 import os
 import sys
@@ -21,22 +26,26 @@ token = os.environ.get("HUGGING_FACE")
 if not token:
     sys.exit("error: $HUGGING_FACE is not set")
 
+# Optional single-operator argument for incremental updates.
+op = sys.argv[1] if len(sys.argv) > 1 else None
+folder = NCU_DIR / op if op else NCU_DIR
+if not folder.is_dir():
+    sys.exit(f"error: {folder} is not a directory")
+path_in_repo = op if op else "."
+
 api = HfApi(token=token)
-
 api.create_repo(REPO_ID, repo_type="dataset", private=True, exist_ok=True)
-print(f"repo ready: {REPO_ID} (dataset, private)", flush=True)
 
-# Upload tilebench_run/ncu/  with structure preserved.
-# allow: every .ncu-rep + every .md
-# (sweep_log.json, *.py, *.out are NOT in allow_patterns → skipped)
-print("uploading … (this may take a while; 6.7 GB across ~270 files)",
+print(f"uploading {'op ' + op if op else 'ALL ops'} → {REPO_ID} (.ncu-rep only) …",
       flush=True)
 result = api.upload_folder(
-    folder_path=str(NCU_DIR),
+    folder_path=str(folder),
     repo_id=REPO_ID,
     repo_type="dataset",
-    path_in_repo=".",
-    allow_patterns=["**/*.ncu-rep", "**/*.md"],
-    commit_message="NCU sweep: 222 reports + 45 comparison.md + SUMMARY",
+    path_in_repo=path_in_repo,
+    # both forms so a per-op folder (files at root) and the all-ops folder
+    # (files one level down) are matched.
+    allow_patterns=["*.ncu-rep", "**/*.ncu-rep"],
+    commit_message=f"NCU .ncu-rep: {op or 'all ops'}",
 )
-print(f"\ndone: {result}", flush=True)
+print(f"done: {result}", flush=True)
