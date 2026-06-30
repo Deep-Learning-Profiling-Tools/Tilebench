@@ -12,7 +12,6 @@ on padding_len and TILE. This matches Triton's `key=["N"]` cache.
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -44,7 +43,7 @@ def _bitonic_step_kernel(
 ):
     """One compare-exchange pass over TILE pairs per CTA — mirrors Triton."""
     bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
 
     slice_1_offset = (offset // stride) * (2 * stride) + (offset % stride)
     slice_2_offset = slice_1_offset + stride
