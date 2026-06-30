@@ -37,9 +37,9 @@ def conv1d_kernel(
         w_scalar = ct.load(kernel_flat, index=(j,), shape=())
         w_scalar = ct.astype(w_scalar, ct.float32)
 
-        acc = acc + x * w_scalar
-
-    ct.store(output_flat, index=(bid,), tile=ct.astype(acc, output_flat.dtype))
+        acc += x * w_scalar
+    acc_out = ct.astype(acc, output_flat.dtype)
+    ct.store(output_flat, index=(bid,), tile=acc_out)
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
