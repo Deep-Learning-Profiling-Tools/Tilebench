@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -37,8 +36,8 @@ def _moe_topk_gating_kernel(
     """
     row = ct.bid(0)
 
-    offsets_le = ct.arange(BLOCK_SIZE_E, dtype=np.int32)[None, :]   # (1, BLOCK_SIZE_E)
-    offsets_k = ct.arange(BLOCK_SIZE_K, dtype=np.int32)[None, :]    # (1, BLOCK_SIZE_K)
+    offsets_le = ct.arange(BLOCK_SIZE_E, dtype=ct.int32)[None, :]   # (1, BLOCK_SIZE_E)
+    offsets_k = ct.arange(BLOCK_SIZE_K, dtype=ct.int32)[None, :]    # (1, BLOCK_SIZE_K)
 
     # Load full row; OOB lanes become -inf so they can't win max/argmax.
     logits = ct.load(
@@ -47,10 +46,10 @@ def _moe_topk_gating_kernel(
         shape=(1, BLOCK_SIZE_E),
         padding_mode=ct.PaddingMode.NEG_INF,
     )
-    logits = ct.astype(logits, np.float32)
+    logits = ct.astype(logits, ct.float32)
 
-    topk_vals = ct.full((1, BLOCK_SIZE_K), -float("inf"), dtype=np.float32)
-    topk_idxs = ct.full((1, BLOCK_SIZE_K), 0, dtype=np.int32)
+    topk_vals = ct.full((1, BLOCK_SIZE_K), -float("inf"), dtype=ct.float32)
+    topk_idxs = ct.full((1, BLOCK_SIZE_K), 0, dtype=ct.int32)
 
     for i in range(K):  # compile-time unrolled
         curr_max_val = ct.max(logits, axis=-1, keepdims=True)    # (1, 1)
