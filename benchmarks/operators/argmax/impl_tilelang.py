@@ -1,24 +1,102 @@
-import torch 
+import torch
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
-_
-#no argmax, primitive use reduce_max then find index
-#if slow maybe implement own
+
+_DEFAULT_CONFIG = {"BLOCK_N": 256, "threads": 128}
+_last_autotune_config: dict = {}
+
+
 def argmax_rowwise_config():
-    BLOCK_SIZE=[256, 512, 1024, 2048]
-    threads=[128, 256, 512]
+    BLOCK_N = [256, 512, 1024, 2048]
+    threads = [128, 256, 512]
     return [
-        dict(BLOCK_SIZE=bs, threads=nt)
-        for bs in BLOCK_SIZE
+        dict(BLOCK_N=bn, threads=nt)
+        for bn in BLOCK_N
         for nt in threads
     ]
+
+
 @tilelang.autotune(configs=argmax_rowwise_config(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
-def argmax_rowwise_kernel(X):
+def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128):
     M = T.dynamic("M")
-    N
-    with T.Kernel()
+    N = T.const("N")
+    X: T.Tensor((M, N), dtype)
+    Out: T.Tensor((M,), "int64")
+
+    with T.Kernel(M, threads=threads) as row:
+        x_tile = T.alloc_fragment((BLOCK_N,), "float32")
+        idx_tile = T.alloc_fragment((BLOCK_N,), "int32")
+        tile_max = T.alloc_fragment((1,), "float32")
+        tile_idx = T.alloc_fragment((1,), "int32")
+        best_val = T.alloc_fragment((1,), "float32")
+        best_idx = T.alloc_fragment((1,), "int32")
+
+        best_val[0] = -T.infinity("float32")
+        best_idx[0] = 0
+
+        for start in T.serial(0, N, BLOCK_N):
+            end = T.min(start + BLOCK_N, N)
+
+            T.fill(x_tile, -T.infinity("float32"))
+            T.fill(idx_tile, N)
+            T.copy(X[row : row + 1, start : end], x_tile)
+            T.reduce_max(x_tile, tile_max, dim=0, clear=True)
+
+            for i in T.Parallel(BLOCK_N):
+                col = start + i
+                if col < N:
+                    if x_tile[i] == tile_max[0]:
+                        idx_tile[i] = col
+
+            T.reduce_min(idx_tile, tile_idx, dim=0, clear=True)
+
+            if tile_max[0] > best_val[0]:
+                best_val[0] = tile_max[0]
+                best_idx[0] = tile_idx[0]
+
+        Out[row] = T.Cast("int64", best_idx[0])
 
 
+def run(
+    x: torch.Tensor,
+    dim: int = 1,
+    block_size: int = 1024,
+    autotune: bool = False,
+    **kwargs,
+) -> torch.Tensor:
+    assert x.is_cuda, "Input must be on CUDA"
+    dtype = str(x.dtype).removeprefix("torch.")
 
+    if dim == 1:
+        x2d = x.contiguous()
+    else:
+        x2d = x.transpose(0, 1).contiguous()
+
+    M, _ = x2d.shape
+    output = torch.empty(M, dtype=torch.int64, device=x.device)
+
+    if autotune:
+        with set_autotune_inputs(x2d, output):
+            kernel = argmax_rowwise_kernel.compile(
+                x2d, output,
+                dtype=dtype,
+            )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config or {}))
+        kernel(x2d, output)
+    else:
+        _last_autotune_config.clear()
+        cfg = dict(_DEFAULT_CONFIG)
+        argmax_rowwise_kernel(
+            x2d, output, dtype,
+            BLOCK_N=cfg["BLOCK_N"],
+            threads=cfg["threads"],
+        )
+
+    return output
+
+
+def get_last_config() -> dict | None:
+    return dict(_last_autotune_config) if _last_autotune_config else None
