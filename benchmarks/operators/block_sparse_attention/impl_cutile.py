@@ -15,7 +15,7 @@ _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
-def block_sparse_attention_cutile_kernel(
+def block_sparse_attention_kernel(
     Out, Q, K, V,
     csr_row_indices, csr_col_indices,
     csr_row_stride_h: ConstInt, csr_col_stride_h: ConstInt,
@@ -193,7 +193,7 @@ def block_sparse_attention_cutile_kernel(
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # See core/cutile_autotune.py for why both layers matter.
-_tuner = CutileAutotuner(block_sparse_attention_cutile_kernel)
+_tuner = CutileAutotuner(block_sparse_attention_kernel)
 
 
 def run(
