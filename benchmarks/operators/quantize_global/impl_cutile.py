@@ -6,7 +6,6 @@ bandwidth-bound, so the autotune sweep is over (TILE, occupancy) only.
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -30,7 +29,7 @@ _SEARCH_SPACE = [
 def _quantize_kernel(x, output, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.load(x, index=(bid,), shape=(TILE,))
-    ct.store(output, index=(bid,), tile=ct.astype(x_tile, np.float16))
+    ct.store(output, index=(bid,), tile=ct.astype(x_tile, ct.float16))
 
 
 _tuner = CutileAutotuner(_quantize_kernel)
