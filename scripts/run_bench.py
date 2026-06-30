@@ -150,6 +150,11 @@ def main():
             return ", ".join(f"{k}={r['params'][k]}" for k in varying_keys if k in r["params"])
         return f"n={r['problem_size']}"
 
+    def _t_vs_c(r):
+        # cuTile-vs-Triton latency ratio = cutile_ms / triton_ms (>1 => cuTile slower).
+        c, t = r.get("cutile_ms", float("nan")), r.get("triton_ms", float("nan"))
+        return c / t if (t == t and c == c and t != 0) else float("nan")
+
     col_w = max((len(_fmt_params(r)) for r in timing_results), default=20) + 2
 
     print("\nSummary:")
@@ -177,7 +182,8 @@ def main():
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "tilelang_ms", "nki_ms",
-                         "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki"])
+                         "speedup_triton", "speedup_cutile", "speedup_tilelang", "speedup_nki",
+                         "triton_vs_cutile"])
         for r in timing_results:
             writer.writerow([
                 _fmt_params(r), r["dtype"],
@@ -185,6 +191,7 @@ def main():
                 f"{r['tilelang_ms']:.4f}", f"{r['nki_ms']:.4f}",
                 f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
                 f"{r['speedup_tilelang']:.2f}", f"{r['speedup_nki']:.2f}",
+                f"{_t_vs_c(r):.4f}",
             ])
     print(f"Summary CSV     → {csv_path}")
 
