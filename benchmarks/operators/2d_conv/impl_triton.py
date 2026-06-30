@@ -12,7 +12,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def _conv2d_kernel(
+def conv2d_kernel(
     input_ptr, weight_ptr, output_ptr,
     batch, in_channels, out_channels,
     in_H, in_W,
@@ -148,7 +148,7 @@ _conv2d_kernel_autotuned = triton.autotune(
      "kH", "kW", "groups", "stride_h", "stride_w", "pad_h", "pad_w"],
     warmup=5,
     rep=10
-)(_conv2d_kernel)
+)(conv2d_kernel)
 
 
 def run(
@@ -226,7 +226,7 @@ def run(
             triton.cdiv(out_channels_per_group, bs_out),
             groups,
         )
-        _conv2d_kernel[grid](
+        conv2d_kernel[grid](
             input, weight, output,
             **common_args,
             BLOCK_SIZE_BATCH_HEIGHT_WIDTH=bs_bhw,

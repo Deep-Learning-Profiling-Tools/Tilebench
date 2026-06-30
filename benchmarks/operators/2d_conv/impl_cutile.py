@@ -33,7 +33,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _conv2d_kernel(
+def conv2d_kernel(
     input_flat,    # 1D view of (batch, in_channels, in_H, in_W)
     weight_flat,   # 1D view of (out_channels, in_channels_per_group, kH, kW)
     output_flat,   # 1D view of (batch, out_channels, out_H, out_W)
@@ -166,7 +166,7 @@ def _conv2d_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_conv2d_kernel)
+_tuner = CutileAutotuner(conv2d_kernel)
 
 
 def run(
