@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -63,7 +62,7 @@ def _bmm_kernel(a_3d, b_3d, c_3d,
     bid_n = (linear_bid % num_pid_in_group) // group_size_m
     # ------------------------------------------------------------------------------
 
-    acc = ct.zeros((TILE_M, TILE_N), dtype=np.float32)
+    acc = ct.zeros((TILE_M, TILE_N), dtype=ct.float32)
 
     # Cast to TF32 for fp32 inputs so ct.mma uses Tensor Cores; no-op for
     # fp16/bf16 inputs (cast to same dtype). Matches Triton's
