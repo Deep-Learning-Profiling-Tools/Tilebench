@@ -36,7 +36,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def matmul_int8_kernel(
+def matmul_kernel(
     A, B, C,
     M, N,
     K_b: ConstInt,
@@ -82,7 +82,7 @@ def matmul_int8_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(matmul_int8_kernel)
+_tuner = CutileAutotuner(matmul_kernel)
 
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
