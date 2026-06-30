@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -26,14 +25,14 @@ def _layernorm_kernel(x, weight, bias, out, eps, N: ConstInt, TILE_SIZE: ConstIn
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
     # Pass 1: accumulate sum(x) and sum(x²) in a single scan.
-    _sum_x  = ct.full((1, TILE_SIZE), 0.0, dtype=np.float32)
-    _sum_x2 = ct.full((1, TILE_SIZE), 0.0, dtype=np.float32)
+    _sum_x  = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
+    _sum_x2 = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         _sum_x  = _sum_x  + xj
         _sum_x2 = _sum_x2 + xj * xj
@@ -48,19 +47,19 @@ def _layernorm_kernel(x, weight, bias, out, eps, N: ConstInt, TILE_SIZE: ConstIn
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         wj = ct.astype(
             ct.load(weight, index=(j,), shape=(TILE_SIZE,),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         bj = ct.astype(
             ct.load(bias, index=(j,), shape=(TILE_SIZE,),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         yj = ct.astype((xj - mean) * rstd * wj + bj, x.dtype)
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
