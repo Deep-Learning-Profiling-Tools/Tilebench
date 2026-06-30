@@ -16,7 +16,7 @@ def conv1d_kernel(input_ptr, kernel_ptr, output_ptr, input_size, kernel_size: tl
 
     acc = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
 
-    for j in range(0, kernel_size):
+    for j in tl.static_range(0, kernel_size):
         x = tl.load(input_ptr + offsets + j, mask=mask, other=0.0).to(tl.float32)
         w = tl.load(kernel_ptr + j).to(tl.float32)
         acc += x * w

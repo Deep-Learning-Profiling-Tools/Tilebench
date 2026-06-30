@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -18,43 +17,33 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _conv1d_stencil_kernel(
+def conv1d_kernel(
     input_flat,
     kernel_flat,
     output_flat,
     kernel_size: ConstInt,
     TILE: ConstInt,
 ):
-    """
-    Direct 1D stencil matching Triton's method exactly:
-      acc[i] = sum_{j=0..kernel_size-1} input[i+j] * kernel[j]
-
-    Each block handles TILE consecutive output elements. For each j, use
-    ct.gather for runtime-indexed per-element loads — the cuTile equivalent
-    of Triton's `tl.load(input_ptr + offsets + j)` per-pixel pointer
-    arithmetic. ct.gather's padding_value=0 handles tail-tile OOB reads;
-    ct.store silently drops OOB writes for the final partial output tile.
-    """
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
 
-    acc = ct.zeros((TILE,), dtype=np.float32)
+    acc = ct.zeros((TILE,), dtype=ct.float32)
 
     for j in range(kernel_size):  # compile-time unrolled
         input_idx = offsets + j
         x = ct.gather(input_flat, input_idx, padding_value=0.0)
-        x = ct.astype(x, np.float32)
+        x = ct.astype(x, ct.float32)
 
         w_scalar = ct.load(kernel_flat, index=(j,), shape=())
-        w_scalar = ct.astype(w_scalar, np.float32)
+        w_scalar = ct.astype(w_scalar, ct.float32)
 
-        acc = acc + x * w_scalar
-
-    ct.store(output_flat, index=(bid,), tile=acc)
+        acc += x * w_scalar
+    acc_out = ct.astype(acc, output_flat.dtype)
+    ct.store(output_flat, index=(bid,), tile=acc_out)
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_conv1d_stencil_kernel)
+_tuner = CutileAutotuner(conv1d_kernel)
 
 
 def run(input, kernel, input_size, kernel_size,
@@ -70,7 +59,7 @@ def run(input, kernel, input_size, kernel_size,
     if output_size <= 0:
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
-    output = torch.empty(output_size, dtype=torch.float32, device=input.device)
+    output = torch.empty(output_size, dtype=input.dtype, device=input.device)
     stream = torch.cuda.current_stream()
 
     if autotune:
@@ -101,7 +90,7 @@ def run(input, kernel, input_size, kernel_size,
         (input, kernel, output, kernel_size, cfg.tile),
     )
 
-    return output.to(input.dtype)
+    return output
 
 
 def get_last_config() -> dict | None:
