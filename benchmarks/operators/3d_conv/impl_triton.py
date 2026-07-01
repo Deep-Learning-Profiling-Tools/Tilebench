@@ -31,9 +31,9 @@ def _conv3d_kernel(
 
     acc = tl.zeros([BLOCK_SIZE], dtype=tl.float32)
 
-    for kd in range(kernel_depth):
-        for kr in range(kernel_rows):
-            for kc in range(kernel_cols):
+    for kd in tl.static_range(kernel_depth):
+        for kr in tl.static_range(kernel_rows):
+            for kc in tl.static_range(kernel_cols):
                 input_idx = (output_depth_id + kd) * input_plane + (output_row_id + kr) * input_cols + (output_col_id + kc)
                 kernel_idx = kd * kernel_plane + kr * kernel_cols + kc
                 x = tl.load(input_ptr + input_idx, mask=mask, other=0.0)
