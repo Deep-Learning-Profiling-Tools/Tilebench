@@ -1,5 +1,5 @@
 """cuTile generic GEMM. Supports fp32 (TF32-accelerated via explicit cast),
-fp16, fp8 e4m3fn, fp8 e5m2 — same kernel, output dtype follows C's torch dtype.
+fp16, fp8 e4m3fn — same kernel, output dtype follows C's torch dtype.
 
 Algorithm: 1D grid with grouped scheduling (L2 cache swizzling); fp32
 accumulator via ct.mma; cast to output dtype at the end.
@@ -32,7 +32,6 @@ _DEFAULT_CONFIGS = {
     torch.float32:        SimpleNamespace(tm=128,  tn=128, tk=32,  group_size_m=8, occupancy=16),
     torch.float16:        SimpleNamespace(tm=128, tn=128, tk=64,  group_size_m=8, occupancy=16),
     torch.float8_e4m3fn:  SimpleNamespace(tm=128, tn=256, tk=64, group_size_m=8, occupancy=16),
-    torch.float8_e5m2:    SimpleNamespace(tm=128, tn=256, tk=64, group_size_m=8, occupancy=16),
 }
 
 # Search space (independent sweep, mirroring Triton). exhaustive_search
