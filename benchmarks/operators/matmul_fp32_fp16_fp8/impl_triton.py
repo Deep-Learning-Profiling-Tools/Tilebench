@@ -17,10 +17,6 @@ _DEFAULT_CONFIGS = {
         "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
         "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
     },
-    torch.float8_e5m2: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
-    },
 }
 
 
@@ -37,8 +33,8 @@ def matmul_kernel(
     GROUP_SIZE_M: tl.constexpr,
 ):
     """Generic GEMM with grouped scheduling. fp32 accumulator; output dtype is
-    inferred from c_ptr — fp32, fp16, fp8 e4m3fn, and fp8 e5m2 are all handled
-    in the epilogue."""
+    inferred from c_ptr — fp32, fp16, and fp8 e4m3fn are handled in the
+    epilogue."""
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
     num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
@@ -77,8 +73,6 @@ def matmul_kernel(
     # Cast accumulator to the output dtype.
     if c_ptr.dtype.element_ty == tl.float8e4nv:
         c = accumulator.to(tl.float8e4nv)
-    elif c_ptr.dtype.element_ty == tl.float8e5:
-        c = accumulator.to(tl.float8e5)
     elif c_ptr.dtype.element_ty == tl.float32:
         c = accumulator
     else:
