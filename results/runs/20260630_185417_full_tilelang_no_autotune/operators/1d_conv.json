@@ -1,0 +1,1362 @@
+[
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 1000000
+    },
+    "problem_size": 1000000,
+    "dtype": "fp16",
+    "torch_ms": 0.33912321,
+    "torch_stats": {
+      "mean": 0.33912321
+    },
+    "triton_ms": 0.06436621,
+    "triton_stats": {
+      "mean": 0.06436621
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.04228468,
+    "cutile_stats": {
+      "mean": 0.04228468
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 976) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpf3qhaoqu/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpf3qhaoqu/tvm_kernels.cubin /scratch/arustagi/tmp/tmpf3qhaoqu/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.26865276050897,
+    "speedup_cutile": 8.02000180680095,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 1000000
+    },
+    "problem_size": 1000000,
+    "dtype": "fp32",
+    "torch_ms": 0.3306906,
+    "torch_stats": {
+      "mean": 0.3306906
+    },
+    "triton_ms": 0.06500492,
+    "triton_stats": {
+      "mean": 0.06500492
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.02888283,
+    "cutile_stats": {
+      "mean": 0.02888283
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 976) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpoo7jfhe9/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpoo7jfhe9/tvm_kernels.cubin /scratch/arustagi/tmp/tmpoo7jfhe9/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.0871626332283775,
+    "speedup_cutile": 11.449383595721056,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 2000000
+    },
+    "problem_size": 2000000,
+    "dtype": "fp16",
+    "torch_ms": 0.66889132,
+    "torch_stats": {
+      "mean": 0.66889132
+    },
+    "triton_ms": 0.12442474,
+    "triton_stats": {
+      "mean": 0.12442474
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.07661736999999999,
+    "cutile_stats": {
+      "mean": 0.07661736999999999
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  half_t input_local_cast[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 1953) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_copy_s = 0; i_copy_s < 8; ++i_copy_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_copy_s * 64)) + (((int)threadIdx.x) >> 1)) < 999937) {\n          input_local_cast[i_copy_s] = input[((((((int)blockIdx.x) * 1024) + (i_copy_s * 128)) + ((int)threadIdx.x)) + i_4)];\n        }\n      }\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 999937) {\n          acc[i_5] = (acc[i_5] + (((float)input_local_cast[i_5]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpxhi0u3qy/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpxhi0u3qy/tvm_kernels.cubin /scratch/arustagi/tmp/tmpxhi0u3qy/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.375870747248497,
+    "speedup_cutile": 8.730282963249717,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 2000000
+    },
+    "problem_size": 2000000,
+    "dtype": "fp32",
+    "torch_ms": 0.65693478,
+    "torch_stats": {
+      "mean": 0.65693478
+    },
+    "triton_ms": 0.12500482000000002,
+    "triton_stats": {
+      "mean": 0.12500482000000002
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.05287883,
+    "cutile_stats": {
+      "mean": 0.05287883
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 1953) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_s = 0; i_s < 8; ++i_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_s * 64)) + (((int)threadIdx.x) >> 1)) < 999937) {\n          acc[i_s] = (acc[i_s] + (input[((((((int)blockIdx.x) * 1024) + (i_s * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_5 = 0; i_5 < 8; ++i_5) {\n      if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x))] = acc[i_5];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpva845dql/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpva845dql/tvm_kernels.cubin /scratch/arustagi/tmp/tmpva845dql/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.255275596572996,
+    "speedup_cutile": 12.42339855098912,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 3000000
+    },
+    "problem_size": 3000000,
+    "dtype": "fp16",
+    "torch_ms": 0.9972776600000001,
+    "torch_stats": {
+      "mean": 0.9972776600000001
+    },
+    "triton_ms": 0.17678456,
+    "triton_stats": {
+      "mean": 0.17678456
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.10662756,
+    "cutile_stats": {
+      "mean": 0.10662756
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 2929) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 1499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 1499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpwdu388sv/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpwdu388sv/tvm_kernels.cubin /scratch/arustagi/tmp/tmpwdu388sv/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.6412033946856,
+    "speedup_cutile": 9.352907072055293,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 3000000
+    },
+    "problem_size": 3000000,
+    "dtype": "fp32",
+    "torch_ms": 0.98147891,
+    "torch_stats": {
+      "mean": 0.98147891
+    },
+    "triton_ms": 0.17736160999999998,
+    "triton_stats": {
+      "mean": 0.17736160999999998
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.0737956,
+    "cutile_stats": {
+      "mean": 0.0737956
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 2929) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 1499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 1499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpuu_j06u4/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpuu_j06u4/tvm_kernels.cubin /scratch/arustagi/tmp/tmpuu_j06u4/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.533773120350002,
+    "speedup_cutile": 13.29996517407542,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 4000000
+    },
+    "problem_size": 4000000,
+    "dtype": "fp16",
+    "torch_ms": 1.32672956,
+    "torch_stats": {
+      "mean": 1.32672956
+    },
+    "triton_ms": 0.23743683,
+    "triton_stats": {
+      "mean": 0.23743683
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.14100858,
+    "cutile_stats": {
+      "mean": 0.14100858
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 3906) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 1999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 1999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpn2j5g3w3/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpn2j5g3w3/tvm_kernels.cubin /scratch/arustagi/tmp/tmpn2j5g3w3/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.587715941120003,
+    "speedup_cutile": 9.408856964590381,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 4000000
+    },
+    "problem_size": 4000000,
+    "dtype": "fp32",
+    "torch_ms": 1.3075758100000001,
+    "torch_stats": {
+      "mean": 1.3075758100000001
+    },
+    "triton_ms": 0.23801610999999998,
+    "triton_stats": {
+      "mean": 0.23801610999999998
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.09740879,
+    "cutile_stats": {
+      "mean": 0.09740879
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 3906) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 1999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 1999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpynva2lqk/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpynva2lqk/tvm_kernels.cubin /scratch/arustagi/tmp/tmpynva2lqk/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.493644148709095,
+    "speedup_cutile": 13.423591546512386,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 5000000
+    },
+    "problem_size": 5000000,
+    "dtype": "fp16",
+    "torch_ms": 1.65503634,
+    "torch_stats": {
+      "mean": 1.65503634
+    },
+    "triton_ms": 0.28967815,
+    "triton_stats": {
+      "mean": 0.28967815
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.17115603,
+    "cutile_stats": {
+      "mean": 0.17115603
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 4882) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 2499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 2499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpre3ql00f/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpre3ql00f/tvm_kernels.cubin /scratch/arustagi/tmp/tmpre3ql00f/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.713362709614101,
+    "speedup_cutile": 9.669751863256002,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 5000000
+    },
+    "problem_size": 5000000,
+    "dtype": "fp32",
+    "torch_ms": 1.63313287,
+    "torch_stats": {
+      "mean": 1.63313287
+    },
+    "triton_ms": 0.29076914000000004,
+    "triton_stats": {
+      "mean": 0.29076914000000004
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.11973022999999999,
+    "cutile_stats": {
+      "mean": 0.11973022999999999
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 4882) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 2499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 2499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp08xop5kq/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp08xop5kq/tvm_kernels.cubin /scratch/arustagi/tmp/tmp08xop5kq/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.616596279784023,
+    "speedup_cutile": 13.640104675318842,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 6000000
+    },
+    "problem_size": 6000000,
+    "dtype": "fp16",
+    "torch_ms": 1.98403092,
+    "torch_stats": {
+      "mean": 1.98403092
+    },
+    "triton_ms": 0.35036216,
+    "triton_stats": {
+      "mean": 0.35036216
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.204971,
+    "cutile_stats": {
+      "mean": 0.204971
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 5859) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 2999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 2999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmprscv_j9j/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmprscv_j9j/tvm_kernels.cubin /scratch/arustagi/tmp/tmprscv_j9j/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.662800229339835,
+    "speedup_cutile": 9.679568914626948,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 6000000
+    },
+    "problem_size": 6000000,
+    "dtype": "fp32",
+    "torch_ms": 1.95847608,
+    "torch_stats": {
+      "mean": 1.95847608
+    },
+    "triton_ms": 0.35136737,
+    "triton_stats": {
+      "mean": 0.35136737
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.14167268,
+    "cutile_stats": {
+      "mean": 0.14167268
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 5859) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 2999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 2999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpka3lgao8/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpka3lgao8/tvm_kernels.cubin /scratch/arustagi/tmp/tmpka3lgao8/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.5738701063789735,
+    "speedup_cutile": 13.823950249264714,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 7000000
+    },
+    "problem_size": 7000000,
+    "dtype": "fp16",
+    "torch_ms": 2.31249875,
+    "torch_stats": {
+      "mean": 2.31249875
+    },
+    "triton_ms": 0.41086332000000003,
+    "triton_stats": {
+      "mean": 0.41086332000000003
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.23901112,
+    "cutile_stats": {
+      "mean": 0.23901112
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 6835) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 3499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 3499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpt_p2hp8o/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpt_p2hp8o/tvm_kernels.cubin /scratch/arustagi/tmp/tmpt_p2hp8o/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.628389387497526,
+    "speedup_cutile": 9.675276823940242,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 7000000
+    },
+    "problem_size": 7000000,
+    "dtype": "fp32",
+    "torch_ms": 2.28419585,
+    "torch_stats": {
+      "mean": 2.28419585
+    },
+    "triton_ms": 0.41178623,
+    "triton_stats": {
+      "mean": 0.41178623
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.16496627,
+    "cutile_stats": {
+      "mean": 0.16496627
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 6835) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 3499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 3499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpd_5j_8lw/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpd_5j_8lw/tvm_kernels.cubin /scratch/arustagi/tmp/tmpd_5j_8lw/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.547042818794597,
+    "speedup_cutile": 13.846441760488373,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 8000000
+    },
+    "problem_size": 8000000,
+    "dtype": "fp16",
+    "torch_ms": 2.64134456,
+    "torch_stats": {
+      "mean": 2.64134456
+    },
+    "triton_ms": 0.46335703,
+    "triton_stats": {
+      "mean": 0.46335703
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.26905872999999997,
+    "cutile_stats": {
+      "mean": 0.26905872999999997
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 7812) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 3999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 3999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp67t7ej92/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp67t7ej92/tvm_kernels.cubin /scratch/arustagi/tmp/tmp67t7ej92/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.70045211140964,
+    "speedup_cutile": 9.8169814449061,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 8000000
+    },
+    "problem_size": 8000000,
+    "dtype": "fp32",
+    "torch_ms": 2.6094162599999997,
+    "torch_stats": {
+      "mean": 2.6094162599999997
+    },
+    "triton_ms": 0.46438887,
+    "triton_stats": {
+      "mean": 0.46438887
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.18575888000000002,
+    "cutile_stats": {
+      "mean": 0.18575888000000002
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 7812) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 3999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 3999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpu4vp8iag/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpu4vp8iag/tvm_kernels.cubin /scratch/arustagi/tmp/tmpu4vp8iag/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.619032730047987,
+    "speedup_cutile": 14.047329850395306,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 9000000
+    },
+    "problem_size": 9000000,
+    "dtype": "fp16",
+    "torch_ms": 2.97033439,
+    "torch_stats": {
+      "mean": 2.97033439
+    },
+    "triton_ms": 0.52395808,
+    "triton_stats": {
+      "mean": 0.52395808
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.3031955,
+    "cutile_stats": {
+      "mean": 0.3031955
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 8788) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 4499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 4499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp0pxoynx3/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp0pxoynx3/tvm_kernels.cubin /scratch/arustagi/tmp/tmp0pxoynx3/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.6690306026008805,
+    "speedup_cutile": 9.796762781769518,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 9000000
+    },
+    "problem_size": 9000000,
+    "dtype": "fp32",
+    "torch_ms": 2.9350806400000002,
+    "torch_stats": {
+      "mean": 2.9350806400000002
+    },
+    "triton_ms": 0.5247658900000001,
+    "triton_stats": {
+      "mean": 0.5247658900000001
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.20904910000000002,
+    "cutile_stats": {
+      "mean": 0.20904910000000002
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 8788) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 4499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 4499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpxfeat9jp/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpxfeat9jp/tvm_kernels.cubin /scratch/arustagi/tmp/tmpxfeat9jp/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.5931238975917426,
+    "speedup_cutile": 14.040149610785218,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 10000000
+    },
+    "problem_size": 10000000,
+    "dtype": "fp16",
+    "torch_ms": 3.2987477099999998,
+    "torch_stats": {
+      "mean": 3.2987477099999998
+    },
+    "triton_ms": 0.5760353,
+    "triton_stats": {
+      "mean": 0.5760353
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.33331501,
+    "cutile_stats": {
+      "mean": 0.33331501
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 9765) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 4999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 4999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpw7kkxxwy/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpw7kkxxwy/tvm_kernels.cubin /scratch/arustagi/tmp/tmpw7kkxxwy/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.726641596443828,
+    "speedup_cutile": 9.896787156389985,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 10000000
+    },
+    "problem_size": 10000000,
+    "dtype": "fp32",
+    "torch_ms": 3.2605296,
+    "torch_stats": {
+      "mean": 3.2605296
+    },
+    "triton_ms": 0.57699835,
+    "triton_stats": {
+      "mean": 0.57699835
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.23130085,
+    "cutile_stats": {
+      "mean": 0.23130085
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 9765) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 4999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 4999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpk527x8ch/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpk527x8ch/tvm_kernels.cubin /scratch/arustagi/tmp/tmpk527x8ch/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.650847355109421,
+    "speedup_cutile": 14.096487756097739,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 11000000
+    },
+    "problem_size": 11000000,
+    "dtype": "fp16",
+    "torch_ms": 3.6272162999999997,
+    "torch_stats": {
+      "mean": 3.6272162999999997
+    },
+    "triton_ms": 0.63666418,
+    "triton_stats": {
+      "mean": 0.63666418
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.36706342,
+    "cutile_stats": {
+      "mean": 0.36706342
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  half_t input_local_cast[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 10742) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_copy_s = 0; i_copy_s < 8; ++i_copy_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_copy_s * 64)) + (((int)threadIdx.x) >> 1)) < 5499937) {\n          input_local_cast[i_copy_s] = input[((((((int)blockIdx.x) * 1024) + (i_copy_s * 128)) + ((int)threadIdx.x)) + i_4)];\n        }\n      }\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 5499937) {\n          acc[i_5] = (acc[i_5] + (((float)input_local_cast[i_5]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 5499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpn00tla7k/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpn00tla7k/tvm_kernels.cubin /scratch/arustagi/tmp/tmpn00tla7k/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.697220628935021,
+    "speedup_cutile": 9.8817155356968,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 11000000
+    },
+    "problem_size": 11000000,
+    "dtype": "fp32",
+    "torch_ms": 3.58596902,
+    "torch_stats": {
+      "mean": 3.58596902
+    },
+    "triton_ms": 0.63756093,
+    "triton_stats": {
+      "mean": 0.63756093
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.25318882,
+    "cutile_stats": {
+      "mean": 0.25318882
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 10742) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_s = 0; i_s < 8; ++i_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_s * 64)) + (((int)threadIdx.x) >> 1)) < 5499937) {\n          acc[i_s] = (acc[i_s] + (input[((((((int)blockIdx.x) * 1024) + (i_s * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_5 = 0; i_5 < 8; ++i_5) {\n      if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 5499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x))] = acc[i_5];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpargyve_d/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpargyve_d/tvm_kernels.cubin /scratch/arustagi/tmp/tmpargyve_d/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.624511872143733,
+    "speedup_cutile": 14.163220240135406,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 12000000
+    },
+    "problem_size": 12000000,
+    "dtype": "fp16",
+    "torch_ms": 3.9564574300000004,
+    "torch_stats": {
+      "mean": 3.9564574300000004
+    },
+    "triton_ms": 0.69693099,
+    "triton_stats": {
+      "mean": 0.69693099
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.40113517,
+    "cutile_stats": {
+      "mean": 0.40113517
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 11718) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 5999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 5999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp4ne8in_7/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp4ne8in_7/tvm_kernels.cubin /scratch/arustagi/tmp/tmp4ne8in_7/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.676971589396534,
+    "speedup_cutile": 9.863152687409585,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 12000000
+    },
+    "problem_size": 12000000,
+    "dtype": "fp32",
+    "torch_ms": 3.91140531,
+    "torch_stats": {
+      "mean": 3.91140531
+    },
+    "triton_ms": 0.6977893900000001,
+    "triton_stats": {
+      "mean": 0.6977893900000001
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.27624714,
+    "cutile_stats": {
+      "mean": 0.27624714
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 11718) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 5999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 5999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpztht6n9j/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpztht6n9j/tvm_kernels.cubin /scratch/arustagi/tmp/tmpztht6n9j/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.6054238801194725,
+    "speedup_cutile": 14.159079836989443,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 13000000
+    },
+    "problem_size": 13000000,
+    "dtype": "fp16",
+    "torch_ms": 4.28587586,
+    "torch_stats": {
+      "mean": 4.28587586
+    },
+    "triton_ms": 0.74964199,
+    "triton_stats": {
+      "mean": 0.74964199
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.43146772,
+    "cutile_stats": {
+      "mean": 0.43146772
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 12695) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 6499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 6499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpve_1o8ax/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpve_1o8ax/tvm_kernels.cubin /scratch/arustagi/tmp/tmpve_1o8ax/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.717230247467861,
+    "speedup_cutile": 9.933247984345156,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 13000000
+    },
+    "problem_size": 13000000,
+    "dtype": "fp32",
+    "torch_ms": 4.23694346,
+    "torch_stats": {
+      "mean": 4.23694346
+    },
+    "triton_ms": 0.75040279,
+    "triton_stats": {
+      "mean": 0.75040279
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.29724495,
+    "cutile_stats": {
+      "mean": 0.29724495
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 12695) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 6499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 6499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp085ee4on/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp085ee4on/tvm_kernels.cubin /scratch/arustagi/tmp/tmp085ee4on/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.646225622375418,
+    "speedup_cutile": 14.254046906431883,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 14000000
+    },
+    "problem_size": 14000000,
+    "dtype": "fp16",
+    "torch_ms": 4.61476804,
+    "torch_stats": {
+      "mean": 4.61476804
+    },
+    "triton_ms": 0.8098948199999999,
+    "triton_stats": {
+      "mean": 0.8098948199999999
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.46533612,
+    "cutile_stats": {
+      "mean": 0.46533612
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 13671) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 6999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 6999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmprhv2j6ni/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmprhv2j6ni/tvm_kernels.cubin /scratch/arustagi/tmp/tmprhv2j6ni/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.697984387651721,
+    "speedup_cutile": 9.917063906408126,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 14000000
+    },
+    "problem_size": 14000000,
+    "dtype": "fp32",
+    "torch_ms": 4.5624768,
+    "torch_stats": {
+      "mean": 4.5624768
+    },
+    "triton_ms": 0.8107915600000001,
+    "triton_stats": {
+      "mean": 0.8107915600000001
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.32036671,
+    "cutile_stats": {
+      "mean": 0.32036671
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 13671) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 6999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 6999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpb3ei4f5_/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpb3ei4f5_/tvm_kernels.cubin /scratch/arustagi/tmp/tmpb3ei4f5_/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.627188324456657,
+    "speedup_cutile": 14.241419777978804,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 15000000
+    },
+    "problem_size": 15000000,
+    "dtype": "fp16",
+    "torch_ms": 4.94348192,
+    "torch_stats": {
+      "mean": 4.94348192
+    },
+    "triton_ms": 0.86252748,
+    "triton_stats": {
+      "mean": 0.86252748
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.49573532,
+    "cutile_stats": {
+      "mean": 0.49573532
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 14648) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 7499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 7499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpek7y9fp6/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpek7y9fp6/tvm_kernels.cubin /scratch/arustagi/tmp/tmpek7y9fp6/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.731390633490309,
+    "speedup_cutile": 9.972018778085047,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 15000000
+    },
+    "problem_size": 15000000,
+    "dtype": "fp32",
+    "torch_ms": 4.88797254,
+    "torch_stats": {
+      "mean": 4.88797254
+    },
+    "triton_ms": 0.86341172,
+    "triton_stats": {
+      "mean": 0.86341172
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.34266988,
+    "cutile_stats": {
+      "mean": 0.34266988
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 14648) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 7499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 7499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpwqb9k0dk/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpwqb9k0dk/tvm_kernels.cubin /scratch/arustagi/tmp/tmpwqb9k0dk/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.661230241349978,
+    "speedup_cutile": 14.264377540272871,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 16000000
+    },
+    "problem_size": 16000000,
+    "dtype": "fp16",
+    "torch_ms": 5.2725884800000005,
+    "torch_stats": {
+      "mean": 5.2725884800000005
+    },
+    "triton_ms": 0.92281472,
+    "triton_stats": {
+      "mean": 0.92281472
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.5296648100000001,
+    "cutile_stats": {
+      "mean": 0.5296648100000001
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 15624) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 7999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 7999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp4c1k1lhd/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp4c1k1lhd/tvm_kernels.cubin /scratch/arustagi/tmp/tmp4c1k1lhd/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.713593818702849,
+    "speedup_cutile": 9.954575762735681,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 16000000
+    },
+    "problem_size": 16000000,
+    "dtype": "fp32",
+    "torch_ms": 5.21349134,
+    "torch_stats": {
+      "mean": 5.21349134
+    },
+    "triton_ms": 0.92376927,
+    "triton_stats": {
+      "mean": 0.92376927
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.36461751000000003,
+    "cutile_stats": {
+      "mean": 0.36461751000000003
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 15624) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 7999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 7999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmptxp7le4b/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmptxp7le4b/tvm_kernels.cubin /scratch/arustagi/tmp/tmptxp7le4b/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.643715924865091,
+    "speedup_cutile": 14.298521593216956,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 17000000
+    },
+    "problem_size": 17000000,
+    "dtype": "fp16",
+    "torch_ms": 5.6015339299999996,
+    "torch_stats": {
+      "mean": 5.6015339299999996
+    },
+    "triton_ms": 0.98271387,
+    "triton_stats": {
+      "mean": 0.98271387
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.56467014,
+    "cutile_stats": {
+      "mean": 0.56467014
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 16601) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 8499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 8499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpr26wmdun/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpr26wmdun/tvm_kernels.cubin /scratch/arustagi/tmp/tmpr26wmdun/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.7000660120936315,
+    "speedup_cutile": 9.92001087573003,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 17000000
+    },
+    "problem_size": 17000000,
+    "dtype": "fp32",
+    "torch_ms": 5.53879836,
+    "torch_stats": {
+      "mean": 5.53879836
+    },
+    "triton_ms": 0.98359423,
+    "triton_stats": {
+      "mean": 0.98359423
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.38758928000000004,
+    "cutile_stats": {
+      "mean": 0.38758928000000004
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 16601) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 8499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 8499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp8dqb8mf2/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp8dqb8mf2/tvm_kernels.cubin /scratch/arustagi/tmp/tmp8dqb8mf2/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.631182240668492,
+    "speedup_cutile": 14.29038068338732,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 18000000
+    },
+    "problem_size": 18000000,
+    "dtype": "fp16",
+    "torch_ms": 5.9305629,
+    "torch_stats": {
+      "mean": 5.9305629
+    },
+    "triton_ms": 1.03583332,
+    "triton_stats": {
+      "mean": 1.03583332
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.59565136,
+    "cutile_stats": {
+      "mean": 0.59565136
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  half_t input_local_cast[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 17578) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_copy_s = 0; i_copy_s < 8; ++i_copy_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_copy_s * 64)) + (((int)threadIdx.x) >> 1)) < 8999937) {\n          input_local_cast[i_copy_s] = input[((((((int)blockIdx.x) * 1024) + (i_copy_s * 128)) + ((int)threadIdx.x)) + i_4)];\n        }\n      }\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 8999937) {\n          acc[i_5] = (acc[i_5] + (((float)input_local_cast[i_5]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 8999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpnge24d4x/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpnge24d4x/tvm_kernels.cubin /scratch/arustagi/tmp/tmpnge24d4x/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.725402712475015,
+    "speedup_cutile": 9.956433071855994,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 18000000
+    },
+    "problem_size": 18000000,
+    "dtype": "fp32",
+    "torch_ms": 5.86409954,
+    "torch_stats": {
+      "mean": 5.86409954
+    },
+    "triton_ms": 1.03667442,
+    "triton_stats": {
+      "mean": 1.03667442
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.40854203,
+    "cutile_stats": {
+      "mean": 0.40854203
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 17578) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      for (int i_s = 0; i_s < 8; ++i_s) {\n        if ((((((int)blockIdx.x) * 512) + (i_s * 64)) + (((int)threadIdx.x) >> 1)) < 8999937) {\n          acc[i_s] = (acc[i_s] + (input[((((((int)blockIdx.x) * 1024) + (i_s * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_5 = 0; i_5 < 8; ++i_5) {\n      if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 8999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x))] = acc[i_5];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmptt0blbr8/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmptt0blbr8/tvm_kernels.cubin /scratch/arustagi/tmp/tmptt0blbr8/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.65664535254955,
+    "speedup_cutile": 14.353723997504002,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 19000000
+    },
+    "problem_size": 19000000,
+    "dtype": "fp16",
+    "torch_ms": 6.26075289,
+    "torch_stats": {
+      "mean": 6.26075289
+    },
+    "triton_ms": 1.0956808,
+    "triton_stats": {
+      "mean": 1.0956808
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.62984277,
+    "cutile_stats": {
+      "mean": 0.62984277
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 18554) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 9499937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 9499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmptxvyly3q/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmptxvyly3q/tvm_kernels.cubin /scratch/arustagi/tmp/tmptxvyly3q/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.714029934630597,
+    "speedup_cutile": 9.940183785867701,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 19000000
+    },
+    "problem_size": 19000000,
+    "dtype": "fp32",
+    "torch_ms": 6.1895171,
+    "torch_stats": {
+      "mean": 6.1895171
+    },
+    "triton_ms": 1.0968284,
+    "triton_stats": {
+      "mean": 1.0968284
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.43183756,
+    "cutile_stats": {
+      "mean": 0.43183756
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 18554) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 9499937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 9499937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmp8w9q2bi6/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmp8w9q2bi6/tvm_kernels.cubin /scratch/arustagi/tmp/tmp8w9q2bi6/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.643104336102165,
+    "speedup_cutile": 14.33297534378436,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 20000000
+    },
+    "problem_size": 20000000,
+    "dtype": "fp16",
+    "torch_ms": 6.588805059999999,
+    "torch_stats": {
+      "mean": 6.588805059999999
+    },
+    "triton_ms": 1.1487463,
+    "triton_stats": {
+      "mean": 1.1487463
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.66173697,
+    "cutile_stats": {
+      "mean": 0.66173697
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const half_t* __restrict__ input, const half_t* __restrict__ kernel, half_t* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 19531) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)]) * ((float)kernel[i_1])));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_3]);\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 9999937) {\n          acc[i_5] = (acc[i_5] + (((float)input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)]) * ((float)kernel[i_4])));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 9999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = ((half_t)acc[i_6]);\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpzgjsy5q_/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpzgjsy5q_/tvm_kernels.cubin /scratch/arustagi/tmp/tmpzgjsy5q_/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.735648558780994,
+    "speedup_cutile": 9.95683384593126,
+    "speedup_tilelang": 0.0
+  },
+  {
+    "params": {
+      "kernel_size": 127,
+      "input_size": 20000000
+    },
+    "problem_size": 20000000,
+    "dtype": "fp32",
+    "torch_ms": 6.5156957,
+    "torch_stats": {
+      "mean": 6.5156957
+    },
+    "triton_ms": 1.1496411000000002,
+    "triton_stats": {
+      "mean": 1.1496411000000002
+    },
+    "triton_ok": true,
+    "triton_err": "",
+    "triton_autotune_cfg": null,
+    "cutile_ms": 0.45345858,
+    "cutile_stats": {
+      "mean": 0.45345858
+    },
+    "cutile_ok": true,
+    "cutile_err": "",
+    "cutile_autotune_cfg": null,
+    "tilelang_ms": NaN,
+    "tilelang_stats": {},
+    "tilelang_ok": false,
+    "tilelang_err": "#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940\n#define _tl_orig_alignas alignas\n#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)\n#include <cuda.h>\n#undef alignas\n#define alignas _tl_orig_alignas\n#endif\n#include <tl_templates/cuda/gemm.h>\n#include <tl_templates/cuda/copy.h>\n#include <tl_templates/cuda/reduce.h>\n#include <tl_templates/cuda/scan.h>\n#include <tl_templates/cuda/ldsm.h>\n#include <tl_templates/cuda/threadblock_swizzle.h>\n#include <tl_templates/cuda/debug.h>\n#ifdef ENABLE_BF16\n#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>\n#endif\n\nextern \"C\" __global__ void conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output);\nextern \"C\" __global__ void __launch_bounds__(128, 1) conv1d_kernel_kernel(const float* __restrict__ input, const float* __restrict__ kernel, float* __restrict__ output) {\n  float acc[8];\n  #pragma unroll\n  for (int i = 0; i < 2; ++i) {\n    float broadcast_var = 0x0p+0f/*0.000000e+00*/;\n    *(float4*)(acc + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);\n  }\n  if (((int)blockIdx.x) < 19531) {\n    #pragma unroll\n    for (int i_1 = 0; i_1 < 127; ++i_1) {\n      #pragma unroll\n      for (int i_2 = 0; i_2 < 8; ++i_2) {\n        acc[i_2] = (acc[i_2] + (input[((((((int)blockIdx.x) * 1024) + (i_2 * 128)) + ((int)threadIdx.x)) + i_1)] * kernel[i_1]));\n      }\n    }\n    #pragma unroll\n    for (int i_3 = 0; i_3 < 8; ++i_3) {\n      output[(((((int)blockIdx.x) * 1024) + (i_3 * 128)) + ((int)threadIdx.x))] = acc[i_3];\n    }\n  } else {\n    #pragma unroll\n    for (int i_4 = 0; i_4 < 127; ++i_4) {\n      #pragma unroll\n      for (int i_5 = 0; i_5 < 8; ++i_5) {\n        if ((((((int)blockIdx.x) * 512) + (i_5 * 64)) + (((int)threadIdx.x) >> 1)) < 9999937) {\n          acc[i_5] = (acc[i_5] + (input[((((((int)blockIdx.x) * 1024) + (i_5 * 128)) + ((int)threadIdx.x)) + i_4)] * kernel[i_4]));\n        }\n      }\n    }\n    #pragma unroll\n    for (int i_6 = 0; i_6 < 8; ++i_6) {\n      if ((((((int)blockIdx.x) * 512) + (i_6 * 64)) + (((int)threadIdx.x) >> 1)) < 9999937) {\n        output[(((((int)blockIdx.x) * 1024) + (i_6 * 128)) + ((int)threadIdx.x))] = acc[i_6];\n      }\n    }\n  }\n}\n\n\nCompilation error:\nnvcc warning : The -std=c++20 flag is not supported with the configured host compiler. Flag will be ignored.\nIn file included from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/detail/__config:15,\n                 from /usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/atomic:14,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/atomic.h:7,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/common.h:21,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm_sm100.h:4,\n                 from /home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src/tl_templates/cuda/gemm.h:6,\n                 from /scratch/arustagi/tmp/tmpbjpwcb6t/tvm_kernels.cu:8:\n/usr/local/cuda-13.2/targets/x86_64-linux/include/cccl/cuda/std/__internal/cpp_dialect.h:40:6: error: #error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n   40 | #    error libcu++ requires at least C++ 17. Define CCCL_IGNORE_DEPRECATED_CPP_DIALECT to suppress this message.\n      |      ^~~~~\n\nCommand: /usr/local/cuda/bin/nvcc --cubin -O3 -lineinfo -arch=sm_100a -std=c++20 -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/../src -I/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/tilelang/3rdparty/cutlass/include -o /scratch/arustagi/tmp/tmpbjpwcb6t/tvm_kernels.cubin /scratch/arustagi/tmp/tmpbjpwcb6t/tvm_kernels.cu\n",
+    "tilelang_autotune_cfg": null,
+    "speedup_triton": 5.667591129092374,
+    "speedup_cutile": 14.368888333748146,
+    "speedup_tilelang": 0.0
+  }
+]
