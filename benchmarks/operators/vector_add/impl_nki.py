@@ -8,32 +8,39 @@ try:
 except ImportError:
     nki = None
 
-if nki is not None:
-    @nki.jit
-    def add_kernel(a_input, b_input):
-        assert a_input.shape == b_input.shape
-        assert a_input.dtype == b_input.dtype
+@nki.jit
+def add_kernel(a_input, b_input):
+    assert a_input.shape == b_input.shape
+    assert a_input.dtype == b_input.dtype
 
-        num_blocks = (a_input.shape[0] + PMAX - 1) // PMAX
+    num_blocks = (a_input.shape[0] + PMAX - 1) // PMAX
 
-        hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
+    free_tile_size = 16384
+    num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
 
-        for i in range(num_blocks):
-            offset = i*PMAX
+    hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
 
-            partition_index = nl.arange(PMAX)[:, None]
-            free_dim_index = nl.arange(a_input.shape[1])[None, :]
+    for i in range(num_blocks):
+        offset = i * PMAX
 
-            mask = partition_index < (a_input.shape[0] - offset)
+        partition_index = nl.arange(PMAX)[:, None]
+        mask_p = partition_index < (a_input.shape[0] - offset)
 
-            a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask)
-            b_tile = nl.load(b_input[offset + partition_index, free_dim_index], mask=mask)
+        for j in range(num_free_blocks):
+            free_offset = j * free_tile_size
+            free_dim_index = nl.arange(free_tile_size)[None, :]
+            mask_f = free_dim_index < (a_input.shape[1] - free_offset)
+
+            mask = mask_p & mask_f
+
+            a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
+            b_tile = nl.load(b_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
 
             result_tile = nl.add(a_tile, b_tile, mask=mask)
 
-            nl.store(hbm_result_tile[offset + partition_index, free_dim_index], value=result_tile, mask=mask)
-        
-        return hbm_result_tile
+            nl.store(hbm_result_tile[offset + partition_index, free_offset + free_dim_index], value=result_tile, mask=mask)
+
+    return hbm_result_tile
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     n = x.numel()
