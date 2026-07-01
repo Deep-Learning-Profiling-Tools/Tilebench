@@ -438,18 +438,15 @@ def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='
 
 
 def generate_2d_conv_inputs(
-    batch, in_channels, out_channels, H,
-    kernel_size=3, stride=1, padding=1, groups=1,
+    input_size, kernel_rows=3, kernel_cols=3,
     dtype=torch.float32, device='cuda', **kwargs,
 ):
-    W = H  # square spatial dims
-    input  = torch.randn(batch, in_channels, H, W, dtype=dtype, device=device)
-    weight = torch.randn(
-        out_channels, in_channels // groups, kernel_size, kernel_size,
-        dtype=dtype, device=device,
-    )
-    # scalar params are passed through to run() as kwargs by the engine
-    return (input, weight, stride, padding, groups)
+    # Single-channel VALID 2D correlation (no batch / channels / padding),
+    # the 2D analog of 1d_conv. Square input: input_rows == input_cols.
+    input_rows = input_cols = input_size
+    input  = torch.randn(input_rows, input_cols, dtype=dtype, device=device)
+    kernel = torch.randn(kernel_rows, kernel_cols, dtype=dtype, device=device)
+    return (input, kernel, input_rows, input_cols, kernel_rows, kernel_cols)
 
 
 def generate_2d_max_pooling_inputs(
@@ -683,16 +680,9 @@ def infer_problem_size(operator_name, params):
     if operator_name == "l2_norm":
         return int(params.get("batch", 1)) * int(params.get("M", 1)) * int(params.get("K", 1))
     if operator_name == "2d_conv":
-        batch        = int(params.get("batch", 1))
-        in_channels  = int(params.get("in_channels", 1))
-        out_channels = int(params.get("out_channels", 1))
-        H            = int(params.get("H", 1))
-        kernel_size  = int(params.get("kernel_size", 3))
-        stride       = int(params.get("stride", 1))
-        padding      = int(params.get("padding", 1))
-        groups       = int(params.get("groups", 1))
-        out_H        = (H + 2 * padding - kernel_size) // stride + 1
-        return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
+        # Single-channel valid 2D correlation: problem size = input elements.
+        input_size = int(params.get("input_size", 1))
+        return input_size * input_size
     if operator_name == "1d_conv":
         return int(params.get("input_size", 1))
     if operator_name == "matrix_copy":

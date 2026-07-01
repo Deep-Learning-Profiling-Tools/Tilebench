@@ -57,74 +57,46 @@
     ],
     "default_params_per_dtype": {
       "fp16": {
-        "batch": 1,
-        "in_channels": 128,
-        "out_channels": 128,
-        "kernel_size": 3,
-        "stride": 1,
-        "padding": 1,
-        "groups": 1,
-        "H": 320
+        "input_size": 10240,
+        "kernel_rows": 3,
+        "kernel_cols": 3
       },
       "fp32": {
-        "batch": 1,
-        "in_channels": 128,
-        "out_channels": 128,
-        "kernel_size": 3,
-        "stride": 1,
-        "padding": 1,
-        "groups": 1,
-        "H": 320
+        "input_size": 10240,
+        "kernel_rows": 3,
+        "kernel_cols": 3
       }
     },
     "autotune_winner_per_dtype": {
       "fp16": {
         "params": {
-          "batch": 1,
-          "in_channels": 128,
-          "out_channels": 128,
-          "kernel_size": 3,
-          "stride": 1,
-          "padding": 1,
-          "groups": 1,
-          "H": 320
+          "input_size": 10240,
+          "kernel_rows": 3,
+          "kernel_cols": 3
         },
         "triton": {
-          "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 128,
-          "BLOCK_SIZE_IN_FEAT": 64,
-          "BLOCK_SIZE_OUT_FEAT": 64,
-          "num_warps": 4,
-          "num_stages": 3
-        },
-        "cutile": {
-          "block_bhw": 32,
-          "block_in": 32,
-          "block_out": 128,
-          "occupancy": 4
-        }
-      },
-      "fp32": {
-        "params": {
-          "batch": 1,
-          "in_channels": 128,
-          "out_channels": 128,
-          "kernel_size": 3,
-          "stride": 1,
-          "padding": 1,
-          "groups": 1,
-          "H": 320
-        },
-        "triton": {
-          "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 64,
-          "BLOCK_SIZE_IN_FEAT": 16,
-          "BLOCK_SIZE_OUT_FEAT": 128,
+          "BLOCK_SIZE": 512,
           "num_warps": 4,
           "num_stages": 2
         },
         "cutile": {
-          "block_bhw": 32,
-          "block_in": 32,
-          "block_out": 128,
+          "tile": 1024,
+          "occupancy": 8
+        }
+      },
+      "fp32": {
+        "params": {
+          "input_size": 10240,
+          "kernel_rows": 3,
+          "kernel_cols": 3
+        },
+        "triton": {
+          "BLOCK_SIZE": 256,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "cutile": {
+          "tile": 1024,
           "occupancy": 4
         }
       }
@@ -254,8 +226,8 @@
           "input_rows": 640
         },
         "triton": {
-          "BLOCK_SIZE": 512,
-          "num_warps": 4
+          "BLOCK_SIZE": 256,
+          "num_warps": 2
         },
         "cutile": {
           "tile": 512,
