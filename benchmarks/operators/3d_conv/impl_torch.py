@@ -2,15 +2,23 @@ import torch
 import torch.nn.functional as F
 
 
-def run(input, kernel, input_depth, input_rows, input_cols,
-        kernel_depth, kernel_rows, kernel_cols, **kwargs):
+def run(input: torch.Tensor, weight: torch.Tensor,
+        stride: int = 1, padding: int = 1, groups: int = 1, **kwargs):
     """
-    3D convolution with valid padding (no padding).
-    input:  flat 1D tensor of size input_depth * input_rows * input_cols
-    kernel: flat 1D tensor of size kernel_depth * kernel_rows * kernel_cols
-    output: flat 1D tensor of size output_depth * output_rows * output_cols
+    Reference Conv3d forward pass using PyTorch (cuDNN).
+    Input:  (batch, in_channels, D, H, W)
+    Weight: (out_channels, in_channels // groups, kD, kH, kW)
+    Output: (batch, out_channels, out_D, out_H, out_W)
+
+    Runs in the native dtype — the honest baseline: fp16 uses fp16 Tensor
+    Cores, fp32 uses TF32 Tensor Cores (torch.backends.cudnn.allow_tf32
+    defaults to True), matching the Triton/cuTile kernels' precision paths.
     """
-    x = input.float().view(1, 1, input_depth, input_rows, input_cols)
-    w = kernel.float().view(1, 1, kernel_depth, kernel_rows, kernel_cols)
-    y = F.conv3d(x, w)
-    return y.view(-1).to(input.dtype)
+    return F.conv3d(
+        input,
+        weight,
+        bias=None,
+        stride=stride,
+        padding=padding,
+        groups=groups,
+    )
