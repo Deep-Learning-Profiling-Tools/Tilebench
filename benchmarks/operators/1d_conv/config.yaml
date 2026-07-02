@@ -1,7 +1,9 @@
-# 1D Convolution with valid padding (no padding)
-# Using loose tolerances because cuTile GEMM with TF32 causes numerical differences.
+# Conv1d forward pass: multi-channel implicit GEMM (1D analog of 2d_conv).
+# Conv is C_in*kL multiply-adds per output element (384 for k=3 + C_in=128), so
+# accumulation order + TF32 tensor-core paths inflate error beyond per-dtype
+# defaults. Override with loose atol/rtol to match the GEMM convention.
 verify:
-  atol: 0.1
+  atol: 1e-1
   rtol: 1e-2
 
 benchmark:
@@ -11,34 +13,42 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep input_size across 20 points with kernel_size fixed.
-# output_size = input_size - kernel_size + 1
+# Sweep sequence length L with channel dims fixed.
+# out_L = (L + 2*padding - kernel_size) // stride + 1 = L  (padding=1, k=3, s=1)
 case_defaults:
-  kernel_size: 127
+  batch: 1
+  in_channels: 128
+  out_channels: 128
+  kernel_size: 3
+  stride: 1
+  padding: 1
+  groups: 1
 
 case_grid:
-  input_size:
-    expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
+  L:
+    expr: "[131072 * i for i in range(1, 21)]"   # 128K ... 2.62M (20 points)
   dtype: ["fp16", "fp32"]
 
 # ---------------------------------------------------------------------------
 # Derived-metric expressions
-#   output_size = input_size - kernel_size + 1
+#   out_L = (L + 2*padding - kernel_size) // stride + 1
 #
-# FLOPs: 2 * output_size * kernel_size
+# FLOPs: 2 * batch * out_channels * out_L * (in_channels // groups) * kernel_size
 # Bytes:
-#   Read  input:  input_size * dtype_size
-#   Read  kernel: kernel_size * dtype_size
-#   Write output: output_size * dtype_size
+#   Read  input:  batch * in_channels * L * dtype_size
+#   Read  weight: out_channels * (in_channels // groups) * kernel_size * dtype_size
+#   Write output: batch * out_channels * out_L * dtype_size
 # ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
-    2 * (input_size - kernel_size + 1) * kernel_size
+    2 * batch * out_channels
+    * ((L + 2 * padding - kernel_size) // stride + 1)
+    * (in_channels // groups) * kernel_size
 
   bytes_expr: >
-    input_size * dtype_size
-    + kernel_size * dtype_size
-    + (input_size - kernel_size + 1) * dtype_size
+    batch * in_channels * L * dtype_size
+    + out_channels * (in_channels // groups) * kernel_size * dtype_size
+    + batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * dtype_size
 
   plots:
     - latency_ms

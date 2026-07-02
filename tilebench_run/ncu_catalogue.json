@@ -7,42 +7,74 @@
     ],
     "default_params_per_dtype": {
       "fp16": {
-        "kernel_size": 127,
-        "input_size": 20000000
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "L": 2621440
       },
       "fp32": {
-        "kernel_size": 127,
-        "input_size": 20000000
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "L": 2621440
       }
     },
     "autotune_winner_per_dtype": {
       "fp16": {
         "params": {
-          "kernel_size": 127,
-          "input_size": 20000000
+          "batch": 1,
+          "in_channels": 128,
+          "out_channels": 128,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "L": 2621440
         },
         "triton": {
-          "BLOCK_SIZE": 512,
+          "BLOCK_SIZE_BATCH_LENGTH": 128,
+          "BLOCK_SIZE_IN_FEAT": 32,
+          "BLOCK_SIZE_OUT_FEAT": 128,
           "num_warps": 8,
-          "num_stages": 1
+          "num_stages": 2
         },
         "cutile": {
-          "tile": 2048,
-          "occupancy": 16
+          "block_bl": 32,
+          "block_in": 32,
+          "block_out": 128,
+          "occupancy": 8
         }
       },
       "fp32": {
         "params": {
-          "kernel_size": 127,
-          "input_size": 20000000
+          "batch": 1,
+          "in_channels": 128,
+          "out_channels": 128,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "L": 2621440
         },
         "triton": {
-          "BLOCK_SIZE": 512,
-          "num_warps": 8,
-          "num_stages": 1
+          "BLOCK_SIZE_BATCH_LENGTH": 64,
+          "BLOCK_SIZE_IN_FEAT": 16,
+          "BLOCK_SIZE_OUT_FEAT": 128,
+          "num_warps": 4,
+          "num_stages": 3
         },
         "cutile": {
-          "tile": 2048,
+          "block_bl": 32,
+          "block_in": 32,
+          "block_out": 128,
           "occupancy": 8
         }
       }
@@ -57,46 +89,74 @@
     ],
     "default_params_per_dtype": {
       "fp16": {
-        "input_size": 10240,
-        "kernel_rows": 3,
-        "kernel_cols": 3
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320
       },
       "fp32": {
-        "input_size": 10240,
-        "kernel_rows": 3,
-        "kernel_cols": 3
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320
       }
     },
     "autotune_winner_per_dtype": {
       "fp16": {
         "params": {
-          "input_size": 10240,
-          "kernel_rows": 3,
-          "kernel_cols": 3
+          "batch": 1,
+          "in_channels": 128,
+          "out_channels": 128,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "H": 320
         },
         "triton": {
-          "BLOCK_SIZE": 512,
+          "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 128,
+          "BLOCK_SIZE_IN_FEAT": 64,
+          "BLOCK_SIZE_OUT_FEAT": 64,
           "num_warps": 4,
-          "num_stages": 2
+          "num_stages": 3
         },
         "cutile": {
-          "tile": 1024,
-          "occupancy": 8
+          "block_bhw": 32,
+          "block_in": 32,
+          "block_out": 128,
+          "occupancy": 4
         }
       },
       "fp32": {
         "params": {
-          "input_size": 10240,
-          "kernel_rows": 3,
-          "kernel_cols": 3
+          "batch": 1,
+          "in_channels": 128,
+          "out_channels": 128,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "H": 320
         },
         "triton": {
-          "BLOCK_SIZE": 256,
+          "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 64,
+          "BLOCK_SIZE_IN_FEAT": 16,
+          "BLOCK_SIZE_OUT_FEAT": 128,
           "num_warps": 4,
-          "num_stages": 1
+          "num_stages": 3
         },
         "cutile": {
-          "tile": 1024,
+          "block_bhw": 32,
+          "block_in": 32,
+          "block_out": 128,
           "occupancy": 4
         }
       }
@@ -202,53 +262,79 @@
     ],
     "default_params_per_dtype": {
       "fp16": {
-        "input_depth": 64,
-        "kernel_depth": 3,
-        "kernel_rows": 3,
-        "kernel_cols": 3,
-        "input_rows": 640
+        "batch": 1,
+        "in_channels": 64,
+        "out_channels": 64,
+        "D": 32,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320
       },
       "fp32": {
-        "input_depth": 64,
-        "kernel_depth": 3,
-        "kernel_rows": 3,
-        "kernel_cols": 3,
-        "input_rows": 640
+        "batch": 1,
+        "in_channels": 64,
+        "out_channels": 64,
+        "D": 32,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320
       }
     },
     "autotune_winner_per_dtype": {
       "fp16": {
         "params": {
-          "input_depth": 64,
-          "kernel_depth": 3,
-          "kernel_rows": 3,
-          "kernel_cols": 3,
-          "input_rows": 640
+          "batch": 1,
+          "in_channels": 64,
+          "out_channels": 64,
+          "D": 32,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "H": 320
         },
         "triton": {
-          "BLOCK_SIZE": 256,
-          "num_warps": 2
+          "BLOCK_SIZE_BATCH_DHW": 128,
+          "BLOCK_SIZE_IN_FEAT": 64,
+          "BLOCK_SIZE_OUT_FEAT": 64,
+          "num_warps": 4,
+          "num_stages": 3
         },
         "cutile": {
-          "tile": 512,
-          "occupancy": 8
+          "block_bdhw": 128,
+          "block_in": 16,
+          "block_out": 64,
+          "occupancy": 4
         }
       },
       "fp32": {
         "params": {
-          "input_depth": 64,
-          "kernel_depth": 3,
-          "kernel_rows": 3,
-          "kernel_cols": 3,
-          "input_rows": 640
+          "batch": 1,
+          "in_channels": 64,
+          "out_channels": 64,
+          "D": 32,
+          "kernel_size": 3,
+          "stride": 1,
+          "padding": 1,
+          "groups": 1,
+          "H": 320
         },
         "triton": {
-          "BLOCK_SIZE": 256,
-          "num_warps": 4
+          "BLOCK_SIZE_BATCH_DHW": 64,
+          "BLOCK_SIZE_IN_FEAT": 64,
+          "BLOCK_SIZE_OUT_FEAT": 64,
+          "num_warps": 4,
+          "num_stages": 2
         },
         "cutile": {
-          "tile": 512,
-          "occupancy": 8
+          "block_bdhw": 128,
+          "block_in": 16,
+          "block_out": 64,
+          "occupancy": 4
         }
       }
     },

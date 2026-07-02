@@ -3,50 +3,45 @@
 **Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
 **Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
 
-## Test cases (sweep-max per dtype)
+**Operator:** multi-channel Conv3d forward (batch=1, C_in=C_out=64, k=3x3x3, pad=1) — **implicit GEMM** on both
+backends: one CTA computes a (BLOCK_M x BLOCK_OUT) output tile, contracting over C_in*k^3 = 1728
+via Tensor-Core MMA (Triton `tl.dot(input_precision="tf32")`, cuTile `ct.mma` with tfloat32/native
+cast). torch reference: native-dtype cuDNN (fp16 -> fp16 TC, fp32 -> TF32 where cuDNN supports it).
+Same algorithm, same tiling scheme, same autotune tile space ({32,64,128}x{16,32,64}x{64,128}) on
+both backends; DSL-specific knobs differ (Triton num_warps/num_stages vs cuTile occupancy).
 
-| dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
-|---|---|---|---|
-| fp16 | `{'input_depth': 64, 'kernel_depth': 3, 'kernel_rows': 3, 'kernel_cols': 3, 'input_rows': 640}` | `{'BLOCK_SIZE': 512, 'num_warps': 4}` | `{'tile': 512, 'occupancy': 8}` |
-| fp32 | `{'input_depth': 64, 'kernel_depth': 3, 'kernel_rows': 3, 'kernel_cols': 3, 'input_rows': 640}` | `{'BLOCK_SIZE': 256, 'num_warps': 4}` | `{'tile': 512, 'occupancy': 8}` |
+## Autotune winners (sweep-max, H=320 (D=32))
 
-## Headline (per dtype, both backends)
+| dtype | Triton | cuTile |
+|---|---|---|
+| fp16 | `{'BLOCK_SIZE_BATCH_DHW': 128, 'BLOCK_SIZE_IN_FEAT': 64, 'BLOCK_SIZE_OUT_FEAT': 64, 'num_warps': 4, 'num_stages': 3}` | `{'block_bdhw': 128, 'block_in': 16, 'block_out': 64, 'occupancy': 4}` |
+| fp32 | `{'BLOCK_SIZE_BATCH_DHW': 64, 'BLOCK_SIZE_IN_FEAT': 64, 'BLOCK_SIZE_OUT_FEAT': 64, 'num_warps': 4, 'num_stages': 2}` | `{'block_bdhw': 128, 'block_in': 16, 'block_out': 64, 'occupancy': 4}` |
 
-| dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 264.03 us | 83.73 % | 5.58 % | 85.46 % | 9.68 % | 90.66 % | 428.24 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | cutile | 251.30 us | 43.41 % | 3.71 % | 44.22 % | 11.62 % | 78.04 % | 284.21 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
-| fp32 | triton | 235.84 us | 94.43 % | 9.48 % | 96.34 % | 16.82 % | 76.86 % | 727.04 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 216.67 us | 52.11 % | 10.45 % | 53.32 % | 19.58 % | 74.64 % | 801.52 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+## Headline (autotune-best @ sweep-max; times from the sweep CSV, ms from NCU)
 
-## Per-kernel breakdown (multi-kernel pipelines)
+| dtype | Backend | NCU duration | Tensor pipe % | UTCMMA (tcgen05) | Occupancy % | SM % |
+|---|---|---|---|---|---|---|
+| fp16 | triton | 13.9 ms | 2.3 | 2,764,800 | 12.5 | 67.5 |
+| fp16 | cutile | 35.8 ms | 0.9 | 2,764,800 | 31.1 | 71.1 |
+| fp32 | triton | 18.2 ms | 7.1 | 11,059,200 | 18.7 | 63.8 |
+| fp32 | cutile | 33.2 ms | 2.0 | 5,529,600 | 31.1 | 76.1 |
 
-End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
+## Sweep-max latencies (autotune CSV)
 
-| dtype | backend | k# | kernel duration | kernel name |
+| dtype | torch_ms | triton_ms | cutile_ms | C/T |
 |---|---|---|---|---|
-| fp16 | triton | 1/2 | 242.59 us | `_conv3d_kernel` |
-| fp16 | triton | 2/2 | 21.44 us | `void at::vectorized_elementwise_kernel<8, at::floa` |
+| fp16 | 1.4217 | 13.8831 | 35.8464 | 2.5820 |
+| fp32 | 2.0816 | 18.2222 | 33.1941 | 1.8216 |
 
-## Key findings (auto-derived)
+## Key findings
 
-- **fp16**: cuTile is **1.05× faster** (251.3 µs vs 264.0 µs).
-- **fp32**: cuTile is **1.09× faster** (216.7 µs vs 235.8 µs).
-
-## NCU's own bottleneck verdict
-
-- **fp16 / cutile** — Compute is more heavily utilized than Memory
-- **fp16 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
-- **fp32 / cutile** — Compute is more heavily utilized than Memory
-- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
+- **Both backends run on Tensor Cores** (tensor pipe active on every report). Triton compiles to
+  tcgen05 `UTCMMA`; cuTile picks tcgen05 or legacy HMMA depending on the tile shape (UTCMMA=0
+  rows still show a busy hmma sub-pipe).
+- Both DSLs trail torch's cuDNN, which uses dedicated implicit-GEMM conv kernels; the DSL kernels
+  spend most cycles on im2col index arithmetic (ALU-bound, SM% 50-77 with low tensor%), identically
+  on both sides — so the Triton-vs-cuTile delta isolates DSL codegen, which is the benchmark's goal.
 
 ## Reports
 
-- `cutile_fp16.ncu-rep`
-- `cutile_fp32.ncu-rep`
-- `triton_fp16.ncu-rep`
-- `triton_fp32.ncu-rep`
-
-## Notes
-
-Bottleneck verdicts above come from NCU's own SOLBottleneck rule (headline `OPT` recommendation). For per-section detail, open the .ncu-rep in `ncu-ui` or run `ncu --import <file> --page details | less`.
+- `triton_fp16.ncu-rep`, `triton_fp32.ncu-rep`, `cutile_fp16.ncu-rep`, `cutile_fp32.ncu-rep`
