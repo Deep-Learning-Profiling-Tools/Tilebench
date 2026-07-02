@@ -1,82 +1,47 @@
 # NCU Comparison: 2d_conv
 
 **Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3N --launch-count N`, autotune-winner cfg at sweep-max input (`input_size=10240`, kernel 3×3).
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
 
-**Operator:** single-channel **VALID** 2D correlation (no batch / channels / padding) —
-`output[oh,ow] = Σ_{i,j} kernel[i,j] · input[oh+i, ow+j]`. A direct stencil (scalar
-weight × shifted input, fp32 accumulate), the 2D analog of `1d_conv` / `3d_conv`.
-No im2col, no GEMM, no Tensor Cores.
+**Operator:** multi-channel Conv2d forward (batch=1, C_in=C_out=128, k=3x3, pad=1) — **implicit GEMM** on both
+backends: one CTA computes a (BLOCK_M x BLOCK_OUT) output tile, contracting over C_in*k^2 = 1152
+via Tensor-Core MMA (Triton `tl.dot(input_precision="tf32")`, cuTile `ct.mma` with tfloat32/native
+cast). torch reference: native-dtype cuDNN (fp16 -> fp16 TC, fp32 -> TF32 where cuDNN supports it).
+Same algorithm, same tiling scheme, same autotune tile space ({32,64,128}x{16,32,64}x{64,128}) on
+both backends; DSL-specific knobs differ (Triton num_warps/num_stages vs cuTile occupancy).
 
-## Tiling: both backends are 1D-flat (aligned)
-
-Both Triton and cuTile use **1D-flat tiling** (identical to 1d_conv / 3d_conv): each
-CTA owns `BLOCK_SIZE`/`TILE` **consecutive flattened output positions**, decodes them
-to `(oh, ow)`, and gathers `input[oh+i, ow+j]` with a **1D** index. Valid convolution ⇒
-every in-bounds output only touches in-bounds input, so no input mask is needed
-(gather padding + masked/OOB-dropped store handle the tail). Same algorithm, same
-tiling on both backends — the only remaining difference is DSL codegen.
-
-## Autotune winners (sweep-max, input_size=10240)
+## Autotune winners (sweep-max, H=320)
 
 | dtype | Triton | cuTile |
 |---|---|---|
-| fp16 | `{BLOCK_SIZE: 512, num_warps: 4, num_stages: 2}` | `{tile: 1024, occupancy: 8}` |
-| fp32 | `{BLOCK_SIZE: 256, num_warps: 4, num_stages: 1}` | `{tile: 1024, occupancy: 4}` |
+| fp16 | `{'BLOCK_SIZE_BATCH_HEIGHT_WIDTH': 128, 'BLOCK_SIZE_IN_FEAT': 64, 'BLOCK_SIZE_OUT_FEAT': 64, 'num_warps': 4, 'num_stages': 3}` | `{'block_bhw': 32, 'block_in': 32, 'block_out': 128, 'occupancy': 4}` |
+| fp32 | `{'BLOCK_SIZE_BATCH_HEIGHT_WIDTH': 64, 'BLOCK_SIZE_IN_FEAT': 16, 'BLOCK_SIZE_OUT_FEAT': 128, 'num_warps': 4, 'num_stages': 3}` | `{'block_bhw': 32, 'block_in': 32, 'block_out': 128, 'occupancy': 4}` |
 
-## Headline (autotune-best @ input_size=10240)
+## Headline (autotune-best @ sweep-max; times from the sweep CSV, µs from NCU)
 
-| dtype | Backend | Duration | L1/TEX % | Compute(SM) % | DRAM % | Occupancy % | global-load sectors |
-|---|---|---|---|---|---|---|---|
-| fp16 | triton | 365 µs | 81.8 | 86.3 | 13.5 | 66.9 | 265 M |
-| fp16 | cutile | 376 µs | 40.0 | 79.2 | 13.4 | 46.1 | **90 M** |
-| fp32 | triton | 343 µs | 98.3 | 81.7 | 30.5 | 84.4 | 273 M |
-| fp32 | cutile | 320 µs | 47.7 | 79.8 | 32.7 | 51.4 | **146 M** |
+| dtype | Backend | NCU duration | Tensor pipe % | UTCMMA (tcgen05) | Occupancy % | SM % |
+|---|---|---|---|---|---|---|
+| fp16 | triton | 552.0 µs | 2.6 | 115,200 | 11.9 | 64.9 |
+| fp16 | cutile | 797.2 µs | 7.0 | 0 | 23.7 | 72.4 |
+| fp32 | triton | 626.5 µs | 9.1 | 230,400 | 22.4 | 61.0 |
+| fp32 | cutile | 934.1 µs | 12.1 | 0 | 23.7 | 66.1 |
 
-- **fp16**: ≈ tie — cuTile/Triton = 1.03 (Triton marginally faster).
-- **fp32**: cuTile **1.09× faster** (320 vs 343 µs).
-- Both compute-bound (SM ≈ 80–86%); neither L1-saturated. cuTile actually issues **fewer**
-  global-load sectors (better gather coalescing), Triton has higher occupancy — nets to a tie.
+## Sweep-max latencies (autotune CSV)
 
-## The 5× catastrophe that was fixed: 2D gather index → 1D gather index
-
-The earlier cuTile version used a **2D block tile** `[BLOCK_R, BLOCK_C]` whose gather index
-was a 2D outer product `expand_dims(in_r,1)·s_r + expand_dims(in_c,0)·s_c`. **cuTile 1.3.0's
-`ct.gather` does not coalesce a 2D index tile**, so it exploded the L1 traffic:
-
-| cuTile fp16 @ 10240 | OLD (2D-tile gather) | NEW (1D-flat gather) | change |
-|---|---|---|---|
-| global-load sectors | 495 M | **90 M** | ↓ 5.5× |
-| L1/TEX throughput | 98.5 % (saturated) | 40.0 % | no longer L1-bound |
-| Compute(SM) | 21.7 % | 79.2 % | now compute-bound |
-| Duration | 1710 µs | **376 µs** | ↓ 4.5× |
-| fp32 Duration | 1712 µs | **319 µs** | ↓ 5.4× |
-
-Root cause is **cuTile `ct.gather` coalescing depends on the index's dimensionality**:
-a 1D index over consecutive positions coalesces; a 2D outer-product index does not.
-Triton's `tl.load` coalesced both. Switching cuTile (and then Triton, for a clean
-apples-to-apples) to 1D-flat tiling made the gather 1D → coalesced → the gap vanished.
-
-## Cross-operator context (all direct stencils, all now 1D-flat both backends)
-
-| op | gather index | cuTile sectors vs Triton | cuTile L1 | autotune C/T (fp16) |
+| dtype | torch_ms | triton_ms | cutile_ms | C/T |
 |---|---|---|---|---|
-| 1d_conv | 1D | fewer | ~53% | 1.47 (Triton faster) |
-| 3d_conv | 1D | fewer | ~44% | 0.97 (≈ tie) |
-| 2d_conv (fixed) | 1D | fewer (90M<265M) | ~40% | 1.03 (≈ tie) |
-| 2d_conv (old 2D-tile) | **2D** | **3.2× more (495M)** | **98.5% (bound)** | ~6.4 (5× slower) |
+| fp16 | 0.0982 | 0.5393 | 0.7810 | 1.4483 |
+| fp32 | 0.1041 | 0.6096 | 0.9166 | 1.5036 |
 
-The only case with a 2D gather index (old 2d_conv) was the only case where cuTile was
-L1-saturated and multiples slower. With 1D-flat everywhere, all three stencils show
-Triton and cuTile within a few percent — a clean DSL-codegen-only comparison.
+## Key findings
+
+- **Both backends run on Tensor Cores** (tensor pipe active on every report). Triton compiles to
+  tcgen05 `UTCMMA`; cuTile picks tcgen05 or legacy HMMA depending on the tile shape (UTCMMA=0
+  rows still show a busy hmma sub-pipe).
+- Both DSLs trail torch's cuDNN, which uses dedicated implicit-GEMM conv kernels; the DSL kernels
+  spend most cycles on im2col index arithmetic (ALU-bound, SM% 50-77 with low tensor%), identically
+  on both sides — so the Triton-vs-cuTile delta isolates DSL codegen, which is the benchmark's goal.
 
 ## Reports
 
-- `triton_fp16.ncu-rep`, `triton_fp32.ncu-rep`
-- `cutile_fp16.ncu-rep`, `cutile_fp32.ncu-rep`
-
-## Notes
-
-Both backends: same algorithm (direct stencil), same tiling (1D-flat over flattened
-output positions), fp32 accumulation. Open a `.ncu-rep` in `ncu-ui` or
-`ncu --import <file> --page details` for per-section detail.
+- `triton_fp16.ncu-rep`, `triton_fp32.ncu-rep`, `cutile_fp16.ncu-rep`, `cutile_fp32.ncu-rep`

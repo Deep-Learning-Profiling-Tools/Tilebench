@@ -1,9 +1,9 @@
-# Single-channel VALID 2D correlation (direct stencil, 2D analog of 1d_conv).
-#   output[r,c] = sum_{i,j} kernel[i,j] * input[r+i, c+j]
-#   out_rows = input_rows - kernel_rows + 1,  out_cols = input_cols - kernel_cols + 1
-# Loose tolerances: fp16 accumulates the kernel window in reduced precision.
+# Conv2d forward pass: implicit GEMM via im2col.
+# Conv is K*K*C_in multiply-adds per output element (1152 for 3x3 + C_in=128),
+# so accumulation order + TF32 tensor-core paths inflate error beyond per-dtype
+# defaults. Override with loose atol/rtol to match the GEMM convention.
 verify:
-  atol: 0.1
+  atol: 1e-1
   rtol: 1e-2
 
 benchmark:
@@ -13,36 +13,43 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep the (square) input side length across 20 points; kernel fixed 3x3.
-# Largest case (10240x10240) far exceeds the B200 L2 (~50 MB) so we measure HBM.
+# Sweep spatial dimension H (= W) across 20 points with other dims fixed.
+# out_H = out_W = (H + 2*padding - kernel_size) // stride + 1
+#               = H  (for padding=1, kernel_size=3, stride=1)
 case_defaults:
-  kernel_rows: 3
-  kernel_cols: 3
+  batch: 1
+  in_channels: 128
+  out_channels: 128
+  kernel_size: 3
+  stride: 1
+  padding: 1
+  groups: 1
 
 case_grid:
-  input_size:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+  H:
+    expr: "[16 * i for i in range(1, 21)]"   # 16, 32, ..., 320 (20 points)
   dtype: ["fp16", "fp32"]
 
 # ---------------------------------------------------------------------------
 # Derived-metric expressions
-#   out = input_size - kernel + 1   (square: input_rows == input_cols == input_size)
+#   out_H = out_W = (H + 2*padding - kernel_size) // stride + 1
 #
-# FLOPs: 2 * out_rows * out_cols * kernel_rows * kernel_cols
+# FLOPs: 2 * batch * out_channels * out_H * out_W * (in_channels // groups) * kernel_size^2
 # Bytes:
-#   Read  input:  input_size^2 * dtype_size
-#   Read  kernel: kernel_rows * kernel_cols * dtype_size
-#   Write output: out_rows * out_cols * dtype_size
+#   Read  input:  batch * in_channels * H * H * dtype_size
+#   Read  weight: out_channels * (in_channels // groups) * kernel_size^2 * dtype_size
+#   Write output: batch * out_channels * out_H * out_W * dtype_size
 # ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
-    2 * (input_size - kernel_rows + 1) * (input_size - kernel_cols + 1)
-    * kernel_rows * kernel_cols
+    2 * batch * out_channels
+    * ((H + 2 * padding - kernel_size) // stride + 1) ** 2
+    * (in_channels // groups) * kernel_size ** 2
 
   bytes_expr: >
-    input_size * input_size * dtype_size
-    + kernel_rows * kernel_cols * dtype_size
-    + (input_size - kernel_rows + 1) * (input_size - kernel_cols + 1) * dtype_size
+    batch * in_channels * H * H * dtype_size
+    + out_channels * (in_channels // groups) * kernel_size ** 2 * dtype_size
+    + batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size
 
   plots:
     - latency_ms
