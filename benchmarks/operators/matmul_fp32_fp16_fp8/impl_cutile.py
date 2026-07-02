@@ -49,6 +49,13 @@ _SEARCH_SPACE = [
     for tk in [64, 128]
     for gs in [8]
     for occ in [4, 8]
+] + [
+    # Tile-space parity with impl_triton.py: its TMA store staging forces extra
+    # fp32-viable 128x128x32 configs (all dtypes may try them there), so mirror
+    # the same tile shape here. cuTile has no smem crisis — these will likely
+    # lose to the big tiles — but both DSLs now search identical tile shapes.
+    SimpleNamespace(tm=128, tn=128, tk=32, group_size_m=8, occupancy=occ)
+    for occ in [4, 8]
 ]
 
 
