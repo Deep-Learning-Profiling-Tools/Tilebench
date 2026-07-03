@@ -191,9 +191,13 @@ def run(input: torch.Tensor, N: int,
         ct.launch(stream, grid, scatter_kernel,
                   (work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE))
 
-        work.copy_(output)
+        # Ping-pong: the pass's result becomes the next pass's input. A
+        # pointer swap instead of `work.copy_(output)` saves a full
+        # read+write of the array per pass (32 device copies ≈ 5 GB of
+        # traffic at n=20M). Mirrored in impl_triton.py.
+        work, output = output, work
 
-    return output
+    return work
 
 
 def get_last_config() -> dict | None:
