@@ -25,7 +25,13 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(block_d=64, occupancy=8)
+# Field names match get_last_config()'s FLAT keys exactly: the NCU harness
+# replays the autotune winner by merging that dict into _DEFAULT_CONFIG, so
+# nested/mismatched names would silently profile the default config instead.
+_DEFAULT_CONFIG = SimpleNamespace(
+    nope_block_d=64, nope_occupancy=8,
+    rope_block_d=64, rope_occupancy=8,
+)
 
 _SEARCH_SPACE = [
     SimpleNamespace(block_d=bd, occupancy=occ)
@@ -95,11 +101,14 @@ def run(
         )
         _last_autotune_config.clear()
         _last_autotune_config.update({
-            "nope": {"block_d": nope_cfg.block_d, "occupancy": nope_cfg.occupancy},
-            "rope": {"block_d": rope_cfg.block_d, "occupancy": rope_cfg.occupancy},
+            "nope_block_d": nope_cfg.block_d, "nope_occupancy": nope_cfg.occupancy,
+            "rope_block_d": rope_cfg.block_d, "rope_occupancy": rope_cfg.occupancy,
         })
     else:
-        nope_cfg = rope_cfg = _DEFAULT_CONFIG
+        nope_cfg = SimpleNamespace(block_d=_DEFAULT_CONFIG.nope_block_d,
+                                   occupancy=_DEFAULT_CONFIG.nope_occupancy)
+        rope_cfg = SimpleNamespace(block_d=_DEFAULT_CONFIG.rope_block_d,
+                                   occupancy=_DEFAULT_CONFIG.rope_occupancy)
 
     nope_kernel = _tuner.kernel_with_hints(occupancy=nope_cfg.occupancy)
     rope_kernel = _tuner.kernel_with_hints(occupancy=rope_cfg.occupancy)
