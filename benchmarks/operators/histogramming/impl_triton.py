@@ -3,14 +3,17 @@ import triton
 import triton.language as tl
 
 
+# Key names match get_last_config()'s output exactly: the NCU harness
+# replays the autotune winner by merging that dict into _DEFAULT_CONFIG,
+# so mismatched names would silently profile the default config instead.
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE": 1024,
-    "NUM_PARTIAL": 256,
-    "BLOCK_ROWS": 64,
-    "BLOCK_BINS": 256,
-    "num_warps_partial": 4,
-    "num_warps_reduce": 4,
-    "num_stages": 1,
+    "partial_BLOCK_SIZE": 1024,
+    "partial_num_warps": 4,
+    "reduce_BLOCK_ROWS": 64,
+    "reduce_BLOCK_BINS": 256,
+    "reduce_num_warps": 4,
+    "reduce_num_stages": 1,
+    "NUM_PARTIAL": 256,   # structural (not tuned; no winner key)
 }
 
 
@@ -78,6 +81,8 @@ _histogram_partial_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["N", "num_bins"],
+    warmup=1,
+    rep=3,
     # Stage 1 uses tl.atomic_add into partial_ptr — each autotune-sweep run
     # accumulates into the same buffer. Zero it before every cfg trial so the
     # final replay sees a clean buffer.
@@ -103,8 +108,8 @@ _histogram_reduce_kernel_autotuned = triton.autotune(
         if br * bb <= 256 * 128
     ],
     key=["num_partials", "num_bins"],
-    warmup=3,
-    rep=10,
+    warmup=1,
+    rep=3,
 )(_histogram_reduce_kernel)
 
 
@@ -117,10 +122,10 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     assert num_bins >= 1
 
     cfg = _DEFAULT_CONFIG
-    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["BLOCK_SIZE"]
+    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["partial_BLOCK_SIZE"]
     NUM_PARTIAL = cfg["NUM_PARTIAL"]
-    BLOCK_ROWS = cfg["BLOCK_ROWS"]
-    BLOCK_BINS = cfg["BLOCK_BINS"]
+    BLOCK_ROWS = cfg["reduce_BLOCK_ROWS"]
+    BLOCK_BINS = cfg["reduce_BLOCK_BINS"]
 
     input = input.contiguous()
     histogram = torch.empty((num_bins,), device=input.device, dtype=torch.int32)
@@ -148,16 +153,16 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             input, partial, N, num_bins, num_partials,
             partial.stride(0), partial.stride(1),
             BLOCK_SIZE=BLOCK_SIZE,
-            num_warps=cfg["num_warps_partial"],
-            num_stages=cfg["num_stages"],
+            num_warps=cfg["partial_num_warps"],
+            num_stages=1,   # atomic-write-bound; the autotuner pins this too
         )
         _histogram_reduce_kernel[(triton.cdiv(num_bins, BLOCK_BINS),)](
             partial, histogram, num_partials, num_bins,
             partial.stride(0), partial.stride(1),
             BLOCK_ROWS=BLOCK_ROWS,
             BLOCK_BINS=BLOCK_BINS,
-            num_warps=cfg["num_warps_reduce"],
-            num_stages=cfg["num_stages"],
+            num_warps=cfg["reduce_num_warps"],
+            num_stages=cfg["reduce_num_stages"],
         )
 
     return histogram

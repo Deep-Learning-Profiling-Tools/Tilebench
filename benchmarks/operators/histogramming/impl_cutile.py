@@ -9,8 +9,13 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_PARTIAL = SimpleNamespace(block_size=1024, occupancy=8)
-_DEFAULT_REDUCE = SimpleNamespace(block_rows=64, block_bins=256, occupancy=8)
+# Field names match get_last_config()'s output exactly: the NCU harness
+# replays the autotune winner by merging that dict into _DEFAULT_CONFIG,
+# so mismatched names would silently profile the default config instead.
+_DEFAULT_CONFIG = SimpleNamespace(
+    partial_block_size=1024, partial_occupancy=8,
+    reduce_block_rows=64, reduce_block_bins=256, reduce_occupancy=8,
+)
 _NUM_PARTIAL = 256
 
 # Shrunk from 16 partial + 60 reduce to 4 + 8 so per-op autotune
@@ -110,7 +115,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     # Choose a partial BLOCK_SIZE up-front (autotune may override below) so
     # we know how many partial rows to allocate.
     default_block_size = (
-        int(block_size) if block_size is not None else _DEFAULT_PARTIAL.block_size
+        int(block_size) if block_size is not None else _DEFAULT_CONFIG.partial_block_size
     )
     num_partials = min(_NUM_PARTIAL, (N + default_block_size - 1) // default_block_size)
     # Allocate + zero the partial buffer per call. The TileBench engine has no
@@ -123,27 +128,26 @@ def run(input: torch.Tensor, N: int, num_bins: int,
 
     # ---- Stage 1: partial histogram ----
     if autotune:
+        # Tune on a scratch buffer (streamk pattern): the sweep atomic_adds
+        # inflated counts into its target, and keeping that off the real
+        # `partial` avoids the extra per-call memset that undoing it would
+        # need (Triton's reset_to_zero handles this inside its autotuner).
+        scratch = torch.empty_like(partial)
         partial_cfg = _partial_tuner.tune_or_cached(
             shape_key=(N, num_bins, num_partials),
             search_space=_PARTIAL_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (num_partials, 1, 1),
             args_fn=lambda cfg: (
-                input, partial, N, num_bins, num_partials, cfg.block_size,
+                input, scratch, N, num_bins, num_partials, cfg.block_size,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
     else:
         partial_cfg = SimpleNamespace(
             block_size=default_block_size,
-            occupancy=_DEFAULT_PARTIAL.occupancy,
+            occupancy=_DEFAULT_CONFIG.partial_occupancy,
         )
-
-    # The autotune sweep above runs the partial kernel many times into the
-    # SAME `partial` buffer (atomic_add'd), so by now `partial` holds wildly
-    # inflated counts. Zero it before the final correctness-yielding launch.
-    if autotune:
-        partial.zero_()
 
     partial_kernel = _partial_tuner.kernel_with_hints(occupancy=partial_cfg.occupancy)
     ct.launch(
@@ -165,7 +169,11 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
     else:
-        reduce_cfg = _DEFAULT_REDUCE
+        reduce_cfg = SimpleNamespace(
+            block_rows=_DEFAULT_CONFIG.reduce_block_rows,
+            block_bins=_DEFAULT_CONFIG.reduce_block_bins,
+            occupancy=_DEFAULT_CONFIG.reduce_occupancy,
+        )
 
     reduce_kernel = _reduce_tuner.kernel_with_hints(occupancy=reduce_cfg.occupancy)
     grid_reduce = ((num_bins + reduce_cfg.block_bins - 1) // reduce_cfg.block_bins, 1, 1)
