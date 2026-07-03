@@ -26,7 +26,11 @@ _last_autotune_config: dict = {}
 
 _KV_BLOCK_M = 32
 
-_DEFAULT_OUT = SimpleNamespace(block_m=32, block_d=16, occupancy=4)
+# Named _DEFAULT_CONFIG with fields matching get_last_config()'s keys: the
+# NCU harness replays the autotune winner by merging that dict into
+# _DEFAULT_CONFIG, so a differently-named namespace (this was _DEFAULT_OUT)
+# made it silently profile the default config instead.
+_DEFAULT_CONFIG = SimpleNamespace(block_m=32, block_d=16, occupancy=4)
 _OUT_SEARCH_SPACE = [
     SimpleNamespace(block_m=bm, block_d=bd, occupancy=occ)
     for bm in [16, 32, 64]
@@ -192,11 +196,11 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
             "occupancy": out_cfg.occupancy,
         })
     else:
-        BLOCK_M = int(block_size) if block_size is not None else _DEFAULT_OUT.block_m
+        BLOCK_M = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block_m
         out_cfg = SimpleNamespace(
             block_m=BLOCK_M,
-            block_d=_DEFAULT_OUT.block_d,
-            occupancy=_DEFAULT_OUT.occupancy,
+            block_d=_DEFAULT_CONFIG.block_d,
+            occupancy=_DEFAULT_CONFIG.occupancy,
         )
 
     out_kernel = _out_tuner.kernel_with_hints(occupancy=out_cfg.occupancy)
