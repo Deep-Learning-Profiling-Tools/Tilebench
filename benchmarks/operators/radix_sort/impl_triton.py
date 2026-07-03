@@ -97,6 +97,8 @@ _radix_sort_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(_radix_sort_kernel)
 
 
@@ -145,9 +147,13 @@ def run(input: torch.Tensor, N: int,
                 num_warps=cfg["num_warps"],
             )
 
-        work.copy_(output)
+        # Ping-pong: the pass's result becomes the next pass's input. A
+        # pointer swap instead of `work.copy_(output)` saves a full
+        # read+write of the array per pass (32 device copies ≈ 5 GB of
+        # traffic at n=20M). Mirrored in impl_cutile.py.
+        work, output = output, work
 
-    return output
+    return work
 
 
 def get_last_config() -> dict | None:
