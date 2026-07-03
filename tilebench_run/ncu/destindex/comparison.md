@@ -1,29 +1,29 @@
 # NCU Comparison: destindex
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 128, 'num_warps': 1, 'num_stages': 1}` | `{'nope': {'block_d': 64, 'occupancy': 8}, 'rope': {'block_d': 64, 'occupancy': 16}}` |
-| bf16 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 128, 'num_warps': 2, 'num_stages': 1}` | `{'nope': {'block_d': 64, 'occupancy': 8}, 'rope': {'block_d': 64, 'occupancy': 16}}` |
-| fp32 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 64, 'num_warps': 1, 'num_stages': 1}` | `{'nope': {'block_d': 64, 'occupancy': 8}, 'rope': {'block_d': 64, 'occupancy': 16}}` |
-| int8 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 128, 'num_warps': 2, 'num_stages': 2}` | `{'nope': {'block_d': 64, 'occupancy': 8}, 'rope': {'block_d': 64, 'occupancy': 16}}` |
+| fp16 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 64, 'num_warps': 1, 'num_stages': 1}` | `{'nope_block_d': 128, 'nope_occupancy': 16, 'rope_block_d': 64, 'rope_occupancy': 16}` |
+| bf16 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 64, 'num_warps': 1, 'num_stages': 1}` | `{'nope_block_d': 128, 'nope_occupancy': 16, 'rope_block_d': 64, 'rope_occupancy': 16}` |
+| fp32 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 64, 'num_warps': 2, 'num_stages': 1}` | `{'nope_block_d': 128, 'nope_occupancy': 16, 'rope_block_d': 64, 'rope_occupancy': 16}` |
+| int8 | `{'batch_size': 1, 'kv_nope_head_num': 12, 'kv_rope_head_num': 1, 'kv_nope_head_dim': 128, 'kv_rope_head_dim': 64, 'seq_len': 40960}` | `{'BLOCK_DMODEL': 64, 'num_warps': 1, 'num_stages': 1}` | `{'nope_block_d': 128, 'nope_occupancy': 16, 'rope_block_d': 64, 'rope_occupancy': 16}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 281.89 us | 10.66 % | 10.66 % | 6.65 % | 5.70 % | 9.55 % | 818.11 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
-| fp16 | cutile | 282.15 us | 16.55 % | 10.73 % | 16.80 % | 6.51 % | 65.46 % | 823.24 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| bf16 | triton | 281.89 us | 10.66 % | 10.66 % | 6.65 % | 5.71 % | 19.11 % | 817.43 Gbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| bf16 | cutile | 282.34 us | 16.49 % | 10.70 % | 16.81 % | 6.50 % | 65.23 % | 821.22 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| fp32 | triton | 282.56 us | 23.40 % | 23.40 % | 12.70 % | 11.40 % | 11.52 % | 1.80 Tbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
-| fp32 | cutile | 282.82 us | 23.39 % | 23.39 % | 17.03 % | 11.40 % | 65.34 % | 1.79 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| int8 | triton | 282.17 us | 5.37 % | 4.27 % | 5.48 % | 3.11 % | 18.13 % | 327.25 Gbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| int8 | cutile | 282.02 us | 16.38 % | 4.42 % | 16.69 % | 4.48 % | 59.23 % | 338.82 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp16 | triton | 282.31 us | 10.65 % | 10.65 % | 7.30 % | 5.73 % | 11.50 % | 816.70 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| fp16 | cutile | 282.21 us | 10.96 % | 10.71 % | 11.16 % | 6.34 % | 47.67 % | 821.71 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| bf16 | triton | 282.30 us | 10.64 % | 10.64 % | 7.32 % | 5.74 % | 11.52 % | 816.15 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| bf16 | cutile | 282.01 us | 10.98 % | 10.72 % | 11.19 % | 6.34 % | 47.76 % | 822.49 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp32 | triton | 282.72 us | 23.42 % | 23.42 % | 13.35 % | 11.39 % | 22.79 % | 1.80 Tbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
+| fp32 | cutile | 282.59 us | 23.40 % | 23.40 % | 13.19 % | 11.39 % | 47.79 % | 1.80 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| int8 | triton | 282.46 us | 4.58 % | 4.42 % | 4.67 % | 3.66 % | 10.54 % | 338.97 Gbyte/s | 32 | 23 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| int8 | cutile | 282.02 us | 10.91 % | 4.33 % | 11.09 % | 3.65 % | 44.42 % | 332.24 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -31,37 +31,37 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| bf16 | cutile | 1/2 | 257.12 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
-| bf16 | cutile | 2/2 | 25.22 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
-| bf16 | triton | 1/2 | 256.64 us | `_copy_by_dest_kernel` |
-| bf16 | triton | 2/2 | 25.25 us | `_copy_by_dest_kernel` |
-| fp16 | cutile | 1/2 | 256.93 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
-| fp16 | cutile | 2/2 | 25.22 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
-| fp16 | triton | 1/2 | 256.67 us | `_copy_by_dest_kernel` |
-| fp16 | triton | 2/2 | 25.22 us | `_copy_by_dest_kernel` |
-| fp32 | cutile | 1/2 | 257.41 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
-| fp32 | cutile | 2/2 | 25.41 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
-| fp32 | triton | 1/2 | 257.22 us | `_copy_by_dest_kernel` |
-| fp32 | triton | 2/2 | 25.34 us | `_copy_by_dest_kernel` |
-| int8 | cutile | 1/2 | 256.90 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
-| int8 | cutile | 2/2 | 25.12 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
-| int8 | triton | 1/2 | 256.83 us | `_copy_by_dest_kernel` |
-| int8 | triton | 2/2 | 25.34 us | `_copy_by_dest_kernel` |
+| bf16 | cutile | 1/2 | 256.70 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
+| bf16 | cutile | 2/2 | 25.31 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
+| bf16 | triton | 1/2 | 257.02 us | `_copy_by_dest_kernel` |
+| bf16 | triton | 2/2 | 25.28 us | `_copy_by_dest_kernel` |
+| fp16 | cutile | 1/2 | 256.80 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
+| fp16 | cutile | 2/2 | 25.41 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
+| fp16 | triton | 1/2 | 257.06 us | `_copy_by_dest_kernel` |
+| fp16 | triton | 2/2 | 25.25 us | `_copy_by_dest_kernel` |
+| fp32 | cutile | 1/2 | 257.12 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
+| fp32 | cutile | 2/2 | 25.47 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
+| fp32 | triton | 1/2 | 257.31 us | `_copy_by_dest_kernel` |
+| fp32 | triton | 2/2 | 25.41 us | `_copy_by_dest_kernel` |
+| int8 | cutile | 1/2 | 256.80 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
+| int8 | cutile | 2/2 | 25.22 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
+| int8 | triton | 1/2 | 256.99 us | `_copy_by_dest_kernel` |
+| int8 | triton | 2/2 | 25.47 us | `_copy_by_dest_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.00× faster** (281.9 µs vs 282.1 µs).
-- **bf16**: Triton is **1.00× faster** (281.9 µs vs 282.3 µs).
-- **fp32**: Triton is **1.00× faster** (282.6 µs vs 282.8 µs).
-- **int8**: cuTile is **1.00× faster** (282.0 µs vs 282.2 µs).
+- **fp16**: cuTile is **1.00× faster** (282.2 µs vs 282.3 µs).
+- **bf16**: cuTile is **1.00× faster** (282.0 µs vs 282.3 µs).
+- **fp32**: cuTile is **1.00× faster** (282.6 µs vs 282.7 µs).
+- **int8**: cuTile is **1.00× faster** (282.0 µs vs 282.5 µs).
 
 ## NCU's own bottleneck verdict
 
-- **bf16 / cutile** — Compute is more heavily utilized than Memory
+- **bf16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp16 / cutile** — Compute is more heavily utilized than Memory
+- **fp16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp32 / cutile** — Compute is more heavily utilized than Memory
+- **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp32 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **int8 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **int8 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
