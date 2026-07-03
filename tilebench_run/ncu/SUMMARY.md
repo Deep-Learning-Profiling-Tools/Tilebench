@@ -1,6 +1,6 @@
 # NCU Sweep Summary — all operators
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
 **Profile method:** autotune-winner cfg at sweep-max input case, `--set full --import-source on`, `--launch-skip 3 --launch-count 1`
 
 Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<dtype>.ncu-rep` files in that directory.
@@ -9,15 +9,15 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 
 | op | dtype | Triton (µs) | cuTile (µs) | Triton:cuTile |
 |---|---|---:|---:|---:|
-| 1d_conv | fp16 | 404.4 | 583.2 | 1.44× |
-| 1d_conv | fp32 | 588.9 | 452.9 | 0.77× |
-| 2d_conv | fp16 | 556.1 | 797.6 | 1.43× |
-| 2d_conv | fp32 | 1860.0 | 5390.0 | 2.90× |
+| 1d_conv | fp16 | 2520.0 | 4510.0 | 1.79× |
+| 1d_conv | fp32 | 3080.0 | 9710.0 | 3.15× |
+| 2d_conv | fp16 | 552.0 | 797.2 | 1.44× |
+| 2d_conv | fp32 | 626.5 | 934.1 | 1.49× |
 | 2d_max_pooling | fp16 | 229.2 | 598.4 | 2.61× |
 | 2d_max_pooling | bf16 | 228.9 | 578.6 | 2.53× |
 | 2d_max_pooling | fp32 | 265.5 | 592.6 | 2.23× |
-| 3d_conv | fp16 | 264.0 | 251.3 | 0.95× |
-| 3d_conv | fp32 | 235.8 | 216.7 | 0.92× |
+| 3d_conv | fp16 | 13870.0 | 35770.0 | 2.58× |
+| 3d_conv | fp32 | 18190.0 | 33160.0 | 1.82× |
 | argmax | fp16 | 30.1 | 47.8 | 1.59× |
 | argmax | fp32 | 40.7 | 39.4 | 0.97× |
 | batch_normalization | fp16 | 113.6 | 140.1 | 1.23× |
@@ -32,10 +32,10 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | cross_entropy | fp16 | 9.8 | 14.5 | 1.48× |
 | cross_entropy | fp32 | 9.9 | 13.5 | 1.37× |
 | dequantize_rowwise | fp32 | 19.2 | 21.2 | 1.10× |
-| destindex | fp16 | 281.9 | 282.1 | 1.00× |
-| destindex | bf16 | 281.9 | 282.3 | 1.00× |
-| destindex | fp32 | 282.6 | 282.8 | 1.00× |
-| destindex | int8 | 282.2 | 282.0 | 1.00× |
+| destindex | fp16 | 282.3 | 282.2 | 1.00× |
+| destindex | bf16 | 282.3 | 282.0 | 1.00× |
+| destindex | fp32 | 282.7 | 282.6 | 1.00× |
+| destindex | int8 | 282.5 | 282.0 | 1.00× |
 | dropout | fp16 | 18.4 | 18.8 | 1.02× |
 | dropout | bf16 | 18.5 | 18.9 | 1.02× |
 | dropout | fp32 | 34.6 | 36.1 | 1.04× |
@@ -44,7 +44,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | fused_activation | fp32 | 47.3 | 48.0 | 1.01× |
 | gaussian_blur | fp16 | 1790.0 | 4600.0 | 2.57× |
 | gaussian_blur | fp32 | 1610.0 | 5310.0 | 3.30× |
-| histogramming | int32 | 1853.4 | 1972.4 | 1.06× |
+| histogramming | int32 | 800.1 | 1426.9 | 1.78× |
 | interleave | fp16 | 21.4 | 22.4 | 1.04× |
 | interleave | bf16 | 21.4 | 22.5 | 1.05× |
 | interleave | fp32 | 43.9 | 51.4 | 1.17× |
@@ -62,11 +62,10 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | leaky_relu | fp16 | 26.3 | 28.0 | 1.06× |
 | leaky_relu | bf16 | 26.9 | 27.5 | 1.02× |
 | leaky_relu | fp32 | 56.2 | 57.2 | 1.02× |
-| linear_self_attention | fp32 | 4900.0 | 19570.0 | 3.99× |
-| matmul_fp32_fp16_fp8 | fp32 | 6130.0 | 981.2 | 0.16× |
-| matmul_fp32_fp16_fp8 | fp16 | 671.8 | 516.1 | 0.77× |
-| matmul_fp32_fp16_fp8 | fp8_e4m3fn | 575.5 | 230.8 | 0.40× |
-| matmul_fp32_fp16_fp8 | fp8_e5m2 | 580.1 | 245.9 | 0.42× |
+| linear_self_attention | fp32 | 5108.8 | 20052.0 | 3.92× |
+| matmul_fp32_fp16_fp8 | fp32 | 1340.0 | 871.7 | 0.65× |
+| matmul_fp32_fp16_fp8 | fp16 | 518.0 | 467.2 | 0.90× |
+| matmul_fp32_fp16_fp8 | fp8_e4m3fn | 257.1 | 220.8 | 0.86× |
 | matmul_int8 | int8 | 475.5 | 345.6 | 0.73× |
 | matrix_copy | fp16 | 17.8 | 18.1 | 1.02× |
 | matrix_copy | bf16 | 18.0 | 18.0 | 1.00× |
@@ -87,7 +86,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | mul2 | fp32 | 22.0 | 22.3 | 1.01× |
 | mul2 | int8 | 9.9 | 15.0 | 1.51× |
 | quantize_global | fp32 | 17.7 | 18.5 | 1.04× |
-| radix_sort | int32 | 2390.2 | 187.8 | 0.08× |
+| radix_sort | int32 | 2371.4 | 2978.7 | 1.26× |
 | relu | fp16 | 14.9 | 13.5 | 0.91× |
 | relu | bf16 | 14.8 | 13.2 | 0.89× |
 | relu | fp32 | 22.2 | 22.7 | 1.02× |
@@ -106,13 +105,13 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | sigmoid | fp32 | 55.5 | 64.9 | 1.17× |
 | softmax | fp16 | 23.8 | 43.2 | 1.82× |
 | softmax | fp32 | 32.6 | 44.5 | 1.36× |
-| streamk_matmul | fp16 | 2646.0 | 14306.1 | 5.41× |
-| streamk_matmul | bf16 | 2595.7 | 14439.4 | 5.56× |
-| streamk_matmul | fp32 | 17363.7 | 16225.6 | 0.93× |
+| streamk_matmul | fp16 | 1977.6 | 2269.4 | 1.15× |
+| streamk_matmul | bf16 | 1938.2 | 2209.2 | 1.14× |
+| streamk_matmul | fp32 | 3681.1 | 3895.4 | 1.06× |
 | swiglu | fp16 | 69.1 | 99.5 | 1.44× |
 | swiglu | bf16 | 72.5 | 100.4 | 1.38× |
 | swiglu | fp32 | 136.9 | 147.1 | 1.07× |
-| top_k_selection | fp32 | 1153.2 | 1344.5 | 1.17× |
+| top_k_selection | fp32 | 1156.6 | 1444.9 | 1.25× |
 | vector_add | fp16 | — | 18.5 | — |
 | vector_add | bf16 | — | 19.2 | — |
 | vector_add | fp32 | — | 34.6 | — |

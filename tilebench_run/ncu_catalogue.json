@@ -759,47 +759,18 @@
           "seq_len": 40960
         },
         "triton": {
-          "BLOCK_DMODEL": 128,
+          "BLOCK_DMODEL": 64,
           "num_warps": 1,
           "num_stages": 1
         },
         "cutile": {
-          "nope": {
-            "block_d": 64,
-            "occupancy": 8
-          },
-          "rope": {
-            "block_d": 64,
-            "occupancy": 16
-          }
+          "nope_block_d": 128,
+          "nope_occupancy": 16,
+          "rope_block_d": 64,
+          "rope_occupancy": 16
         }
       },
       "bf16": {
-        "params": {
-          "batch_size": 1,
-          "kv_nope_head_num": 12,
-          "kv_rope_head_num": 1,
-          "kv_nope_head_dim": 128,
-          "kv_rope_head_dim": 64,
-          "seq_len": 40960
-        },
-        "triton": {
-          "BLOCK_DMODEL": 128,
-          "num_warps": 2,
-          "num_stages": 1
-        },
-        "cutile": {
-          "nope": {
-            "block_d": 64,
-            "occupancy": 8
-          },
-          "rope": {
-            "block_d": 64,
-            "occupancy": 16
-          }
-        }
-      },
-      "fp32": {
         "params": {
           "batch_size": 1,
           "kv_nope_head_num": 12,
@@ -814,14 +785,31 @@
           "num_stages": 1
         },
         "cutile": {
-          "nope": {
-            "block_d": 64,
-            "occupancy": 8
-          },
-          "rope": {
-            "block_d": 64,
-            "occupancy": 16
-          }
+          "nope_block_d": 128,
+          "nope_occupancy": 16,
+          "rope_block_d": 64,
+          "rope_occupancy": 16
+        }
+      },
+      "fp32": {
+        "params": {
+          "batch_size": 1,
+          "kv_nope_head_num": 12,
+          "kv_rope_head_num": 1,
+          "kv_nope_head_dim": 128,
+          "kv_rope_head_dim": 64,
+          "seq_len": 40960
+        },
+        "triton": {
+          "BLOCK_DMODEL": 64,
+          "num_warps": 2,
+          "num_stages": 1
+        },
+        "cutile": {
+          "nope_block_d": 128,
+          "nope_occupancy": 16,
+          "rope_block_d": 64,
+          "rope_occupancy": 16
         }
       },
       "int8": {
@@ -834,19 +822,15 @@
           "seq_len": 40960
         },
         "triton": {
-          "BLOCK_DMODEL": 128,
-          "num_warps": 2,
-          "num_stages": 2
+          "BLOCK_DMODEL": 64,
+          "num_warps": 1,
+          "num_stages": 1
         },
         "cutile": {
-          "nope": {
-            "block_d": 64,
-            "occupancy": 8
-          },
-          "rope": {
-            "block_d": 64,
-            "occupancy": 16
-          }
+          "nope_block_d": 128,
+          "nope_occupancy": 16,
+          "rope_block_d": 64,
+          "rope_occupancy": 16
         }
       }
     },
@@ -1086,23 +1070,10 @@
       "int32": {
         "params": {
           "N": 67108864,
-          "num_bins": 64
+          "num_bins": 4096
         },
-        "triton": {
-          "partial_BLOCK_SIZE": 2048,
-          "partial_num_warps": 8,
-          "reduce_BLOCK_ROWS": 128,
-          "reduce_BLOCK_BINS": 64,
-          "reduce_num_warps": 8,
-          "reduce_num_stages": 2
-        },
-        "cutile": {
-          "partial_block_size": 2048,
-          "partial_occupancy": 4,
-          "reduce_block_rows": 128,
-          "reduce_block_bins": 64,
-          "reduce_occupancy": 8
-        }
+        "triton": null,
+        "cutile": null
       }
     },
     "has_autotune_log": true
@@ -2535,9 +2506,9 @@
           "n": 28672
         },
         "triton": {
-          "BLOCK_M": 64,
+          "BLOCK_M": 128,
           "BLOCK_N": 128,
-          "BLOCK_K": 32,
+          "BLOCK_K": 64,
           "GROUP_M": 8,
           "num_warps": 8,
           "num_stages": 3
@@ -2545,7 +2516,7 @@
         "cutile": {
           "tm": 128,
           "tn": 128,
-          "tk": 32,
+          "tk": 64,
           "group_m": 8,
           "occupancy": 16
         }
@@ -2557,9 +2528,9 @@
           "n": 28672
         },
         "triton": {
-          "BLOCK_M": 64,
+          "BLOCK_M": 128,
           "BLOCK_N": 128,
-          "BLOCK_K": 32,
+          "BLOCK_K": 64,
           "GROUP_M": 8,
           "num_warps": 8,
           "num_stages": 3
@@ -2567,7 +2538,7 @@
         "cutile": {
           "tm": 128,
           "tn": 128,
-          "tk": 32,
+          "tk": 64,
           "group_m": 8,
           "occupancy": 16
         }
@@ -2579,7 +2550,7 @@
           "n": 28672
         },
         "triton": {
-          "BLOCK_M": 64,
+          "BLOCK_M": 128,
           "BLOCK_N": 128,
           "BLOCK_K": 32,
           "GROUP_M": 8,
@@ -2589,9 +2560,9 @@
         "cutile": {
           "tm": 128,
           "tn": 128,
-          "tk": 32,
+          "tk": 64,
           "group_m": 8,
-          "occupancy": 16
+          "occupancy": 4
         }
       }
     },
@@ -2688,7 +2659,7 @@
         },
         "cutile": {
           "tile": 512,
-          "occupancy": 16
+          "occupancy": 32
         }
       }
     },
