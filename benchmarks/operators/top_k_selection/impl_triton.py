@@ -70,6 +70,8 @@ _bitonic_step_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(_bitonic_step_kernel)
 
 
