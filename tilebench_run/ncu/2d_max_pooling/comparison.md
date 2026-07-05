@@ -1,7 +1,7 @@
 # NCU Comparison: 2d_max_pooling
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
@@ -15,18 +15,18 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 229.15 us | 97.48 % | 29.00 % | 99.36 % | 15.84 % | 80.93 % | 2.22 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 0 byte/block | 5 block / 32 block |
-| fp16 | cutile | 598.43 us | 11.98 % | 11.14 % | 12.07 % | 6.61 % | 87.68 % | 854.55 Gbyte/s | 128 | 38 register/thread | 524 byte/block | 0 byte/block | 12 block / 39 block |
-| bf16 | triton | 228.86 us | 97.47 % | 29.02 % | 99.34 % | 15.86 % | 81.22 % | 2.23 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 0 byte/block | 5 block / 32 block |
-| bf16 | cutile | 578.56 us | 12.26 % | 11.52 % | 12.36 % | 6.84 % | 87.26 % | 883.58 Gbyte/s | 128 | 36 register/thread | 524 byte/block | 0 byte/block | 12 block / 39 block |
-| fp32 | triton | 265.50 us | 88.21 % | 50.77 % | 89.56 % | 28.44 % | 86.46 % | 3.89 Tbyte/s | 128 | 31 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 592.61 us | 22.76 % | 22.76 % | 22.12 % | 13.16 % | 87.30 % | 1.75 Tbyte/s | 128 | 37 register/thread | 1.04 Kbyte/block | 0 byte/block | 12 block / 30 block |
+| fp16 | triton | 229.70 us | 97.13 % | 28.92 % | 99.37 % | 15.81 % | 80.64 % | 2.22 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 0 byte/block | 5 block / 32 block |
+| fp16 | cutile | 598.14 us | 11.99 % | 11.13 % | 12.08 % | 6.64 % | 87.72 % | 854.18 Gbyte/s | 128 | 38 register/thread | 524 byte/block | 0 byte/block | 12 block / 39 block |
+| bf16 | triton | 229.06 us | 97.50 % | 28.99 % | 99.28 % | 15.85 % | 81.25 % | 2.22 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 0 byte/block | 5 block / 32 block |
+| bf16 | cutile | 578.40 us | 12.28 % | 11.53 % | 12.37 % | 6.87 % | 87.36 % | 884.68 Gbyte/s | 128 | 36 register/thread | 524 byte/block | 0 byte/block | 12 block / 39 block |
+| fp32 | triton | 265.31 us | 88.15 % | 50.84 % | 89.57 % | 28.68 % | 86.41 % | 3.90 Tbyte/s | 128 | 31 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | cutile | 591.52 us | 22.82 % | 22.82 % | 22.12 % | 13.21 % | 87.27 % | 1.75 Tbyte/s | 128 | 37 register/thread | 1.04 Kbyte/block | 0 byte/block | 12 block / 30 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **2.61× faster** (229.2 µs vs 598.4 µs).
-- **bf16**: Triton is **2.53× faster** (228.9 µs vs 578.6 µs).
-- **fp32**: Triton is **2.23× faster** (265.5 µs vs 592.6 µs).
+- **fp16**: Triton is **2.60× faster** (229.7 µs vs 598.1 µs).
+- **bf16**: Triton is **2.53× faster** (229.1 µs vs 578.4 µs).
+- **fp32**: Triton is **2.23× faster** (265.3 µs vs 591.5 µs).
 
 ## NCU's own bottleneck verdict
 
