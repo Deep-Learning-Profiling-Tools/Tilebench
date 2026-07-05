@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _rope_embedding(
+def rope_embedding(
     Q,                    # Rank 4: [TotalTokens, Heads, 2, HalfDim]
     Cos,                  # Rank 2: [SeqLen, HalfDim]
     Sin,                  # Rank 2: [SeqLen, HalfDim]
@@ -60,7 +60,7 @@ def _rope_embedding(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_rope_embedding)
+_tuner = CutileAutotuner(rope_embedding)
 
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
