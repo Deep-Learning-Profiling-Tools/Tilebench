@@ -13,7 +13,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def _bmm_kernel(a_ptr, b_ptr, c_ptr,
+def bmm_kernel(a_ptr, b_ptr, c_ptr,
                 BATCH, M, N, K,
                 BLOCK_SIZE_M: tl.constexpr,
                 BLOCK_SIZE_N: tl.constexpr,
@@ -85,7 +85,7 @@ _bmm_kernel_autotuned = triton.autotune(
     key=["BATCH", "M", "N", "K"],
     warmup=1,
     rep=3,
-)(_bmm_kernel)
+)(bmm_kernel)
 
 
 def run(A: torch.Tensor, B: torch.Tensor,
@@ -107,7 +107,7 @@ def run(A: torch.Tensor, B: torch.Tensor,
             triton.cdiv(N, cfg["BLOCK_SIZE_N"]),
             BATCH,
         )
-        _bmm_kernel[grid](
+        bmm_kernel[grid](
             A, B, C, BATCH, M, N, K,
             BLOCK_SIZE_M=cfg["BLOCK_SIZE_M"],
             BLOCK_SIZE_N=cfg["BLOCK_SIZE_N"],
