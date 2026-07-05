@@ -1,32 +1,32 @@
 # NCU Comparison: l2_norm
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'batch': 1, 'M': 2048, 'eps': 1e-06, 'K': 10240}` | `{'BLOCK_N': 2048, 'num_warps': 4, 'num_stages': 3}` | `{'tile_size': 1024, 'occupancy': 32}` |
-| bf16 | `{'batch': 1, 'M': 2048, 'eps': 1e-06, 'K': 10240}` | `{'BLOCK_N': 1024, 'num_warps': 8, 'num_stages': 4}` | `{'tile_size': 1024, 'occupancy': 32}` |
+| fp16 | `{'batch': 1, 'M': 2048, 'eps': 1e-06, 'K': 10240}` | `{'BLOCK_N': 2048, 'num_warps': 8, 'num_stages': 3}` | `{'tile_size': 1024, 'occupancy': 32}` |
+| bf16 | `{'batch': 1, 'M': 2048, 'eps': 1e-06, 'K': 10240}` | `{'BLOCK_N': 2048, 'num_warps': 8, 'num_stages': 4}` | `{'tile_size': 1024, 'occupancy': 32}` |
 | fp32 | `{'batch': 1, 'M': 2048, 'eps': 1e-06, 'K': 10240}` | `{'BLOCK_N': 2048, 'num_warps': 8, 'num_stages': 4}` | `{'tile_size': 1024, 'occupancy': 32}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 17.25 us | 33.50 % | 33.50 % | 44.45 % | 30.46 % | 24.50 % | 2.56 Tbyte/s | 128 | 40 register/thread | 0 byte/block | 16 byte/block | 12 block / 28 block |
-| fp16 | cutile | 18.46 us | 31.28 % | 31.28 % | 41.16 % | 29.10 % | 38.10 % | 2.40 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
-| bf16 | triton | 17.25 us | 33.52 % | 33.52 % | 44.40 % | 29.80 % | 39.87 % | 2.57 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
-| bf16 | cutile | 18.11 us | 31.99 % | 31.99 % | 41.15 % | 29.72 % | 37.65 % | 2.45 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
-| fp32 | triton | 30.30 us | 54.53 % | 54.53 % | 46.99 % | 36.19 % | 18.56 % | 4.18 Tbyte/s | 256 | 26 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
-| fp32 | cutile | 42.53 us | 60.23 % | 60.23 % | 51.04 % | 39.81 % | 14.26 % | 4.62 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
+| fp16 | triton | 14.21 us | 40.65 % | 40.65 % | 56.62 % | 35.57 % | 25.75 % | 3.11 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
+| fp16 | cutile | 18.62 us | 31.34 % | 31.34 % | 40.91 % | 28.72 % | 37.32 % | 2.40 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
+| bf16 | triton | 14.50 us | 40.24 % | 40.24 % | 56.97 % | 34.82 % | 27.24 % | 3.07 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
+| bf16 | cutile | 19.39 us | 30.30 % | 30.30 % | 40.55 % | 27.75 % | 37.26 % | 2.32 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
+| fp32 | triton | 27.46 us | 57.81 % | 57.81 % | 50.94 % | 38.53 % | 10.40 % | 4.43 Tbyte/s | 256 | 36 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
+| fp32 | cutile | 42.50 us | 60.25 % | 60.25 % | 50.88 % | 39.91 % | 14.65 % | 4.61 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.07× faster** (17.2 µs vs 18.5 µs).
-- **bf16**: Triton is **1.05× faster** (17.2 µs vs 18.1 µs).
-- **fp32**: Triton is **1.40× faster** (30.3 µs vs 42.5 µs).
+- **fp16**: Triton is **1.31× faster** (14.2 µs vs 18.6 µs).
+- **bf16**: Triton is **1.34× faster** (14.5 µs vs 19.4 µs).
+- **fp32**: Triton is **1.55× faster** (27.5 µs vs 42.5 µs).
 
 ## NCU's own bottleneck verdict
 

@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _l2_norm_fwd_kernel(x, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
+def l2_norm_fwd_kernel(x, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
     """One CTA normalises one row with tiled two-pass L2 norm."""
     row = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
@@ -50,7 +50,7 @@ def _l2_norm_fwd_kernel(x, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_l2_norm_fwd_kernel)
+_tuner = CutileAutotuner(l2_norm_fwd_kernel)
 
 
 def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
