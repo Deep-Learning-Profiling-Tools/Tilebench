@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 2048, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _quantize_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+def quantize_kernel(x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -23,7 +23,7 @@ _quantize_kernel_autotuned = triton.autotune(
         if bs >= nw * 32 * 4
     ],
     key=["n_elements"],
-)(_quantize_kernel)
+)(quantize_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
@@ -36,7 +36,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
-        _quantize_kernel[grid](
+        quantize_kernel[grid](
             x, out, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
