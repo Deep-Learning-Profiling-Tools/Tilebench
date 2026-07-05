@@ -1070,10 +1070,23 @@
       "int32": {
         "params": {
           "N": 67108864,
-          "num_bins": 4096
+          "num_bins": 64
         },
-        "triton": null,
-        "cutile": null
+        "triton": {
+          "partial_BLOCK_SIZE": 2048,
+          "partial_num_warps": 8,
+          "reduce_BLOCK_ROWS": 128,
+          "reduce_BLOCK_BINS": 64,
+          "reduce_num_warps": 8,
+          "reduce_num_stages": 2
+        },
+        "cutile": {
+          "partial_block_size": 2048,
+          "partial_occupancy": 4,
+          "reduce_block_rows": 128,
+          "reduce_block_bins": 64,
+          "reduce_occupancy": 4
+        }
       }
     },
     "has_autotune_log": true
