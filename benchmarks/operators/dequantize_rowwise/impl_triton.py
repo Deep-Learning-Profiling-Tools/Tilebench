@@ -17,7 +17,7 @@ _DEFAULT_CONFIG = {"num_warps": 4}
 
 
 @triton.jit
-def _dequantize_rowwise_kernel(
+def dequantize_rowwise_kernel(
     x_ptr, state_x, output_ptr,
     inv_127, n_elements,
     BLOCK_SIZE: tl.constexpr,
@@ -40,7 +40,7 @@ _dequantize_rowwise_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8, 16]
     ],
     key=["BLOCK_SIZE"],
-)(_dequantize_rowwise_kernel)
+)(dequantize_rowwise_kernel)
 
 
 def run(x: torch.Tensor, state_x: torch.Tensor,
@@ -57,7 +57,7 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
             BLOCK_SIZE=cols, P2=P2,
         )
     else:
-        _dequantize_rowwise_kernel[grid](
+        dequantize_rowwise_kernel[grid](
             x, state_x, output, 1.0 / 127.0, n_elements,
             BLOCK_SIZE=cols, P2=P2,
             num_warps=_DEFAULT_CONFIG["num_warps"],

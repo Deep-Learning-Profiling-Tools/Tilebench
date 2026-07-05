@@ -27,7 +27,7 @@ _INV_127 = 1.0 / 127.0
 
 
 @ct.kernel
-def _dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
+def dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
     bid = ct.bid(0)
     # x: (rows, cols) int8 -- load row `bid` as (1, COLS).
     x_tile = ct.load(x, index=(bid, 0), shape=(1, COLS))
@@ -39,7 +39,7 @@ def _dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
     ct.store(output, index=(bid, 0), tile=ct.astype(out, ct.float16))
 
 
-_tuner = CutileAutotuner(_dequantize_rowwise_kernel)
+_tuner = CutileAutotuner(dequantize_rowwise_kernel)
 
 
 def run(x: torch.Tensor, state_x: torch.Tensor,
