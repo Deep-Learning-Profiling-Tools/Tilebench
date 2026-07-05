@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
+def relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,))
     zero = ct.zeros((TILE,), dtype=x_tile.dtype)
@@ -28,7 +28,7 @@ def _relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_relu_kernel)
+_tuner = CutileAutotuner(relu_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
