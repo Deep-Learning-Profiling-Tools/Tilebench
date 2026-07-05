@@ -17,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
+def sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
     """
     Element-wise sigmoid matching Triton's method:
       y[i] = 1 / (1 + exp(-x[i]))
@@ -37,7 +37,7 @@ def _sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_sigmoid_kernel)
+_tuner = CutileAutotuner(sigmoid_kernel)
 
 
 def run(X: torch.Tensor, N: int,
