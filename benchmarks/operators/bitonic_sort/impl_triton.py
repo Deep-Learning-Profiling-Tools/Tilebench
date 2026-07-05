@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK": 1024, "num_warps": 4}
 
 
 @triton.jit
-def _pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
+def pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
     """Copy data[0:N] → work[0:N], fill work[N:M] with +inf."""
     offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     vals = tl.load(data_ptr + offs, mask=offs < N, other=float("inf"))
@@ -14,7 +14,7 @@ def _pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
 
 
 @triton.jit
-def _bitonic_step_kernel(work_ptr, k, j, M, BLOCK: tl.constexpr):
+def bitonic_step_kernel(work_ptr, k, j, M, BLOCK: tl.constexpr):
     """
     One compare-exchange pass of bitonic sort.
     Each thread handles a pair (offs, ixj=offs^j); the ixj > offs guard
@@ -42,7 +42,7 @@ _bitonic_step_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["M"],
-)(_bitonic_step_kernel)
+)(bitonic_step_kernel)
 
 
 def run(data: torch.Tensor, N: int,
@@ -62,7 +62,7 @@ def run(data: torch.Tensor, N: int,
 
     # Pad phase — always uses the default config (cheap, single launch).
     grid_pad = (triton.cdiv(M, cfg["BLOCK"]),)
-    _pad_kernel[grid_pad](data, work, N, M, BLOCK=cfg["BLOCK"])
+    pad_kernel[grid_pad](data, work, N, M, BLOCK=cfg["BLOCK"])
 
     # Bitonic sort phase — triton.autotune caches per `key=["M"]`, so the first
     # step autotunes and the remaining log²(M)/2 steps are cache hits.
@@ -81,7 +81,7 @@ def run(data: torch.Tensor, N: int,
         while k <= M:
             j = k // 2
             while j > 0:
-                _bitonic_step_kernel[grid](
+                bitonic_step_kernel[grid](
                     work, k, j, M,
                     BLOCK=cfg["BLOCK"],
                     num_warps=cfg["num_warps"],
