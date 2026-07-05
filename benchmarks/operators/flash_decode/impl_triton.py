@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _fwd_kernel_flash_decode_stage2(
+def fwd_kernel_flash_decode_stage2(
     B_Seqlen,
     Mid_O,  # [batch, head, seq_block_num, head_dim]
     Mid_O_LogExpSum,  # [batch, head, seq_block_num]
@@ -62,7 +62,7 @@ _fwd_kernel_flash_decode_stage2_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["head_dim"],
-)(_fwd_kernel_flash_decode_stage2)
+)(fwd_kernel_flash_decode_stage2)
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
@@ -115,7 +115,7 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _fwd_kernel_flash_decode_stage2[grid](
+        fwd_kernel_flash_decode_stage2[grid](
             B_Seqlen=b_seqlen,
             Mid_O=mid_o,
             Mid_O_LogExpSum=mid_o_lse,

@@ -1,7 +1,7 @@
 # NCU Comparison: flash_decode
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
@@ -13,12 +13,12 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 47.42 us | 0.73 % | 0.73 % | 3.04 % | 0.48 % | 0.89 % | 55.85 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 168.35 us | 0.21 % | 0.21 % | 0.81 % | 0.14 % | 0.52 % | 15.74 Gbyte/s | 128 | 24 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp32 | triton | 47.42 us | 0.73 % | 0.73 % | 3.05 % | 0.48 % | 0.88 % | 55.85 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | cutile | 169.15 us | 0.20 % | 0.20 % | 0.81 % | 0.14 % | 0.51 % | 15.66 Gbyte/s | 128 | 24 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **3.55× faster** (47.4 µs vs 168.3 µs).
+- **fp32**: Triton is **3.57× faster** (47.4 µs vs 169.2 µs).
 
 ## NCU's own bottleneck verdict
 
