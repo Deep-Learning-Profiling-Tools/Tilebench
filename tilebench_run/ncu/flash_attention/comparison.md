@@ -1,7 +1,7 @@
 # NCU Comparison: flash_attention
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
@@ -13,12 +13,12 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 22770.00 us | 21.12 % | 1.54 % | 41.56 % | 20.57 % | 60.94 % | 117.85 Gbyte/s | 256 | 128 register/thread | 0 byte/block | 98.85 Kbyte/block | 2 block / 2 block |
-| fp16 | cutile | 17700.00 us | 26.36 % | 1.97 % | 26.72 % | 26.34 % | 43.20 % | 151.14 Gbyte/s | 384 | 168 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 22740.00 us | 21.10 % | 1.54 % | 41.56 % | 20.59 % | 60.88 % | 117.92 Gbyte/s | 256 | 128 register/thread | 0 byte/block | 98.85 Kbyte/block | 2 block / 2 block |
+| fp16 | cutile | 17670.00 us | 26.40 % | 1.97 % | 26.72 % | 26.39 % | 43.21 % | 151.28 Gbyte/s | 384 | 168 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.29× faster** (17700.0 µs vs 22770.0 µs).
+- **fp16**: cuTile is **1.29× faster** (17670.0 µs vs 22740.0 µs).
 
 ## NCU's own bottleneck verdict
 
