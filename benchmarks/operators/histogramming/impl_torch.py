@@ -12,7 +12,3 @@ def run(input: torch.Tensor, N: int, num_bins: int, **kwargs):
     assert input.shape[0] == N
     assert input.dtype == torch.int32
     return torch.bincount(input.to(torch.int64), minlength=num_bins).to(torch.int32)
-
-
-def get_last_config() -> dict | None:
-    return None

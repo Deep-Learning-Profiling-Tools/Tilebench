@@ -36,7 +36,7 @@ _REDUCE_SEARCH_SPACE = [
 
 
 @ct.kernel
-def _histogram_partial_kernel(
+def histogram_partial_kernel(
     input_ptr,
     partial_ptr,
     N,
@@ -70,7 +70,7 @@ def _histogram_partial_kernel(
 
 
 @ct.kernel
-def _histogram_reduce_kernel(
+def histogram_reduce_kernel(
     partial_ptr,
     hist_ptr,
     num_partials,
@@ -96,8 +96,8 @@ def _histogram_reduce_kernel(
 
 
 # Module-level: one tuner per @ct.kernel; caches persist across run() calls.
-_partial_tuner = CutileAutotuner(_histogram_partial_kernel)
-_reduce_tuner = CutileAutotuner(_histogram_reduce_kernel)
+_partial_tuner = CutileAutotuner(histogram_partial_kernel)
+_reduce_tuner = CutileAutotuner(histogram_reduce_kernel)
 
 
 def run(input: torch.Tensor, N: int, num_bins: int,
