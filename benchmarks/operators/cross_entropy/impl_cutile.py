@@ -15,7 +15,7 @@ _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
-def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: ConstInt):
+def cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: ConstInt):
     bid = ct.bid(0)
     # Kernel-side -inf padding: lanes >= num_classes contribute -inf to max/sum
     # so they don't affect the row-wise reduction. Mirrors Triton's
@@ -42,7 +42,7 @@ def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: C
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_cross_entropy_kernel)
+_tuner = CutileAutotuner(cross_entropy_kernel)
 
 
 def run(

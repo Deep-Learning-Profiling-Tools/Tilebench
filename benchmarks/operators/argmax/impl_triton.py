@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_N": 256, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
+def argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
     """
     X:   pointer to input, logically [M, N]
     Out: pointer to output, shape [M], int64
@@ -43,7 +43,7 @@ _argmax_rowwise_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N"],
-)(_argmax_rowwise_kernel)
+)(argmax_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -61,7 +61,7 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
         _argmax_rowwise_kernel_autotuned[(M,)](x2d, out, N)
     else:
         cfg = _DEFAULT_CONFIG
-        _argmax_rowwise_kernel[(M,)](
+        argmax_rowwise_kernel[(M,)](
             x2d, out, N,
             BLOCK_N=cfg["BLOCK_N"],
             num_warps=cfg["num_warps"],

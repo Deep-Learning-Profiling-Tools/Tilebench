@@ -14,15 +14,15 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 1790.00 us | 53.27 % | 2.84 % | 53.40 % | 4.28 % | 82.88 % | 218.06 Gbyte/s | 256 | 62 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
-| fp16 | cutile | 4600.00 us | 16.11 % | 1.10 % | 16.13 % | 2.29 % | 92.80 % | 84.64 Gbyte/s | 128 | 54 register/thread | 1.04 Kbyte/block | 0 byte/block | 9 block / 30 block |
-| fp32 | triton | 1610.00 us | 93.35 % | 6.53 % | 93.63 % | 8.04 % | 81.94 % | 500.62 Gbyte/s | 256 | 32 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
-| fp32 | cutile | 5310.00 us | 14.45 % | 1.98 % | 14.47 % | 2.57 % | 94.80 % | 152.12 Gbyte/s | 128 | 56 register/thread | 2.06 Kbyte/block | 0 byte/block | 9 block / 20 block |
+| fp16 | triton | 1790.00 us | 53.23 % | 2.85 % | 53.37 % | 4.27 % | 82.88 % | 218.93 Gbyte/s | 256 | 62 register/thread | 0 byte/block | 0 byte/block | 4 block / 32 block |
+| fp16 | cutile | 4600.00 us | 16.13 % | 1.11 % | 16.15 % | 2.29 % | 92.80 % | 85.10 Gbyte/s | 128 | 54 register/thread | 1.04 Kbyte/block | 0 byte/block | 9 block / 30 block |
+| fp32 | triton | 1600.00 us | 93.41 % | 6.55 % | 93.72 % | 8.07 % | 81.91 % | 502.82 Gbyte/s | 256 | 32 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| fp32 | cutile | 5310.00 us | 14.46 % | 1.98 % | 14.47 % | 2.57 % | 94.80 % | 151.88 Gbyte/s | 128 | 56 register/thread | 2.06 Kbyte/block | 0 byte/block | 9 block / 20 block |
 
 ## Key findings (auto-derived)
 
 - **fp16**: Triton is **2.57× faster** (1790.0 µs vs 4600.0 µs).
-- **fp32**: Triton is **3.30× faster** (1610.0 µs vs 5310.0 µs).
+- **fp32**: Triton is **3.32× faster** (1600.0 µs vs 5310.0 µs).
 
 ## NCU's own bottleneck verdict
 

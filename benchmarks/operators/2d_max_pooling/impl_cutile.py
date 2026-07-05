@@ -17,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _max_pool2d_kernel(
+def max_pool2d_kernel(
     input_flat,
     output_flat,
     C,
@@ -76,7 +76,7 @@ def _max_pool2d_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_max_pool2d_kernel)
+_tuner = CutileAutotuner(max_pool2d_kernel)
 
 
 def run(input, N, C, H, W, kernel_size, stride, padding,

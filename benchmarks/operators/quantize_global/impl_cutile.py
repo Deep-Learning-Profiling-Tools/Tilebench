@@ -26,13 +26,13 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _quantize_kernel(x, output, TILE: ConstInt):
+def quantize_kernel(x, output, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.load(x, index=(bid,), shape=(TILE,))
     ct.store(output, index=(bid,), tile=ct.astype(x_tile, ct.float16))
 
 
-_tuner = CutileAutotuner(_quantize_kernel)
+_tuner = CutileAutotuner(quantize_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:

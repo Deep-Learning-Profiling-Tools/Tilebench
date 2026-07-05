@@ -15,27 +15,27 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 25.34 us | 69.88 % | 2.71 % | 83.46 % | 2.20 % | 64.66 % | 207.12 Gbyte/s | 128 | 22 register/thread | 0 byte/block | 24 byte/block | 21 block / 28 block |
-| fp16 | cutile | 29.57 us | 64.24 % | 2.32 % | 74.78 % | 2.35 % | 68.00 % | 177.60 Gbyte/s | 128 | 22 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
-| bf16 | triton | 24.90 us | 71.01 % | 2.75 % | 84.80 % | 2.22 % | 63.71 % | 210.84 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 32 byte/block | 21 block / 28 block |
-| bf16 | cutile | 29.47 us | 64.43 % | 2.33 % | 74.17 % | 2.35 % | 68.19 % | 178.19 Gbyte/s | 128 | 22 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
-| fp32 | triton | 25.22 us | 69.18 % | 5.43 % | 84.42 % | 3.61 % | 62.01 % | 416.06 Gbyte/s | 128 | 20 register/thread | 0 byte/block | 32 byte/block | 21 block / 28 block |
-| fp32 | cutile | 29.44 us | 64.57 % | 4.65 % | 75.08 % | 3.09 % | 67.81 % | 356.46 Gbyte/s | 128 | 22 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
+| fp16 | triton | 14.66 us | 12.62 % | 4.68 % | 19.10 % | 3.11 % | 27.61 % | 358.10 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| fp16 | cutile | 29.09 us | 64.99 % | 2.36 % | 75.61 % | 2.12 % | 68.30 % | 180.53 Gbyte/s | 128 | 20 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
+| bf16 | triton | 14.59 us | 12.65 % | 4.70 % | 19.57 % | 3.12 % | 25.37 % | 359.67 Gbyte/s | 32 | 20 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| bf16 | cutile | 29.06 us | 65.28 % | 2.36 % | 75.56 % | 2.11 % | 68.60 % | 180.74 Gbyte/s | 128 | 20 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
+| fp32 | triton | 14.69 us | 13.69 % | 9.32 % | 20.67 % | 6.19 % | 24.33 % | 714.23 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| fp32 | cutile | 29.22 us | 65.06 % | 4.69 % | 75.71 % | 3.11 % | 67.85 % | 359.20 Gbyte/s | 128 | 20 register/thread | 44 byte/block | 0 byte/block | 21 block / 28 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.17× faster** (25.3 µs vs 29.6 µs).
-- **bf16**: Triton is **1.18× faster** (24.9 µs vs 29.5 µs).
-- **fp32**: Triton is **1.17× faster** (25.2 µs vs 29.4 µs).
+- **fp16**: Triton is **1.98× faster** (14.7 µs vs 29.1 µs).
+- **bf16**: Triton is **1.99× faster** (14.6 µs vs 29.1 µs).
+- **fp32**: Triton is **1.99× faster** (14.7 µs vs 29.2 µs).
 
 ## NCU's own bottleneck verdict
 
 - **bf16 / cutile** — Compute and Memory are well-balanced
-- **bf16 / triton** — Compute and Memory are well-balanced
+- **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp16 / cutile** — Compute and Memory are well-balanced
-- **fp16 / triton** — Compute and Memory are well-balanced
+- **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp32 / cutile** — Compute and Memory are well-balanced
-- **fp32 / triton** — Compute and Memory are well-balanced
+- **fp32 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 
 ## Reports
 

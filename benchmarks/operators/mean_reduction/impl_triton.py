@@ -7,7 +7,7 @@ _DEFAULT_CONFIG = {"BLOCK_M": 1, "BLOCK_N": 1024, "num_warps": 4, "num_stages": 
 
 
 @triton.jit
-def _mean_rowwise_kernel(X, Out, M, N: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
+def mean_rowwise_kernel(X, Out, M, N: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
     """
     X:   pointer to input  [M, N] (row-major)
     Out: pointer to output [M]
@@ -45,7 +45,7 @@ _mean_rowwise_kernel_autotuned = triton.autotune(
     key=["M", "N"],
     warmup=1,
     rep=3,
-)(_mean_rowwise_kernel)
+)(mean_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -68,7 +68,7 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(M, cfg["BLOCK_M"]),)
-        _mean_rowwise_kernel[grid](
+        mean_rowwise_kernel[grid](
             x2d, out, M, N,
             BLOCK_M=cfg["BLOCK_M"],
             BLOCK_N=cfg["BLOCK_N"],

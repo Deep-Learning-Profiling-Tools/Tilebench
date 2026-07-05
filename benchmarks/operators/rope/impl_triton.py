@@ -9,7 +9,7 @@ _DEFAULT_CONFIG = {"ROPE_GROUP_SIZE": 4, "num_warps": 4, "num_stages": 2}
 
 @triton.heuristics({"BACKWARD_PASS": lambda args: args["BACKWARD_PASS"]})
 @triton.jit
-def _rope_embedding(
+def rope_embedding(
     Q,     Q_row_stride,
     cos, cos_row_stride,
     sin, sin_row_stride,
@@ -62,7 +62,7 @@ _rope_embedding_autotuned = triton.autotune(
     ],
     key=["seqlen", "head_dim"],
     restore_value=["Q"],
-)(_rope_embedding)
+)(rope_embedding)
 
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
@@ -89,7 +89,7 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
         n_groups = triton.cdiv(n_heads, cfg["ROPE_GROUP_SIZE"])
-        _rope_embedding[(n_rows, n_groups)](
+        rope_embedding[(n_rows, n_groups)](
             output,   output.stride(1),
             cos,      cos.stride(0),
             sin,      sin.stride(0),

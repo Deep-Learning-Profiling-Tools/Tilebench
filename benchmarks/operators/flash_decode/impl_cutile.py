@@ -14,7 +14,7 @@ _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [8, 16, 32]]
 
 @ct.kernel
-def _fwd_kernel_flash_decode_stage2(
+def fwd_kernel_flash_decode_stage2(
     Mid_O,              # [Batch, Head, NumBlocks, HeadDim]
     Mid_O_LSE,          # [Batch, Head, NumBlocks]
     B_Seqlen,           # [Batch]
@@ -70,7 +70,7 @@ def _fwd_kernel_flash_decode_stage2(
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # See core/cutile_autotune.py for why both layers matter.
-_tuner = CutileAutotuner(_fwd_kernel_flash_decode_stage2)
+_tuner = CutileAutotuner(fwd_kernel_flash_decode_stage2)
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):

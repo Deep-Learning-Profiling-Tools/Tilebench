@@ -8,7 +8,7 @@ _BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (hardcoded in L
 
 
 @triton.jit
-def _count_ones_in_block(input, block_sum, N, bit, BLOCK_SIZE: tl.constexpr):
+def count_ones_in_block(input, block_sum, N, bit, BLOCK_SIZE: tl.constexpr):
     program_id = tl.program_id(axis=0)
     offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < N
@@ -20,7 +20,7 @@ def _count_ones_in_block(input, block_sum, N, bit, BLOCK_SIZE: tl.constexpr):
 
 
 @triton.jit
-def _count_ones_per_block_blocks(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
+def count_ones_per_block_blocks(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
     program_id = tl.program_id(axis=0)
     offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < K
@@ -30,7 +30,7 @@ def _count_ones_per_block_blocks(first_layer_sum, block_block_sum, K, BLOCK_SIZE
 
 
 @triton.jit
-def _compute_prefix_sums_per_block_of_blocks(block_block_sum, global_ones, L, BLOCK_SIZE: tl.constexpr):
+def compute_prefix_sums_per_block_of_blocks(block_block_sum, global_ones, L, BLOCK_SIZE: tl.constexpr):
     # Grid of 1 process
     offset = tl.arange(0, BLOCK_SIZE)
     mask = offset < L
@@ -42,7 +42,7 @@ def _compute_prefix_sums_per_block_of_blocks(block_block_sum, global_ones, L, BL
 
 
 @triton.jit
-def _compute_prefix_sums_per_block(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
+def compute_prefix_sums_per_block(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
     program_id = tl.program_id(axis=0)
     offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < K
@@ -58,7 +58,7 @@ def _compute_prefix_sums_per_block(first_layer_sum, block_block_sum, K, BLOCK_SI
 
 
 @triton.jit
-def _radix_sort_kernel(input, output, first_layer_sum, global_ones, bit, N, BLOCK_SIZE: tl.constexpr):
+def radix_sort_kernel(input, output, first_layer_sum, global_ones, bit, N, BLOCK_SIZE: tl.constexpr):
     input = input.to(tl.pointer_type(tl.uint32))
     output = output.to(tl.pointer_type(tl.uint32))
 
@@ -99,7 +99,7 @@ _radix_sort_kernel_autotuned = triton.autotune(
     key=["N"],
     warmup=1,
     rep=3,
-)(_radix_sort_kernel)
+)(radix_sort_kernel)
 
 
 def run(input: torch.Tensor, N: int,
@@ -130,19 +130,19 @@ def run(input: torch.Tensor, N: int,
     cfg = _DEFAULT_CONFIG
 
     for bit in range(32):
-        _count_ones_in_block[grid](work, first_layer, N, bit, _BLOCK_SIZE)
-        _count_ones_per_block_blocks[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
-        _compute_prefix_sums_per_block_of_blocks[grid_third](
+        count_ones_in_block[grid](work, first_layer, N, bit, _BLOCK_SIZE)
+        count_ones_per_block_blocks[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
+        compute_prefix_sums_per_block_of_blocks[grid_third](
             second_layer, global_ones, grid_second[0], _BLOCK_BB,
         )
-        _compute_prefix_sums_per_block[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
+        compute_prefix_sums_per_block[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
 
         if autotune:
             _radix_sort_kernel_autotuned[grid](
                 work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
             )
         else:
-            _radix_sort_kernel[grid](
+            radix_sort_kernel[grid](
                 work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
                 num_warps=cfg["num_warps"],
             )

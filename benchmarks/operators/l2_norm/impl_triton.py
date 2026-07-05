@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_N": 1024, "num_warps": 4, "num_stages": 3}
 
 
 @triton.jit
-def _l2_norm_fwd_kernel(
+def l2_norm_fwd_kernel(
     X,
     Y,
     stride_x_row,
@@ -46,7 +46,7 @@ _l2_norm_fwd_kernel_autotuned = triton.autotune(
     key=["N"],
     warmup=1,
     rep=3,
-)(_l2_norm_fwd_kernel)
+)(l2_norm_fwd_kernel)
 
 
 def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -68,7 +68,7 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
     else:
         cfg = _DEFAULT_CONFIG
         with torch.cuda.device(x.device.index):
-            _l2_norm_fwd_kernel[(M,)](
+            l2_norm_fwd_kernel[(M,)](
                 x_2d, y_2d,
                 x_2d.stride(0),
                 N, eps,

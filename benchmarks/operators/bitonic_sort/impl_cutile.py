@@ -21,7 +21,7 @@ def _next_pow2(n: int) -> int:
 
 
 @ct.kernel
-def _pad_kernel(data_ptr, work_ptr, N, M, TILE: ConstInt):
+def pad_kernel(data_ptr, work_ptr, N, M, TILE: ConstInt):
     """Copy data[0:N] → work[0:N], fill work[N:M] with +inf (mirrors Triton's pad_kernel)."""
     bid = ct.bid(0)
     offs = bid * TILE + ct.arange(TILE, dtype=ct.int32)
@@ -32,7 +32,7 @@ def _pad_kernel(data_ptr, work_ptr, N, M, TILE: ConstInt):
 
 
 @ct.kernel
-def _bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
+def bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
     """
     One compare-exchange pass of bitonic sort — cuTile mirror of Triton's method:
       - Each CTA handles TILE positions starting at bid*TILE.
@@ -71,7 +71,7 @@ def _bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # Mirrors Triton's @triton.autotune(key=["M"]) — one sweep per problem size.
-_tuner = CutileAutotuner(_bitonic_step_kernel)
+_tuner = CutileAutotuner(bitonic_step_kernel)
 
 
 def run(data: torch.Tensor, N: int,
@@ -92,7 +92,7 @@ def run(data: torch.Tensor, N: int,
     # Pad phase — always uses default config (single launch).
     default_tile = _DEFAULT_CONFIG.tile
     pad_grid = (ct.cdiv(M, default_tile), 1, 1)
-    ct.launch(stream, pad_grid, _pad_kernel, (data, work, N, M, default_tile))
+    ct.launch(stream, pad_grid, pad_kernel, (data, work, N, M, default_tile))
 
     # Bitonic phase — same kernel launched O(log²(M)) times. Tune ONCE per M
     # (matching Triton's `@triton.autotune(key=["M"])`), then reuse the cached

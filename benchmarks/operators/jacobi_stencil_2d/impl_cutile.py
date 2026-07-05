@@ -18,7 +18,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _jacobi_stencil_kernel(input_2d, output_2d, rows, cols,
+def jacobi_stencil_kernel(input_2d, output_2d, rows, cols,
                            TILE_R: ConstInt, TILE_C: ConstInt):
     """
     2D 5-point Jacobi stencil — direct mirror of Triton's per-pixel-offset method:
@@ -60,7 +60,7 @@ def _jacobi_stencil_kernel(input_2d, output_2d, rows, cols,
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_jacobi_stencil_kernel)
+_tuner = CutileAutotuner(jacobi_stencil_kernel)
 
 
 def run(input: torch.Tensor, rows: int, cols: int,

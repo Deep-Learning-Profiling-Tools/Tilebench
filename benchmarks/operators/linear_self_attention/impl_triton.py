@@ -1,12 +1,12 @@
 """Triton linear self-attention via 3 kernels:
 
-Stage 1 (`_kv_kernel`): Compute S = phi(K)^T @ V into a (D, D) buffer.
+Stage 1 (`kv_kernel`): Compute S = phi(K)^T @ V into a (D, D) buffer.
   Grid (D, D); each CTA owns one S[d0, d1] scalar and reduces along M.
 
-Stage 2 (`_z_kernel`):  Compute Z = sum_m phi(K[m, :]) into a (D,) buffer.
+Stage 2 (`z_kernel`):  Compute Z = sum_m phi(K[m, :]) into a (D,) buffer.
   Grid (D,); each CTA owns one Z[d] scalar.
 
-Stage 3 (`_out_kernel`): Compute O = (phi(Q) @ S) / (phi(Q) @ Z + eps).
+Stage 3 (`out_kernel`): Compute O = (phi(Q) @ S) / (phi(Q) @ Z + eps).
   Grid (cdiv(M, BLOCK_M), cdiv(D, BLOCK_D)); each CTA emits a
   (BLOCK_M, BLOCK_D) output tile via a D-step inner loop accumulating
   outer products of (phi_q, s_row) and a denominator scalar (phi_q @ z).
@@ -37,7 +37,7 @@ def _phi(x):
 
 
 @triton.jit
-def _kv_kernel(
+def kv_kernel(
     S_ptr, K_ptr, V_ptr,
     M, D,
     stride_km, stride_kd,
@@ -67,7 +67,7 @@ def _kv_kernel(
 
 
 @triton.jit
-def _z_kernel(
+def z_kernel(
     Z_ptr, K_ptr,
     M, D,
     stride_km, stride_kd,
@@ -92,7 +92,7 @@ def _z_kernel(
 
 
 @triton.jit
-def _out_kernel(
+def out_kernel(
     O_ptr, Q_ptr, S_ptr, Z_ptr,
     M, D, eps: tl.constexpr,
     stride_qm, stride_qd,
@@ -151,14 +151,14 @@ _out_kernel_autotuned = triton.autotune(
     key=["M", "D"],
     warmup=1,
     rep=3,
-)(_out_kernel)
+)(out_kernel)
 
 
 def _launch_kv_z(Q, K, V, M, D, KV_BLOCK_M):
     S = torch.empty((D, D), device=Q.device, dtype=torch.float32)
     Z = torch.empty((D,), device=Q.device, dtype=torch.float32)
 
-    _kv_kernel[(D, D)](
+    kv_kernel[(D, D)](
         S, K, V, M, D,
         K.stride(0), K.stride(1),
         V.stride(0), V.stride(1),
@@ -166,7 +166,7 @@ def _launch_kv_z(Q, K, V, M, D, KV_BLOCK_M):
         BLOCK_M=KV_BLOCK_M,
         num_warps=1, num_stages=1,
     )
-    _z_kernel[(D,)](
+    z_kernel[(D,)](
         Z, K, M, D,
         K.stride(0), K.stride(1),
         Z.stride(0),
@@ -208,7 +208,7 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
         BLOCK_M = int(block_size) if block_size is not None else cfg["BLOCK_M"]
         BLOCK_D = cfg["BLOCK_D"]
         grid = (triton.cdiv(M, BLOCK_M), triton.cdiv(D, BLOCK_D))
-        _out_kernel[grid](
+        out_kernel[grid](
             O, Q, S, Z, M, D, float(eps),
             Q.stride(0), Q.stride(1),
             O.stride(0), O.stride(1),

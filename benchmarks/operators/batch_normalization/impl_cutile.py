@@ -21,7 +21,7 @@ def _next_pow2(n: int) -> int:
 
 
 @ct.kernel
-def _compute_block_sums_kernel(
+def compute_block_sums_kernel(
     input_ptr,
     block_sum_ptr,
     block_sq_sum_ptr,
@@ -52,7 +52,7 @@ def _compute_block_sums_kernel(
 
 
 @ct.kernel
-def _compute_mean_invstd_kernel(
+def compute_mean_invstd_kernel(
     block_sum_ptr,
     block_sq_sum_ptr,
     mean_ptr,
@@ -87,7 +87,7 @@ def _compute_mean_invstd_kernel(
 
 
 @ct.kernel
-def _apply_batch_norm_kernel(
+def apply_batch_norm_kernel(
     input_ptr,
     gamma_ptr,
     beta_ptr,
@@ -124,7 +124,7 @@ def _apply_batch_norm_kernel(
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # Mirrors Triton's @triton.autotune(key=["total_elements"]) — kernel 3 is the
 # dominant cost; kernels 1 and 2 use fixed defaults on both sides.
-_tuner = CutileAutotuner(_apply_batch_norm_kernel)
+_tuner = CutileAutotuner(apply_batch_norm_kernel)
 
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
@@ -155,12 +155,12 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     stream = torch.cuda.current_stream()
 
     # Kernel 1 — fixed config (small, not autotuned).
-    ct.launch(stream, (NUM_BLOCKS, C, 1), _compute_block_sums_kernel,
+    ct.launch(stream, (NUM_BLOCKS, C, 1), compute_block_sums_kernel,
               (input_flat, block_sum_flat, block_sq_sum_flat, N, C, BLOCK_N))
 
     # Kernel 2 — fixed config.
     BLOCK_B = _next_pow2(NUM_BLOCKS)
-    ct.launch(stream, (C, 1, 1), _compute_mean_invstd_kernel,
+    ct.launch(stream, (C, 1, 1), compute_mean_invstd_kernel,
               (block_sum_flat, block_sq_sum_flat, mean, inv_std,
                N, C, NUM_BLOCKS, BLOCK_B, eps))
 

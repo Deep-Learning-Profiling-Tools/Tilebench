@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _rmsnorm_kernel(
+def rmsnorm_kernel(
     x_ptr, rms_w_ptr, out_ptr,
     stride_row,       # stride for one row in the (batch*M, K) view (= K for contiguous)
     N_SIZE,           # K dimension; NOT constexpr so one kernel handles all K values
@@ -62,7 +62,7 @@ _rmsnorm_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N_SIZE"],
-)(_rmsnorm_kernel)
+)(rmsnorm_kernel)
 
 
 def run(
@@ -98,7 +98,7 @@ def run(
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _rmsnorm_kernel[grid](
+        rmsnorm_kernel[grid](
             x_2d, rms_w, out_2d,
             x_2d.stride(0),
             N_SIZE=K, eps=eps,

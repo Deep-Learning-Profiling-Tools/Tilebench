@@ -16,7 +16,7 @@ _BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (matches Triton
 
 
 @ct.kernel
-def _count_ones_in_block(input_ptr, block_sum_ptr, N, bit, TILE: ConstInt):
+def count_ones_in_block(input_ptr, block_sum_ptr, N, bit, TILE: ConstInt):
     bid = ct.bid(0)
     offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < N
@@ -30,7 +30,7 @@ def _count_ones_in_block(input_ptr, block_sum_ptr, N, bit, TILE: ConstInt):
 
 
 @ct.kernel
-def _count_ones_per_block_blocks(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
+def count_ones_per_block_blocks(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
     bid = ct.bid(0)
     offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < K
@@ -43,7 +43,7 @@ def _count_ones_per_block_blocks(first_sum_ptr, block_block_sum_ptr, K, TILE: Co
 
 
 @ct.kernel
-def _compute_prefix_sums_per_block_of_blocks(block_block_sum_ptr, global_ones_ptr, L, TILE_BB: ConstInt):
+def compute_prefix_sums_per_block_of_blocks(block_block_sum_ptr, global_ones_ptr, L, TILE_BB: ConstInt):
     # Grid of 1 process.
     offset = ct.arange(TILE_BB, dtype=ct.int32)
     mask = offset < L
@@ -65,7 +65,7 @@ def _compute_prefix_sums_per_block_of_blocks(block_block_sum_ptr, global_ones_pt
 
 
 @ct.kernel
-def _compute_prefix_sums_per_block(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
+def compute_prefix_sums_per_block(first_sum_ptr, block_block_sum_ptr, K, TILE: ConstInt):
     bid = ct.bid(0)
     offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
     mask = offset < K
@@ -85,7 +85,7 @@ def _compute_prefix_sums_per_block(first_sum_ptr, block_block_sum_ptr, K, TILE: 
 
 
 @ct.kernel
-def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
+def radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
                        bit, N, TILE: ConstInt):
     """Scatter each element to its correct position based on the current bit."""
     bid = ct.bid(0)
@@ -126,7 +126,7 @@ def _radix_sort_kernel(input_ptr, output_ptr, first_sum_ptr, global_ones_ptr,
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # Mirrors Triton's @triton.autotune(key=["N"]) — one sweep per problem size,
 # reused across all 32 bit-pass scatter launches.
-_tuner = CutileAutotuner(_radix_sort_kernel)
+_tuner = CutileAutotuner(radix_sort_kernel)
 
 
 def run(input: torch.Tensor, N: int,
@@ -180,13 +180,13 @@ def run(input: torch.Tensor, N: int,
     scatter_kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
 
     for bit in range(32):
-        ct.launch(stream, grid, _count_ones_in_block,
+        ct.launch(stream, grid, count_ones_in_block,
                   (work, first_layer, N, bit, _BLOCK_SIZE))
-        ct.launch(stream, grid_second, _count_ones_per_block_blocks,
+        ct.launch(stream, grid_second, count_ones_per_block_blocks,
                   (first_layer, second_layer, K, _BLOCK_SIZE))
-        ct.launch(stream, grid_third, _compute_prefix_sums_per_block_of_blocks,
+        ct.launch(stream, grid_third, compute_prefix_sums_per_block_of_blocks,
                   (second_layer, global_ones, L, _BLOCK_BB))
-        ct.launch(stream, grid_second, _compute_prefix_sums_per_block,
+        ct.launch(stream, grid_second, compute_prefix_sums_per_block,
                   (first_layer, second_layer, K, _BLOCK_SIZE))
         ct.launch(stream, grid, scatter_kernel,
                   (work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE))

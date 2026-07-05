@@ -18,7 +18,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def _histogram_partial_kernel(
+def histogram_partial_kernel(
     input_ptr,
     partial_ptr,
     N,
@@ -46,7 +46,7 @@ def _histogram_partial_kernel(
 
 
 @triton.jit
-def _histogram_reduce_kernel(
+def histogram_reduce_kernel(
     partial_ptr,
     hist_ptr,
     num_partials,
@@ -87,7 +87,7 @@ _histogram_partial_kernel_autotuned = triton.autotune(
     # accumulates into the same buffer. Zero it before every cfg trial so the
     # final replay sees a clean buffer.
     reset_to_zero=["partial_ptr"],
-)(_histogram_partial_kernel)
+)(histogram_partial_kernel)
 
 
 # Stage 2's K-loop is a true `tl.load → reduce` pipeline, so num_stages
@@ -110,7 +110,7 @@ _histogram_reduce_kernel_autotuned = triton.autotune(
     key=["num_partials", "num_bins"],
     warmup=1,
     rep=3,
-)(_histogram_reduce_kernel)
+)(histogram_reduce_kernel)
 
 
 def run(input: torch.Tensor, N: int, num_bins: int,
@@ -149,14 +149,14 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             partial.stride(0), partial.stride(1),
         )
     else:
-        _histogram_partial_kernel[(num_partials,)](
+        histogram_partial_kernel[(num_partials,)](
             input, partial, N, num_bins, num_partials,
             partial.stride(0), partial.stride(1),
             BLOCK_SIZE=BLOCK_SIZE,
             num_warps=cfg["partial_num_warps"],
             num_stages=1,   # atomic-write-bound; the autotuner pins this too
         )
-        _histogram_reduce_kernel[(triton.cdiv(num_bins, BLOCK_BINS),)](
+        histogram_reduce_kernel[(triton.cdiv(num_bins, BLOCK_BINS),)](
             partial, histogram, num_partials, num_bins,
             partial.stride(0), partial.stride(1),
             BLOCK_ROWS=BLOCK_ROWS,

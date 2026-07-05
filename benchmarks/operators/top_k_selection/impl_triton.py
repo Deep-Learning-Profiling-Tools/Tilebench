@@ -27,7 +27,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def _bitonic_step_kernel(
+def bitonic_step_kernel(
     input_ptr,
     N,
     stage,
@@ -72,7 +72,7 @@ _bitonic_step_kernel_autotuned = triton.autotune(
     key=["N"],
     warmup=1,
     rep=3,
-)(_bitonic_step_kernel)
+)(bitonic_step_kernel)
 
 
 def _next_pow2(x: int) -> int:
@@ -108,7 +108,7 @@ def run(input: torch.Tensor, N: int, k: int,
                 )
             else:
                 grid = (triton.cdiv(padding_len, BLOCK_SIZE * 2),)
-                _bitonic_step_kernel[grid](
+                bitonic_step_kernel[grid](
                     input_padding, padding_len, stage, stride,
                     BLOCK_SIZE=BLOCK_SIZE,
                     num_warps=_DEFAULT_CONFIG["num_warps"],

@@ -41,7 +41,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstInt):
+def copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstInt):
     """One CTA copies one (token, head) slice, tiling the head dim in BLOCK_D chunks."""
     token_id = ct.bid(0)
     head_id  = ct.bid(1)
@@ -62,7 +62,7 @@ def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstIn
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # Same kernel is launched twice (nope + rope) with different shapes, so the
 # two shape_keys share this single tuner's caches.
-_tuner = CutileAutotuner(_copy_by_dest_kernel)
+_tuner = CutileAutotuner(copy_by_dest_kernel)
 
 
 def run(

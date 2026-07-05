@@ -23,7 +23,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _bmm_kernel(a_3d, b_3d, c_3d,
+def bmm_kernel(a_3d, b_3d, c_3d,
                 K_TILES:    ConstInt,
                 TILE_M:     ConstInt,
                 TILE_N:     ConstInt,
@@ -94,7 +94,7 @@ def _bmm_kernel(a_3d, b_3d, c_3d,
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_bmm_kernel)
+_tuner = CutileAutotuner(bmm_kernel)
 
 
 def run(A: torch.Tensor, B: torch.Tensor,

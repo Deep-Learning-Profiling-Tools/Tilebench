@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"num_warps": 4}
 
 
 @triton.jit
-def _moe_topk_gating_kernel(
+def moe_topk_gating_kernel(
     logits_ptr,
     topk_w_ptr,
     topk_idx_ptr,
@@ -63,7 +63,7 @@ _moe_topk_gating_kernel_autotuned = triton.autotune(
     key=["E", "K"],
     warmup=1,
     rep=3,
-)(_moe_topk_gating_kernel)
+)(moe_topk_gating_kernel)
 
 
 def run(logits: torch.Tensor, M: int, E: int, k: int,
@@ -84,7 +84,7 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _moe_topk_gating_kernel[grid](
+        moe_topk_gating_kernel[grid](
             logits, topk_weights, topk_indices,
             E, k,
             BLOCK_SIZE_E=block_size_e,

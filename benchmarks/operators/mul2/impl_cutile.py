@@ -13,7 +13,7 @@ _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
 
 @ct.kernel
-def _mul2_kernel(x_ptr, output_ptr, TILE: ConstInt):
+def mul2_kernel(x_ptr, output_ptr, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,))
     y_tile = x_tile * 2
@@ -29,7 +29,7 @@ _SEARCH_SPACE = [
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_mul2_kernel)
+_tuner = CutileAutotuner(mul2_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:

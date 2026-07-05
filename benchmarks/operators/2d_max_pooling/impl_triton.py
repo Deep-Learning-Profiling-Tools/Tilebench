@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
 
 
 @triton.jit
-def _max_pool2d_kernel(
+def max_pool2d_kernel(
     input_ptr,
     output_ptr,
     C,
@@ -53,7 +53,7 @@ _max_pool2d_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["total_out", "kernel_size", "stride", "padding"],
-)(_max_pool2d_kernel)
+)(max_pool2d_kernel)
 
 
 def run(input, N, C, H, W, kernel_size, stride, padding,
@@ -79,7 +79,7 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(total_out, cfg["BLOCK_SIZE"]),)
-        _max_pool2d_kernel[grid](
+        max_pool2d_kernel[grid](
             input, output,
             C, H, W, H_out, W_out, total_out,
             kernel_size=kernel_size,

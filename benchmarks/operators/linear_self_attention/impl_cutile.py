@@ -1,12 +1,12 @@
 """cuTile linear self-attention via the same 3 kernels as impl_triton.py.
 
-Stage 1 (`_kv_kernel`):  S = phi(K)^T @ V into a (D, D) buffer.
+Stage 1 (`kv_kernel`):  S = phi(K)^T @ V into a (D, D) buffer.
   Grid (D, D); each CTA owns one S[d0, d1] scalar and reduces along M.
 
-Stage 2 (`_z_kernel`):   Z = sum_m phi(K[m, :]) into a (D,) buffer.
+Stage 2 (`z_kernel`):   Z = sum_m phi(K[m, :]) into a (D,) buffer.
   Grid (D,); each CTA owns one Z[d] scalar.
 
-Stage 3 (`_out_kernel`): O = (phi(Q) @ S) / (phi(Q) @ Z + eps).
+Stage 3 (`out_kernel`): O = (phi(Q) @ S) / (phi(Q) @ Z + eps).
   Grid (cdiv(M, BLOCK_M), cdiv(D, BLOCK_D)); each CTA emits a
   (BLOCK_M, BLOCK_D) output tile.
 
@@ -45,7 +45,7 @@ def _phi_tile(x):
 
 
 @ct.kernel
-def _kv_kernel(
+def kv_kernel(
     S, K, V,
     M, D,
     BLOCK_M: ConstInt,
@@ -78,7 +78,7 @@ def _kv_kernel(
 
 
 @ct.kernel
-def _z_kernel(
+def z_kernel(
     Z, K,
     M, D,
     BLOCK_M: ConstInt,
@@ -107,7 +107,7 @@ def _z_kernel(
 
 
 @ct.kernel
-def _out_kernel(
+def out_kernel(
     O, Q, S, Z,
     M, D,
     eps: ct.Constant[float],
@@ -146,7 +146,7 @@ def _out_kernel(
 
 
 # Only the OUT kernel is autotuned (mirrors Triton).
-_out_tuner = CutileAutotuner(_out_kernel)
+_out_tuner = CutileAutotuner(out_kernel)
 
 
 def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
@@ -168,10 +168,10 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
     stream = torch.cuda.current_stream()
 
     # Stage 1: S = phi(K)^T @ V
-    ct.launch(stream, (D, D, 1), _kv_kernel, (S, K, V, M, D, _KV_BLOCK_M))
+    ct.launch(stream, (D, D, 1), kv_kernel, (S, K, V, M, D, _KV_BLOCK_M))
 
     # Stage 2: Z = sum_m phi(K)
-    ct.launch(stream, (D, 1, 1), _z_kernel, (Z, K, M, D, _KV_BLOCK_M))
+    ct.launch(stream, (D, 1, 1), z_kernel, (Z, K, M, D, _KV_BLOCK_M))
 
     # Stage 3: O = (phi(Q) @ S) / (phi(Q) @ Z + eps)
     if autotune:

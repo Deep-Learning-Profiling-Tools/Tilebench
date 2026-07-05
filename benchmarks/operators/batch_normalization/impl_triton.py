@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK": 256, "num_warps": 4}
 
 
 @triton.jit
-def _compute_block_sums_kernel(
+def compute_block_sums_kernel(
     input_ptr,
     block_sum_ptr,
     block_sq_sum_ptr,
@@ -31,7 +31,7 @@ def _compute_block_sums_kernel(
 
 
 @triton.jit
-def _compute_mean_invstd_kernel(
+def compute_mean_invstd_kernel(
     block_sum_ptr,
     block_sq_sum_ptr,
     mean_ptr,
@@ -62,7 +62,7 @@ def _compute_mean_invstd_kernel(
 
 
 @triton.jit
-def _apply_batch_norm_kernel(
+def apply_batch_norm_kernel(
     input_ptr,
     gamma_ptr,
     beta_ptr,
@@ -99,7 +99,7 @@ _apply_batch_norm_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["total_elements"],
-)(_apply_batch_norm_kernel)
+)(apply_batch_norm_kernel)
 
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
@@ -115,13 +115,13 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     inv_std = torch.empty((C,), device=input.device, dtype=torch.float32)
 
     # Kernel 1: per-(block, channel) partial sums.
-    _compute_block_sums_kernel[(NUM_BLOCKS, C)](
+    compute_block_sums_kernel[(NUM_BLOCKS, C)](
         input, block_sum, block_sq_sum, N, C, BLOCK_N=BLOCK_N,
     )
 
     # Kernel 2: finish reduction per channel, compute mean/inv_std.
     BLOCK_B = triton.next_power_of_2(NUM_BLOCKS)
-    _compute_mean_invstd_kernel[(C,)](
+    compute_mean_invstd_kernel[(C,)](
         block_sum, block_sq_sum, mean, inv_std,
         N, C, NUM_BLOCKS, BLOCK_B=BLOCK_B, eps=eps,
     )
@@ -137,7 +137,7 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(total_elements, cfg["BLOCK"]),)
-        _apply_batch_norm_kernel[grid](
+        apply_batch_norm_kernel[grid](
             input, gamma, beta, output, mean, inv_std,
             total_elements, C,
             BLOCK=cfg["BLOCK"],

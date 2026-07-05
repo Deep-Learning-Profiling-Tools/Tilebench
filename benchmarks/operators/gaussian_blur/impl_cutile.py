@@ -17,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _gaussian_blur_kernel(
+def gaussian_blur_kernel(
     input_flat,
     kernel_flat,
     output_flat,
@@ -68,7 +68,7 @@ def _gaussian_blur_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_gaussian_blur_kernel)
+_tuner = CutileAutotuner(gaussian_blur_kernel)
 
 
 def run(input, kernel, input_rows, input_cols,

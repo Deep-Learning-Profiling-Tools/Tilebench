@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_DMODEL": 64, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _copy_by_dest_kernel(
+def copy_by_dest_kernel(
     kv_ptr,
     dest_ptr,
     out_ptr,
@@ -42,7 +42,7 @@ _copy_by_dest_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["head_dim"],
-)(_copy_by_dest_kernel)
+)(copy_by_dest_kernel)
 
 
 def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor, autotune: bool):
@@ -57,7 +57,7 @@ def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor, au
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _copy_by_dest_kernel[grid](
+        copy_by_dest_kernel[grid](
             kv, dest_loc, out,
             kv.stride(0), kv.stride(1), kv.stride(2),
             out.stride(0), out.stride(1), out.stride(2),

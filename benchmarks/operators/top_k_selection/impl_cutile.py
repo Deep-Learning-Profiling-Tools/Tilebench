@@ -34,7 +34,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _bitonic_step_kernel(
+def bitonic_step_kernel(
     input_ptr,
     N,
     stage,
@@ -85,7 +85,7 @@ def _bitonic_step_kernel(
 # Module-level: caches replace_hints per-occupancy and autotune-best per
 # padding_len. Mirrors Triton's @triton.autotune(key=["N"]) — one sweep per
 # problem size, reused across all log^2(padding_len)/2 step launches.
-_tuner = CutileAutotuner(_bitonic_step_kernel)
+_tuner = CutileAutotuner(bitonic_step_kernel)
 
 
 def _next_pow2(x: int) -> int:

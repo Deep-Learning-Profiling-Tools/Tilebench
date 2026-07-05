@@ -23,7 +23,7 @@ _SEARCH_SPACE = [
 ]
 
 @ct.kernel
-def _fwd_kernel(Q, K, V, Out,
+def fwd_kernel(Q, K, V, Out,
                 qk_scale: float,
                 input_pos: int,
                 TILE_D: ConstInt,  # TILE_D = hidden_size
@@ -135,7 +135,7 @@ def _fwd_kernel(Q, K, V, Out,
 
 # Caches replace_hints results (per occupancy) and autotune outcomes (per
 # problem shape). See core/cutile_autotune.py for why both layers matter.
-_tuner = CutileAutotuner(_fwd_kernel)
+_tuner = CutileAutotuner(fwd_kernel)
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
