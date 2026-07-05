@@ -39,7 +39,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
+def rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
     """One CTA normalises one row using tiled two-pass RMSNorm."""
     row = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
@@ -76,7 +76,7 @@ def _rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_rmsnorm_kernel)
+_tuner = CutileAutotuner(rmsnorm_kernel)
 
 
 def run(
