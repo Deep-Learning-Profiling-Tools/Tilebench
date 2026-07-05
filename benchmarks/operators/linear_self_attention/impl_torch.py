@@ -32,7 +32,3 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6, **
     # Z = sum_m phi(K[m]), shape [D]
     Z = phi_k.sum(dim=0)
     return (phi_q @ S) / ((phi_q @ Z)[:, None] + float(eps))
-
-
-def get_last_config() -> dict | None:
-    return None
