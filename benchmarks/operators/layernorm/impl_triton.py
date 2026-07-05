@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 8, "num_stages": 2}
 
 
 @triton.jit
-def _layernorm_kernel(
+def layernorm_kernel(
     x_ptr, weight_ptr, bias_ptr, out_ptr,
     stride_row,
     N_SIZE,
@@ -60,7 +60,7 @@ _layernorm_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N_SIZE"],
-)(_layernorm_kernel)
+)(layernorm_kernel)
 
 
 def run(
@@ -88,7 +88,7 @@ def run(
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _layernorm_kernel[grid](
+        layernorm_kernel[grid](
             x_2d, weight, bias, out_2d,
             x_2d.stride(0),
             N_SIZE=K, eps=eps,
