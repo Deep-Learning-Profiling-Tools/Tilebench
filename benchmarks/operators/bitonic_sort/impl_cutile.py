@@ -24,9 +24,10 @@ def _next_pow2(n: int) -> int:
 def pad_kernel(data_ptr, work_ptr, N, M, TILE: ConstInt):
     """Copy data[0:N] → work[0:N], fill work[N:M] with +inf (mirrors Triton's pad_kernel)."""
     bid = ct.bid(0)
-    offs = bid * TILE + ct.arange(TILE, dtype=ct.int32)
-    # ct.gather returns padding_value for OOB indices (>= N or negative).
-    vals = ct.gather(data_ptr, offs, padding_value=float("inf"))
+    # Contiguous chunk: tile-aligned box load; the +inf padding fills the
+    # tail beyond N directly (no per-element index tile needed).
+    vals = ct.load(data_ptr, index=(bid,), shape=(TILE,),
+                   padding_mode=ct.PaddingMode.POS_INF)
     # Tile-aligned store; silently drops the OOB tail (offs >= M).
     ct.store(work_ptr, index=(bid,), tile=vals)
 
@@ -52,7 +53,10 @@ def bitonic_step_kernel(work_ptr, k, j, M, TILE: ConstInt):
 
     active = (ixj > offs) & (ixj < M) & (offs < M)
 
-    a = ct.gather(work_ptr, offs, padding_value=0.0)
+    # `offs` is the CTA's own contiguous chunk — box load; only the XOR
+    # partner `ixj` is a genuinely data-dependent access and stays a gather.
+    a = ct.load(work_ptr, index=(bid,), shape=(TILE,),
+                padding_mode=ct.PaddingMode.ZERO)
     b = ct.gather(work_ptr, ixj, padding_value=0.0)
 
     ascending = (offs & k) == 0
