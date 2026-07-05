@@ -16,14 +16,14 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 282.31 us | 10.65 % | 10.65 % | 7.30 % | 5.73 % | 11.50 % | 816.70 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
-| fp16 | cutile | 282.21 us | 10.96 % | 10.71 % | 11.16 % | 6.34 % | 47.67 % | 821.71 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| bf16 | triton | 282.30 us | 10.64 % | 10.64 % | 7.32 % | 5.74 % | 11.52 % | 816.15 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
-| bf16 | cutile | 282.01 us | 10.98 % | 10.72 % | 11.19 % | 6.34 % | 47.76 % | 822.49 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| fp32 | triton | 282.72 us | 23.42 % | 23.42 % | 13.35 % | 11.39 % | 22.79 % | 1.80 Tbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp32 | cutile | 282.59 us | 23.40 % | 23.40 % | 13.19 % | 11.39 % | 47.79 % | 1.80 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
-| int8 | triton | 282.46 us | 4.58 % | 4.42 % | 4.67 % | 3.66 % | 10.54 % | 338.97 Gbyte/s | 32 | 23 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
-| int8 | cutile | 282.02 us | 10.91 % | 4.33 % | 11.09 % | 3.65 % | 44.42 % | 332.24 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp16 | triton | 282.75 us | 10.63 % | 10.63 % | 7.29 % | 5.72 % | 11.51 % | 815.61 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| fp16 | cutile | 282.59 us | 10.95 % | 10.71 % | 11.17 % | 6.32 % | 47.64 % | 821.33 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| bf16 | triton | 282.62 us | 10.62 % | 10.62 % | 7.29 % | 5.73 % | 11.48 % | 814.84 Gbyte/s | 32 | 22 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| bf16 | cutile | 282.24 us | 10.97 % | 10.71 % | 11.17 % | 6.33 % | 47.73 % | 821.77 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp32 | triton | 283.17 us | 23.35 % | 23.35 % | 13.34 % | 11.38 % | 22.75 % | 1.79 Tbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
+| fp32 | cutile | 283.17 us | 23.36 % | 23.36 % | 13.16 % | 11.38 % | 47.66 % | 1.79 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| int8 | triton | 282.69 us | 4.56 % | 4.42 % | 4.66 % | 3.65 % | 10.51 % | 339.25 Gbyte/s | 32 | 23 register/thread | 0 byte/block | 0 byte/block | 84 block / 32 block |
+| int8 | cutile | 282.47 us | 10.90 % | 4.32 % | 11.08 % | 3.63 % | 44.38 % | 331.56 Gbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -31,29 +31,29 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| bf16 | cutile | 1/2 | 256.70 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
-| bf16 | cutile | 2/2 | 25.31 us | `_copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16` |
-| bf16 | triton | 1/2 | 257.02 us | `_copy_by_dest_kernel` |
-| bf16 | triton | 2/2 | 25.28 us | `_copy_by_dest_kernel` |
-| fp16 | cutile | 1/2 | 256.80 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
-| fp16 | cutile | 2/2 | 25.41 us | `_copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_` |
-| fp16 | triton | 1/2 | 257.06 us | `_copy_by_dest_kernel` |
-| fp16 | triton | 2/2 | 25.25 us | `_copy_by_dest_kernel` |
-| fp32 | cutile | 1/2 | 257.12 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
-| fp32 | cutile | 2/2 | 25.47 us | `_copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_` |
-| fp32 | triton | 1/2 | 257.31 us | `_copy_by_dest_kernel` |
-| fp32 | triton | 2/2 | 25.41 us | `_copy_by_dest_kernel` |
-| int8 | cutile | 1/2 | 256.80 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
-| int8 | cutile | 2/2 | 25.22 us | `_copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_` |
-| int8 | triton | 1/2 | 256.99 us | `_copy_by_dest_kernel` |
-| int8 | triton | 2/2 | 25.47 us | `_copy_by_dest_kernel` |
+| bf16 | cutile | 1/2 | 256.83 us | `copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16_` |
+| bf16 | cutile | 2/2 | 25.41 us | `copy_by_dest_kernel_Kt1_A3bf16_3v8l0_4t1_5i16_p16_` |
+| bf16 | triton | 1/2 | 257.31 us | `copy_by_dest_kernel` |
+| bf16 | triton | 2/2 | 25.31 us | `copy_by_dest_kernel` |
+| fp16 | cutile | 1/2 | 257.15 us | `copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_A` |
+| fp16 | cutile | 2/2 | 25.44 us | `copy_by_dest_kernel_Kt1_A3f16_3v8l0_4t1_5i16_p16_A` |
+| fp16 | triton | 1/2 | 257.41 us | `copy_by_dest_kernel` |
+| fp16 | triton | 2/2 | 25.34 us | `copy_by_dest_kernel` |
+| fp32 | cutile | 1/2 | 257.70 us | `copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_A` |
+| fp32 | cutile | 2/2 | 25.47 us | `copy_by_dest_kernel_Kt1_A3f32_3v4l0_4t1_5i16_p16_A` |
+| fp32 | triton | 1/2 | 257.63 us | `copy_by_dest_kernel` |
+| fp32 | triton | 2/2 | 25.54 us | `copy_by_dest_kernel` |
+| int8 | cutile | 1/2 | 257.22 us | `copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_A` |
+| int8 | cutile | 2/2 | 25.25 us | `copy_by_dest_kernel_Kt1_A3i8_3v16l0_4t1_5i16_p16_A` |
+| int8 | triton | 1/2 | 257.12 us | `copy_by_dest_kernel` |
+| int8 | triton | 2/2 | 25.57 us | `copy_by_dest_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.00× faster** (282.2 µs vs 282.3 µs).
-- **bf16**: cuTile is **1.00× faster** (282.0 µs vs 282.3 µs).
-- **fp32**: cuTile is **1.00× faster** (282.6 µs vs 282.7 µs).
-- **int8**: cuTile is **1.00× faster** (282.0 µs vs 282.5 µs).
+- **fp16**: cuTile is **1.00× faster** (282.6 µs vs 282.8 µs).
+- **bf16**: cuTile is **1.00× faster** (282.2 µs vs 282.6 µs).
+- **fp32**: cuTile is **1.00× faster** (283.2 µs vs 283.2 µs).
+- **int8**: cuTile is **1.00× faster** (282.5 µs vs 282.7 µs).
 
 ## NCU's own bottleneck verdict
 
