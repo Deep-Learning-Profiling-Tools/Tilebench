@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _swiglu_kernel(x, y, output, TILE: ConstInt):
+def swiglu_kernel(x, y, output, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.astype(ct.load(x, index=(bid,), shape=(TILE,)), ct.float32)
     y_tile = ct.astype(ct.load(y, index=(bid,), shape=(TILE,)), ct.float32)
@@ -29,7 +29,7 @@ def _swiglu_kernel(x, y, output, TILE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_swiglu_kernel)
+_tuner = CutileAutotuner(swiglu_kernel)
 
 
 def run(x: torch.Tensor, y: torch.Tensor,
