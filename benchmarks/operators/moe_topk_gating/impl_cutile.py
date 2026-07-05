@@ -13,7 +13,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _moe_topk_gating_kernel(
+def moe_topk_gating_kernel(
     logits_ptr,
     topk_w_ptr,
     topk_idx_ptr,
@@ -76,7 +76,7 @@ def _moe_topk_gating_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_moe_topk_gating_kernel)
+_tuner = CutileAutotuner(moe_topk_gating_kernel)
 
 
 def _next_pow2(n: int) -> int:
