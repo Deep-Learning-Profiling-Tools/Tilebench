@@ -35,7 +35,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
+def mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
     """One CTA per row. Accumulates sum in tiles, writes mean to out[row, 0]."""
     row       = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
@@ -58,7 +58,7 @@ def _mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_mean_rowwise_kernel)
+_tuner = CutileAutotuner(mean_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
