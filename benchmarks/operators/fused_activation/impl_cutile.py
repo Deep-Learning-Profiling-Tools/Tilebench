@@ -27,7 +27,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _fused_activation_kernel(x, gate, bias, out, TILE: ConstInt):
+def fused_activation_kernel(x, gate, bias, out, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.astype(
         ct.load(x, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO),
@@ -46,7 +46,7 @@ def _fused_activation_kernel(x, gate, bias, out, TILE: ConstInt):
     ct.store(out, index=(bid,), tile=out_tile)
 
 
-_tuner = CutileAutotuner(_fused_activation_kernel)
+_tuner = CutileAutotuner(fused_activation_kernel)
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
