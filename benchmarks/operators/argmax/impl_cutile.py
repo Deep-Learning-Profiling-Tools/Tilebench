@@ -17,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _argmax_rowwise_kernel(
+def argmax_rowwise_kernel(
     input_flat,
     output_flat,
     N,
@@ -57,7 +57,7 @@ def _argmax_rowwise_kernel(
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_argmax_rowwise_kernel)
+_tuner = CutileAutotuner(argmax_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
