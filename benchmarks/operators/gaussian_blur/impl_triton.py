@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
 
 
 @triton.jit
-def _gaussian_blur_kernel(
+def gaussian_blur_kernel(
     input_ptr,
     kernel_ptr,
     output_ptr,
@@ -60,7 +60,7 @@ _gaussian_blur_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["total_elements"],
-)(_gaussian_blur_kernel)
+)(gaussian_blur_kernel)
 
 
 def run(input, kernel, input_rows, input_cols,
@@ -83,7 +83,7 @@ def run(input, kernel, input_rows, input_cols,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(total_elements, cfg["BLOCK_SIZE"]),)
-        _gaussian_blur_kernel[grid](
+        gaussian_blur_kernel[grid](
             input, kernel, output,
             input_rows, input_cols, total_elements,
             kernel_rows=kernel_rows,
