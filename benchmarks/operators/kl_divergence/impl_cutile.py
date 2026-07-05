@@ -37,7 +37,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
+def kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
     bid = ct.bid(0)
 
     acc = ct.full((1, TILE), 0.0, dtype=ct.float32)
@@ -66,7 +66,7 @@ def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
     ct.store(loss, index=(bid,), tile=row_sum)
 
 
-_tuner = CutileAutotuner(_kl_divergence_kernel)
+_tuner = CutileAutotuner(kl_divergence_kernel)
 
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
