@@ -111,7 +111,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | swiglu | fp16 | 69.0 | 99.8 | 1.45× |
 | swiglu | bf16 | 72.9 | 100.8 | 1.38× |
 | swiglu | fp32 | 137.9 | 148.3 | 1.08× |
-| top_k_selection | fp32 | 200.0 | 156.3 | 0.78× |
+| top_k_selection | fp32 | 200.6 | 140.2 | 0.70× |
 | vector_add | fp16 | 18.3 | 18.4 | 1.01× |
 | vector_add | bf16 | 18.1 | 18.6 | 1.03× |
 | vector_add | fp32 | 34.3 | 34.4 | 1.00× |

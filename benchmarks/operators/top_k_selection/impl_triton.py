@@ -1,26 +1,7 @@
-"""Top-k via hierarchical block-topk tournament reduction.
-
-Algorithm (mirrors impl_cutile.py):
-  1. Split the input into BLOCK_SIZE-wide chunks; each CTA computes its
-     chunk's local top-k' (k' = next_pow2(k)) with `tl.topk` — an
-     in-register bitonic top-k — and writes k' sorted-descending
-     candidates to a (num_blocks, k') buffer.
-  2. Repeat the same kernel on the flattened candidate buffer until one
-     block remains; its first k values are the answer.
-
-Levels shrink by a factor of BLOCK_SIZE / k' per round, so configs are
-constrained to BLOCK_SIZE >= 2*k' (otherwise the candidate count would
-not decrease; e.g. k=1024 with BLOCK_SIZE=1024 recurses forever).
-Total data touched ~ N * (1 + k'/B + ...) ≈ 1.1-1.5 passes, and the
-launch count drops from the old full bitonic sort's log²(2N)/2 = 210 to
-2-6 — the same complexity class as torch.topk's RadixSelect.
-
-The tuner is hand-rolled (streamk pattern): it times the WHOLE level
-hierarchy per config on scratch buffers, because the level structure
-(grid sizes, buffer shapes) depends on BLOCK_SIZE, which
-triton.autotune cannot express (output allocation happens between
-launches). do_bench warmup=1/rep=3 is the repo-wide autotune budget.
-"""
+"""Top-k via hierarchical block-topk tournament reduction: each CTA writes
+its chunk's sorted top-k' (k' = next_power_of_2(k)) candidates via tl.topk,
+the kernel re-launches on the candidates until one block remains.
+Configs keep BLOCK_SIZE >= 2*k' so every level shrinks."""
 import torch
 import triton
 import triton.language as tl
@@ -32,16 +13,14 @@ _DEFAULT_CONFIG = {
     "num_warps": 8,
 }
 
-# Tile dim is 1:1 with impl_cutile.py's search space; num_warps is
-# Triton's scheduling knob like cuTile's occupancy. Configs with
-# BLOCK_SIZE < 2*k' are filtered out at tune time.
+# Tile dim mirrors impl_cutile.py's block values; num_warps is Triton's
+# scheduling knob. BLOCK_SIZE < 2*k' is skipped at tune time.
 _SEARCH_SPACE = [
     {"BLOCK_SIZE": bs, "num_warps": nw}
     for bs in (1024, 2048, 4096)
     for nw in (4, 8)
 ]
 
-# (N, k) -> winning config dict, filled by _tune_pipeline.
 _autotune_cache: dict = {}
 _last_autotune_config: dict = {}
 
@@ -62,10 +41,6 @@ def block_topk_kernel(
         tl.store(out_ptr + offs_out, tl.topk(x, K2))
 
 
-def _next_pow2(x: int) -> int:
-    return 1 << (int(x) - 1).bit_length()
-
-
 def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg: dict) -> torch.Tensor:
     B, nw = cfg["BLOCK_SIZE"], cfg["num_warps"]
     cur, n = x, x.numel()
@@ -80,6 +55,10 @@ def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg: dict) -> torch.Tensor:
 
 
 def _tune_pipeline(x: torch.Tensor, k: int, K2: int) -> dict:
+    """Time the whole level hierarchy per config (the level structure —
+    grid sizes and buffer shapes between launches — depends on BLOCK_SIZE,
+    which triton.autotune cannot express). do_bench warmup=1/rep=3 is the
+    repo-wide autotune budget."""
     key = (x.numel(), k)
     cached = _autotune_cache.get(key)
     if cached is not None:
@@ -104,7 +83,7 @@ def run(input: torch.Tensor, N: int, k: int,
     assert 1 <= k <= N
 
     input = input.contiguous()
-    K2 = _next_pow2(k)
+    K2 = triton.next_power_of_2(k)
 
     if autotune:
         cfg = _tune_pipeline(input, k, K2)
