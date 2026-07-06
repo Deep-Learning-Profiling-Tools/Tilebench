@@ -11,7 +11,7 @@ def _moe_topk_gating_kernel(
     topk_w_ptr,
     topk_idx_ptr,
     E,
-    K,
+    K: tl.constexpr,
     BLOCK_SIZE_E: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
 ):
@@ -61,6 +61,8 @@ _moe_topk_gating_kernel_autotuned = triton.autotune(
         for nw in [1, 2, 4]
     ],
     key=["E", "K"],
+    warmup=1,
+    rep=3,
 )(_moe_topk_gating_kernel)
 
 
