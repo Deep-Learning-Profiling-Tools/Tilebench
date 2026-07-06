@@ -7,20 +7,20 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 64, 'GROUP_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 64, 'group_m': 8, 'occupancy': 16}` |
-| bf16 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 64, 'GROUP_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 64, 'group_m': 8, 'occupancy': 16}` |
-| fp32 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'GROUP_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 64, 'group_m': 8, 'occupancy': 4}` |
+| fp16 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 64, 'GROUP_M': 8, 'num_warps': 4, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 64, 'group_m': 8, 'occupancy': 16}` |
+| bf16 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 256, 'BLOCK_K': 64, 'GROUP_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 64, 'group_m': 8, 'occupancy': 8}` |
+| fp32 | `{'k': 4096, 'm': 8192, 'n': 28672}` | `{'BLOCK_M': 128, 'BLOCK_N': 128, 'BLOCK_K': 32, 'GROUP_M': 8, 'num_warps': 4, 'num_stages': 3}` | `{'tm': 128, 'tn': 128, 'tk': 32, 'group_m': 8, 'occupancy': 8}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 1977.57 us | 61.80 % | 19.59 % | 62.16 % | 54.60 % | 63.32 % | 1.50 Tbyte/s | 256 | 71 register/thread | 0 byte/block | 98.35 Kbyte/block | 3 block / 2 block |
-| fp16 | cutile | 2269.41 us | 72.75 % | 21.59 % | 74.50 % | 56.00 % | 69.04 % | 1.66 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| bf16 | triton | 1938.18 us | 59.73 % | 20.06 % | 59.89 % | 55.65 % | 61.32 % | 1.54 Tbyte/s | 256 | 71 register/thread | 0 byte/block | 98.35 Kbyte/block | 3 block / 2 block |
-| bf16 | cutile | 2209.25 us | 72.00 % | 22.36 % | 73.56 % | 58.30 % | 68.60 % | 1.72 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| fp32 | triton | 3681.12 us | 60.57 % | 18.45 % | 61.98 % | 58.60 % | 65.77 % | 1.42 Tbyte/s | 256 | 71 register/thread | 0 byte/block | 98.35 Kbyte/block | 3 block / 2 block |
-| fp32 | cutile | 3895.42 us | 67.16 % | 19.67 % | 68.32 % | 60.36 % | 68.17 % | 1.51 Tbyte/s | 256 | 255 register/thread | 213.19 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 1962.61 us | 61.89 % | 20.11 % | 62.41 % | 56.90 % | 62.91 % | 1.54 Tbyte/s | 128 | 135 register/thread | 0 byte/block | 98.35 Kbyte/block | 3 block / 2 block |
+| fp16 | cutile | 2220.72 us | 72.50 % | 22.14 % | 73.87 % | 55.85 % | 69.00 % | 1.70 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| bf16 | triton | 2073.81 us | 40.44 % | 19.16 % | 41.21 % | 32.91 % | 50.49 % | 1.47 Tbyte/s | 256 | 135 register/thread | 0 byte/block | 147.50 Kbyte/block | 1 block / 1 block |
+| bf16 | cutile | 2171.10 us | 71.26 % | 22.86 % | 73.01 % | 57.90 % | 68.07 % | 1.75 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp32 | triton | 3628.50 us | 61.69 % | 19.15 % | 61.86 % | 60.82 % | 66.36 % | 1.47 Tbyte/s | 128 | 135 register/thread | 0 byte/block | 98.35 Kbyte/block | 3 block / 2 block |
+| fp32 | cutile | 3733.42 us | 80.33 % | 21.79 % | 80.81 % | 66.55 % | 80.63 % | 1.67 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -28,32 +28,32 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| bf16 | cutile | 1/2 | 569.25 us | `first_wave_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2bf16_1v` |
-| bf16 | cutile | 2/2 | 1640.00 us | `full_tiles_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2bf16_1v` |
-| bf16 | triton | 1/2 | 98.18 us | `first_wave` |
-| bf16 | triton | 2/2 | 1840.00 us | `full_tiles` |
-| fp16 | cutile | 1/2 | 569.41 us | `first_wave_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f16_1v8l` |
-| fp16 | cutile | 2/2 | 1700.00 us | `full_tiles_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f16_1v8l` |
-| fp16 | triton | 1/2 | 97.57 us | `first_wave` |
-| fp16 | triton | 2/2 | 1880.00 us | `full_tiles` |
-| fp32 | cutile | 1/2 | 675.42 us | `first_wave_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
-| fp32 | cutile | 2/2 | 3220.00 us | `full_tiles_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
-| fp32 | triton | 1/2 | 181.12 us | `first_wave` |
-| fp32 | triton | 2/2 | 3500.00 us | `full_tiles` |
+| bf16 | cutile | 1/2 | 571.10 us | `first_wave_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2bf16_1v` |
+| bf16 | cutile | 2/2 | 1600.00 us | `full_tiles_Kt1_A2bf16_1v8l0_2t1_3i16_p16_A2bf16_1v` |
+| bf16 | triton | 1/2 | 163.81 us | `first_wave` |
+| bf16 | triton | 2/2 | 1910.00 us | `full_tiles` |
+| fp16 | cutile | 1/2 | 570.72 us | `first_wave_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f16_1v8l` |
+| fp16 | cutile | 2/2 | 1650.00 us | `full_tiles_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f16_1v8l` |
+| fp16 | triton | 1/2 | 132.61 us | `first_wave` |
+| fp16 | triton | 2/2 | 1830.00 us | `full_tiles` |
+| fp32 | cutile | 1/2 | 863.42 us | `first_wave_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | cutile | 2/2 | 2870.00 us | `full_tiles_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | triton | 1/2 | 218.50 us | `first_wave` |
+| fp32 | triton | 2/2 | 3410.00 us | `full_tiles` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.15× faster** (1977.6 µs vs 2269.4 µs).
-- **bf16**: Triton is **1.14× faster** (1938.2 µs vs 2209.2 µs).
-- **fp32**: Triton is **1.06× faster** (3681.1 µs vs 3895.4 µs).
+- **fp16**: Triton is **1.13× faster** (1962.6 µs vs 2220.7 µs).
+- **bf16**: Triton is **1.05× faster** (2073.8 µs vs 2171.1 µs).
+- **fp32**: Triton is **1.03× faster** (3628.5 µs vs 3733.4 µs).
 
 ## NCU's own bottleneck verdict
 
 - **bf16 / cutile** — Compute and Memory are well-balanced
-- **bf16 / triton** — Compute and Memory are well-balanced
+- **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp16 / cutile** — Compute and Memory are well-balanced
 - **fp16 / triton** — Compute and Memory are well-balanced
-- **fp32 / cutile** — Compute and Memory are well-balanced
+- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
 - **fp32 / triton** — Compute and Memory are well-balanced
 
 ## Reports
