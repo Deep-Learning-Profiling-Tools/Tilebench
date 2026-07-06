@@ -1,100 +1,146 @@
-"""cuTile top-k selection — same multi-launch bitonic sort as impl_triton.py.
+"""Top-k via hierarchical block-topk tournament reduction (cuTile).
 
-Each compare-exchange kernel handles TILE pairs per CTA (mirrors Triton's
-BLOCK_SIZE), using ct.gather for runtime-strided loads and ct.scatter for
-runtime-strided stores. Inactive lanes route their writes to OOB index N
-(silently dropped) — equivalent to Triton's `tl.store(..., mask=valid)`.
+Same two-phase structure as impl_triton.py: each CTA computes its
+BLOCK-wide chunk's local top-k' (k' = next_pow2(k)) sorted descending,
+writes k' candidates to a (num_blocks, k') buffer, and the same kernel
+is re-launched on the flattened candidates until one block remains.
+Configs keep BLOCK >= 2*k' so every level shrinks.
 
-Tune ONCE per padding_len, not per (stage, stride) — `stage` and `stride`
-are runtime ints baked in via args_fn, so the optimal config depends only
-on padding_len and TILE. This matches Triton's `key=["N"]` cache.
+The block-local top-k' is an in-tile bitonic sorting network built from
+ct.reshape / ct.extract / ct.minimum / ct.maximum / ct.cat (cuTile has
+no sort/topk primitive — Triton uses tl.topk, which lowers to the same
+kind of in-register network). The network's log²(B) compare-exchange
+stages need tile SHAPES that change per stage, and cuTile 1.3 offers no
+in-language way to unroll them statically: in-kernel `for range(...)`
+and `while` both compile to runtime IR loops (loop variables cannot
+feed constant reshape shapes), and iterating a Python tuple is rejected
+("cannot create constant from value of type tuple"). The kernels are
+therefore GENERATED as straight-line source per (B, k') and imported
+from a temp module (the tracer needs inspect-able source, so exec()
+alone is not enough). This is itself an expressibility data point:
+static metaprogramming that Triton gets from tl.constexpr + built-in
+primitives requires source generation in cuTile.
+
+Compile cost is one-time per (B, k') variant (~2-7 s), paid inside the
+engine's warmup, and cached for the process lifetime.
 """
+import importlib.util
+import tempfile
 from types import SimpleNamespace
 
 import cuda.tile as ct
 import torch
+# Timing-only import: keeps the tuning clock identical to impl_triton.py.
+from triton.testing import do_bench
 
-from core.cutile_autotune import CutileAutotuner
+_DEFAULT_CONFIG = SimpleNamespace(block=2048, occupancy=8)
 
-ConstInt = ct.Constant[int]
-
-_last_autotune_config: dict = {}
-
-# Defaults and search space mirror impl_triton.py 1-to-1:
-#   tile       ↔ BLOCK_SIZE        same values
-#   occupancy  ↔ num_warps         nw * occ ≈ 64 on B200, so cuTile's
-#                                   occ ∈ [8, 16, 32] pairs with Triton's
-#                                   nw ∈ [8, 4, 2]. Default occ=16 ↔ nw=4.
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=16)
+# Tile dim is 1:1 with impl_triton.py's search space; occupancy is
+# cuTile's scheduling knob like Triton's num_warps. Configs with
+# block < 2*k' are filtered out at tune time.
 _SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [512, 1024, 2048]
-    for occ in [8, 16, 32]
+    SimpleNamespace(block=bs, occupancy=occ)
+    for bs in (1024, 2048, 4096)
+    for occ in (4, 8, 16)
 ]
 
+_last_autotune_config: dict = {}
+_autotune_cache: dict = {}
 
-@ct.kernel
-def bitonic_step_kernel(
-    input_ptr,
-    N,
-    stage,
-    stride,
-    TILE: ConstInt,
-):
-    """One compare-exchange pass over TILE pairs per CTA — mirrors Triton."""
-    bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=ct.int32)
-
-    slice_1_offset = (offset // stride) * (2 * stride) + (offset % stride)
-    slice_2_offset = slice_1_offset + stride
-
-    valid_1 = slice_1_offset < N
-    valid_2 = slice_2_offset < N
-
-    # Two-step OOB handling (defensive):
-    #   1. Clamp OOB lanes to a safe in-range index (0). ct.gather's
-    #      padding_value is documented to fire for negative / out-of-range
-    #      indices only; an in-range (but logically invalid) index returns
-    #      the real element at that address. So clamping to 0 is needed
-    #      first to avoid undefined-bounds reads.
-    #   2. Override the gathered values to -inf for invalid lanes. This is
-    #      what actually neutralises them in the bitonic compare-exchange,
-    #      regardless of what the gather returned.
-    safe_1 = ct.where(valid_1, slice_1_offset, 0)
-    safe_2 = ct.where(valid_2, slice_2_offset, 0)
-    slice_1_t = ct.gather(input_ptr, safe_1, padding_value=-float("inf"))
-    slice_2_t = ct.gather(input_ptr, safe_2, padding_value=-float("inf"))
-    slice_1_t = ct.where(valid_1, slice_1_t, -float("inf"))
-    slice_2_t = ct.where(valid_2, slice_2_t, -float("inf"))
-
-    descend = ((slice_1_offset // stage) % 2) == 1
-    greater = slice_1_t > slice_2_t
-    swap = descend == greater
-
-    new_slice_1_t = ct.where(swap, slice_2_t, slice_1_t)
-    new_slice_2_t = ct.where(swap, slice_1_t, slice_2_t)
-
-    # Route inactive writes to OOB index N (silently dropped by ct.scatter),
-    # equivalent to Triton's mask=valid.
-    store_1 = ct.where(valid_1, slice_1_offset, N)
-    store_2 = ct.where(valid_2, slice_2_offset, N)
-    ct.scatter(input_ptr, store_1, new_slice_1_t)
-    ct.scatter(input_ptr, store_2, new_slice_2_t)
+# Generated-module machinery: one straight-line kernel per (B, K2),
+# written into a temp dir that lives for the process lifetime.
+_gen_dir = tempfile.TemporaryDirectory(prefix="cutile_topk_gen_")
+_kernel_cache: dict = {}
+_hinted_cache: dict = {}
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per
-# padding_len. Mirrors Triton's @triton.autotune(key=["N"]) — one sweep per
-# problem size, reused across all log^2(padding_len)/2 step launches.
-_tuner = CutileAutotuner(bitonic_step_kernel)
+def _gen_source(B: int, K2: int) -> str:
+    """Emit the fully unrolled descending bitonic sort + top-k' extract."""
+    L = ["import cuda.tile as ct", "", "", "@ct.kernel",
+         "def block_topk_kernel(inp, out2d):",
+         "    bid = ct.bid(0)",
+         f"    x = ct.load(inp, index=(bid,), shape=({B},), "
+         "padding_mode=ct.PaddingMode.NEG_INF)"]
+    for kb in range(1, B.bit_length()):
+        ksz = 1 << kb
+        for jj in range(kb):
+            j = 1 << (kb - 1 - jj)
+            G = B // (2 * j)
+            L += [f"    x3 = ct.reshape(x, ({G}, 2, {j}))",
+                  f"    a = ct.extract(x3, index=(0, 0, 0), shape=({G}, 1, {j}))",
+                  f"    b = ct.extract(x3, index=(0, 1, 0), shape=({G}, 1, {j}))",
+                  "    lo = ct.minimum(a, b)",
+                  "    hi = ct.maximum(a, b)",
+                  f"    m = ((ct.arange({G}, dtype=ct.int32) * {2 * j}) & {ksz}) == 0",
+                  f"    m3 = ct.reshape(m, ({G}, 1, 1))",
+                  "    first = ct.where(m3, hi, lo)",
+                  "    second = ct.where(m3, lo, hi)",
+                  f"    x = ct.reshape(ct.cat((first, second), axis=1), ({B},))"]
+    L += [f"    top = ct.extract(x, index=(0,), shape=({K2},))",
+          f"    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, {K2})))",
+          ""]
+    return "\n".join(L)
+
+
+def _make_kernel(B: int, K2: int):
+    key = (B, K2)
+    if key not in _kernel_cache:
+        name = f"cutile_topk_gen_b{B}_k{K2}"
+        path = f"{_gen_dir.name}/{name}.py"
+        with open(path, "w") as f:
+            f.write(_gen_source(B, K2))
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _kernel_cache[key] = mod.block_topk_kernel
+    return _kernel_cache[key]
+
+
+def _kernel_with_hints(B: int, K2: int, occupancy: int):
+    """replace_hints result cached per (B, K2, occupancy) — required for
+    CUDA-graph stability, same rationale as core.cutile_autotune."""
+    key = (B, K2, occupancy)
+    if key not in _hinted_cache:
+        _hinted_cache[key] = _make_kernel(B, K2).replace_hints(occupancy=occupancy)
+    return _hinted_cache[key]
 
 
 def _next_pow2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
 
 
+def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg, stream) -> torch.Tensor:
+    B = cfg.block
+    kern = _kernel_with_hints(B, K2, cfg.occupancy)
+    cur, n = x, x.numel()
+    while True:
+        nb = (n + B - 1) // B
+        out = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
+        ct.launch(stream, (nb, 1, 1), kern, (cur, out))
+        if nb == 1:
+            return out[0, :k]
+        cur, n = out.reshape(-1), nb * K2
+
+
+def _tune_pipeline(x: torch.Tensor, k: int, K2: int, stream):
+    key = (x.numel(), k)
+    cached = _autotune_cache.get(key)
+    if cached is not None:
+        return cached
+    best_cfg, best_ms = None, float("inf")
+    for cfg in _SEARCH_SPACE:
+        if cfg.block < 2 * K2:
+            continue   # level sizes would not shrink
+        ms = do_bench(lambda: _run_hierarchy(x, k, K2, cfg, stream),
+                      warmup=1, rep=3)
+        if ms < best_ms:
+            best_cfg, best_ms = cfg, ms
+    _autotune_cache[key] = best_cfg
+    return best_cfg
+
+
 def run(input: torch.Tensor, N: int, k: int,
         block_size: int = None, autotune: bool = False, **kwargs):
-
     assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
@@ -102,46 +148,21 @@ def run(input: torch.Tensor, N: int, k: int,
     assert 1 <= k <= N
 
     input = input.contiguous()
-    padding_len = _next_pow2(N)
-    input_padding = torch.empty((padding_len,), device=input.device, dtype=input.dtype)
-    input_padding[:N] = input
-    input_padding[N:] = -float("inf")
-
+    K2 = _next_pow2(k)
     stream = torch.cuda.current_stream()
-    pair_count = padding_len // 2
 
-    # Tune ONCE per padding_len. (stage, stride) are runtime ints, so the
-    # optimal cfg depends only on padding_len and TILE. Use the first step's
-    # (stage, stride) for the tuning launches.
     if autotune:
-        stage0, stride0 = 2, 1
-        cfg = _tuner.tune_or_cached(
-            shape_key=(padding_len,),
-            search_space=_SEARCH_SPACE,
-            stream=stream,
-            grid_fn=lambda cfg: ((pair_count + cfg.tile - 1) // cfg.tile, 1, 1),
-            args_fn=lambda cfg: (input_padding, padding_len, stage0, stride0, cfg.tile),
-            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-        )
+        cfg = _tune_pipeline(input, k, K2, stream)
         _last_autotune_config.clear()
-        _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
+        _last_autotune_config.update({"block": cfg.block,
+                                      "occupancy": cfg.occupancy})
     else:
-        TILE = int(block_size) if block_size is not None else _DEFAULT_CONFIG.tile
-        cfg = SimpleNamespace(tile=TILE, occupancy=_DEFAULT_CONFIG.occupancy)
+        blk = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block
+        # progress guarantee: candidates must shrink between levels
+        cfg = SimpleNamespace(block=max(blk, 2 * K2),
+                              occupancy=_DEFAULT_CONFIG.occupancy)
 
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    grid = ((pair_count + cfg.tile - 1) // cfg.tile, 1, 1)
-
-    stage = 2
-    while stage <= padding_len:
-        stride = stage >> 1
-        while stride > 0:
-            ct.launch(stream, grid, kernel,
-                      (input_padding, padding_len, stage, stride, cfg.tile))
-            stride >>= 1
-        stage <<= 1
-
-    return input_padding[:k].clone()
+    return _run_hierarchy(input, k, K2, cfg, stream)
 
 
 def get_last_config() -> dict | None:
