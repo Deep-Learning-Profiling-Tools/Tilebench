@@ -11,26 +11,33 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def reverse_kernel(a_input):
-        n = a_input.shape[0]
-
-        num_blocks = (n + (PMAX - 1)) // PMAX
+        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
+        free_tile_size = 16384
+        num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
 
         hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
 
+        total_rows = a_input.shape[0]
+        total_cols = a_input.shape[1] 
+        
         for i in range(num_blocks):
             offset = i * PMAX
-
             partition_index = nl.arange(PMAX)[:, None]
-            free_dim_index = nl.arange(a_input.shape[1])[None, :]
-            
-            mask = partition_index < (n - offset)
+            mask_p = partition_index < (total_rows - offset)
 
-            a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask)
+            for j in range(num_free_blocks):
+                free_offset = j * free_tile_size
+                free_dim_index = nl.arange(free_tile_size)[None, :]
+                mask_f = free_dim_index < (total_cols - free_offset)
+                mask = mask_p & mask_f
 
-            rev_partition = PMAX - 1 - partition_index
-            rev_free = a_input.shape[1] - 1 - free_dim_index
-            
-            nl.store(hbm_result_tile[rev_partition, rev_free], value=a_tile, mask=mask)
+                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
+
+                # reverse destination: element at (p, f) goes to (total_rows-1-p, total_cols-1-f)
+                rev_p = total_rows - 1 - (offset + partition_index)
+                rev_f = total_cols - 1 - (free_offset + free_dim_index)
+
+                nl.store(hbm_result_tile[rev_p, rev_f], value=a_tile, mask=mask)
 
         return hbm_result_tile
 
