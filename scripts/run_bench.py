@@ -1,29 +1,31 @@
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 from core.engine import run_benchmark_suite
 
-_TIMING_KEYS = {
-    "params", "problem_size", "dtype",
-    "torch_ms", "torch_stats",
-    "triton_ms", "triton_stats", "triton_ok", "triton_err",
-    "cutile_ms", "cutile_stats", "cutile_ok", "cutile_err",
-    "speedup_triton", "speedup_cutile",
-}
-_AUTOTUNE_KEYS = {
-    "params", "problem_size", "dtype",
-    "triton_autotune_cfg", "cutile_autotune_cfg",
-}
+# Display labels for the tile-language backends (torch is the implicit baseline).
+_BACKEND_LABEL = {"triton": "Triton", "cutile": "cuTile", "tilelang": "TileLang", "nki": "NKI"}
+_SPEEDUP_CODE = {"triton": "T", "cutile": "C", "tilelang": "TL", "nki": "N"}
 
 
-def _split(results: list[dict]) -> tuple[list[dict], list[dict]]:
-    timing = [{k: v for k, v in r.items() if k in _TIMING_KEYS} for r in results]
-    autotune = [{k: v for k, v in r.items() if k in _AUTOTUNE_KEYS} for r in results]
+def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dict]]:
+    """Keep only torch + the active backends' keys, so backends that were not
+    run never appear (as nan) in the timing / autotune logs."""
+    timing_keys = {"params", "problem_size", "dtype", "torch_ms", "torch_stats"}
+    autotune_keys = {"params", "problem_size", "dtype"}
+    for b in active:
+        timing_keys |= {f"{b}_ms", f"{b}_stats", f"{b}_ok", f"{b}_err", f"speedup_{b}"}
+        autotune_keys.add(f"{b}_autotune_cfg")
+    timing = [{k: v for k, v in r.items() if k in timing_keys} for r in results]
+    autotune = [{k: v for k, v in r.items() if k in autotune_keys} for r in results]
     return timing, autotune
 
 
 def main():
+    os.environ["NEURON_RT_NUM_CORES"] = "1"
+
     parser = argparse.ArgumentParser(description="Run TileBench benchmarks")
     parser.add_argument("--operator", type=str, default="vector_add",
                         help="Operator to benchmark")
@@ -51,11 +53,39 @@ def main():
                         help="Enable autotune (overrides config.yaml autotune setting)")
     parser.add_argument("--case-indices", type=str, default=None,
                         help="Comma-separated case indices to run, e.g. 0,1,3")
+    parser.add_argument("--tile-language", type=str, default=None,
+                        help="Comma-separated tile-language backends to run: "
+                             "triton, cutile, tilelang, nki (or 'all'). torch "
+                             "always runs as the speedup baseline. Default: all.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
                         help="Directory to store kept Proton files (default: system temp dir)")
     args = parser.parse_args()
+
+    # Resolve which tile-language backends to run. torch is always on (speedup
+    # baseline); omitting the flag runs them all (backward-compatible).
+    _TILE_LANGUAGES = ("triton", "cutile", "tilelang", "nki")
+    if args.tile_language is None:
+        enabled_backends = set(_TILE_LANGUAGES)
+    else:
+        tokens = [t.strip().lower() for t in args.tile_language.split(",") if t.strip()]
+        if "all" in tokens:
+            enabled_backends = set(_TILE_LANGUAGES)
+        else:
+            enabled_backends = set()
+            for t in tokens:
+                if t == "torch":
+                    continue  # always on; ignore if explicitly listed
+                if t not in _TILE_LANGUAGES:
+                    parser.error(
+                        f"unknown --tile-language backend '{t}'; "
+                        f"choose from {', '.join(_TILE_LANGUAGES)} (or 'all')"
+                    )
+                enabled_backends.add(t)
+
+    # Active tile-language backends in canonical column order (drives all output).
+    active = [b for b in _TILE_LANGUAGES if b in enabled_backends]
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -92,9 +122,21 @@ def main():
     )
 
     print(f"Starting benchmark for operator: {args.operator}")
-    results = run_benchmark_suite(args.operator, benchmark_overrides=overrides)
+    print(f"Tile-language backends: torch (baseline) + "
+          f"{', '.join(sorted(enabled_backends)) or '(none)'}")
+    results = run_benchmark_suite(
+        args.operator, benchmark_overrides=overrides, enabled_backends=enabled_backends
+    )
 
-    timing_results, autotune_results = _split(results)
+    if not results:
+        print(
+            f"\nNo cases produced results for '{args.operator}' — every case was "
+            f"skipped (see the 'Skipped:' messages above). Refusing to overwrite "
+            f"existing logs/CSV with empty data."
+        )
+        return
+
+    timing_results, autotune_results = _split(results, active)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     Path(autotune_path).parent.mkdir(parents=True, exist_ok=True)
@@ -122,31 +164,37 @@ def main():
     col_w = max((len(_fmt_params(r)) for r in timing_results), default=20) + 2
 
     print("\nSummary:")
-    print(
-        f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10} | "
-        f"{'Triton(ms)':>10} | {'cuTile(ms)':>10} | {'Speedup(T)':>10} | {'Speedup(C)':>10}"
-    )
-    print("-" * (col_w + 75))
+    header = f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10}"
+    header += "".join(f" | {_BACKEND_LABEL[b] + '(ms)':>12}" for b in active)
+    header += "".join(f" | {'Speedup(' + _SPEEDUP_CODE[b] + ')':>11}" for b in active)
+    print(header)
+    print("-" * len(header))
     for r in timing_results:
-        print(
-            f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f} | "
-            f"{r['triton_ms']:10.4f} | {r['cutile_ms']:10.4f} | "
-            f"{r['speedup_triton']:10.2f} | {r['speedup_cutile']:10.2f}"
-        )
+        line = f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f}"
+        line += "".join(f" | {r[f'{b}_ms']:12.4f}" for b in active)
+        line += "".join(f" | {r[f'speedup_{b}']:11.2f}" for b in active)
+        print(line)
 
-    # Save summary as CSV
-    csv_path = f"results/csv/{args.operator}_summary.csv"
+    # Save summary as CSV. Filename suffix mirrors the run mode so default
+    # and autotune sweeps don't overwrite each other:
+    #   results/csv/<op>_default.csv   (no --autotune)
+    #   results/csv/<op>_autotune.csv  (--autotune)
+    mode_suffix = "autotune" if args.autotune else "default"
+    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["params", "dtype", "torch_ms", "triton_ms", "cutile_ms",
-                         "speedup_triton", "speedup_cutile"])
+        writer.writerow(
+            ["params", "dtype", "torch_ms"]
+            + [f"{b}_ms" for b in active]
+            + [f"speedup_{b}" for b in active]
+        )
         for r in timing_results:
-            writer.writerow([
-                _fmt_params(r), r["dtype"],
-                f"{r['torch_ms']:.4f}", f"{r['triton_ms']:.4f}", f"{r['cutile_ms']:.4f}",
-                f"{r['speedup_triton']:.2f}", f"{r['speedup_cutile']:.2f}",
-            ])
+            writer.writerow(
+                [_fmt_params(r), r["dtype"], f"{r['torch_ms']:.4f}"]
+                + [f"{r[f'{b}_ms']:.4f}" for b in active]
+                + [f"{r[f'speedup_{b}']:.2f}" for b in active]
+            )
     print(f"Summary CSV     → {csv_path}")
 
 

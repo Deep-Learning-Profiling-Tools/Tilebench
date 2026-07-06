@@ -24,7 +24,7 @@ Available derived metrics (from core/metrics.py):
     tflops              arithmetic throughput (needs flops_expr)
     pct_peak_tflops     % of peak TFLOPS (needs flops_expr + peak_tflops map)
     arithmetic_intensity FLOP/Byte ratio (needs both expressions)
-    speedup             vs PyTorch baseline (triton & cutile only)
+    speedup             vs PyTorch baseline (non-torch backends only)
 """
 from __future__ import annotations
 
@@ -48,18 +48,20 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import compute_derived, load_peak_config  # noqa: E402
+from core.metrics import NON_GPU_BACKENDS, compute_derived, load_peak_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # constants
 # ---------------------------------------------------------------------------
 
-BACKENDS = ["torch", "triton", "cutile"]
+BACKENDS = ["torch", "triton", "cutile", "tilelang", "nki"]
 
 _STYLE: dict[str, dict] = {
     "torch":  {"color": "#1f77b4", "marker": "o", "linestyle": "-",  "label": "PyTorch"},
     "triton": {"color": "#2ca02c", "marker": "s", "linestyle": "--", "label": "Triton"},
     "cutile": {"color": "#ff7f0e", "marker": "^", "linestyle": ":",  "label": "cuTile"},
+    "tilelang": {"color": "#9467bd", "marker": "D", "linestyle": "-.", "label": "TileLang"},
+    "nki":    {"color": "#d62728", "marker": "v", "linestyle": (0, (3, 1, 1, 1)), "label": "NKI (Trainium)"},
 }
 
 _METRIC_LABEL: dict[str, str] = {
@@ -213,7 +215,7 @@ def _plot_one_metric(
 # ---------------------------------------------------------------------------
 
 # Jitter scale for X axis (separates backend points at the same AI value)
-_JITTER_FACTORS = {"torch": 0.85, "triton": 1.0, "cutile": 1.18}
+_JITTER_FACTORS = {"torch": 0.76, "triton": 0.88, "cutile": 1.0, "tilelang": 1.12, "nki": 1.24}
 
 
 def _plot_roofline(
@@ -257,16 +259,21 @@ def _plot_roofline(
 
     any_data_in_figure = False
 
+    # The roofline ceilings are GPU peaks; non-GPU backends (e.g. NKI on
+    # Trainium) must not be plotted against them — that would be a
+    # cross-hardware comparison (see PR #102 review).
+    roofline_backends = [b for b in BACKENDS if b not in NON_GPU_BACKENDS]
+
     for ax_idx, dtype in enumerate(dtypes):
         row, col = divmod(ax_idx, ncols)
         ax = axes[row][col]
         rows = grouped[dtype]
 
         # Collect (AI, TFLOPS) for each backend
-        points: dict[str, tuple[list, list]] = {b: ([], []) for b in BACKENDS}
+        points: dict[str, tuple[list, list]] = {b: ([], []) for b in roofline_backends}
         ai_vals = []
         for _, _, derived in rows:
-            for backend in BACKENDS:
+            for backend in roofline_backends:
                 ai = derived.get(backend, {}).get("arithmetic_intensity")
                 tf = derived.get(backend, {}).get("tflops")
                 if ai and tf and not math.isnan(tf):
@@ -311,7 +318,7 @@ def _plot_roofline(
                     linestyle="-", label=f"Mem BW ({peak_bw_GBs:.0f} GB/s)", zorder=1)
 
         # --- Data points (jitter X so backends don't overlap) ---
-        for backend in BACKENDS:
+        for backend in roofline_backends:
             xs, ys = points[backend]
             if not xs:
                 continue

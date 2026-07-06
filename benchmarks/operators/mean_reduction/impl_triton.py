@@ -7,7 +7,7 @@ _DEFAULT_CONFIG = {"BLOCK_M": 1, "BLOCK_N": 1024, "num_warps": 4, "num_stages": 
 
 
 @triton.jit
-def _mean_rowwise_kernel(X, Out, M, N, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
+def _mean_rowwise_kernel(X, Out, M, N: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
     """
     X:   pointer to input  [M, N] (row-major)
     Out: pointer to output [M]
@@ -43,6 +43,8 @@ _mean_rowwise_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["M", "N"],
+    warmup=1,
+    rep=3,
 )(_mean_rowwise_kernel)
 
 
