@@ -1,82 +1,98 @@
-"""Top-k via multi-launch descending bitonic sort.
+"""Top-k via hierarchical block-topk tournament reduction.
 
-Algorithm:
-  1. Pad the input to next_pow2(N) with -inf.
-  2. Outer loop over `stage in [2, 4, ..., padding_len]`; inner loop over
-     `stride in [stage/2, stage/4, ..., 1]`. Each (stage, stride) launches
-     a single compare-exchange kernel that, for each of the
-     padding_len/2 pairs, swaps the two endpoints based on whether the
-     pair lies in an ascending or descending sub-sequence.
-  3. The first k elements of the sorted buffer are the top-k (descending).
+Algorithm (mirrors impl_cutile.py):
+  1. Split the input into BLOCK_SIZE-wide chunks; each CTA computes its
+     chunk's local top-k' (k' = next_pow2(k)) with `tl.topk` — an
+     in-register bitonic top-k — and writes k' sorted-descending
+     candidates to a (num_blocks, k') buffer.
+  2. Repeat the same kernel on the flattened candidate buffer until one
+     block remains; its first k values are the answer.
 
-The compare-exchange kernel is autotuned via `triton.autotune(key=["N"])`,
-so the first launch in step 2 runs the sweep and all subsequent
-log²(padding_len)/2 launches are cache hits — equivalent to running the
-sweep once per padding_len.
+Levels shrink by a factor of BLOCK_SIZE / k' per round, so configs are
+constrained to BLOCK_SIZE >= 2*k' (otherwise the candidate count would
+not decrease; e.g. k=1024 with BLOCK_SIZE=1024 recurses forever).
+Total data touched ~ N * (1 + k'/B + ...) ≈ 1.1-1.5 passes, and the
+launch count drops from the old full bitonic sort's log²(2N)/2 = 210 to
+2-6 — the same complexity class as torch.topk's RadixSelect.
+
+The tuner is hand-rolled (streamk pattern): it times the WHOLE level
+hierarchy per config on scratch buffers, because the level structure
+(grid sizes, buffer shapes) depends on BLOCK_SIZE, which
+triton.autotune cannot express (output allocation happens between
+launches). do_bench warmup=1/rep=3 is the repo-wide autotune budget.
 """
 import torch
 import triton
 import triton.language as tl
+from triton.testing import do_bench
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE": 1024,
-    "num_warps": 4,
-    "num_stages": 1,
+    "BLOCK_SIZE": 2048,
+    "num_warps": 8,
 }
+
+# Tile dim is 1:1 with impl_cutile.py's search space; num_warps is
+# Triton's scheduling knob like cuTile's occupancy. Configs with
+# BLOCK_SIZE < 2*k' are filtered out at tune time.
+_SEARCH_SPACE = [
+    {"BLOCK_SIZE": bs, "num_warps": nw}
+    for bs in (1024, 2048, 4096)
+    for nw in (4, 8)
+]
+
+# (N, k) -> winning config dict, filled by _tune_pipeline.
+_autotune_cache: dict = {}
+_last_autotune_config: dict = {}
 
 
 @triton.jit
-def bitonic_step_kernel(
-    input_ptr,
-    N,
-    stage,
-    stride,
+def block_topk_kernel(
+    input_ptr, out_ptr, n,
+    K2: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
-    pid = tl.program_id(axis=0)
-    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-
-    slice_1_offset = (offset // stride) * (2 * stride) + (offset % stride)
-    slice_2_offset = slice_1_offset + stride
-
-    slice_1_t = tl.load(input_ptr + slice_1_offset,
-                        mask=slice_1_offset < N, other=-float("inf"))
-    slice_2_t = tl.load(input_ptr + slice_2_offset,
-                        mask=slice_2_offset < N, other=-float("inf"))
-
-    descend = ((slice_1_offset // stage) % 2) == 1
-    greater = slice_1_t > slice_2_t
-    swap = descend == greater
-
-    new_slice_1_t = tl.where(swap, slice_2_t, slice_1_t)
-    new_slice_2_t = tl.where(swap, slice_1_t, slice_2_t)
-
-    tl.store(input_ptr + slice_1_offset, new_slice_1_t, mask=slice_1_offset < N)
-    tl.store(input_ptr + slice_2_offset, new_slice_2_t, mask=slice_2_offset < N)
-
-
-# Sweep mirrors impl_cutile.py 1-to-1:
-#   BLOCK_SIZE  ↔ tile             same values
-#   num_warps   ↔ occupancy        nw * occ ≈ 64 on B200, so Triton's
-#                                   nw ∈ [2, 4, 8] pairs with cuTile's
-#                                   occ ∈ [32, 16, 8].
-# num_stages is fixed to 1 — this kernel has no runtime K-loop, just
-# load → compare → store, so software pipelining has nothing to overlap.
-_bitonic_step_kernel_autotuned = triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=1)
-        for bs in [512, 1024, 2048]
-        for nw in [2, 4, 8]
-    ],
-    key=["N"],
-    warmup=1,
-    rep=3,
-)(bitonic_step_kernel)
+    pid = tl.program_id(0)
+    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    x = tl.load(input_ptr + offs, mask=offs < n, other=-float("inf"))
+    if K2 == 1:
+        tl.store(out_ptr + pid, tl.max(x))
+    else:
+        offs_out = pid * K2 + tl.arange(0, K2)
+        tl.store(out_ptr + offs_out, tl.topk(x, K2))
 
 
 def _next_pow2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
+
+
+def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg: dict) -> torch.Tensor:
+    B, nw = cfg["BLOCK_SIZE"], cfg["num_warps"]
+    cur, n = x, x.numel()
+    while True:
+        nb = triton.cdiv(n, B)
+        out = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
+        block_topk_kernel[(nb,)](cur, out, n, K2=K2, BLOCK_SIZE=B,
+                                 num_warps=nw)
+        if nb == 1:
+            return out[0, :k]
+        cur, n = out.view(-1), nb * K2
+
+
+def _tune_pipeline(x: torch.Tensor, k: int, K2: int) -> dict:
+    key = (x.numel(), k)
+    cached = _autotune_cache.get(key)
+    if cached is not None:
+        return cached
+    best_cfg, best_ms = None, float("inf")
+    for cfg in _SEARCH_SPACE:
+        if cfg["BLOCK_SIZE"] < 2 * K2:
+            continue   # level sizes would not shrink
+        ms = do_bench(lambda: _run_hierarchy(x, k, K2, cfg), warmup=1, rep=3)
+        if ms < best_ms:
+            best_cfg, best_ms = cfg, ms
+    _autotune_cache[key] = best_cfg
+    return best_cfg
 
 
 def run(input: torch.Tensor, N: int, k: int,
@@ -88,44 +104,23 @@ def run(input: torch.Tensor, N: int, k: int,
     assert 1 <= k <= N
 
     input = input.contiguous()
-    padding_len = _next_pow2(N)
-    input_padding = torch.empty((padding_len,), device=input.device, dtype=input.dtype)
-    input_padding[:N] = input
-    input_padding[N:] = -float("inf")
+    K2 = _next_pow2(k)
 
-    BLOCK_SIZE = (
-        int(block_size) if block_size is not None else _DEFAULT_CONFIG["BLOCK_SIZE"]
-    )
+    if autotune:
+        cfg = _tune_pipeline(input, k, K2)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(cfg)
+    else:
+        cfg = dict(_DEFAULT_CONFIG)
+        if block_size is not None:
+            cfg["BLOCK_SIZE"] = int(block_size)
+        # progress guarantee: candidates must shrink between levels
+        cfg["BLOCK_SIZE"] = max(cfg["BLOCK_SIZE"], 2 * K2)
 
-    stage = 2
-    while stage <= padding_len:
-        stride = stage >> 1
-        while stride > 0:
-            if autotune:
-                grid = lambda meta: (triton.cdiv(padding_len, meta["BLOCK_SIZE"] * 2),)
-                _bitonic_step_kernel_autotuned[grid](
-                    input_padding, padding_len, stage, stride,
-                )
-            else:
-                grid = (triton.cdiv(padding_len, BLOCK_SIZE * 2),)
-                bitonic_step_kernel[grid](
-                    input_padding, padding_len, stage, stride,
-                    BLOCK_SIZE=BLOCK_SIZE,
-                    num_warps=_DEFAULT_CONFIG["num_warps"],
-                    num_stages=_DEFAULT_CONFIG["num_stages"],
-                )
-            stride >>= 1
-        stage <<= 1
-
-    return input_padding[:k].clone()
+    return _run_hierarchy(input, k, K2, cfg)
 
 
 def get_last_config() -> dict | None:
-    cfg = getattr(_bitonic_step_kernel_autotuned, "best_config", None)
-    if cfg is None:
-        return None
-    return {
-        "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
-        "num_warps":  cfg.num_warps,
-        "num_stages": cfg.num_stages,
-    }
+    # Hand-rolled tuner (no triton.autotune wrapper to read best_config
+    # from) — mutable-dict pattern, same as the cuTile side.
+    return dict(_last_autotune_config) if _last_autotune_config else None
