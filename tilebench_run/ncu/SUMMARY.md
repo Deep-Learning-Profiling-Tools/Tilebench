@@ -44,7 +44,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | fused_activation | fp32 | 47.9 | 47.4 | 0.99× |
 | gaussian_blur | fp16 | 1790.0 | 4600.0 | 2.57× |
 | gaussian_blur | fp32 | 1600.0 | 5310.0 | 3.32× |
-| histogramming | int32 | 799.1 | 1436.8 | 1.80× |
+| histogramming | int32 | 793.7 | 1436.6 | 1.81× |
 | interleave | fp16 | 21.4 | 22.4 | 1.04× |
 | interleave | bf16 | 21.4 | 22.5 | 1.05× |
 | interleave | fp32 | 43.9 | 51.4 | 1.17× |
@@ -105,13 +105,13 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | sigmoid | fp32 | 56.9 | 65.3 | 1.15× |
 | softmax | fp16 | 23.8 | 43.2 | 1.82× |
 | softmax | fp32 | 32.6 | 44.5 | 1.36× |
-| streamk_matmul | fp16 | 1977.6 | 2269.4 | 1.15× |
-| streamk_matmul | bf16 | 1938.2 | 2209.2 | 1.14× |
-| streamk_matmul | fp32 | 3681.1 | 3895.4 | 1.06× |
+| streamk_matmul | fp16 | 1962.6 | 2220.7 | 1.13× |
+| streamk_matmul | bf16 | 2073.8 | 2171.1 | 1.05× |
+| streamk_matmul | fp32 | 3628.5 | 3733.4 | 1.03× |
 | swiglu | fp16 | 69.0 | 99.8 | 1.45× |
 | swiglu | bf16 | 72.9 | 100.8 | 1.38× |
 | swiglu | fp32 | 137.9 | 148.3 | 1.08× |
-| top_k_selection | fp32 | 1161.5 | 1453.3 | 1.25× |
+| top_k_selection | fp32 | 200.0 | 156.3 | 0.78× |
 | vector_add | fp16 | 18.3 | 18.4 | 1.01× |
 | vector_add | bf16 | 18.1 | 18.6 | 1.03× |
 | vector_add | fp32 | 34.3 | 34.4 | 1.00× |
