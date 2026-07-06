@@ -31,7 +31,13 @@ def _eval_expr(expr: str | None, ctx: dict) -> float | None:
         return None
 
 
-BACKENDS = ("torch", "triton", "cutile")
+BACKENDS = ("torch", "triton", "cutile", "tilelang", "nki")
+
+# Backends that do NOT run on the GPU whose peak_* values are configured here.
+# Their measured throughput (bandwidth_GBs, tflops, speedup) is still valid and
+# hardware-agnostic, but %-of-peak and the GPU roofline must not be applied —
+# that would divide Trainium timings by GPU peaks (see PR #102 review).
+NON_GPU_BACKENDS = ("nki",)
 
 
 def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = None) -> dict[str, dict[str, float]]:
@@ -73,16 +79,20 @@ def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = Non
 
         d: dict[str, float] = {"latency_ms": ms}
 
+        # %-of-peak compares against the configured GPU peaks, so it is only
+        # meaningful for backends that run on that GPU.
+        gpu_peak_applies = backend not in NON_GPU_BACKENDS
+
         if bytes_transferred and bytes_transferred > 0:
             bw = bytes_transferred / (ms * 1e-3) / 1e9
             d["bandwidth_GBs"] = bw
-            if peak_bw and peak_bw > 0:
+            if gpu_peak_applies and peak_bw and peak_bw > 0:
                 d["pct_peak_bw"] = bw / peak_bw * 100.0
 
         if flops and flops > 0:
             tf = flops / (ms * 1e-3) / 1e12
             d["tflops"] = tf
-            if peak_tflops and peak_tflops > 0:
+            if gpu_peak_applies and peak_tflops and peak_tflops > 0:
                 d["pct_peak_tflops"] = tf / peak_tflops * 100.0
 
         if flops and bytes_transferred and bytes_transferred > 0:

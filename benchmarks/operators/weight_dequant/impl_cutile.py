@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _dequant_kernel(x_ptr, s_ptr, out_ptr, N, TILE_SIZE, TILE: ConstInt):
+def _dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE: ConstInt):
     bid = ct.bid(0)
     base = bid * TILE
     offsets = ct.arange(TILE, dtype=ct.int32) + base

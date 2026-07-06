@@ -1,6 +1,6 @@
 # TileBench Operator Authoring Guide
 
-Goal: fair performance comparison between PyTorch, Triton, and cuTile under **similar implementation strategies**.  
+Goal: fair performance comparison between PyTorch, Triton, cuTile, and (optionally) TileLang under **similar implementation strategies**.
 Not about squeezing peak performance — autotune handles parameter selection; the focus is on structural equivalence.
 
 ---
@@ -11,6 +11,7 @@ Not about squeezing peak performance — autotune handles parameter selection; t
 - **Autotune is enabled**: Triton uses `@triton.autotune`; cuTile uses `ct_experimental.autotune_launch`. Do not manually tune `BLOCK_SIZE` / `tile`.
 - Keep kernel structure conceptually aligned across backends (same tiling pattern, same loop order, same masking approach).
 - Avoid backend-specific tricks unless discussed and documented.
+- TileLang is an **optional 4th backend** (`impl_tilelang.py`): the engine skips it gracefully when the file or the `tilelang` package is absent. When provided, it must follow the same algorithmic strategy as the other backends.
 
 ---
 
@@ -21,7 +22,8 @@ benchmarks/operators/<name>/
 ├── config.yaml        # case_grid, benchmark params, metrics expressions
 ├── impl_torch.py      # def run(*inputs) -> Tensor
 ├── impl_triton.py     # def run(*inputs, block_size=...) -> Tensor  + get_last_config()
-└── impl_cutile.py     # def run(*inputs, block_size=...) -> Tensor  + get_last_config()
+├── impl_cutile.py     # def run(*inputs, block_size=...) -> Tensor  + get_last_config()
+└── impl_tilelang.py   # optional — same run()/get_last_config() contract
 ```
 
 Register the input generator in `data/tensors.py`:
@@ -161,6 +163,57 @@ def run(x: torch.Tensor, block_size: int = 1024) -> torch.Tensor:
 
 ---
 
+### TileLang (optional)
+
+Requires `tilelang==0.1.11` with `apache-tvm-ffi==0.1.11` — the pin is load-bearing
+(tvm-ffi 0.1.12 makes `import tilelang` abort at C++ level).
+
+```python
+import tilelang
+import tilelang.language as T
+from tilelang.autotuner import set_autotune_inputs
+
+_last_autotune_config: dict = {}          # mutable-dict pattern — never `global`
+
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+
+@tilelang.autotune(
+    configs=[dict(BLOCK_SIZE=bs, threads=nt)
+             for bs in [512, 1024, 2048] for nt in [64, 128, 256]],
+)
+@tilelang.jit
+def my_kernel(x, out, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
+    ...
+
+def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs):
+    dtype = str(x.dtype).removeprefix("torch.")
+    out = torch.empty_like(x)
+    if autotune:
+        with set_autotune_inputs(x, out):
+            kernel = my_kernel.compile(x, out, dtype=dtype)
+        _last_autotune_config.clear()
+        _last_autotune_config.update(dict(kernel.config))
+        kernel(x, out)
+    else:
+        cfg = _DEFAULT_CONFIG
+        # Passing every tunable param explicitly bypasses the sweep
+        # (tilelang logs "Skipping compilation and using direct JIT").
+        my_kernel(x, out, dtype=dtype, BLOCK_SIZE=cfg["BLOCK_SIZE"], threads=cfg["threads"])
+    return out
+
+def get_last_config() -> dict | None:
+    return dict(_last_autotune_config) if _last_autotune_config else None
+```
+
+- The tuning sweep result is cached in-process — repeat `autotune=True` calls cost
+  ~ms, so the Proton measurement window stays clean.
+- Prefer `T.symbolic` over `T.const` for swept problem-size dims: `T.const` makes the
+  size a compile-time constant and recompiles per shape (~3.4 s each on B200, ×80
+  cases adds minutes of wall-clock per operator).
+- CUDA-graph capture of the compiled kernel works — keep `use_cuda_graph: true`.
+
+---
+
 ## 6. Dtype Handling
 
 ### Standard floating-point types (fp16, bf16, fp32)
@@ -265,3 +318,4 @@ If `flops_expr` is `null` or omitted, TFLOPS and `pct_peak_tflops` are not compu
 - [ ] Three backends follow the same algorithmic strategy
 - [ ] No dtype-specific workarounds inside kernel code
 - [ ] FP8 is commented out (with explanation) if not supported by all backends
+- [ ] If `impl_tilelang.py` is provided: same algorithmic strategy, mutable-dict `get_last_config()`, default path passes explicit config kwargs (skips the tuning sweep), swept size dims use `T.symbolic` rather than `T.const`
