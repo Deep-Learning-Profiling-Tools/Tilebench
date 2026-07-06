@@ -119,21 +119,41 @@ def collect_op(op_name: str) -> dict:
     autotune_by_dtype = {}
     if isinstance(autotune_data, list):
         for dt in dtypes:
-            best = None
-            best_size = -1
-            for entry in autotune_data:
-                if _norm(entry.get("dtype")) != _norm(dt):
-                    continue
-                ps = entry.get("problem_size", 0)
-                if ps > best_size:
-                    best_size = ps
-                    best = entry
-            if best is not None:
-                autotune_by_dtype[dt] = {
-                    "params":  best.get("params", {}),
-                    "triton":  best.get("triton_autotune_cfg"),
-                    "cutile":  best.get("cutile_autotune_cfg"),
-                }
+            entries = [e for e in autotune_data
+                       if _norm(e.get("dtype")) == _norm(dt) and e.get("params")]
+            if not entries:
+                continue
+            # Sweep-max = the entry whose EVERY int-valued param equals that
+            # param's maximum across entries. For cross-product case grids
+            # (all current ops) this entry always exists and is unique.
+            # Float params (dropout's p, eps, ...) are per-op constants and
+            # are ignored. The engine's scalar problem_size field is NOT
+            # used: it records a single dim, which ties across cases in
+            # multi-dim sweeps (top_k's N x k, streamk's m x n, ...) and the
+            # old first-tie-wins scan paired the params of one case with the
+            # winner of another. params and winner now come from ONE entry.
+            int_keys = sorted({k for e in entries
+                               for k, v in e["params"].items()
+                               if isinstance(v, int) and not isinstance(v, bool)})
+            dim_max = {k: max(e["params"][k] for e in entries
+                              if k in e["params"]) for k in int_keys}
+            best = next((e for e in entries
+                         if all(e["params"].get(k) == dim_max[k]
+                                for k in int_keys)), None)
+            if best is None:
+                # Non-cross-product sweep: the all-dims-max combination does
+                # not exist in the log. Fall back to max int-product, LOUDLY.
+                best = max(entries, key=lambda e: case_size(
+                    {k: v for k, v in e["params"].items()
+                     if isinstance(v, int) and not isinstance(v, bool)}))
+                print(f"  WARNING {op_name}/{dt}: no all-dims-max case in "
+                      f"autotune log (per-dim maxes {dim_max}); falling back "
+                      f"to max int-product params={best['params']}")
+            autotune_by_dtype[dt] = {
+                "params":  best.get("params", {}),
+                "triton":  best.get("triton_autotune_cfg"),
+                "cutile":  best.get("cutile_autotune_cfg"),
+            }
 
     return {
         "op": op_name,
