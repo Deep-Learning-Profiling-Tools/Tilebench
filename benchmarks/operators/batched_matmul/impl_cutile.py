@@ -65,6 +65,11 @@ def _bmm_kernel(a_3d, b_3d, c_3d,
 
     acc = ct.zeros((TILE_M, TILE_N), dtype=np.float32)
 
+    # Cast to TF32 for fp32 inputs so ct.mma uses Tensor Cores; no-op for
+    # fp16/bf16 inputs (cast to same dtype). Matches Triton's
+    # input_precision="tf32" kwarg in impl_triton.py.
+    mma_dtype = ct.tfloat32 if a_3d.dtype == ct.float32 else a_3d.dtype
+
     for bid_k in range(K_TILES):  # compile-time unrolled (cuTile DSL constraint)
         a_tile = ct.load(
             a_3d, index=(bid_b, bid_m, bid_k),
@@ -77,8 +82,8 @@ def _bmm_kernel(a_3d, b_3d, c_3d,
             padding_mode=ct.PaddingMode.ZERO,
         )
 
-        a_2d = ct.reshape(a_tile, (TILE_M, TILE_K))
-        b_2d = ct.reshape(b_tile, (TILE_K, TILE_N))
+        a_2d = ct.reshape(a_tile, (TILE_M, TILE_K)).astype(mma_dtype)
+        b_2d = ct.reshape(b_tile, (TILE_K, TILE_N)).astype(mma_dtype)
 
         # ct.mma(x, y, acc) = acc + x @ y with native-dtype inputs + fp32 acc,
         # same underlying hardware op as Triton's tl.dot(a, b) + accumulator.
