@@ -1,169 +1,304 @@
-"""Top-k via hierarchical block-topk tournament reduction (cuTile).
+"""Top-k via hierarchical block-topk tournament reduction.
 
-Same two-phase structure as impl_triton.py: each CTA computes its
-BLOCK-wide chunk's local top-k' (k' = next_pow2(k)) sorted descending,
-writes k' candidates to a (num_blocks, k') buffer, and the same kernel
-is re-launched on the flattened candidates until one block remains.
-Configs keep BLOCK >= 2*k' so every level shrinks.
+Each CTA writes its chunk's sorted top-k' candidates. The wrapper re-launches
+on the candidate buffer until one block remains.
 
-The block-local top-k' is an in-tile bitonic sorting network built from
-ct.reshape / ct.extract / ct.minimum / ct.maximum / ct.cat (cuTile has
-no sort/topk primitive — Triton uses tl.topk, which lowers to the same
-kind of in-register network). The network's log²(B) compare-exchange
-stages need tile SHAPES that change per stage, and cuTile 1.3 offers no
-in-language way to unroll them statically: in-kernel `for range(...)`
-and `while` both compile to runtime IR loops (loop variables cannot
-feed constant reshape shapes), and iterating a Python tuple is rejected
-("cannot create constant from value of type tuple"). The kernels are
-therefore GENERATED as straight-line source per (B, k') and imported
-from a temp module (the tracer needs inspect-able source, so exec()
-alone is not enough). This is itself an expressibility data point:
-static metaprogramming that Triton gets from tl.constexpr + built-in
-primitives requires source generation in cuTile.
-
-Compile cost is one-time per (B, k') variant (~2-7 s), paid inside the
-engine's warmup, and cached for the process lifetime.
+This version avoids external source generation and uses ct.static_iter for
+compile-time unrolling of the in-tile bitonic network.
 """
-import importlib.util
-import tempfile
+
 from types import SimpleNamespace
 
 import cuda.tile as ct
 import torch
-# Timing-only import: keeps the tuning clock identical to impl_triton.py.
-from triton.testing import do_bench
+
+from core.cutile_autotune import CutileAutotuner
+
+ConstInt = ct.Constant[int]
 
 _DEFAULT_CONFIG = SimpleNamespace(block=2048, occupancy=8)
 
-# Tile dim is 1:1 with impl_triton.py's search space; occupancy is
-# cuTile's scheduling knob like Triton's num_warps. Configs with
-# block < 2*k' are filtered out at tune time.
-_SEARCH_SPACE = [
-    SimpleNamespace(block=bs, occupancy=occ)
-    for bs in (1024, 2048, 4096)
-    for occ in (4, 8, 16)
-]
+_BLOCKS = (1024, 2048, 4096)
+_OCC_SPACE = [SimpleNamespace(occupancy=occ) for occ in (4, 8, 16)]
 
-_last_autotune_config: dict = {}
+_last_config: dict = {}
 _autotune_cache: dict = {}
-
-# Generated-module machinery: one straight-line kernel per (B, K2),
-# written into a temp dir that lives for the process lifetime.
-_gen_dir = tempfile.TemporaryDirectory(prefix="cutile_topk_gen_")
-_kernel_cache: dict = {}
-_hinted_cache: dict = {}
-
-
-def _gen_source(B: int, K2: int) -> str:
-    """Emit the fully unrolled descending bitonic sort + top-k' extract."""
-    L = ["import cuda.tile as ct", "", "", "@ct.kernel",
-         "def block_topk_kernel(inp, out2d):",
-         "    bid = ct.bid(0)",
-         f"    x = ct.load(inp, index=(bid,), shape=({B},), "
-         "padding_mode=ct.PaddingMode.NEG_INF)"]
-    for kb in range(1, B.bit_length()):
-        ksz = 1 << kb
-        for jj in range(kb):
-            j = 1 << (kb - 1 - jj)
-            G = B // (2 * j)
-            L += [f"    x3 = ct.reshape(x, ({G}, 2, {j}))",
-                  f"    a = ct.extract(x3, index=(0, 0, 0), shape=({G}, 1, {j}))",
-                  f"    b = ct.extract(x3, index=(0, 1, 0), shape=({G}, 1, {j}))",
-                  "    lo = ct.minimum(a, b)",
-                  "    hi = ct.maximum(a, b)",
-                  f"    m = ((ct.arange({G}, dtype=ct.int32) * {2 * j}) & {ksz}) == 0",
-                  f"    m3 = ct.reshape(m, ({G}, 1, 1))",
-                  "    first = ct.where(m3, hi, lo)",
-                  "    second = ct.where(m3, lo, hi)",
-                  f"    x = ct.reshape(ct.cat((first, second), axis=1), ({B},))"]
-    L += [f"    top = ct.extract(x, index=(0,), shape=({K2},))",
-          f"    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, {K2})))",
-          ""]
-    return "\n".join(L)
-
-
-def _make_kernel(B: int, K2: int):
-    key = (B, K2)
-    if key not in _kernel_cache:
-        name = f"cutile_topk_gen_b{B}_k{K2}"
-        path = f"{_gen_dir.name}/{name}.py"
-        with open(path, "w") as f:
-            f.write(_gen_source(B, K2))
-        spec = importlib.util.spec_from_file_location(name, path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _kernel_cache[key] = mod.block_topk_kernel
-    return _kernel_cache[key]
-
-
-def _kernel_with_hints(B: int, K2: int, occupancy: int):
-    """replace_hints result cached per (B, K2, occupancy) — required for
-    CUDA-graph stability, same rationale as core.cutile_autotune."""
-    key = (B, K2, occupancy)
-    if key not in _hinted_cache:
-        _hinted_cache[key] = _make_kernel(B, K2).replace_hints(occupancy=occupancy)
-    return _hinted_cache[key]
 
 
 def _next_pow2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
 
 
+def _make_bitonic_stages(B: int):
+    """Return compile-time stage descriptors for descending bitonic sort.
+
+    Each tuple is (G, j, ksz):
+      - reshape x as (G, 2, j)
+      - compare/swap the two halves
+      - ksz controls ascending/descending direction for this stage
+    """
+    stages = []
+    for kb in range(1, B.bit_length()):
+        ksz = 1 << kb
+        for jj in range(kb):
+            j = 1 << (kb - 1 - jj)
+            G = B // (2 * j)
+            stages.append((G, j, ksz))
+    return tuple(stages)
+
+
+_STAGES_1024 = _make_bitonic_stages(1024)
+_STAGES_2048 = _make_bitonic_stages(2048)
+_STAGES_4096 = _make_bitonic_stages(4096)
+
+
+def _sort_desc_1024(x):
+    for G, j, ksz in ct.static_iter(_STAGES_1024):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (1024,))
+
+    return x
+
+
+def _sort_desc_2048(x):
+    for G, j, ksz in ct.static_iter(_STAGES_2048):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (2048,))
+
+    return x
+
+
+def _sort_desc_4096(x):
+    for G, j, ksz in ct.static_iter(_STAGES_4096):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (4096,))
+
+    return x
+
+
+@ct.kernel
+def block_topk_kernel_b1024(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(1024,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_1024(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+@ct.kernel
+def block_topk_kernel_b2048(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(2048,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_2048(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+@ct.kernel
+def block_topk_kernel_b4096(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(4096,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_4096(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+KERNELS = {
+    1024: block_topk_kernel_b1024,
+    2048: block_topk_kernel_b2048,
+    4096: block_topk_kernel_b4096,
+}
+
+_tuners = {B: CutileAutotuner(KERNELS[B]) for B in _BLOCKS}
+
+
+def _resolve_block(block_size: int | None, K2: int) -> int:
+    """Pick a supported block size that guarantees hierarchy progress.
+
+    Need block >= 2*K2. Otherwise candidate count may not shrink.
+    """
+    requested = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block
+    min_block = max(requested, 2 * K2)
+
+    for B in _BLOCKS:
+        if B >= min_block:
+            return B
+
+    raise ValueError(
+        f"Unsupported top-k size: k'={K2}. "
+        f"Need block >= {2 * K2}, but supported blocks are {_BLOCKS}."
+    )
+
+
 def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg, stream) -> torch.Tensor:
-    B = cfg.block
-    kern = _kernel_with_hints(B, K2, cfg.occupancy)
-    cur, n = x, x.numel()
+    B = int(cfg.block)
+    kernel = _tuners[B].kernel_with_hints(occupancy=cfg.occupancy)
+
+    cur = x
+    n = x.numel()
+
     while True:
-        nb = (n + B - 1) // B
+        nb = ct.cdiv(n, B)
         out = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
-        ct.launch(stream, (nb, 1, 1), kern, (cur, out))
+
+        ct.launch(stream, (nb, 1, 1), kernel, (cur, out, K2))
+
         if nb == 1:
             return out[0, :k]
-        cur, n = out.reshape(-1), nb * K2
+
+        cur = out.reshape(-1)
+        n = nb * K2
 
 
-def _tune_pipeline(x: torch.Tensor, k: int, K2: int, stream):
-    key = (x.numel(), k)
+def _tune(x: torch.Tensor, k: int, K2: int, stream) -> SimpleNamespace:
+    """Autotune occupancy for each viable block size.
+
+    The first hierarchy level is usually dominant, so this matches the
+    existing implementation's tuning strategy.
+    """
+    key = (x.numel(), K2)
     cached = _autotune_cache.get(key)
     if cached is not None:
         return cached
-    best_cfg, best_ms = None, float("inf")
-    for cfg in _SEARCH_SPACE:
-        if cfg.block < 2 * K2:
-            continue   # level sizes would not shrink
-        ms = do_bench(lambda: _run_hierarchy(x, k, K2, cfg, stream),
-                      warmup=1, rep=3)
-        if ms < best_ms:
-            best_cfg, best_ms = cfg, ms
+
+    n = x.numel()
+    best_us = None
+    best_cfg = None
+
+    for B in _BLOCKS:
+        if B < 2 * K2:
+            continue
+
+        nb = ct.cdiv(n, B)
+        scratch = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
+
+        result = ct.tune.exhaustive_search(
+            _OCC_SPACE,
+            stream,
+            grid_fn=lambda cfg: (nb, 1, 1),
+            kernel=_tuners[B].kernel,
+            args_fn=lambda cfg: (x, scratch, K2),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+
+        mean_us = result.best.mean_us
+        if best_us is None or mean_us < best_us:
+            best_us = mean_us
+            best_cfg = SimpleNamespace(
+                block=B,
+                occupancy=result.best.config.occupancy,
+            )
+
+    if best_cfg is None:
+        raise ValueError(
+            f"No viable cuTile top-k config for k={k}, k'={K2}. "
+            f"Need some block >= {2 * K2}, supported blocks are {_BLOCKS}."
+        )
+
     _autotune_cache[key] = best_cfg
     return best_cfg
 
 
-def run(input: torch.Tensor, N: int, k: int,
-        block_size: int = None, autotune: bool = False, **kwargs):
+def run(
+    input: torch.Tensor,
+    N: int,
+    k: int,
+    block_size: int = None,
+    autotune: bool = False,
+    **kwargs,
+):
     assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
     assert input.dtype == torch.float32
     assert 1 <= k <= N
 
-    input = input.contiguous()
+    x = input.contiguous()
     K2 = _next_pow2(k)
     stream = torch.cuda.current_stream()
 
     if autotune:
-        cfg = _tune_pipeline(input, k, K2, stream)
-        _last_autotune_config.clear()
-        _last_autotune_config.update({"block": cfg.block,
-                                      "occupancy": cfg.occupancy})
+        cfg = _tune(x, k, K2, stream)
     else:
-        blk = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block
-        # progress guarantee: candidates must shrink between levels
-        cfg = SimpleNamespace(block=max(blk, 2 * K2),
-                              occupancy=_DEFAULT_CONFIG.occupancy)
+        cfg = SimpleNamespace(
+            block=_resolve_block(block_size, K2),
+            occupancy=_DEFAULT_CONFIG.occupancy,
+        )
 
-    return _run_hierarchy(input, k, K2, cfg, stream)
+    _last_config.clear()
+    _last_config.update(
+        {
+            "block": int(cfg.block),
+            "occupancy": int(cfg.occupancy),
+            "K2": int(K2),
+        }
+    )
+
+    return _run_hierarchy(x, k, K2, cfg, stream)
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) if _last_autotune_config else None
+    return dict(_last_config) if _last_config else None
