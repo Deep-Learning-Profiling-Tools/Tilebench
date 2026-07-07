@@ -42,8 +42,8 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | flash_attention | fp16 | 22740.0 | 17670.0 | 0.78× |
 | flash_decode | fp32 | 47.4 | 169.2 | 3.57× |
 | fused_activation | fp32 | 47.9 | 47.4 | 0.99× |
-| gaussian_blur | fp16 | 1790.0 | 4600.0 | 2.57× |
-| gaussian_blur | fp32 | 1600.0 | 5310.0 | 3.32× |
+| gaussian_blur | fp16 | 1030.0 | 1500.0 | 1.46× |
+| gaussian_blur | fp32 | 1270.0 | 1280.0 | 1.01× |
 | histogramming | int32 | 793.7 | 1436.6 | 1.81× |
 | interleave | fp16 | 21.4 | 22.4 | 1.04× |
 | interleave | bf16 | 21.4 | 22.5 | 1.05× |
