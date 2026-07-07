@@ -9,7 +9,7 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(group_size=4, occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(group_size=16, occupancy=4)
 
 _SEARCH_SPACE = [
     SimpleNamespace(group_size=gs, occupancy=occ)
@@ -28,35 +28,36 @@ def rope_embedding(
     GROUP_SIZE: ConstInt,
 ):
     """RoPE in-place. One CTA processes GROUP_SIZE consecutive heads of one
-    (batch, seq) row, sharing a single cos/sin tile across them — mirrors
-    Triton's ROPE_GROUP_SIZE loop.
+    (batch, seq) row with a single group-level box load/store per half,
+    sharing one cos/sin tile broadcast across the heads.
     """
     row_id = ct.bid(0)    # Batch*Seq
     group_id = ct.bid(1)  # Head group
 
     seq_idx = row_id % SeqLen
 
-    # cos/sin shared across all heads in this group.
-    cos_tile = ct.load(Cos, index=(seq_idx, 0), shape=(1, TILE_DIM))
-    sin_tile = ct.load(Sin, index=(seq_idx, 0), shape=(1, TILE_DIM))
+    # cos/sin shared across all heads in this group; reshape to rank 4 so
+    # they broadcast over the head axis.
+    cos_tile = ct.reshape(ct.load(Cos, index=(seq_idx, 0), shape=(1, TILE_DIM)),
+                          (1, 1, 1, TILE_DIM))
+    sin_tile = ct.reshape(ct.load(Sin, index=(seq_idx, 0), shape=(1, TILE_DIM)),
+                          (1, 1, 1, TILE_DIM))
 
-    head_start = group_id * GROUP_SIZE
-    for k in range(GROUP_SIZE):
-        head_id = head_start + k
-        # padding_mode=ZERO handles the partial last group when
-        # n_heads % GROUP_SIZE != 0; OOB stores are silently dropped.
-        q1 = ct.load(Q, index=(row_id, head_id, 0, 0),
-                     shape=(1, 1, 1, TILE_DIM),
-                     padding_mode=ct.PaddingMode.ZERO)
-        q2 = ct.load(Q, index=(row_id, head_id, 1, 0),
-                     shape=(1, 1, 1, TILE_DIM),
-                     padding_mode=ct.PaddingMode.ZERO)
+    # One box load per half covering all GROUP_SIZE heads at once.
+    # padding_mode=ZERO handles the partial last group when
+    # n_heads % GROUP_SIZE != 0; OOB stores are silently dropped.
+    q1 = ct.load(Q, index=(row_id, group_id, 0, 0),
+                 shape=(1, GROUP_SIZE, 1, TILE_DIM),
+                 padding_mode=ct.PaddingMode.ZERO)
+    q2 = ct.load(Q, index=(row_id, group_id, 1, 0),
+                 shape=(1, GROUP_SIZE, 1, TILE_DIM),
+                 padding_mode=ct.PaddingMode.ZERO)
 
-        out1 = q1 * cos_tile - q2 * sin_tile
-        out2 = q2 * cos_tile + q1 * sin_tile
+    out1 = q1 * cos_tile - q2 * sin_tile
+    out2 = q2 * cos_tile + q1 * sin_tile
 
-        ct.store(Q, index=(row_id, head_id, 0, 0), tile=out1)
-        ct.store(Q, index=(row_id, head_id, 1, 0), tile=out2)
+    ct.store(Q, index=(row_id, group_id, 0, 0), tile=out1)
+    ct.store(Q, index=(row_id, group_id, 1, 0), tile=out2)
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.

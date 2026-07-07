@@ -98,8 +98,8 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | rmsnorm | fp16 | 17.8 | 21.7 | 1.22× |
 | rmsnorm | bf16 | 17.9 | 21.9 | 1.23× |
 | rmsnorm | fp32 | 30.2 | 37.3 | 1.23× |
-| rope | fp16 | 91.2 | 201.9 | 2.21× |
-| rope | fp32 | 131.4 | 212.4 | 1.62× |
+| rope | fp16 | 49.4 | 52.5 | 1.06× |
+| rope | fp32 | 101.7 | 106.3 | 1.05× |
 | sigmoid | fp16 | 30.7 | 51.0 | 1.66× |
 | sigmoid | bf16 | 30.5 | 50.8 | 1.66× |
 | sigmoid | fp32 | 56.9 | 65.3 | 1.15× |
