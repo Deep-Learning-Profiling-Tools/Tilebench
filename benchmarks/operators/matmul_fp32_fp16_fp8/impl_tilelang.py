@@ -54,7 +54,6 @@ def matmul_kernel(
     threads: int = 256,
     num_stages: int = 3,
 ):
-
     M, K, N = T.const("M, K, N")
 
     a: T.Tensor((M, K), dtype)

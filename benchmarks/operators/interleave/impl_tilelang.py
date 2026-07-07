@@ -26,11 +26,20 @@ def interleave_kernel(A, B, output, dtype, BLOCK_SIZE: int = 1024, threads: int 
     output: T.Tensor((2 * n_elements,), dtype)
 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads=threads) as pid:
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[2 * idx] = A[idx]
-                output[2 * idx + 1] = B[idx]
+        start = pid * BLOCK_SIZE
+        A_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        B_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        output_reg = T.alloc_fragment((2 * BLOCK_SIZE, ), dtype)
+        T.copy(A[start], A_reg)
+        T.copy(B[start], B_reg)
+        for out_local_idx in T.Parallel(2 * BLOCK_SIZE):
+            in_local_idx = out_local_idx // 2
+            output_reg[out_local_idx] = T.if_then_else(
+                out_local_idx % 2 == 0,
+                A_reg[in_local_idx],
+                B_reg[in_local_idx],
+            )
+        T.copy(output_reg, output[2 * start])
 
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
