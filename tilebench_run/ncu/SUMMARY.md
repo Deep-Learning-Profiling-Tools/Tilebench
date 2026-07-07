@@ -76,8 +76,8 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | matrix_transpose | fp32 | 99.5 | 101.7 | 1.02× |
 | matrix_transpose | int8 | 28.7 | 34.0 | 1.18× |
 | mean_reduction | fp16 | 16.8 | 19.4 | 1.16× |
-| mean_reduction | bf16 | 16.4 | 26.8 | 1.63× |
-| mean_reduction | fp32 | 28.7 | 32.5 | 1.13× |
+| mean_reduction | bf16 | 16.8 | 26.8 | 1.59× |
+| mean_reduction | fp32 | 28.4 | 32.5 | 1.15× |
 | moe_topk_gating | fp16 | 14.7 | 29.1 | 1.98× |
 | moe_topk_gating | bf16 | 14.6 | 29.1 | 1.99× |
 | moe_topk_gating | fp32 | 14.7 | 29.2 | 1.99× |
