@@ -14,7 +14,7 @@ _SEARCH_SPACE = [
     for t in [256, 512, 1024, 2048]
     for occ in [2, 4, 8, 16, 32]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
@@ -88,7 +88,6 @@ def run(input, kernel, input_depth, input_rows, input_cols,
     kernel: flat 1D tensor of size kernel_depth * kernel_rows * kernel_cols
     output: flat 1D tensor of size output_depth * output_rows * output_cols
     """
-    global _last_autotune_config
 
     output_depth = input_depth - kernel_depth + 1
     output_rows_out = input_rows - kernel_rows + 1
@@ -117,10 +116,11 @@ def run(input, kernel, input_depth, input_rows, input_cols,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile":      cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -140,4 +140,4 @@ def run(input, kernel, input_depth, input_rows, input_cols,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
