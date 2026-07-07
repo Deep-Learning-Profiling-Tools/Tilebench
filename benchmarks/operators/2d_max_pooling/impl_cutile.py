@@ -1,3 +1,17 @@
+"""2D max pooling via 2D output tiles + broadcast-index gathers.
+
+Each block owns a (TILE_R, TILE_C) output tile of one (n, c) plane; for
+every kernel tap the input positions come from broadcast 2D index
+arithmetic (oh*stride + kh - padding) — the cuTile equivalent of
+Triton's 2D pointer offsets, and the same pattern as jacobi_stencil_2d.
+No flat-offset decode (div/mod) per element. Negative / out-of-range
+indices are OOB for ct.gather and return -inf, which never wins the max.
+
+A pure box-load formulation was measured and rejected: stride=2 windows
+shifted by -1 are not expressible as tile-aligned loads (Array.slice
+crashes on negative starts), and a hybrid box+gather variant benched
+slower than uniform gathers (0.354 vs 0.299 ms at sweep-max fp32).
+"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -7,10 +21,11 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(tile_r=4, tile_c=128, occupancy=8)
 _SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048]
+    SimpleNamespace(tile_r=tr, tile_c=tc, occupancy=occ)
+    for tr, tc in [(1, 128), (1, 256), (1, 512), (2, 128), (2, 256),
+                   (4, 128), (4, 256), (8, 64)]
     for occ in [4, 8, 16]
 ]
 _last_autotune_config: dict = {}
@@ -18,61 +33,32 @@ _last_autotune_config: dict = {}
 
 @ct.kernel
 def max_pool2d_kernel(
-    input_flat,
-    output_flat,
-    C,
-    H,
-    W,
-    H_out,
-    W_out,
-    total_out,
+    x3,        # (N*C, H, W)
+    out3,      # (N*C, H_out, W_out)
     kernel_size: ConstInt,
     stride: ConstInt,
     padding: ConstInt,
-    TILE: ConstInt,
+    TILE_R: ConstInt,
+    TILE_C: ConstInt,
 ):
-    """
-    Direct 2D stencil with max reduction, matching Triton's per-pixel-offset method:
-      output[n, c, oh, ow] = max over (kh, kw) of
-          input[n, c, oh*stride + kh - padding, ow*stride + kw - padding]
+    plane = ct.bid(0)
+    bh = ct.bid(1)
+    bw = ct.bid(2)
 
-    Each block handles TILE consecutive output positions (flat layout).
-    For each (kh, kw) kernel tap, compute the per-pixel flat input index and
-    use ct.gather with padding_value=-inf — the cuTile equivalent of Triton's
-    `tl.load(input_ptr + input_idx, mask=valid, other=-float("inf"))`.
-    Invalid positions (spatial or output-range OOB) are clamped to -1 so
-    ct.gather returns -inf and does not affect the max.
-    """
-    bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
-    mask = offsets < total_out
+    oh2 = (bh * TILE_R + ct.arange(TILE_R, dtype=ct.int32))[:, None]
+    ow2 = (bw * TILE_C + ct.arange(TILE_C, dtype=ct.int32))[None, :]
 
-    # Decompose flat output offset into (n, c, oh, ow)
-    ow = offsets % W_out
-    oh = (offsets // W_out) % H_out
-    c = (offsets // (H_out * W_out)) % C
-    n = offsets // (C * H_out * W_out)
-
-    acc = ct.full((TILE,), -float("inf"), dtype=ct.float32)
+    acc = ct.full((TILE_R, TILE_C), -float("inf"), dtype=x3.dtype)
 
     for kh in range(kernel_size):        # compile-time unrolled
         for kw in range(kernel_size):    # compile-time unrolled
-            ih = oh * stride + kh - padding
-            iw = ow * stride + kw - padding
-
-            valid = mask & (ih >= 0) & (ih < H) & (iw >= 0) & (iw < W)
-            input_idx = ((n * C + c) * H + ih) * W + iw
-
-            # Clamp invalid indices so ct.gather returns padding_value=-inf
-            input_idx_safe = ct.where(valid, input_idx, -1)
-            x = ct.gather(input_flat, input_idx_safe, padding_value=-float("inf"))
-            x = ct.astype(x, ct.float32)
-
+            ih = oh2 * stride + (kh - padding)
+            iw = ow2 * stride + (kw - padding)
+            x = ct.gather(x3, (plane, ih, iw), padding_value=-float("inf"))
             acc = ct.maximum(acc, x)
 
-    # Cast back to output dtype before storing (avoids host-side conversion).
-    acc = ct.astype(acc, output_flat.dtype)
-    ct.store(output_flat, index=(bid,), tile=acc)
+    ct.store(out3, index=(plane, bh, bw),
+             tile=ct.reshape(acc, (1, TILE_R, TILE_C)))
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
@@ -82,11 +68,10 @@ _tuner = CutileAutotuner(max_pool2d_kernel)
 def run(input, N, C, H, W, kernel_size, stride, padding,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     """
-    cuTile 2D max pooling — direct stencil matching Triton's method.
+    cuTile 2D max pooling — tiled 2D output, broadcast-index gathers.
     input:  flat 1D tensor of size N * C * H * W
     output: flat 1D tensor of size N * C * H_out * W_out
     """
-
     H_out = (H + 2 * padding - kernel_size) // stride + 1
     W_out = (W + 2 * padding - kernel_size) // stride + 1
     total_out = N * C * H_out * W_out
@@ -95,6 +80,8 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
     output = torch.empty(total_out, dtype=input.dtype, device=input.device)
+    x3 = input.view(N * C, H, W)
+    out3 = output.view(N * C, H_out, W_out)
     stream = torch.cuda.current_stream()
 
     if autotune:
@@ -102,32 +89,35 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
             shape_key=(total_out, kernel_size, stride, padding),
             search_space=_SEARCH_SPACE,
             stream=stream,
-            grid_fn=lambda cfg: (ct.cdiv(total_out, cfg.tile), 1, 1),
+            grid_fn=lambda cfg: (
+                N * C,
+                ct.cdiv(H_out, cfg.tile_r),
+                ct.cdiv(W_out, cfg.tile_c),
+            ),
             args_fn=lambda cfg: (
-                input, output,
-                C, H, W, H_out, W_out, total_out,
-                kernel_size, stride, padding,
-                cfg.tile,
+                x3, out3, kernel_size, stride, padding,
+                cfg.tile_r, cfg.tile_c,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
         _last_autotune_config.update({
-            "tile":      cfg.tile,
+            "tile_r":    cfg.tile_r,
+            "tile_c":    cfg.tile_c,
             "occupancy": cfg.occupancy,
         })
     else:
         cfg = _DEFAULT_CONFIG
 
-    grid = (ct.cdiv(total_out, cfg.tile), 1, 1)
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(
-        stream, grid, kernel,
-        (input, output,
-         C, H, W, H_out, W_out, total_out,
-         kernel_size, stride, padding,
-         cfg.tile),
+    grid = (
+        N * C,
+        ct.cdiv(H_out, cfg.tile_r),
+        ct.cdiv(W_out, cfg.tile_c),
     )
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (x3, out3, kernel_size, stride, padding,
+               cfg.tile_r, cfg.tile_c))
 
     return output
 

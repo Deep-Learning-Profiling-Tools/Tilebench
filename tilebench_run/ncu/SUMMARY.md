@@ -13,9 +13,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | 1d_conv | fp32 | 3080.0 | 9710.0 | 3.15× |
 | 2d_conv | fp16 | 552.0 | 797.2 | 1.44× |
 | 2d_conv | fp32 | 626.5 | 934.1 | 1.49× |
-| 2d_max_pooling | fp16 | 229.7 | 598.1 | 2.60× |
-| 2d_max_pooling | bf16 | 229.1 | 578.4 | 2.53× |
-| 2d_max_pooling | fp32 | 265.3 | 591.5 | 2.23× |
+| 2d_max_pooling | fp16 | 197.6 | 288.0 | 1.46× |
+| 2d_max_pooling | bf16 | 200.1 | 288.8 | 1.44× |
+| 2d_max_pooling | fp32 | 218.6 | 299.0 | 1.37× |
 | 3d_conv | fp16 | 13870.0 | 35770.0 | 2.58× |
 | 3d_conv | fp32 | 18190.0 | 33160.0 | 1.82× |
 | argmax | fp16 | 31.2 | 30.9 | 0.99× |

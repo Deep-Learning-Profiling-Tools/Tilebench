@@ -1,58 +1,63 @@
+"""2D max pooling via 2D output tiles + shifted 2D loads: grid is
+(plane, oh_tile, ow_tile); each program owns a (BLOCK_R, BLOCK_C) output
+tile and takes the max over kernel_size^2 shifted 2D masked loads.
+No flat-offset decode (div/mod) per element; max in native dtype."""
 import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "num_warps": 4}
+_DEFAULT_CONFIG = {"BLOCK_R": 2, "BLOCK_C": 128, "num_warps": 4}
 
 
 @triton.jit
 def max_pool2d_kernel(
     input_ptr,
     output_ptr,
-    C,
     H,
     W,
     H_out,
     W_out,
-    total_out,
     kernel_size: tl.constexpr,
     stride: tl.constexpr,
     padding: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK_R: tl.constexpr,
+    BLOCK_C: tl.constexpr,
 ):
-    pid = tl.program_id(0)
-    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < total_out
+    plane = tl.program_id(0)          # n * C + c
+    pid_r = tl.program_id(1)
+    pid_c = tl.program_id(2)
 
-    # Decompose flat output offset into (n, c, oh, ow)
-    ow = offsets % W_out
-    oh = (offsets // W_out) % H_out
-    c = (offsets // (H_out * W_out)) % C
-    n = offsets // (C * H_out * W_out)
+    oh = pid_r * BLOCK_R + tl.arange(0, BLOCK_R)
+    ow = pid_c * BLOCK_C + tl.arange(0, BLOCK_C)
 
-    acc = tl.full((BLOCK_SIZE,), -float("inf"), tl.float32)
+    in_base = input_ptr + plane * H * W
+    acc = tl.full((BLOCK_R, BLOCK_C), -float("inf"),
+                  input_ptr.dtype.element_ty)
 
     for kh in tl.static_range(0, kernel_size):
         for kw in tl.static_range(0, kernel_size):
             ih = oh * stride + kh - padding
             iw = ow * stride + kw - padding
-
-            valid = mask & (ih >= 0) & (ih < H) & (iw >= 0) & (iw < W)
-            input_idx = ((n * C + c) * H + ih) * W + iw
-
-            x = tl.load(input_ptr + input_idx, mask=valid, other=-float("inf")).to(tl.float32)
+            valid = ((ih[:, None] >= 0) & (ih[:, None] < H)
+                     & (iw[None, :] >= 0) & (iw[None, :] < W))
+            x = tl.load(in_base + ih[:, None] * W + iw[None, :],
+                        mask=valid, other=-float("inf"))
             acc = tl.maximum(acc, x)
 
-    tl.store(output_ptr + offsets, acc, mask=mask)
+    out_mask = (oh[:, None] < H_out) & (ow[None, :] < W_out)
+    out_base = output_ptr + plane * H_out * W_out
+    tl.store(out_base + oh[:, None] * W_out + ow[None, :], acc,
+             mask=out_mask)
 
 
 _max_pool2d_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048]
+        triton.Config({"BLOCK_R": br, "BLOCK_C": bc}, num_warps=nw)
+        for br, bc in [(1, 128), (1, 256), (1, 512), (2, 128), (2, 256),
+                       (4, 128), (4, 256), (8, 64)]
         for nw in [4, 8]
     ],
-    key=["total_out", "kernel_size", "stride", "padding"],
+    key=["H_out", "W_out", "kernel_size", "stride", "padding"],
 )(max_pool2d_kernel)
 
 
@@ -68,24 +73,33 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
     output = torch.empty(total_out, dtype=input.dtype, device=input.device)
 
     if autotune:
-        grid = lambda meta: (triton.cdiv(total_out, meta["BLOCK_SIZE"]),)
+        grid = lambda meta: (
+            N * C,
+            triton.cdiv(H_out, meta["BLOCK_R"]),
+            triton.cdiv(W_out, meta["BLOCK_C"]),
+        )
         _max_pool2d_kernel_autotuned[grid](
             input, output,
-            C, H, W, H_out, W_out, total_out,
+            H, W, H_out, W_out,
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (triton.cdiv(total_out, cfg["BLOCK_SIZE"]),)
+        grid = (
+            N * C,
+            triton.cdiv(H_out, cfg["BLOCK_R"]),
+            triton.cdiv(W_out, cfg["BLOCK_C"]),
+        )
         max_pool2d_kernel[grid](
             input, output,
-            C, H, W, H_out, W_out, total_out,
+            H, W, H_out, W_out,
             kernel_size=kernel_size,
             stride=stride,
             padding=padding,
-            BLOCK_SIZE=cfg["BLOCK_SIZE"],
+            BLOCK_R=cfg["BLOCK_R"],
+            BLOCK_C=cfg["BLOCK_C"],
             num_warps=cfg["num_warps"],
         )
 
@@ -97,6 +111,7 @@ def get_last_config() -> dict | None:
     if cfg is None:
         return None
     return {
-        "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
+        "BLOCK_R": cfg.kwargs["BLOCK_R"],
+        "BLOCK_C": cfg.kwargs["BLOCK_C"],
         "num_warps": cfg.num_warps,
     }
