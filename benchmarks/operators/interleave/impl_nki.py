@@ -13,28 +13,32 @@ if nki is not None:
     def interleave_kernel(a_input, b_input):
         num_rows = a_input.shape[0]
         num_cols = a_input.shape[1]
-
         num_blocks = (num_rows + (PMAX - 1)) // PMAX
+        free_tile_size = 16384
+        num_free_blocks = (num_cols + free_tile_size - 1) // free_tile_size
 
         hbm_shape = (num_rows, num_cols * 2)
         hbm_result_tile = nl.ndarray(hbm_shape, dtype=a_input.dtype, buffer=nl.hbm)
 
         for i in range(num_blocks):
             offset = i*PMAX
+            partition_index = nl.arange(PMAX)[:, None]  
+            mask_p = partition_index < (num_rows - offset)
 
-            partition_index = nl.arange(PMAX)[:, None]
-            free_dim_index = nl.arange(num_cols)[None, :]
-            
-            mask = partition_index < (num_rows - offset)
+            for j in range(num_free_blocks):
+                free_offset = j * free_tile_size
+                free_dim_index = nl.arange(free_tile_size)[None, :]
+                mask_f = free_dim_index < (num_cols - free_offset)
+                mask = mask_p & mask_f
 
-            a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask)
-            b_tile = nl.load(b_input[offset + partition_index, free_dim_index], mask=mask)
+                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
+                b_tile = nl.load(b_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
 
-            col_index_a = free_dim_index * 2
-            nl.store(hbm_result_tile[offset + partition_index, col_index_a], value=a_tile, mask=mask)
-
-            col_index_b = (free_dim_index * 2) + 1
-            nl.store(hbm_result_tile[offset + partition_index, col_index_b], value=b_tile, mask=mask)
+                col_index_a = (free_offset + free_dim_index) * 2
+                col_index_b = (free_offset + free_dim_index) * 2 + 1
+                
+                nl.store(hbm_result_tile[offset + partition_index, col_index_a], value=a_tile, mask=mask)
+                nl.store(hbm_result_tile[offset + partition_index, col_index_b], value=b_tile, mask=mask)
             
         return hbm_result_tile
 
