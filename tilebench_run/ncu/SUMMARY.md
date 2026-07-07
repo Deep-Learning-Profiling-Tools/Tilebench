@@ -116,9 +116,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | vector_add | bf16 | 18.1 | 18.6 | 1.03× |
 | vector_add | fp32 | 34.3 | 34.4 | 1.00× |
 | vector_add | int8 | 12.0 | 17.2 | 1.43× |
-| weight_dequant | fp16 | 69.0 | 207.8 | 3.01× |
-| weight_dequant | bf16 | 68.8 | 206.3 | 3.00× |
-| weight_dequant | fp32 | 118.8 | 201.6 | 1.70× |
+| weight_dequant | fp16 | 62.7 | 188.6 | 3.01× |
+| weight_dequant | bf16 | 63.3 | 188.6 | 2.98× |
+| weight_dequant | fp32 | 117.0 | 224.4 | 1.92× |
 
 ## Failed pairs
 
