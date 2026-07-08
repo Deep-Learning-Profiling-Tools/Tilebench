@@ -34,7 +34,7 @@ _DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
     for ts in [512, 1024, 2048]
-    for occ in [4, 8, 16, 32]
+    for occ in [4, 8, 16]
 ]
 
 
@@ -100,7 +100,7 @@ def run(
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch_M, K),
+            shape_key=(batch_M, K, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,
