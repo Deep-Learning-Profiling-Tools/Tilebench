@@ -23,8 +23,8 @@ import triton.language as tl
 from triton.tools.tensor_descriptor import TensorDescriptor
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE_M": 128,
-    "BLOCK_SIZE_N": 128,
+    "BLOCK_SIZE_M": 256,
+    "BLOCK_SIZE_N": 64,
     "BLOCK_SIZE_K": 64,
     "GROUP_SIZE_M": 8,
     "num_warps": 4,

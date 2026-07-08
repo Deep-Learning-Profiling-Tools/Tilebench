@@ -23,7 +23,7 @@ ConstInt = ct.Constant[int]
 _last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(
-    tm=128, tn=128, tk=64, group_size_m=8, occupancy=8,
+    tm=256, tn=64, tk=32, group_size_m=8, occupancy=16,
 )
 
 _SEARCH_SPACE = [

@@ -66,7 +66,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | matmul_fp32_fp16_fp8 | fp32 | 1340.0 | 871.7 | 0.65× |
 | matmul_fp32_fp16_fp8 | fp16 | 518.0 | 467.2 | 0.90× |
 | matmul_fp32_fp16_fp8 | fp8_e4m3fn | 257.1 | 220.8 | 0.86× |
-| matmul_int8 | int8 | 475.5 | 345.6 | 0.73× |
+| matmul_int8 | int8 | 338.0 | 341.1 | 1.01× |
 | matrix_copy | fp16 | 17.8 | 18.1 | 1.02× |
 | matrix_copy | bf16 | 18.0 | 18.0 | 1.00× |
 | matrix_copy | fp32 | 31.2 | 28.0 | 0.90× |
