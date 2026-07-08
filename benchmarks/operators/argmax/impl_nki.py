@@ -5,58 +5,60 @@ try:
     import neuronxcc.nki.language as nl
     import neuronxcc.nki.isa as nisa
     PMAX = nl.tile_size.pmax
-    FREE_TILE = 16384
 except ImportError:
     nki = None
 
 if nki is not None:
     @nki.jit
     def argmax_kernel(a_input):
-        m, n = a_input.shape
-        num_blocks = (m + PMAX - 1) // PMAX
-        num_free_blocks = (n + FREE_TILE - 1) // FREE_TILE
+        free_tile_size = 16384
 
-        hbm_result = nl.ndarray((m, 1), dtype=nl.uint32, buffer=nl.hbm)
+        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
+        num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
+
+        hbm_result_tile = nl.ndarray((a_input.shape[0], 1), dtype=nl.uint32, buffer=nl.hbm)
 
         for i in range(num_blocks):
             offset = i * PMAX
             partition_index = nl.arange(PMAX)[:, None]
-            p_mask = partition_index < (m - offset)
+            mask_p = partition_index < (a_input.shape[0] - offset)
 
-            best_val = nl.full((PMAX, 8), fill_value=float('-inf'), dtype=nl.float32, buffer=nl.sbuf)
-            best_idx = nl.zeros((PMAX, 1), dtype=nl.uint32, buffer=nl.sbuf)
+            global_max = nl.full((PMAX, 1), fill_value=float('-inf'), dtype=nl.float32, buffer=nl.sbuf)
+            global_idx = nl.zeros((PMAX, 1), dtype=nl.uint32, buffer=nl.sbuf)
 
             for j in range(num_free_blocks):
-                free_offset = j * FREE_TILE
-                free_dim_index = nl.arange(FREE_TILE)[None, :]
-                f_mask = free_dim_index < (n - free_offset)
-                mask = p_mask & f_mask
+                free_offset = j * free_tile_size
+                free_dim_index = nl.arange(free_tile_size)[None, :]
+                mask_f = free_dim_index < (a_input.shape[1] - free_offset)
+                mask = mask_p & mask_f
 
-                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index],
-                                mask=mask)
+                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
 
-                tile_top8_vals = nisa.max8(src=a_tile, mask=mask)
-                tile_top8_idx = nisa.nc_find_index8(data=a_tile, vals=tile_top8_vals, mask=mask)
+                top8 = nisa.max8(src=a_tile, mask=mask)
+                idx8 = nisa.nc_find_index8(data=a_tile, vals=top8, mask=mask)
 
-                # cast to uint32 and add global offset
-                tile_max_val = tile_top8_vals[:, 0:1]
-                tile_max_idx = nl.static_cast(tile_top8_idx[:, 0:1], nl.uint32)
-                tile_max_idx = nl.add(tile_max_idx, free_offset)
+                chunk_max = nl.static_cast(top8[:, 0:1], nl.float32)
+                chunk_idx = nl.add(nl.static_cast(idx8[:, 0:1], nl.uint32), free_offset, dtype=nl.uint32)
 
-                better = nl.greater(tile_max_val, best_val[:, 0:1])
-                best_val[...] = nl.where(better, tile_top8_vals, best_val)
-                best_idx[...] = nl.where(better, nl.static_cast(tile_max_idx, nl.uint32), best_idx)
+                better = nl.greater(chunk_max, global_max)
+                new_idx = nl.where(better, chunk_idx, global_idx)
+                new_max = nl.where(better, chunk_max, global_max)
+                global_idx[...] = new_idx
+                global_max[...] = new_max
 
-            nl.store(hbm_result[offset + partition_index, nl.arange(1)[None, :]],
-                    value=best_idx, mask=p_mask)
+            nl.store(hbm_result_tile[offset + partition_index, nl.arange(1)[None, :]], value=global_idx, mask=mask_p)
 
-        return hbm_result
+        return hbm_result_tile
+
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    if dim != 1:
-        raise NotImplementedError("NKI argmax only supports dim=1")
     if x.dtype == torch.int8:
-        raise NotImplementedError("NKI argmax: int8 not supported")
+        raise NotImplementedError("argmax NKI: int8 not supported")
+    if x.dim() != 2:
+        raise NotImplementedError("argmax NKI: expects a 2D input (rows, cols)")
+    if dim != 1:
+        raise NotImplementedError("argmax NKI: only dim=1 (row-wise) is supported")
+
     result = argmax_kernel(x)
     return result.reshape(-1).to(torch.int64)
 
