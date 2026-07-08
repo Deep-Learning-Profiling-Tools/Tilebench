@@ -8,7 +8,7 @@ _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 64,
     "BLOCK_SIZE_N": 64,
     "BLOCK_SIZE_K": 32,
-    "GROUP_SIZE_M": 8,
+    "GROUPSIZE": 8,
     "threads": 128,
     "num_stages": 2,
 }
@@ -20,14 +20,14 @@ def bmm_configs():
     block_n = [32, 64, 128]
     block_k = [32, 64]
     group_size_m = [1, 8]
-    threads = [128]
-    num_stages = [2]
+    threads = [128, 256]
+    num_stages = [2, 3, 4]
     return [
         dict(
             BLOCK_SIZE_M=bm,
             BLOCK_SIZE_N=bn,
             BLOCK_SIZE_K=bk,
-            GROUP_SIZE_M=gs,
+            GROUPSIZE=gs,
             threads=nt,
             num_stages=ns,
         )
@@ -50,7 +50,7 @@ def bmm_kernel(
     BLOCK_SIZE_M: int = 64,
     BLOCK_SIZE_N: int = 64,
     BLOCK_SIZE_K: int = 32,
-    GROUP_SIZE_M: int = 8,
+    GROUPSIZE: int = 8,
     threads: int = 128,
     num_stages: int = 2,
 ):
@@ -66,7 +66,7 @@ def bmm_kernel(
         BATCH,
         threads=threads,
     ) as (pid_m, pid_n, pid_b):
-        T.use_swizzle(panel_size=GROUP_SIZE_M, enable=True)
+        T.use_swizzle(panel_size=GROUPSIZE, order="row", enable=GROUPSIZE > 1)
 
         start_m = pid_m * BLOCK_SIZE_M
         start_n = pid_n * BLOCK_SIZE_N
@@ -116,7 +116,7 @@ def run(
             BLOCK_SIZE_M=cfg["BLOCK_SIZE_M"],
             BLOCK_SIZE_N=cfg["BLOCK_SIZE_N"],
             BLOCK_SIZE_K=cfg["BLOCK_SIZE_K"],
-            GROUP_SIZE_M=cfg["GROUP_SIZE_M"],
+            GROUPSIZE=cfg["GROUPSIZE"],
             threads=cfg["threads"],
             num_stages=cfg["num_stages"],
         )

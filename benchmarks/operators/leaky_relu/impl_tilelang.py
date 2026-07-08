@@ -5,8 +5,8 @@ from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128, "num_stages": 2}
 _last_autotune_config: dict = {}
 def leaky_relu_configs():
-    BLOCK_SIZE = [512, 1024, 2048]
-    threads = [64, 128, 256]
+    BLOCK_SIZE = [1024, 2048, 4096, 8192]
+    threads = [128, 256]
     return [
         dict(BLOCK_SIZE = bs, threads = nt)
         for bs in BLOCK_SIZE
@@ -27,12 +27,10 @@ def leaky_relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 1
         start = pid * BLOCK_SIZE
         x_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
         output_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
-        zero = T.cast(0, dtype)
-        slope = T.cast(0.01, dtype)
         T.copy(x[start : start + BLOCK_SIZE], x_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
             value = x_reg[local_idx]
-            output_reg[local_idx] = T.if_then_else(value > zero, value, slope * value)
+            output_reg[local_idx] = T.Select(value > 0, value, T.cast(0.01, dtype) * value)
         T.copy(output_reg, output[start : start + BLOCK_SIZE])
 
 def run(x: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:

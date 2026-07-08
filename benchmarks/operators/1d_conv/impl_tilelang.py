@@ -9,7 +9,7 @@ _last_autotune_config: dict = {}
 
 def conv1d_configs():
     BLOCK_SIZE = [256, 512, 1024, 2048]
-    threads = [64, 128, 256, 512]
+    threads = [128, 256]
     return [
         dict(BLOCK_SIZE=bs, threads=nt)
         for bs in BLOCK_SIZE
@@ -28,32 +28,21 @@ def conv1d_kernel(input, kernel, output, dtype,
     kernel: T.Tensor((kernel_size, ), dtype)
     output: T.Tensor((N - kernel_size + 1, ), dtype)
     with T.Kernel(T.ceildiv(output_size, BLOCK_SIZE), threads=threads) as pid:
+        input_tile = T.alloc_fragment((BLOCK_SIZE, ), dtype)
         acc = T.alloc_fragment((BLOCK_SIZE, ), "float32")
+        output_tile = T.alloc_fragment((BLOCK_SIZE, ), dtype)
         T.fill(acc, 0.0)
         start = pid * BLOCK_SIZE
-        full_blocks = output_size // BLOCK_SIZE
 
-        if pid < full_blocks:
-            for i in T.unroll(0, kernel_size):
-                for j in T.Parallel(BLOCK_SIZE):
-                    acc[j] += (
-                        T.Cast("float32", input[start + j + i])
-                        * T.Cast("float32", kernel[i])
-                    )
-
-            T.copy(acc, output[start: start + BLOCK_SIZE])
-        else:
-            for i in T.unroll(0, kernel_size):
-                for j in T.Parallel(BLOCK_SIZE):
-                    if start + j < output_size:
-                        acc[j] += (
-                            T.Cast("float32", input[start + j + i])
-                            * T.Cast("float32", kernel[i])
-                        )
-
+        for i in T.unroll(0, kernel_size):
+            T.copy(input[start + i], input_tile)
+            weight = T.Cast("float32", kernel[i])
             for j in T.Parallel(BLOCK_SIZE):
-                if start + j < output_size:
-                    output[start + j] = T.Cast(dtype, acc[j])
+                acc[j] += T.Cast("float32", input_tile[j]) * weight
+
+        for j in T.Parallel(BLOCK_SIZE):
+            output_tile[j] = T.Cast(dtype, acc[j])
+        T.copy(output_tile, output[start])
 
 def run(input: torch.Tensor, kernel: torch.Tensor,
         input_size: int, kernel_size: int,

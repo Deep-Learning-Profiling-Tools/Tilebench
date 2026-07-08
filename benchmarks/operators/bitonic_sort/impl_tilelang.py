@@ -2,6 +2,7 @@ import torch
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
+from tilelang.math import next_power_of_2
 
 
 _DEFAULT_CONFIG = {"BLOCK": 1024, "threads": 128}
@@ -16,10 +17,6 @@ def bitonic_step_configs():
     ]
 
 
-def _next_pow2(n: int) -> int:
-    return 1 << ((n - 1).bit_length()) if n > 1 else 1
-
-
 @tilelang.jit
 def pad_kernel(data, work, dtype, BLOCK: int = 1024, threads: int = 128):
     N, M = T.const("N, M")
@@ -31,7 +28,10 @@ def pad_kernel(data, work, dtype, BLOCK: int = 1024, threads: int = 128):
         for local_idx in T.Parallel(BLOCK):
             offs = pid * BLOCK + local_idx
             if offs < M:
-                work[offs] = T.if_then_else(offs < N, data[offs], inf)
+                value = T.alloc_var(dtype, init=inf)
+                if offs < N:
+                    value = data[offs]
+                work[offs] = value
 
 
 @tilelang.autotune(configs=bitonic_step_configs(), warmup=20, rep=100, timeout=60)
@@ -50,12 +50,15 @@ def bitonic_step_kernel(M, dtype, BLOCK: int = 1024, threads: int = 128):
                 ixj = T.bitwise_xor(offs, j)
                 active = (ixj > offs) and (ixj < M) and (offs < M)
 
-                a = T.if_then_else(active, work[offs], zero)
-                b = T.if_then_else(active, work[ixj], zero)
+                a = T.alloc_var(dtype, init=zero)
+                b = T.alloc_var(dtype, init=zero)
+                if active:
+                    a = work[offs]
+                    b = work[ixj]
                 ascending = T.bitwise_and(offs, k) == 0
-                swap = T.if_then_else(ascending, a > b, a < b)
-                new_a = T.if_then_else(swap, b, a)
-                new_b = T.if_then_else(swap, a, b)
+                swap = T.Select(ascending, a > b, a < b)
+                new_a = T.Select(swap, b, a)
+                new_b = T.Select(swap, a, b)
 
                 if active:
                     work[offs] = new_a
@@ -70,7 +73,7 @@ def run(data: torch.Tensor, N: int,
         return data.clone()
 
     dtype = str(data.dtype).removeprefix("torch.")
-    M = _next_pow2(N)
+    M = next_power_of_2(N)
     work = torch.empty((M,), device=data.device, dtype=data.dtype)
 
     cfg = dict(_DEFAULT_CONFIG)

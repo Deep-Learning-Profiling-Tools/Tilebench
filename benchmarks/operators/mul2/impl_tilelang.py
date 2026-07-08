@@ -22,11 +22,13 @@ def mul2_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     output: T.Tensor((n_elements, ), dtype)
 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
+        start = pid * BLOCK_SIZE
+        output_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        x_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        T.copy(x[start], x_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[idx] = x[idx] * 2
-
+            output_reg[local_idx] = x_reg[local_idx] * 2
+        T.copy(output_reg, output[start]) 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     dtype = str(x.dtype).removeprefix("torch.")
     output = torch.empty_like(x)
