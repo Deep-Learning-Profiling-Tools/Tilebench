@@ -11,7 +11,7 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def mul2_kernel(a_input):
-        num_blocks = (a_input.shape[1] + (PMAX - 1)) // PMAX
+        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
 
         free_tile_size = 16384
 
