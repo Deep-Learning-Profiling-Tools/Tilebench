@@ -8,25 +8,25 @@
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
 | fp16 | `{'n': 50000000}` | `{'BLOCK_SIZE': 4096, 'num_warps': 8, 'num_stages': 1}` | `{'tile': 4096, 'occupancy': 16}` |
-| bf16 | `{'n': 50000000}` | `{'BLOCK_SIZE': 2048, 'num_warps': 4, 'num_stages': 1}` | `{'tile': 4096, 'occupancy': 16}` |
-| fp32 | `{'n': 50000000}` | `{'BLOCK_SIZE': 2048, 'num_warps': 8, 'num_stages': 1}` | `{'tile': 4096, 'occupancy': 16}` |
+| bf16 | `{'n': 50000000}` | `{'BLOCK_SIZE': 4096, 'num_warps': 8, 'num_stages': 1}` | `{'tile': 4096, 'occupancy': 16}` |
+| fp32 | `{'n': 50000000}` | `{'BLOCK_SIZE': 2048, 'num_warps': 8, 'num_stages': 1}` | `{'tile': 2048, 'occupancy': 8}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 30.69 us | 63.30 % | 63.30 % | 47.26 % | 35.47 % | 72.62 % | 4.85 Tbyte/s | 256 | 29 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
-| fp16 | cutile | 50.98 us | 39.99 % | 39.99 % | 27.18 % | 21.56 % | 73.51 % | 3.06 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| bf16 | triton | 30.53 us | 64.32 % | 64.32 % | 46.58 % | 35.59 % | 73.36 % | 4.93 Tbyte/s | 128 | 30 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| bf16 | cutile | 50.78 us | 40.14 % | 40.14 % | 27.12 % | 21.62 % | 74.10 % | 3.08 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | triton | 56.86 us | 79.71 % | 79.71 % | 48.19 % | 39.99 % | 39.12 % | 6.11 Tbyte/s | 256 | 21 register/thread | 0 byte/block | 0 byte/block | 10 block / 32 block |
-| fp32 | cutile | 65.28 us | 70.26 % | 70.26 % | 41.70 % | 35.01 % | 56.77 % | 5.39 Tbyte/s | 128 | 30 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | triton | 30.72 us | 63.48 % | 63.48 % | 47.59 % | 35.45 % | 72.47 % | 4.86 Tbyte/s | 256 | 29 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| fp16 | cutile | 50.85 us | 40.06 % | 40.06 % | 27.22 % | 21.59 % | 73.60 % | 3.07 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| bf16 | triton | 30.91 us | 63.93 % | 63.93 % | 46.79 % | 35.30 % | 71.64 % | 4.90 Tbyte/s | 256 | 30 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
+| bf16 | cutile | 50.82 us | 40.13 % | 40.13 % | 27.15 % | 21.60 % | 74.09 % | 3.08 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | triton | 56.16 us | 80.81 % | 80.81 % | 48.07 % | 40.60 % | 39.47 % | 6.19 Tbyte/s | 256 | 21 register/thread | 0 byte/block | 0 byte/block | 10 block / 32 block |
+| fp32 | cutile | 61.86 us | 73.99 % | 73.99 % | 44.21 % | 36.93 % | 63.49 % | 5.67 Tbyte/s | 128 | 40 register/thread | 0 byte/block | 0 byte/block | 12 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.66× faster** (30.7 µs vs 51.0 µs).
-- **bf16**: Triton is **1.66× faster** (30.5 µs vs 50.8 µs).
-- **fp32**: Triton is **1.15× faster** (56.9 µs vs 65.3 µs).
+- **fp16**: Triton is **1.66× faster** (30.7 µs vs 50.9 µs).
+- **bf16**: Triton is **1.64× faster** (30.9 µs vs 50.8 µs).
+- **fp32**: Triton is **1.10× faster** (56.2 µs vs 61.9 µs).
 
 ## NCU's own bottleneck verdict
 
@@ -35,7 +35,7 @@
 - **fp16 / cutile** — Compute is more heavily utilized than Memory
 - **fp16 / triton** — Compute and Memory are well-balanced
 - **fp32 / cutile** — Memory is more heavily utilized than Compute
-- **fp32 / triton** — Memory is more heavily utilized than Compute
+- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
 
 ## Reports
 
