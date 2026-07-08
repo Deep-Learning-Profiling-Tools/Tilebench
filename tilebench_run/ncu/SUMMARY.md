@@ -23,9 +23,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | batch_normalization | fp16 | 113.7 | 140.2 | 1.23× |
 | batch_normalization | bf16 | 113.4 | 139.1 | 1.23× |
 | batch_normalization | fp32 | 117.4 | 141.2 | 1.20× |
-| batched_matmul | fp16 | 29.7 | 30.6 | 1.03× |
-| batched_matmul | bf16 | 29.6 | 30.2 | 1.02× |
-| batched_matmul | fp32 | 117.9 | 98.5 | 0.84× |
+| batched_matmul | fp16 | 29.8 | 30.3 | 1.02× |
+| batched_matmul | bf16 | 29.9 | 29.8 | 1.00× |
+| batched_matmul | fp32 | 49.5 | 99.3 | 2.01× |
 | bitonic_sort | fp16 | 8106.3 | 8105.4 | 1.00× |
 | bitonic_sort | fp32 | 9271.4 | 9926.0 | 1.07× |
 | block_sparse_attention | fp16 | 75.9 | 281.8 | 3.71× |
