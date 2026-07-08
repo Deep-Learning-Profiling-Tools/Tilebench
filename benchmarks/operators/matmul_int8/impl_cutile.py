@@ -75,7 +75,9 @@ def matmul_kernel(
                 padding_mode=ct.PaddingMode.ZERO,
             )
             mask_i = 3 << (2 * i)
-            b_unpacked = ct.astype((B_int32 & mask_i) >> (2 * i), ct.int8) - 1
+            # Subtract in int32, then cast once — keeps the {0..3} -> {-1..2}
+            # mapping's dtype promotion explicit.
+            b_unpacked = ct.astype(((B_int32 & mask_i) >> (2 * i)) - 1, ct.int8)
             acc = ct.mma(A_tile, b_unpacked, acc)
 
     ct.store(C, index=(pid_m, pid_n), tile=acc)
