@@ -8,7 +8,7 @@ from core.cutile_autotune import CutileAutotuner
 ConstInt = ct.Constant[int]
 
 _DEFAULT_CONFIG = SimpleNamespace(
-    tile_m=64, tile_n=64, tile_k=32, occupancy=2, group_size=8,
+    tile_m=128, tile_n=128, tile_k=64, occupancy=4, group_size=1,
 )
 _SEARCH_SPACE = [
     SimpleNamespace(tile_m=tm, tile_n=tn, tile_k=tk, occupancy=occ, group_size=gs)
