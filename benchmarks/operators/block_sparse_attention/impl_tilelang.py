@@ -9,10 +9,11 @@ _last_autotune_config: dict = {}
 
 
 def block_sparse_attention_configs():
+    # Mirrors impl_triton's search space: num_warps {2,4,8} -> threads {64,128,256}.
     return [
         dict(threads=nt, num_stages=ns)
-        for nt in [128, 256]
-        for ns in [1, 2]
+        for nt in [64, 128, 256]
+        for ns in [2, 3, 4]
     ]
 
 
@@ -70,7 +71,10 @@ def block_sparse_attention_kernel(
             o_shared = T.alloc_shared((BLOCK_M, total_d), dtype)
 
             qk = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            p_cast = T.alloc_fragment((BLOCK_M, BLOCK_N), dtype)
+            # P goes through shared memory: a cast fragment would pin gemm #2's
+            # A-operand layout to gemm #1's C layout, which conflicts whenever
+            # warps > BLOCK_M/16 (e.g. num_warps=8 with BLOCK_M=64).
+            p_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
@@ -142,7 +146,7 @@ def block_sparse_attention_kernel(
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                     qk[i, j] *= scores_scale[i]
 
-                T.copy(qk, p_cast)
+                T.copy(qk, p_shared)
 
                 for i, j in T.Parallel(BLOCK_M, total_d):
                     acc[i, j] *= T.if_then_else(
@@ -152,7 +156,7 @@ def block_sparse_attention_kernel(
                     )
 
                 T.copy(V[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:total_d], v_shared)
-                T.gemm(p_cast, v_shared, acc, policy=T.GemmWarpPolicy.FullRow)
+                T.gemm(p_shared, v_shared, acc, policy=T.GemmWarpPolicy.FullRow)
 
                 l += 1
 
@@ -214,9 +218,9 @@ def run(
     dtype = str(Q.dtype).removeprefix("torch.")
     out = torch.empty((batch, num_heads, total_seq_len, head_dim), device=Q.device, dtype=Q.dtype)
 
+    # NOTE: `block_size` is the engine's generic elementwise knob (1024 by
+    # default), not a CTA size — ignore it, like impl_triton does.
     cfg = dict(_DEFAULT_CONFIG)
-    if block_size is not None:
-        cfg["threads"] = int(block_size)
 
     if autotune:
         with set_autotune_inputs(Q, K, V, layout_csr_row_indices, layout_csr_col_indices, out):

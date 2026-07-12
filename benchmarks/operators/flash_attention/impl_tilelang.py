@@ -9,11 +9,12 @@ _last_autotune_config: dict = {}
 
 
 def flash_attention_configs():
+    # Mirrors impl_triton's search space: num_warps {2,4,8} -> threads {64,128,256}.
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt, num_stages=ns)
         for bm in [64, 128]
         for bn in [32, 64, 128]
-        for nt in [128, 256]
+        for nt in [64, 128, 256]
         for ns in [2, 3, 4]
     ]
 
@@ -50,10 +51,12 @@ def flash_attention_kernel(
             q_shared = T.alloc_shared((BLOCK_M, dim), dtype)
             k_shared = T.alloc_shared((BLOCK_N, dim), dtype)
             v_shared = T.alloc_shared((BLOCK_N, dim), dtype)
-            o_shared = T.alloc_shared((BLOCK_M, dim), dtype)
 
             scores = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            scores_cast = T.alloc_fragment((BLOCK_M, BLOCK_N), dtype)
+            # P goes through shared memory: a cast fragment would pin gemm #2's
+            # A-operand layout to gemm #1's C layout, which conflicts whenever
+            # warps > BLOCK_M/16 (e.g. num_warps=8 with BLOCK_M=64).
+            scores_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc_o = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
@@ -107,18 +110,17 @@ def flash_attention_kernel(
                 for i in T.Parallel(BLOCK_M):
                     logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
 
-                T.copy(scores, scores_cast)
+                T.copy(scores, scores_shared)
                 for i, j in T.Parallel(BLOCK_M, dim):
                     acc_o[i, j] *= scores_scale[i]
 
                 T.copy(V[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], v_shared)
-                T.gemm(scores_cast, v_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
+                T.gemm(scores_shared, v_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
 
             for i, j in T.Parallel(BLOCK_M, dim):
                 acc_o[i, j] /= logsum[i]
 
-            T.copy(acc_o, o_shared)
-            T.copy(o_shared, O[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :])
+            T.copy(acc_o, O[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :])
 
     return main
 

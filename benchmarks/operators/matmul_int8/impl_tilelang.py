@@ -9,7 +9,7 @@ _DEFAULT_CONFIG = {
     "BLOCK_SIZE_N": 128,
     "BLOCK_SIZE_K": 64,
     "GROUP_SIZE_M": 8,
-    "threads": 256,
+    "threads": 128,
     "num_stages": 4,
 }
 _last_autotune_config: dict = {}
@@ -28,7 +28,7 @@ def matmul_configs():
         for bm in [64, 128, 256]
         for bn in [64, 128, 256]
         for bk in [32, 64]
-        for nt in [128, 256]
+        for nt in [128, 256, 512]
         for ns in [3, 4]
         if bm * bn <= 128 * 256
     ]
