@@ -9,6 +9,18 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
+# CUDA is required for the GPU backends (torch timing via Proton, Triton,
+# cuTile, TileLang). On non-CUDA hosts (e.g. AWS Trainium) those are skipped;
+# only the torch correctness reference + the NKI backend (timed via XLA) run.
+HAS_CUDA = torch.cuda.is_available()
+
+
+def _sync():
+    """Synchronize the CUDA device when present; no-op on non-CUDA hosts."""
+    if HAS_CUDA:
+        torch.cuda.synchronize()
+
+
 def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
     with open(config_path, "r") as f:
@@ -138,53 +150,68 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         try:
             ref_output = impl_torch.run(*inputs)
-            torch.cuda.synchronize()
+            _sync()
         except (RuntimeError, TypeError) as e:
             print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
-        # --- Torch ---
-        torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
-        torch_ms    = torch_stats["mean"]
+        # --- Torch (baseline) ---
+        # Proton-timed on CUDA; on non-CUDA hosts torch ran above only as the
+        # correctness reference (no GPU timer here), so torch_ms is nan.
+        if HAS_CUDA:
+            torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+            torch_ms    = torch_stats["mean"]
+        else:
+            torch_stats = None
+            torch_ms    = float("nan")
 
         # --- Triton ---
         triton_cfg = None
-        if impl_triton is None:
+        if impl_triton is None or not HAS_CUDA:
             triton_ok = False
-            triton_err = "Triton not selected (--tile-language)"
+            triton_err = ("Triton requires CUDA (host has no NVIDIA GPU)"
+                          if impl_triton is not None else "Triton not selected (--tile-language)")
             triton_ms = float("nan")
             triton_stats = None
         else:
-            triton_kw = _run_kwargs(impl_triton.run, block_size)
-            triton_output = impl_triton.run(*inputs, **triton_kw)
-            torch.cuda.synchronize()
-            triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-            triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
-            if triton_cfg:
-                print(f"  Triton autotune → {triton_cfg}")
-            if not triton_ok:
-                print(f"  Triton verification FAILED: {triton_err}")
-            triton_stats = (
-                _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
-                if triton_ok else None
-            )
-            triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+            try:
+                triton_kw = _run_kwargs(impl_triton.run, block_size)
+                triton_output = impl_triton.run(*inputs, **triton_kw)
+                _sync()
+                triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
+                if triton_cfg:
+                    print(f"  Triton autotune → {triton_cfg}")
+                if not triton_ok:
+                    print(f"  Triton verification FAILED: {triton_err}")
+                triton_stats = (
+                    _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                    if triton_ok else None
+                )
+                triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+            except Exception as e:
+                triton_ok    = False
+                triton_err   = str(e)
+                triton_ms    = float("nan")
+                triton_stats = None
+                print(f"  Triton execution FAILED: {triton_err}")
 
         # --- cuTile ---
         cutile_cfg = None
-        if impl_cutile is None:
+        if impl_cutile is None or not HAS_CUDA:
             cutile_ok = False
-            cutile_err = "cuTile not available (import failed)"
+            cutile_err = ("cuTile requires CUDA (host has no NVIDIA GPU)"
+                          if impl_cutile is not None else "cuTile not available (import failed)")
             cutile_ms = float("nan")
             cutile_stats = None
-            print("  cuTile skipped (not installed)")
+            print(f"  cuTile skipped ({cutile_err})")
         else:
             try:
                 cutile_kw = _run_kwargs(impl_cutile.run, block_size)
                 cutile_output = impl_cutile.run(*inputs, **cutile_kw)
-                torch.cuda.synchronize()
+                _sync()
                 cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
                 cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
                 if cutile_cfg:
@@ -205,17 +232,18 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         # --- TileLang ---
         tilelang_cfg = None
-        if impl_tilelang is None:
+        if impl_tilelang is None or not HAS_CUDA:
             tilelang_ok = False
-            tilelang_err = "TileLang not available (import failed)"
+            tilelang_err = ("TileLang requires CUDA (host has no NVIDIA GPU)"
+                            if impl_tilelang is not None else "TileLang not available (import failed)")
             tilelang_ms = float("nan")
             tilelang_stats = None
-            print("  TileLang skipped (not available)")
+            print(f"  TileLang skipped ({tilelang_err})")
         else:
             try:
                 tilelang_kw = _run_kwargs(impl_tilelang.run, block_size)
                 tilelang_output = impl_tilelang.run(*inputs, **tilelang_kw)
-                torch.cuda.synchronize()
+                _sync()
                 tilelang_ok, tilelang_err = verify(tilelang_output, ref_output, atol=verify_atol, rtol=verify_rtol)
                 tilelang_cfg = getattr(impl_tilelang, "get_last_config", lambda: None)() if autotune else None
                 if tilelang_cfg:
