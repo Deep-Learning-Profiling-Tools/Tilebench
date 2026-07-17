@@ -3,7 +3,7 @@ import triton
 import triton.language as tl
 from triton.tools.tensor_descriptor import TensorDescriptor
 
-_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 32, "num_warps": 8, "num_stages": 4}
+_DEFAULT_CONFIG = {"BLOCK_M": 128, "BLOCK_N": 64, "num_warps": 8, "num_stages": 3}
 
 
 def _tma_set_block_size_hook(nargs):
@@ -12,9 +12,8 @@ def _tma_set_block_size_hook(nargs):
     09-persistent-matmul and bowen/fix/operator-matmul_fp32_fp16_fp8).
 
     Host-side ``TensorDescriptor`` is the supported TMA API. Building the
-    descriptors in ``run()`` (not inside the kernel via device-side
-    ``tl.make_tensor_descriptor``) hoists descriptor construction out of every
-    CTA, avoiding the per-program-instance overhead."""
+    descriptors in ``run()`` hoists descriptor construction out of every CTA,
+    avoiding per-program-instance overhead."""
     BLOCK_M = nargs["BLOCK_M"]
     BLOCK_N = nargs["BLOCK_N"]
     DIM = nargs["DIM"]

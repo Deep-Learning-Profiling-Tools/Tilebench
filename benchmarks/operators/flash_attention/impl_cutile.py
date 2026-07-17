@@ -14,7 +14,7 @@ ConstBool = ct.Constant[bool]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=32, occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=64, occupancy=16)
 _SEARCH_SPACE = [
     SimpleNamespace(tile_m=tm, tile_n=tn, occupancy=occ)
     for tm in [64, 128]
