@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 32, "num_warps": 8, "num_stages": 4
 
 
 @triton.jit
-def _fwd_kernel(
+def fwd_kernel(
     Q, K, V, sm_scale,
     L,
     O,
@@ -104,7 +104,7 @@ _fwd_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["SEQLEN", "DIM"],
-)(_fwd_kernel)
+)(fwd_kernel)
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
@@ -133,7 +133,7 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(q.shape[2], cfg["BLOCK_M"]), q.shape[0] * q.shape[1], 1)
-        _fwd_kernel[grid](
+        fwd_kernel[grid](
             q, k, v, sm_scale,
             L,
             o,
