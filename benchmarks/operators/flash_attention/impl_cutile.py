@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 import math
-import numpy as np
 from cuda.tile import RoundingMode as RMd
 
 from core.cutile_autotune import CutileAutotuner
@@ -15,7 +14,7 @@ ConstBool = ct.Constant[bool]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=32, occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(tile_m=64, tile_n=64, occupancy=16)
 _SEARCH_SPACE = [
     SimpleNamespace(tile_m=tm, tile_n=tn, occupancy=occ)
     for tm in [64, 128]
@@ -24,7 +23,7 @@ _SEARCH_SPACE = [
 ]
 
 @ct.kernel
-def fmha_kernel(Q, K, V, Out,
+def fwd_kernel(Q, K, V, Out,
                 qk_scale: float,
                 input_pos: int,
                 TILE_D: ConstInt,  # TILE_D = hidden_size
@@ -49,18 +48,18 @@ def fmha_kernel(Q, K, V, Out,
     qk_scale = qk_scale * INV_LOG_2
 
     # Initialize offsets for current query tile (M-dimension)
-    offs_m = bid_x * TILE_M + ct.arange(TILE_M, dtype=np.int32)  # [TILE_M]
+    offs_m = bid_x * TILE_M + ct.arange(TILE_M, dtype=ct.int32)  # [TILE_M]
     offs_m += input_pos
     offs_m = offs_m[:, None]  # [TILE_M, 1]
 
     # Initialize local offsets for key/value tile (N-dimension)
-    offs_n_tile = ct.arange(TILE_N, dtype=np.int32)  # [TILE_N]
+    offs_n_tile = ct.arange(TILE_N, dtype=ct.int32)  # [TILE_N]
     offs_n_tile = offs_n_tile[None, :]  # [1, TILE_N]
 
     # Initialize online softmax accumulators in float32 for stability
-    m_i = ct.full((TILE_M, 1), -np.inf, dtype=np.float32)
-    l_i = ct.full((TILE_M, 1), 0.0, dtype=np.float32)
-    acc = ct.full((TILE_M, TILE_D), 0.0, dtype=np.float32)
+    m_i = ct.full((TILE_M, 1), -float('inf'), dtype=ct.float32)
+    l_i = ct.full((TILE_M, 1), 0.0, dtype=ct.float32)
+    acc = ct.full((TILE_M, TILE_D), 0.0, dtype=ct.float32)
 
     # Load query tile for this batch, head, and M-chunk
     q = ct.load(
@@ -89,20 +88,20 @@ def fmha_kernel(Q, K, V, Out,
             latency=2,
         )
         k = k.reshape((TILE_D, TILE_N))  # [TILE_D, TILE_N]
-        qk = ct.full((TILE_M, TILE_N), 0., dtype=np.float32)
+        qk = ct.full((TILE_M, TILE_N), 0., dtype=ct.float32)
         qk = ct.mma(q, k, qk)  # [TILE_M, TILE_N]
 
         # --- Apply Causal Masking ---
         if (CAUSAL or not EVEN_K) and j >= mask_start:
             offs_n = j * TILE_N + offs_n_tile
-            mask = ct.full((TILE_M, TILE_N), True, dtype=np.bool)
+            mask = ct.full((TILE_M, TILE_N), True, dtype=ct.bool_)
             # out of bound mask
             if not EVEN_K:
                 mask = mask & (offs_n < k_seqlen)
             # causal mask
             if CAUSAL:
                 mask = mask & (offs_m >= offs_n)  # [TILE_M, TILE_N]
-            mask = ct.where(mask, 0.0, -np.inf)  # [TILE_M, TILE_N]
+            mask = ct.where(mask, 0.0, -float('inf'))  # [TILE_M, TILE_N]
             qk += mask
 
         # --- Online Softmax Update ---
@@ -136,7 +135,7 @@ def fmha_kernel(Q, K, V, Out,
 
 # Caches replace_hints results (per occupancy) and autotune outcomes (per
 # problem shape). See core/cutile_autotune.py for why both layers matter.
-_tuner = CutileAutotuner(fmha_kernel)
+_tuner = CutileAutotuner(fwd_kernel)
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
