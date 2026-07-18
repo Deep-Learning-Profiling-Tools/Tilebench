@@ -18,7 +18,8 @@ ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
 sys.path.insert(0, str(ROOT))
 
 OPS_DIR = ROOT / "benchmarks" / "operators"
-LOG_DIR = ROOT / "results" / "logs" / "autotune_logs"
+from core.gpu import gpu_tag
+LOG_DIR = ROOT / "results" / gpu_tag() / "logs" / "autotune_logs"
 
 
 def expand_case_grid(case_grid: dict) -> list[dict]:

@@ -3,6 +3,7 @@ import csv
 import json
 from pathlib import Path
 from core.engine import run_benchmark_suite
+from core.gpu import gpu_tag
 
 _TIMING_KEYS = {
     "params", "problem_size", "dtype",
@@ -29,10 +30,10 @@ def main():
                         help="Operator to benchmark")
     parser.add_argument("--output", type=str, default=None,
                         help="Output path for timing results "
-                             "(default: results/logs/time_measurement_logs/<operator>_results.json)")
+                             "(default: results/<GPU>/logs/time_measurement_logs/<operator>_results.json)")
     parser.add_argument("--autotune-log", type=str, default=None,
                         help="Output path for autotune config log "
-                             "(default: results/logs/autotune_logs/<operator>_autotune.json)")
+                             "(default: results/<GPU>/logs/autotune_logs/<operator>_autotune.json)")
     parser.add_argument("--warmup", type=int, default=None,
                         help="Warmup iterations (default: 20)")
     parser.add_argument("--repeat", type=int, default=None,
@@ -110,12 +111,13 @@ def main():
     if args.proton_output_dir is not None:
         overrides["proton_output_dir"] = args.proton_output_dir
 
-    # Resolve output paths (operator-bound defaults)
+    # Resolve output paths (operator-bound defaults, segregated per GPU model)
+    tag = gpu_tag()
     output_path = args.output or (
-        f"results/logs/time_measurement_logs/{args.operator}_results.json"
+        f"results/{tag}/logs/time_measurement_logs/{args.operator}_results.json"
     )
     autotune_path = args.autotune_log or (
-        f"results/logs/autotune_logs/{args.operator}_autotune.json"
+        f"results/{tag}/logs/autotune_logs/{args.operator}_autotune.json"
     )
 
     print(f"Starting benchmark for operator: {args.operator}")
@@ -173,10 +175,10 @@ def main():
 
     # Save summary as CSV. Filename suffix mirrors the run mode so default
     # and autotune sweeps don't overwrite each other:
-    #   results/csv/<op>_default.csv   (no --autotune)
-    #   results/csv/<op>_autotune.csv  (--autotune)
+    #   results/<GPU>/csv/<op>_default.csv   (no --autotune)
+    #   results/<GPU>/csv/<op>_autotune.csv  (--autotune)
     mode_suffix = "autotune" if args.autotune else "default"
-    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
+    csv_path = f"results/{tag}/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)

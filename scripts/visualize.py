@@ -9,13 +9,13 @@ Typical usage (run from Tilebench/):
 
     # Override paths or metrics explicitly:
     PYTHONPATH=. python scripts/visualize.py --operator mul2 \\
-        --input  results/logs/time_measurement_logs/mul2_results.json \\
-        --output-dir results/figures/mul2/ \\
+        --input  results/B200/logs/time_measurement_logs/mul2_results.json \\
+        --output-dir results/B200/figures/mul2/ \\
         --metrics latency_ms bandwidth_GBs speedup pct_peak_bw
 
-Default paths (derived from --operator):
-    --input      results/logs/time_measurement_logs/<operator>_results.json
-    --output-dir results/figures/<operator>/
+Default paths (derived from --operator and the GPU model; --gpu overrides):
+    --input      results/<GPU>/logs/time_measurement_logs/<operator>_results.json
+    --output-dir results/<GPU>/figures/<operator>/
 
 Available derived metrics (from core/metrics.py):
     latency_ms          raw mean latency (always available)
@@ -48,6 +48,7 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
+from core.gpu import gpu_tag  # noqa: E402
 from core.metrics import NON_GPU_BACKENDS, compute_derived, load_peak_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -372,22 +373,26 @@ def main() -> None:
                              "and derive default input/output paths")
     parser.add_argument("--input", type=str, default=None,
                         help="Timing results JSON produced by run_bench.py "
-                             "(default: results/logs/time_measurement_logs/<operator>_results.json)")
+                             "(default: results/<GPU>/logs/time_measurement_logs/<operator>_results.json)")
     parser.add_argument("--metrics", nargs="+", default=None,
                         help="Metrics to plot (default: from config.yaml metrics.plots)")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Directory to write PNG files "
-                             "(default: results/figures/<operator>/)")
+                             "(default: results/<GPU>/figures/<operator>/)")
     parser.add_argument("--gpu", type=str, default=None,
-                        help="GPU short name (e.g. B200). Loads peak performance from "
-                             "data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
+                        help="GPU short name (e.g. B200). Selects the results/<GPU>/ "
+                             "directory for default paths and loads peak performance "
+                             "from data/peak_performance/<GPU>.json for roofline and "
+                             "pct_peak metrics. Default: auto-detected from the current "
+                             "CUDA device (or TILEBENCH_GPU_TAG).")
     args = parser.parse_args()
 
-    # Resolve operator-bound default paths
+    # Resolve operator-bound default paths (segregated per GPU model)
+    tag = args.gpu or gpu_tag()
     input_path = args.input or (
-        f"results/logs/time_measurement_logs/{args.operator}_results.json"
+        f"results/{tag}/logs/time_measurement_logs/{args.operator}_results.json"
     )
-    output_dir = args.output_dir or f"results/figures/{args.operator}"
+    output_dir = args.output_dir or f"results/{tag}/figures/{args.operator}"
 
     # Load data
     with open(input_path) as f:

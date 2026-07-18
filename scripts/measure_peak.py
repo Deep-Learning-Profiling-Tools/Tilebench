@@ -21,10 +21,18 @@ Usage:
 import argparse
 import json
 import os
-import re
 import statistics
+import sys
 from datetime import datetime
 import torch
+
+# Allow running as: python scripts/measure_peak.py (without PYTHONPATH=.)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from core.gpu import gpu_label as _default_gpu_label  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -42,25 +50,6 @@ L2_BW_SIZES_MB = [1, 2, 4, 8, 16]
 
 # GEMM sizes for FLOPS
 GEMM_SIZES = [4096, 8192, 12288, 16384]
-
-_GPU_MODEL_PATTERNS = [
-    # Data center GPUs: B200, H100, H200, A100, A800, V100, P100, L40S.
-    r"\b[BHAVLP]\d{2,4}[A-Z]*\b",
-    # RTX GPUs: RTX 4090, RTX4090, RTX 6000 Ada.
-    r"\bRTX\s*\d{4}(?:\s*Ada)?\b",
-]
-
-
-def _default_gpu_label(gpu_name: str) -> str:
-    for pattern in _GPU_MODEL_PATTERNS:
-        model = re.search(pattern, gpu_name, flags=re.IGNORECASE)
-        if model:
-            return re.sub(r"\s+", "", model.group(0)).upper()
-
-    label = re.sub(r"^NVIDIA\s+", "", gpu_name, flags=re.IGNORECASE)
-    label = re.sub(r"[^A-Za-z0-9]+", "_", label).strip("_")
-    return label or "GPU"
-
 
 def _sync():
     torch.cuda.synchronize()
@@ -440,10 +429,11 @@ def main():
             "peak_tflops": round(peak_tflops[dname], 1),
         }
 
-    # Save detailed results to results/peak_performance/<GPU>_peak_performance.json
-    detail_dir = os.path.join(os.path.dirname(__file__), "..", "results", "peak_performance")
+    # Save detailed results to results/<GPU>/peak_performance/peak_performance.json
+    detail_dir = os.path.join(os.path.dirname(__file__), "..", "results",
+                              gpu_label, "peak_performance")
     os.makedirs(detail_dir, exist_ok=True)
-    detail_path = os.path.join(detail_dir, f"{gpu_label}_peak_performance.json")
+    detail_path = os.path.join(detail_dir, "peak_performance.json")
     with open(detail_path, "w") as f:
         json.dump(full_results, f, indent=2)
     print(f"Detailed results saved to {os.path.abspath(detail_path)}")

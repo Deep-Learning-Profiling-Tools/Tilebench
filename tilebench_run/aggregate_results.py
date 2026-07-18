@@ -29,8 +29,10 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
-CSV_DIR = ROOT / "results" / "csv"
-OUT_DIR = ROOT / "results" / "aggregate"
+from core.gpu import gpu_tag
+
+CSV_DIR = ROOT / "results" / gpu_tag() / "csv"
+OUT_DIR = ROOT / "results" / gpu_tag() / "aggregate"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 MEAN_COLS = ("torch_ms", "triton_ms", "cutile_ms")

@@ -1,3 +1,4 @@
+import gc
 import importlib
 import inspect
 
@@ -128,6 +129,16 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         dtype      = resolve_dtype(dtype_str)
         block_size = case.get("block_size", 1024)
 
+        # The loop variables below still reference the previous case's tensors
+        # until reassigned — drop them first, then release cached allocator
+        # segments; large sweeps otherwise fragment the allocator and OOM on
+        # smaller-memory GPUs (e.g. A100 80GB).
+        inputs = ref_output = None
+        triton_output = cutile_output = tilelang_output = nki_output = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         print(f"Running case: {params}, dtype={dtype_str}")
 
         try:
@@ -157,20 +168,27 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             triton_ms = float("nan")
             triton_stats = None
         else:
-            triton_kw = _run_kwargs(impl_triton.run, block_size)
-            triton_output = impl_triton.run(*inputs, **triton_kw)
-            torch.cuda.synchronize()
-            triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-            triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
-            if triton_cfg:
-                print(f"  Triton autotune → {triton_cfg}")
-            if not triton_ok:
-                print(f"  Triton verification FAILED: {triton_err}")
-            triton_stats = (
-                _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
-                if triton_ok else None
-            )
-            triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+            try:
+                triton_kw = _run_kwargs(impl_triton.run, block_size)
+                triton_output = impl_triton.run(*inputs, **triton_kw)
+                torch.cuda.synchronize()
+                triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
+                if triton_cfg:
+                    print(f"  Triton autotune → {triton_cfg}")
+                if not triton_ok:
+                    print(f"  Triton verification FAILED: {triton_err}")
+                triton_stats = (
+                    _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                    if triton_ok else None
+                )
+                triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+            except Exception as e:
+                triton_ok    = False
+                triton_err   = str(e)
+                triton_ms    = float("nan")
+                triton_stats = None
+                print(f"  Triton execution FAILED: {triton_err}")
 
         # --- cuTile ---
         cutile_cfg = None
