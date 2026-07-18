@@ -86,7 +86,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | mul2 | fp32 | 22.1 | 22.1 | 1.00× |
 | mul2 | int8 | 9.7 | 15.1 | 1.56× |
 | quantize_global | fp32 | 17.7 | 18.3 | 1.03× |
-| radix_sort | int32 | 2379.0 | 2985.8 | 1.26× |
+| radix_sort | int32 | 1331.2 | 2529.9 | 1.90× |
 | relu | fp16 | 14.9 | 13.0 | 0.87× |
 | relu | bf16 | 14.8 | 13.0 | 0.87× |
 | relu | fp32 | 22.3 | 22.4 | 1.01× |
