@@ -17,7 +17,7 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _leaky_relu_kernel(x_ptr, y_ptr, TILE: ConstInt):
+def leaky_relu_kernel(x_ptr, y_ptr, TILE: ConstInt):
     """
     Element-wise Leaky ReLU matching Triton's method:
       y[i] = x[i] if x[i] > 0 else 0.01 * x[i]
@@ -33,7 +33,7 @@ def _leaky_relu_kernel(x_ptr, y_ptr, TILE: ConstInt):
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_leaky_relu_kernel)
+_tuner = CutileAutotuner(leaky_relu_kernel)
 
 
 def run(input: torch.Tensor, N: int,
