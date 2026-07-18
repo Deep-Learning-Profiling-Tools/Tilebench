@@ -19,7 +19,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 3}
 
 
 @triton.jit
-def _kl_divergence_kernel(
+def kl_divergence_kernel(
     log_y_pred_ptr, log_y_pred_stride,
     y_true_ptr, y_true_stride,
     loss_ptr,
@@ -59,7 +59,7 @@ _kl_divergence_kernel_autotuned = triton.autotune(
     key=["n_cols"],
     warmup=3,
     rep=10,
-)(_kl_divergence_kernel)
+)(kl_divergence_kernel)
 
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
@@ -77,7 +77,7 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _kl_divergence_kernel[grid](
+        kl_divergence_kernel[grid](
             log_y_pred, log_y_pred.stride(0),
             y_true, y_true.stride(0),
             loss,
