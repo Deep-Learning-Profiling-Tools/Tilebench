@@ -1,5 +1,5 @@
-# Radix Sort — 32-pass 1-bit hierarchical radix sort
-# Per-pass pipeline: count_ones → block-block sum → block-of-blocks prefix → per-block prefix → scatter.
+# Radix Sort — 16-pass 2-bit LSD radix sort (packed per-digit counters)
+# Per-pass pipeline: digit histogram → chunk sums → chunk-sums prefix → per-chunk prefix → scatter.
 
 verify:
   atol: 0.0
@@ -12,8 +12,8 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep n across 20 points; the algorithm uses BLOCK_SIZE=1024 and supports N such that
-# ceil(ceil(N/1024)/1024) <= 128 (the compute_prefix_sums_bb kernel's tile), i.e., N <= ~134M.
+# Sweep n across 20 points; BLOCK_SIZE=1024, and the single-block scan tile
+# grows as next_pow2(RADIX * ceil(N/1024) / 1024) — 1024 for this whole sweep.
 case_grid:
   n:
     expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
@@ -21,13 +21,13 @@ case_grid:
 
 # ---------------------------------------------------------------------------
 # Derived-metric expressions
-#   32 passes × ~5 kernel launches per pass ≈ 160 launches per sort.
-#   Bytes: per-pass ~ 2*N read + N write (scatter) + small prefix traffic.
-#   Aggregate: 32 passes × (2N read + N write) dominates → ~100 * N * dtype_size.
+#   16 passes × 5 kernel launches per pass = 80 launches per sort.
+#   Bytes: per-pass ~ 2*N read (histogram + scatter) + N write (scatter)
+#   + small prefix traffic → 16 * 3N * dtype_size.
 # ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
-  bytes_expr: "32 * 3 * n * dtype_size"
+  bytes_expr: "16 * 3 * n * dtype_size"
 
   plots:
     - latency_ms
