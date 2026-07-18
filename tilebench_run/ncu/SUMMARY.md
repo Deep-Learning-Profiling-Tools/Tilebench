@@ -32,10 +32,10 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | cross_entropy | fp16 | 9.8 | 14.7 | 1.50× |
 | cross_entropy | fp32 | 9.9 | 13.8 | 1.39× |
 | dequantize_rowwise | fp32 | 18.4 | 21.5 | 1.17× |
-| destindex | fp16 | 282.8 | 282.6 | 1.00× |
-| destindex | bf16 | 282.6 | 282.2 | 1.00× |
-| destindex | fp32 | 283.2 | 283.2 | 1.00× |
-| destindex | int8 | 282.7 | 282.5 | 1.00× |
+| destindex | fp16 | 42.5 | 115.0 | 2.71× |
+| destindex | bf16 | 42.4 | 115.3 | 2.72× |
+| destindex | fp32 | 85.2 | 126.6 | 1.49× |
+| destindex | int8 | 41.5 | 111.6 | 2.69× |
 | dropout | fp16 | 18.8 | 18.9 | 1.01× |
 | dropout | bf16 | 18.4 | 19.0 | 1.03× |
 | dropout | fp32 | 34.2 | 35.7 | 1.04× |
