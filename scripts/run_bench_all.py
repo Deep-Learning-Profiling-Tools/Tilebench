@@ -111,6 +111,11 @@ def main() -> int:
         default=[],
         help="Optional file/dir/glob paths to copy into this run's profiles directory.",
     )
+    parser.add_argument(
+        "--autotune",
+        action="store_true",
+        help="Enable autotuning for every operator, overriding each config.yaml.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -129,8 +134,11 @@ def main() -> int:
     logs_dir.mkdir(parents=True, exist_ok=True)
     run_log_path = logs_dir / "run.log"
 
+    overrides = {"autotune": True} if args.autotune else None
+
     manifest = {
         "created_at_utc": _now_utc_str(),
+        "autotune": bool(args.autotune),
         "hostname": socket.gethostname(),
         "python_executable": sys.executable,
         "python_version": sys.version,
@@ -147,7 +155,7 @@ def main() -> int:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
             try:
-                results = run_benchmark_suite(op)
+                results = run_benchmark_suite(op, benchmark_overrides=overrides)
                 out_path = operators_dir / f"{op}.json"
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)
