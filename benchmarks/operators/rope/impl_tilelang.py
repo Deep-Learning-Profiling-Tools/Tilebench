@@ -56,7 +56,6 @@ def rope_embedding(Q, cos, sin, dtype, seq_len,
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
-    # RoPE is in-place; clone so the caller's q stays pristine across backends.
     output = q.clone().contiguous()
     batch, seq_len, n_heads, head_dim = output.shape
     half_dim = head_dim // 2

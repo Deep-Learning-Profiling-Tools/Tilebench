@@ -40,14 +40,19 @@ def histogram_partial_kernel(x, partial, BLOCK_SIZE: int = 1024, threads: int = 
     partial: T.Tensor((num_partials, num_bins), "int32")
 
     with T.Kernel(num_partials, threads=threads) as pid:
+        smem = T.alloc_shared((num_bins,), "int32")
+
+        T.fill(smem, 0)
+
         for chunk_idx in T.serial(pid, T.ceildiv(N, BLOCK_SIZE), num_partials):
             for local_idx in T.Parallel(BLOCK_SIZE):
                 idx = chunk_idx * BLOCK_SIZE + local_idx
-                in_bounds = idx < N
-                val = T.if_then_else(in_bounds, x[idx], 0)
-                valid = in_bounds and (val >= 0) and (val < num_bins)
-                if valid:
-                    T.atomic_add(partial[pid, val], 1)
+                if idx < N:
+                    val = x[idx]
+                    if (val >= 0) and (val < num_bins):
+                        T.atomic_add(smem[val], 1)
+
+        T.copy(smem, partial[pid, :])
 
 
 @tilelang.autotune(configs=histogram_reduce_configs(), warmup=3, rep=10, timeout=60)
@@ -76,10 +81,7 @@ def histogram_reduce_kernel(partial, histogram, BLOCK_ROWS: int = 64, BLOCK_BINS
             for local_bin in T.Parallel(BLOCK_BINS):
                 acc[local_bin] += tile_sum[local_bin]
 
-        for local_bin in T.Parallel(BLOCK_BINS):
-            bin_idx = pid_b * BLOCK_BINS + local_bin
-            if bin_idx < num_bins:
-                histogram[bin_idx] = acc[local_bin]
+        T.copy(acc, histogram[pid_b * BLOCK_BINS : (pid_b + 1) * BLOCK_BINS])
 
 
 def run(input: torch.Tensor, N: int, num_bins: int,

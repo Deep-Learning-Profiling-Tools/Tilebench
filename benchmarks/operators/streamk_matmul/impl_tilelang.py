@@ -189,9 +189,6 @@ def run(a: torch.Tensor, b: torch.Tensor,
     else:
         _last_autotune_config.clear()
         cfg = dict(_DEFAULT_CONFIG)
-        # Unlike Triton, TileLang doesn't shrink the pipeline when the staged
-        # A/B tiles exceed the SM's shared-memory budget (128 KB needed for
-        # fp32 at ns=4 vs e.g. 99 KB on sm_89). Clamp stages to what fits.
         props = torch.cuda.get_device_properties(torch.cuda.current_device())
         smem_budget = getattr(props, "shared_memory_per_block_optin", 99 * 1024)
         stage_bytes = (cfg["BLOCK_M"] + cfg["BLOCK_N"]) * cfg["BLOCK_K"] * a.element_size()

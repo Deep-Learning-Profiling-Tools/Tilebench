@@ -9,7 +9,6 @@ _last_autotune_config: dict = {}
 
 
 def block_sparse_attention_configs():
-    # Mirrors impl_triton's search space: num_warps {2,4,8} -> threads {64,128,256}.
     return [
         dict(threads=nt, num_stages=ns)
         for nt in [64, 128, 256]
@@ -71,9 +70,6 @@ def block_sparse_attention_kernel(
             o_shared = T.alloc_shared((BLOCK_M, total_d), dtype)
 
             qk = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            # P goes through shared memory: a cast fragment would pin gemm #2's
-            # A-operand layout to gemm #1's C layout, which conflicts whenever
-            # warps > BLOCK_M/16 (e.g. num_warps=8 with BLOCK_M=64).
             p_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
@@ -218,8 +214,6 @@ def run(
     dtype = str(Q.dtype).removeprefix("torch.")
     out = torch.empty((batch, num_heads, total_seq_len, head_dim), device=Q.device, dtype=Q.dtype)
 
-    # NOTE: `block_size` is the engine's generic elementwise knob (1024 by
-    # default), not a CTA size — ignore it, like impl_triton does.
     cfg = dict(_DEFAULT_CONFIG)
 
     if autotune:

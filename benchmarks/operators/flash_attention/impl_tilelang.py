@@ -9,7 +9,6 @@ _last_autotune_config: dict = {}
 
 
 def flash_attention_configs():
-    # Mirrors impl_triton's search space: num_warps {2,4,8} -> threads {64,128,256}.
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt, num_stages=ns)
         for bm in [64, 128]
@@ -53,9 +52,6 @@ def flash_attention_kernel(
             v_shared = T.alloc_shared((BLOCK_N, dim), dtype)
 
             scores = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            # P goes through shared memory: a cast fragment would pin gemm #2's
-            # A-operand layout to gemm #1's C layout, which conflicts whenever
-            # warps > BLOCK_M/16 (e.g. num_warps=8 with BLOCK_M=64).
             scores_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc_o = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)

@@ -23,15 +23,11 @@ def pad_kernel(data, work, dtype, BLOCK: int = 1024, threads: int = 128):
     data: T.Tensor((N,), dtype)
     work: T.Tensor((M,), dtype)
 
-    inf = T.infinity(dtype)
     with T.Kernel(T.ceildiv(M, BLOCK), threads=threads) as pid:
+        T.annotate_safe_value({data: T.infinity(dtype)})
         for local_idx in T.Parallel(BLOCK):
             offs = pid * BLOCK + local_idx
-            if offs < M:
-                value = T.alloc_var(dtype, init=inf)
-                if offs < N:
-                    value = data[offs]
-                work[offs] = value
+            work[offs] = data[offs]
 
 
 @tilelang.autotune(configs=bitonic_step_configs(), warmup=20, rep=100, timeout=60)
@@ -47,7 +43,7 @@ def bitonic_step_kernel(M, dtype, BLOCK: int = 1024, threads: int = 128):
         with T.Kernel(T.ceildiv(M, BLOCK), threads=threads) as pid:
             for local_idx in T.Parallel(BLOCK):
                 offs = pid * BLOCK + local_idx
-                ixj = T.bitwise_xor(offs, j)
+                ixj = offs ^ j
                 active = (ixj > offs) and (ixj < M) and (offs < M)
 
                 a = T.alloc_var(dtype, init=zero)
@@ -55,7 +51,7 @@ def bitonic_step_kernel(M, dtype, BLOCK: int = 1024, threads: int = 128):
                 if active:
                     a = work[offs]
                     b = work[ixj]
-                ascending = T.bitwise_and(offs, k) == 0
+                ascending = (offs & k) == 0
                 swap = T.Select(ascending, a > b, a < b)
                 new_a = T.Select(swap, b, a)
                 new_b = T.Select(swap, a, b)
