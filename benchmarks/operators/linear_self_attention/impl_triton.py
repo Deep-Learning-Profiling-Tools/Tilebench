@@ -1,46 +1,56 @@
-"""Blocked-GEMM Triton implementation of linear self-attention.
+"""Blocked-GEMM Triton linear self-attention with host-side TMA descriptors.
 
-The expensive matrix products use the same CTA-level decomposition as the
-PyTorch baseline:
+The two matrix products follow the TMA-descriptor pattern from
+``bowen/fix/operator-batched_matmul``: A/B/C tiles are loaded and stored through
+host-side ``TensorDescriptor`` objects (the tutorial-09 pattern), never via plain
+pointer arithmetic. On sm100/sm120 the TMA path is what makes Triton lower
+``tl.dot`` to the newest ``tcgen05`` MMA -- the plain pointer / ``cp.async``
+version lowers a TF32 dot to Ampere-era ``HMMA.1688.F32.TF32`` and starves the
+tensor cores, which is exactly why the earlier pointer-based rewrite showed no
+TMA / no tcgen05 on the Triton side while Torch used both.
 
-  S = phi(K)^T @ V
-  O = (phi(Q) @ S) / (phi(Q) @ Z + eps),  Z = sum_m phi(K[m])
+Both GEMMs consume the operand whose contraction axis would otherwise be the
+outer box dim in a transposed layout, so every TMA box has the contraction (K)
+axis innermost (the ``<=128 B`` swizzle fast path), then ``tl.dot(a, b.T, ...)``
+restores the math -- the same trick batched_matmul uses for B.
 
-Stage 1 and Stage 3 both assign one output tile to each CTA and accumulate the
-reduction dimension with ``tl.dot``.  This replaces the old scalar
-one-S-element-per-CTA and scalar outer-product loops, which repeatedly reread K,
-V, Q, and S.  All three backends use fp32 inputs/outputs with TF32 Tensor-Core
-matmul precision; accumulation remains fp32.
+Algorithm (fp32 in/out, TF32 tensor-core matmul, fp32 accumulation):
+
+  S = phi(K)^T @ V                         # (D, D), contraction over M
+  Z = sum_m phi(K[m, :])                   # (D,)
+  O = (phi(Q) @ S) / (phi(Q) @ Z + eps)    # (M, D), contraction over D
 """
-
 import torch
 import triton
 import triton.language as tl
+from triton.tools.tensor_descriptor import TensorDescriptor
 
 
+# Stage-1 (S = phi(K)^T @ V) tiles over the (D, D) output with contraction M.
 _DEFAULT_KV_CONFIG = {
-    "BLOCK_M": 16,
-    "BLOCK_N": 32,
+    "BLOCK_M": 64,
+    "BLOCK_N": 64,
     "BLOCK_K": 32,
     "num_warps": 4,
-    "num_stages": 1,
+    "num_stages": 3,
 }
 
+# Stage-3 (O = phi(Q) @ S) tiles over the (M, D) output with contraction D.
 _DEFAULT_OUT_CONFIG = {
-    "BLOCK_M": 32,
-    "BLOCK_N": 32,
+    "BLOCK_M": 64,
+    "BLOCK_N": 64,
     "BLOCK_K": 32,
     "num_warps": 4,
-    "num_stages": 1,
+    "num_stages": 3,
 }
 
-# Triton and cuTile use the same (M, N, K) tile-shape search space.  Scheduling
-# controls are backend-specific: num_warps here and occupancy in cuTile.
+# Shared GEMM tile-shape search space (matches the cuTile side). num_warps and
+# num_stages are the Triton-specific scheduling knobs.
 _TILE_SHAPES = [
     (bm, bn, bk)
-    for bm in [16, 32]
-    for bn in [32, 64]
-    for bk in [16, 32]
+    for bm in [32, 64, 128]
+    for bn in [32, 64, 128]
+    for bk in [32, 64]
 ]
 
 
@@ -57,53 +67,50 @@ def phi_kernel(Y, X, n_elements, BLOCK: tl.constexpr):
     tl.store(Y + offs, _phi(x), mask=offs < n_elements)
 
 
+# --------------------------------------------------------------------------- #
+# Stage 1: S = phi(K)^T @ V                                                    #
+#   PhiK, V are (M, D) row-major.  S[d0, d1] = sum_m PhiK[m, d0] * V[m, d1].   #
+#   Contraction is over M, so both operands are viewed as (D, M) via a         #
+#   cached transpose, giving the M (=K) axis innermost for the TMA box.        #
+# --------------------------------------------------------------------------- #
+def _kv_set_block_size_hook(nargs):
+    bm = nargs["BLOCK_M"]
+    bn = nargs["BLOCK_N"]
+    bk = nargs["BLOCK_K"]
+    nargs["kt_desc"].block_shape = [bm, bk]   # PhiK^T view (D, M)
+    nargs["vt_desc"].block_shape = [bn, bk]   # V^T view   (D, M)
+    nargs["s_desc"].block_shape = [bm, bn]
+
+
 @triton.jit
 def kv_gemm_kernel(
-    S, PhiK, V,
+    kt_desc, vt_desc, s_desc,
     M, D,
-    stride_km, stride_kd,
-    stride_vm, stride_vd,
-    stride_sm, stride_sd,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
-    """Compute one [BLOCK_M, BLOCK_N] tile of S = phi(K)^T @ V."""
+    """One [BLOCK_M, BLOCK_N] tile of S = phi(K)^T @ V (contraction over M)."""
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
 
-    offs_dm = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    offs_dn = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    offs_k = tl.arange(0, BLOCK_K)
-
-    k_ptrs = PhiK + offs_k[:, None] * stride_km + offs_dm[None, :] * stride_kd
-    v_ptrs = V + offs_k[:, None] * stride_vm + offs_dn[None, :] * stride_vd
+    offs_dm = pid_m * BLOCK_M
+    offs_dn = pid_n * BLOCK_N
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+    for k in tl.range(tl.cdiv(M, BLOCK_K)):
+        # kt: (BLOCK_M, BLOCK_K) rows of phi(K)^T ; vt: (BLOCK_N, BLOCK_K) rows
+        # of V^T.  Both boxes have the M (contraction) axis innermost.
+        kt = kt_desc.load([offs_dm, k * BLOCK_K])
+        vt = vt_desc.load([offs_dn, k * BLOCK_K])
+        acc = tl.dot(kt, vt.T, acc, input_precision="tf32")
 
-    for k_start in range(0, M, BLOCK_K):
-        valid_k = k_start + offs_k < M
-        k = tl.load(
-            k_ptrs,
-            mask=valid_k[:, None] & (offs_dm[None, :] < D),
-            other=0.0,
-        )
-        v = tl.load(
-            v_ptrs,
-            mask=valid_k[:, None] & (offs_dn[None, :] < D),
-            other=0.0,
-        )
-        acc = tl.dot(tl.trans(k), v, acc, input_precision="tf32")
-        k_ptrs += BLOCK_K * stride_km
-        v_ptrs += BLOCK_K * stride_vm
-
-    tl.store(
-        S + offs_dm[:, None] * stride_sm + offs_dn[None, :] * stride_sd,
-        acc,
-        mask=(offs_dm[:, None] < D) & (offs_dn[None, :] < D),
-    )
+    s_desc.store([offs_dm, offs_dn], acc.to(s_desc.dtype))
 
 
+# --------------------------------------------------------------------------- #
+# Stage 2: Z = sum_m phi(K[m, :])  (small (D,) reduction; plain load is fine). #
+# --------------------------------------------------------------------------- #
 @triton.jit
 def z_kernel(
     Z, PhiK,
@@ -112,7 +119,6 @@ def z_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_D: tl.constexpr,
 ):
-    """Compute a BLOCK_D slice of Z = sum_m phi(K[m, :])."""
     pid_d = tl.program_id(0)
     offs_d = pid_d * BLOCK_D + tl.arange(0, BLOCK_D)
     offs_m = tl.arange(0, BLOCK_M)
@@ -132,61 +138,51 @@ def z_kernel(
     tl.store(Z + offs_d, acc, mask=offs_d < D)
 
 
+# --------------------------------------------------------------------------- #
+# Stage 3: O = (phi(Q) @ S) / (phi(Q) @ Z + eps)                              #
+#   PhiQ (M, D), S (D, D).  numer[m, n] = sum_d PhiQ[m, d] * S[d, n].          #
+#   Contraction is over D.  S is consumed transposed (N, D) so both boxes      #
+#   have the D (=K) axis innermost.  The denominator phi(Q) @ Z is accumulated #
+#   from the same PhiQ tiles.                                                  #
+# --------------------------------------------------------------------------- #
+def _out_set_block_size_hook(nargs):
+    bm = nargs["BLOCK_M"]
+    bn = nargs["BLOCK_N"]
+    bk = nargs["BLOCK_K"]
+    nargs["q_desc"].block_shape = [bm, bk]
+    nargs["st_desc"].block_shape = [bn, bk]   # S^T view (D, D)
+    nargs["o_desc"].block_shape = [bm, bn]
+
+
 @triton.jit
 def out_gemm_kernel(
-    O, PhiQ, S, Z,
+    q_desc, st_desc, o_desc, Z,
     M, D, eps: tl.constexpr,
-    stride_qm, stride_qd,
-    stride_sm, stride_sd,
-    stride_om, stride_od,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
-    """Compute one output tile using blocked phi(Q) @ S.
-
-    The denominator phi(Q) @ Z is accumulated over the same BLOCK_K tiles.
-    It is shared by all columns in the CTA's output tile.
-    """
+    """One [BLOCK_M, BLOCK_N] output tile (contraction over D)."""
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
 
-    offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
-    offs_k = tl.arange(0, BLOCK_K)
-
-    q_ptrs = PhiQ + offs_m[:, None] * stride_qm + offs_k[None, :] * stride_qd
-    s_ptrs = S + offs_k[:, None] * stride_sm + offs_n[None, :] * stride_sd
+    offs_m = pid_m * BLOCK_M
+    offs_n = pid_n * BLOCK_N
 
     numer = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     denom = tl.zeros((BLOCK_M,), dtype=tl.float32)
 
-    for k_start in range(0, D, BLOCK_K):
-        valid_k = k_start + offs_k < D
-        q = tl.load(
-            q_ptrs,
-            mask=(offs_m[:, None] < M) & valid_k[None, :],
-            other=0.0,
-        )
-        s = tl.load(
-            s_ptrs,
-            mask=valid_k[:, None] & (offs_n[None, :] < D),
-            other=0.0,
-        )
-        z = tl.load(Z + k_start + offs_k, mask=valid_k, other=0.0)
+    for k in tl.range(tl.cdiv(D, BLOCK_K)):
+        q = q_desc.load([offs_m, k * BLOCK_K])        # (BLOCK_M, BLOCK_K)
+        st = st_desc.load([offs_n, k * BLOCK_K])      # (BLOCK_N, BLOCK_K) of S^T
+        numer = tl.dot(q, st.T, numer, input_precision="tf32")
 
-        numer = tl.dot(q, s, numer, input_precision="tf32")
+        offs_k = k * BLOCK_K + tl.arange(0, BLOCK_K)
+        z = tl.load(Z + offs_k, mask=offs_k < D, other=0.0)
         denom += tl.sum(q * z[None, :], axis=1)
 
-        q_ptrs += BLOCK_K * stride_qd
-        s_ptrs += BLOCK_K * stride_sm
-
     out = numer / (denom[:, None] + eps)
-    tl.store(
-        O + offs_m[:, None] * stride_om + offs_n[None, :] * stride_od,
-        out,
-        mask=(offs_m[:, None] < M) & (offs_n[None, :] < D),
-    )
+    o_desc.store([offs_m, offs_n], out.to(o_desc.dtype))
 
 
 _kv_kernel_autotuned = triton.autotune(
@@ -194,10 +190,12 @@ _kv_kernel_autotuned = triton.autotune(
         triton.Config(
             {"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk},
             num_warps=nw,
-            num_stages=1,
+            num_stages=ns,
+            pre_hook=_kv_set_block_size_hook,
         )
         for bm, bn, bk in _TILE_SHAPES
         for nw in [4, 8]
+        for ns in [2, 3]
     ],
     key=["M", "D"],
     warmup=1,
@@ -210,10 +208,12 @@ _out_kernel_autotuned = triton.autotune(
         triton.Config(
             {"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk},
             num_warps=nw,
-            num_stages=1,
+            num_stages=ns,
+            pre_hook=_out_set_block_size_hook,
         )
         for bm, bn, bk in _TILE_SHAPES
         for nw in [4, 8]
+        for ns in [2, 3]
     ],
     key=["M", "D"],
     warmup=1,
@@ -261,62 +261,64 @@ def run(
     phi_kernel[phi_grid](PhiQ, Q, n_elements, BLOCK=1024, num_warps=8)
     phi_kernel[phi_grid](PhiK, K, n_elements, BLOCK=1024, num_warps=8)
 
+    # Transposed operands so each TMA box has the contraction axis innermost
+    # (the swizzle fast path), mirroring batched_matmul's transposed B.
+    PhiK_t = PhiK.t().contiguous()   # (D, M)
+    V_t = V.t().contiguous()         # (D, M)
+
     if autotune:
+        dummy = [1, 1]
+        kt_desc = TensorDescriptor.from_tensor(PhiK_t, dummy)
+        vt_desc = TensorDescriptor.from_tensor(V_t, dummy)
+        s_desc = TensorDescriptor.from_tensor(S, dummy)
         kv_grid = lambda meta: (
             triton.cdiv(D, meta["BLOCK_M"]),
             triton.cdiv(D, meta["BLOCK_N"]),
         )
-        _kv_kernel_autotuned[kv_grid](
-            S, PhiK, V, M, D,
-            PhiK.stride(0), PhiK.stride(1),
-            V.stride(0), V.stride(1),
-            S.stride(0), S.stride(1),
-        )
+        _kv_kernel_autotuned[kv_grid](kt_desc, vt_desc, s_desc, M, D)
+
         _launch_z(Z, PhiK, M, D)
 
+        S_t = S.t().contiguous()     # (D, D) transpose of S
+        q_desc = TensorDescriptor.from_tensor(PhiQ, dummy)
+        st_desc = TensorDescriptor.from_tensor(S_t, dummy)
+        o_desc = TensorDescriptor.from_tensor(O, dummy)
         out_grid = lambda meta: (
             triton.cdiv(M, meta["BLOCK_M"]),
             triton.cdiv(D, meta["BLOCK_N"]),
         )
-        _out_kernel_autotuned[out_grid](
-            O, PhiQ, S, Z, M, D, float(eps),
-            PhiQ.stride(0), PhiQ.stride(1),
-            S.stride(0), S.stride(1),
-            O.stride(0), O.stride(1),
-        )
+        _out_kernel_autotuned[out_grid](q_desc, st_desc, o_desc, Z, M, D, float(eps))
     else:
         kv_cfg = _DEFAULT_KV_CONFIG
-        # `block_size` is a generic framework argument (1024 when absent from
-        # the case).  It is not an algorithm parameter for this operator and
-        # must not override the GEMM tile.
-        out_cfg = dict(_DEFAULT_OUT_CONFIG)
-
-        kv_grid = (
-            triton.cdiv(D, kv_cfg["BLOCK_M"]),
-            triton.cdiv(D, kv_cfg["BLOCK_N"]),
-        )
+        kt_desc = TensorDescriptor.from_tensor(
+            PhiK_t, [kv_cfg["BLOCK_M"], kv_cfg["BLOCK_K"]])
+        vt_desc = TensorDescriptor.from_tensor(
+            V_t, [kv_cfg["BLOCK_N"], kv_cfg["BLOCK_K"]])
+        s_desc = TensorDescriptor.from_tensor(
+            S, [kv_cfg["BLOCK_M"], kv_cfg["BLOCK_N"]])
+        kv_grid = (triton.cdiv(D, kv_cfg["BLOCK_M"]), triton.cdiv(D, kv_cfg["BLOCK_N"]))
         kv_gemm_kernel[kv_grid](
-            S, PhiK, V, M, D,
-            PhiK.stride(0), PhiK.stride(1),
-            V.stride(0), V.stride(1),
-            S.stride(0), S.stride(1),
+            kt_desc, vt_desc, s_desc, M, D,
             BLOCK_M=kv_cfg["BLOCK_M"],
             BLOCK_N=kv_cfg["BLOCK_N"],
             BLOCK_K=kv_cfg["BLOCK_K"],
             num_warps=kv_cfg["num_warps"],
             num_stages=kv_cfg["num_stages"],
         )
+
         _launch_z(Z, PhiK, M, D)
 
-        out_grid = (
-            triton.cdiv(M, out_cfg["BLOCK_M"]),
-            triton.cdiv(D, out_cfg["BLOCK_N"]),
-        )
+        out_cfg = _DEFAULT_OUT_CONFIG
+        S_t = S.t().contiguous()
+        q_desc = TensorDescriptor.from_tensor(
+            PhiQ, [out_cfg["BLOCK_M"], out_cfg["BLOCK_K"]])
+        st_desc = TensorDescriptor.from_tensor(
+            S_t, [out_cfg["BLOCK_N"], out_cfg["BLOCK_K"]])
+        o_desc = TensorDescriptor.from_tensor(
+            O, [out_cfg["BLOCK_M"], out_cfg["BLOCK_N"]])
+        out_grid = (triton.cdiv(M, out_cfg["BLOCK_M"]), triton.cdiv(D, out_cfg["BLOCK_N"]))
         out_gemm_kernel[out_grid](
-            O, PhiQ, S, Z, M, D, float(eps),
-            PhiQ.stride(0), PhiQ.stride(1),
-            S.stride(0), S.stride(1),
-            O.stride(0), O.stride(1),
+            q_desc, st_desc, o_desc, Z, M, D, float(eps),
             BLOCK_M=out_cfg["BLOCK_M"],
             BLOCK_N=out_cfg["BLOCK_N"],
             BLOCK_K=out_cfg["BLOCK_K"],
