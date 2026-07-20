@@ -1,18 +1,11 @@
-"""cuTile linear self-attention via the same 3 kernels as impl_triton.py.
+"""Blocked-GEMM cuTile implementation of linear self-attention.
 
-Stage 1 (`kv_kernel`):  S = phi(K)^T @ V into a (D, D) buffer.
-  Grid (D, D); each CTA owns one S[d0, d1] scalar and reduces along M.
-
-Stage 2 (`z_kernel`):   Z = sum_m phi(K[m, :]) into a (D,) buffer.
-  Grid (D,); each CTA owns one Z[d] scalar.
-
-Stage 3 (`out_kernel`): O = (phi(Q) @ S) / (phi(Q) @ Z + eps).
-  Grid (cdiv(M, BLOCK_M), cdiv(D, BLOCK_D)); each CTA emits a
-  (BLOCK_M, BLOCK_D) output tile.
-
-Only stage 3 is autotuned (matches Triton). Stages 1/2 use a fixed
-KV_BLOCK_M to keep the search space narrow on both backends.
+Stage 1 and Stage 3 mirror the Triton implementation: each CTA owns an output
+tile and uses ``ct.mma`` across the reduction dimension.  The old scalar CTA
+decomposition was intentionally removed because it repeatedly reread columns of
+K/V and rows of S.  Tile shapes match Triton's search space exactly.
 """
+
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -20,138 +13,194 @@ import torch
 
 from core.cutile_autotune import CutileAutotuner
 
+
 ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_KV_BLOCK_M = 32
+_DEFAULT_KV_CONFIG = SimpleNamespace(
+    block_m=32,
+    block_n=64,
+    block_k=32,
+    occupancy=8,
+)
 
-# Named _DEFAULT_CONFIG with fields matching get_last_config()'s keys: the
-# NCU harness replays the autotune winner by merging that dict into
-# _DEFAULT_CONFIG, so a differently-named namespace (this was _DEFAULT_OUT)
-# made it silently profile the default config instead.
-_DEFAULT_CONFIG = SimpleNamespace(block_m=32, block_d=16, occupancy=4)
-_OUT_SEARCH_SPACE = [
-    SimpleNamespace(block_m=bm, block_d=bd, occupancy=occ)
-    for bm in [16, 32, 64]
-    for bd in [8, 16, 32]
-    for occ in [4, 8, 16]
+_DEFAULT_OUT_CONFIG = SimpleNamespace(
+    block_m=32,
+    block_n=32,
+    block_k=32,
+    occupancy=4,
+)
+
+# Same GEMM tile-shape search space as Triton.  occupancy is the cuTile-specific
+# scheduling control corresponding to Triton's independent num_warps search.
+_GEMM_SEARCH_SPACE = [
+    SimpleNamespace(block_m=bm, block_n=bn, block_k=bk, occupancy=occ)
+    for bm in [16, 32]
+    for bn in [32, 64]
+    for bk in [16, 32]
+    for occ in [4, 8]
 ]
 
 
 def _phi_tile(x):
-    # phi(x) = ELU(x) + 1
     return ct.where(x > 0, x + 1.0, ct.exp(x))
 
 
 @ct.kernel
-def kv_kernel(
-    S, K, V,
+def phi_kernel(Y, X, BLOCK_M: ConstInt, BLOCK_D: ConstInt):
+    pid_m = ct.bid(0)
+    pid_d = ct.bid(1)
+    x = ct.load(
+        X,
+        index=(pid_m, pid_d),
+        shape=(BLOCK_M, BLOCK_D),
+        padding_mode=ct.PaddingMode.ZERO,
+    )
+    ct.store(Y, index=(pid_m, pid_d), tile=_phi_tile(x))
+
+
+@ct.kernel
+def kv_gemm_kernel(
+    S, PhiK, V,
     M, D,
     BLOCK_M: ConstInt,
+    BLOCK_N: ConstInt,
+    BLOCK_K: ConstInt,
 ):
-    # Each program computes one scalar S[d0, d1].
-    pid_d0 = ct.bid(0)
-    pid_d1 = ct.bid(1)
+    """Compute one [BLOCK_M, BLOCK_N] tile of S = phi(K)^T @ V."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
 
-    acc = ct.full((1, 1), 0.0, dtype=ct.float32)
+    acc = ct.zeros((BLOCK_M, BLOCK_N), dtype=ct.float32)
+    num_k_tiles = ct.cdiv(M, BLOCK_K)
 
-    num_m_tiles = ct.cdiv(M, BLOCK_M)
-    m_tile = 0
-    while m_tile < num_m_tiles:
-        offs_m = m_tile * BLOCK_M + ct.expand_dims(ct.arange(BLOCK_M, dtype=ct.int32), 1)
-        valid_m = offs_m < M
+    k_tile_idx = 0
+    while k_tile_idx < num_k_tiles:
+        k = ct.load(
+            PhiK,
+            index=(k_tile_idx, pid_m),
+            shape=(BLOCK_K, BLOCK_M),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
+        v = ct.load(
+            V,
+            index=(k_tile_idx, pid_n),
+            shape=(BLOCK_K, BLOCK_N),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
 
-        k_tile = ct.load(K, index=(m_tile, pid_d0), shape=(BLOCK_M, 1),
-                         padding_mode=ct.PaddingMode.ZERO)
-        v_tile = ct.load(V, index=(m_tile, pid_d1), shape=(BLOCK_M, 1),
-                         padding_mode=ct.PaddingMode.ZERO)
+        acc = ct.mma(
+            ct.transpose(k.astype(ct.tfloat32), 0, 1),
+            v.astype(ct.tfloat32),
+            acc,
+        )
+        k_tile_idx = k_tile_idx + 1
 
-        phi_k = _phi_tile(k_tile)
-        phi_k = ct.where(valid_m, phi_k, 0.0)
-        v_tile = ct.where(valid_m, v_tile, 0.0)
-
-        acc = acc + ct.sum(phi_k * v_tile, axis=0, keepdims=True)
-        m_tile = m_tile + 1
-
-    ct.store(S, index=(pid_d0, pid_d1), tile=acc)
+    ct.store(S, index=(pid_m, pid_n), tile=acc)
 
 
 @ct.kernel
 def z_kernel(
-    Z, K,
+    Z, PhiK,
     M, D,
     BLOCK_M: ConstInt,
+    BLOCK_D: ConstInt,
 ):
-    # Each program computes one scalar Z[d].
+    """Compute one BLOCK_D slice of Z = sum_m phi(K[m, :])."""
     pid_d = ct.bid(0)
-
-    acc = ct.full((1,), 0.0, dtype=ct.float32)
-
+    acc = ct.zeros((BLOCK_D,), dtype=ct.float32)
     num_m_tiles = ct.cdiv(M, BLOCK_M)
+
     m_tile = 0
     while m_tile < num_m_tiles:
-        offs_m = m_tile * BLOCK_M + ct.expand_dims(ct.arange(BLOCK_M, dtype=ct.int32), 1)
-        valid_m = offs_m < M
-
-        k_tile = ct.load(K, index=(m_tile, pid_d), shape=(BLOCK_M, 1),
-                         padding_mode=ct.PaddingMode.ZERO)
-
-        phi_k = _phi_tile(k_tile)
-        phi_k = ct.where(valid_m, phi_k, 0.0)
-
-        acc = acc + ct.sum(phi_k, axis=0)
+        k = ct.load(
+            PhiK,
+            index=(m_tile, pid_d),
+            shape=(BLOCK_M, BLOCK_D),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
+        acc = acc + ct.sum(k, axis=0)
         m_tile = m_tile + 1
 
     ct.store(Z, index=(pid_d,), tile=acc)
 
 
 @ct.kernel
-def out_kernel(
-    O, Q, S, Z,
+def out_gemm_kernel(
+    O, PhiQ, S, Z,
     M, D,
     eps: ct.Constant[float],
     BLOCK_M: ConstInt,
-    BLOCK_D: ConstInt,
+    BLOCK_N: ConstInt,
+    BLOCK_K: ConstInt,
 ):
-    # Each program computes O tile [BLOCK_M, BLOCK_D].
+    """Compute an output tile with blocked phi(Q) @ S and tiled phi(Q) @ Z."""
     pid_m = ct.bid(0)
-    pid_do = ct.bid(1)
+    pid_n = ct.bid(1)
 
-    offs_m = pid_m * BLOCK_M + ct.expand_dims(ct.arange(BLOCK_M, dtype=ct.int32), 1)
-    valid_m = offs_m < M
+    numer = ct.zeros((BLOCK_M, BLOCK_N), dtype=ct.float32)
+    denom = ct.zeros((BLOCK_M, 1), dtype=ct.float32)
+    num_k_tiles = ct.cdiv(D, BLOCK_K)
 
-    numer = ct.full((BLOCK_M, BLOCK_D), 0.0, dtype=ct.float32)
-    denom = ct.full((BLOCK_M, 1), 0.0, dtype=ct.float32)
+    k_tile_idx = 0
+    while k_tile_idx < num_k_tiles:
+        q = ct.load(
+            PhiQ,
+            index=(pid_m, k_tile_idx),
+            shape=(BLOCK_M, BLOCK_K),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
+        s = ct.load(
+            S,
+            index=(k_tile_idx, pid_n),
+            shape=(BLOCK_K, BLOCK_N),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
+        z = ct.load(
+            Z,
+            index=(k_tile_idx,),
+            shape=(BLOCK_K,),
+            padding_mode=ct.PaddingMode.ZERO,
+        )
 
-    d_idx = 0
-    while d_idx < D:
-        q_tile = ct.load(Q, index=(pid_m, d_idx), shape=(BLOCK_M, 1),
-                         padding_mode=ct.PaddingMode.ZERO)
-        s_tile = ct.load(S, index=(d_idx, pid_do), shape=(1, BLOCK_D),
-                         padding_mode=ct.PaddingMode.ZERO)
-        z_tile = ct.load(Z, index=(d_idx,), shape=(1,),
-                         padding_mode=ct.PaddingMode.ZERO)
+        numer = ct.mma(
+            q.astype(ct.tfloat32),
+            s.astype(ct.tfloat32),
+            numer,
+        )
+        denom = denom + ct.sum(
+            q * ct.reshape(z, (1, BLOCK_K)),
+            axis=1,
+            keepdims=True,
+        )
+        k_tile_idx = k_tile_idx + 1
 
-        phi_q = _phi_tile(q_tile)
-        phi_q = ct.where(valid_m, phi_q, 0.0)
-
-        numer = numer + phi_q * s_tile
-        denom = denom + phi_q * ct.reshape(z_tile, (1, 1))
-
-        d_idx = d_idx + 1
-
-    out_tile = numer / (denom + eps)
-    ct.store(O, index=(pid_m, pid_do), tile=out_tile)
+    ct.store(O, index=(pid_m, pid_n), tile=numer / (denom + eps))
 
 
-# Only the OUT kernel is autotuned (mirrors Triton).
-_out_tuner = CutileAutotuner(out_kernel)
+_kv_tuner = CutileAutotuner(kv_gemm_kernel)
+_out_tuner = CutileAutotuner(out_gemm_kernel)
 
 
-def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
-        block_size: int = None, autotune: bool = False, **kwargs):
+def _launch_z(stream, Z, PhiK, M, D):
+    ct.launch(
+        stream,
+        ((D + 31) // 32, 1, 1),
+        z_kernel,
+        (Z, PhiK, M, D, 32, 32),
+    )
 
+
+def run(
+    Q: torch.Tensor,
+    K: torch.Tensor,
+    V: torch.Tensor,
+    eps: float = 1e-6,
+    block_size: int = None,
+    autotune: bool = False,
+    **kwargs,
+):
     assert Q.is_cuda and K.is_cuda and V.is_cuda
     assert Q.shape == K.shape == V.shape
     assert Q.dtype == K.dtype == V.dtype == torch.float32
@@ -161,57 +210,98 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
     V = V.contiguous()
 
     M, D = Q.shape
-    O = torch.empty((M, D), device=Q.device, dtype=torch.float32)
+    PhiQ = torch.empty_like(Q)
+    PhiK = torch.empty_like(K)
     S = torch.empty((D, D), device=Q.device, dtype=torch.float32)
     Z = torch.empty((D,), device=Q.device, dtype=torch.float32)
-
+    O = torch.empty((M, D), device=Q.device, dtype=torch.float32)
     stream = torch.cuda.current_stream()
 
-    # Stage 1: S = phi(K)^T @ V
-    ct.launch(stream, (D, D, 1), kv_kernel, (S, K, V, M, D, _KV_BLOCK_M))
+    phi_grid = ((M + 31) // 32, (D + 31) // 32, 1)
+    ct.launch(stream, phi_grid, phi_kernel, (PhiQ, Q, 32, 32))
+    ct.launch(stream, phi_grid, phi_kernel, (PhiK, K, 32, 32))
 
-    # Stage 2: Z = sum_m phi(K)
-    ct.launch(stream, (D, 1, 1), z_kernel, (Z, K, M, D, _KV_BLOCK_M))
-
-    # Stage 3: O = (phi(Q) @ S) / (phi(Q) @ Z + eps)
     if autotune:
-        out_cfg = _out_tuner.tune_or_cached(
+        kv_cfg = _kv_tuner.tune_or_cached(
             shape_key=(M, D),
-            search_space=_OUT_SEARCH_SPACE,
+            search_space=_GEMM_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (
-                (M + cfg.block_m - 1) // cfg.block_m,
-                (D + cfg.block_d - 1) // cfg.block_d,
+                (D + cfg.block_m - 1) // cfg.block_m,
+                (D + cfg.block_n - 1) // cfg.block_n,
                 1,
             ),
             args_fn=lambda cfg: (
-                O, Q, S, Z, M, D, float(eps), cfg.block_m, cfg.block_d,
+                S, PhiK, V, M, D,
+                cfg.block_m, cfg.block_n, cfg.block_k,
+            ),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+    else:
+        kv_cfg = SimpleNamespace(**vars(_DEFAULT_KV_CONFIG))
+
+    kv_kernel = _kv_tuner.kernel_with_hints(occupancy=kv_cfg.occupancy)
+    ct.launch(
+        stream,
+        (
+            (D + kv_cfg.block_m - 1) // kv_cfg.block_m,
+            (D + kv_cfg.block_n - 1) // kv_cfg.block_n,
+            1,
+        ),
+        kv_kernel,
+        (
+            S, PhiK, V, M, D,
+            kv_cfg.block_m, kv_cfg.block_n, kv_cfg.block_k,
+        ),
+    )
+
+    _launch_z(stream, Z, PhiK, M, D)
+
+    if autotune:
+        out_cfg = _out_tuner.tune_or_cached(
+            shape_key=(M, D),
+            search_space=_GEMM_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: (
+                (M + cfg.block_m - 1) // cfg.block_m,
+                (D + cfg.block_n - 1) // cfg.block_n,
+                1,
+            ),
+            args_fn=lambda cfg: (
+                O, PhiQ, S, Z, M, D, float(eps),
+                cfg.block_m, cfg.block_n, cfg.block_k,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
         _last_autotune_config.update({
-            "block_m":   out_cfg.block_m,
-            "block_d":   out_cfg.block_d,
-            "occupancy": out_cfg.occupancy,
+            "kv_block_m": kv_cfg.block_m,
+            "kv_block_n": kv_cfg.block_n,
+            "kv_block_k": kv_cfg.block_k,
+            "kv_occupancy": kv_cfg.occupancy,
+            "out_block_m": out_cfg.block_m,
+            "out_block_n": out_cfg.block_n,
+            "out_block_k": out_cfg.block_k,
+            "out_occupancy": out_cfg.occupancy,
         })
     else:
-        BLOCK_M = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block_m
-        out_cfg = SimpleNamespace(
-            block_m=BLOCK_M,
-            block_d=_DEFAULT_CONFIG.block_d,
-            occupancy=_DEFAULT_CONFIG.occupancy,
-        )
+        # `block_size` is a generic framework argument, not an operator
+        # parameter.  Keep the backend-selected GEMM tile.
+        out_cfg = SimpleNamespace(**vars(_DEFAULT_OUT_CONFIG))
 
     out_kernel = _out_tuner.kernel_with_hints(occupancy=out_cfg.occupancy)
-    grid = (
-        (M + out_cfg.block_m - 1) // out_cfg.block_m,
-        (D + out_cfg.block_d - 1) // out_cfg.block_d,
-        1,
-    )
     ct.launch(
-        stream, grid, out_kernel,
-        (O, Q, S, Z, M, D, float(eps), out_cfg.block_m, out_cfg.block_d),
+        stream,
+        (
+            (M + out_cfg.block_m - 1) // out_cfg.block_m,
+            (D + out_cfg.block_n - 1) // out_cfg.block_n,
+            1,
+        ),
+        out_kernel,
+        (
+            O, PhiQ, S, Z, M, D, float(eps),
+            out_cfg.block_m, out_cfg.block_n, out_cfg.block_k,
+        ),
     )
 
     return O
