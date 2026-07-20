@@ -81,28 +81,33 @@ def block_sparse_attention_kernel(
 
         qk *= softmax_scale
 
-        # This assumes that past sequence length is 0, otherwise need offs_m[:, None] + past_seq_len >= ...
-        qk += tl.where(offs_m[:, None] >= (start_n + offs_n[None, :]), 0, float("-inf"))
-        # -- compute m_ij, p, l_ij
-        m_ij = tl.max(qk, 1)
-        p = tl.exp(qk - m_ij[:, None])
-        l_ij = tl.sum(p, 1)
-        # -- update m_i and l_i
-        m_i_new = tl.maximum(m_i, m_ij)
-        alpha = tl.exp(m_i - m_i_new)
-        beta = tl.exp(m_ij - m_i_new)
-        l_i_new = alpha * l_i + beta * l_ij
-        # -- update output accumulator --
-        # scale p
-        p_scale = beta / l_i_new
-        p = p * p_scale[:, None]
-        # scale acc
-        acc_scale = l_i / l_i_new * alpha
-        acc = acc * acc_scale[:, None]
+        # Prompt-only causal + sequence mask.  Keep the explicit validity mask
+        # so fully masked rows can be handled without NaNs.
+        valid = (
+            (offs_m[:, None] < total_seq_len)
+            & ((start_n + offs_n[None, :]) < total_seq_len)
+            & (offs_m[:, None] >= (start_n + offs_n[None, :]))
+        )
+        qk = tl.where(valid, qk, float("-inf"))
+
+        # Standard unnormalized online-softmax recurrence, shared verbatim with
+        # cuTile.  This needs only one guard for a previously-empty row and one
+        # for a fully-masked current block.
+        has_prev = l_i > 0.0
+        has_valid = tl.sum(valid.to(tl.int32), axis=1) > 0
+        block_max = tl.where(has_valid, tl.max(qk, axis=1), float("-inf"))
+        m_i_new = tl.maximum(m_i, block_max)
+        has_any = has_prev | has_valid
+        m_safe = tl.where(has_any, m_i_new, 0.0)
+        alpha = tl.where(has_prev, tl.exp(m_i - m_safe), 0.0)
+        p = tl.where(valid, tl.exp(qk - m_safe[:, None]), 0.0)
+        l_i_new = l_i * alpha + tl.sum(p, axis=1)
+
+        acc = acc * alpha[:, None]
         if NUM_D_BLOCKS >= 2:
-            acc2 = acc2 * acc_scale[:, None]
+            acc2 = acc2 * alpha[:, None]
         p = p.to(q.dtype)
-        # update acc
+
         v = v_desc.load([off_b, off_h_kv, start_n, 0]).reshape([BLOCK_N, BLOCK_D])
         acc += tl.dot(p, v)
 
@@ -110,12 +115,14 @@ def block_sparse_attention_kernel(
             v = v_desc.load([off_b, off_h_kv, start_n, BLOCK_D]).reshape([BLOCK_N, BLOCK_D])
             acc2 += tl.dot(p, v)
 
-        # update m_i and l_i
         l_i = l_i_new
-        m_i = m_i_new
+        m_i = tl.where(has_any, m_i_new, m_i)
 
+    l_safe = tl.where(l_i > 0.0, l_i, 1.0)
+    acc = acc / l_safe[:, None]
     out_desc.store([off_b, off_h, start_m * BLOCK_M, 0], acc.to(out_desc.dtype).reshape([1, 1, BLOCK_M, BLOCK_D]))
     if NUM_D_BLOCKS >= 2:
+        acc2 = acc2 / l_safe[:, None]
         out_desc.store([off_b, off_h, start_m * BLOCK_M, BLOCK_D], acc2.to(out_desc.dtype).reshape([1, 1, BLOCK_M, BLOCK_D]))
 
 
