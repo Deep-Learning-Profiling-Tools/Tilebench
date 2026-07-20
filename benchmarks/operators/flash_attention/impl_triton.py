@@ -26,7 +26,6 @@ def _tma_set_block_size_hook(nargs):
 @triton.jit
 def fwd_kernel(
     desc_q, desc_k, desc_v, sm_scale,
-    L,
     desc_o,
     BS, HEAD, SEQLEN,
     BLOCK_M: tl.constexpr,
@@ -75,8 +74,6 @@ def fwd_kernel(
         max = max_new
 
     out_buffer = out_buffer / denom[:, None]
-    l_ptr = L + off_bs_head * SEQLEN + off_m
-    tl.store(l_ptr, max + tl.math.log2(denom))
     desc_o.store(
         [off_b, off_h, start_m * BLOCK_M, 0],
         out_buffer.to(tl.float16).reshape([1, 1, BLOCK_M, DIM]),
@@ -111,8 +108,6 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     sm_scale = 1.0 / (Lq ** 0.5)
 
     o = torch.empty_like(q)
-    L = torch.empty((q.shape[0] * q.shape[1], q.shape[2]), device=q.device, dtype=torch.float32)
-
     BS, HEAD, SEQLEN, _ = q.shape
 
     if autotune:
@@ -125,7 +120,6 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
         grid = lambda meta: (triton.cdiv(SEQLEN, meta["BLOCK_M"]), BS * HEAD, 1)
         _fwd_kernel_autotuned[grid](
             desc_q, desc_k, desc_v, sm_scale,
-            L,
             desc_o,
             BS, HEAD, SEQLEN,
             DIM=Lk,
@@ -141,7 +135,6 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
         grid = (triton.cdiv(SEQLEN, BLOCK_M), BS * HEAD, 1)
         fwd_kernel[grid](
             desc_q, desc_k, desc_v, sm_scale,
-            L,
             desc_o,
             BS, HEAD, SEQLEN,
             BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N, DIM=Lk,
