@@ -1,0 +1,1033 @@
+
+	code for sm_100a
+	.target	sm_100a
+
+		Function : _gaussian_blur_stencil_kernel_Kt1_A1f16_1i16t1_p16_A1f16_1t1_p16_A1f16_1i16t1_p16_Si32_Si32_Si32_I7_I7_I256
+	.headerflags	@"EF_CUDA_ACCELERATORS EF_CUDA_SM100 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM100)"
+        /*0000*/                   LDC R1, c[0x0][0x37c] ;                                 /* 0x0000df00ff017b82 */
+                                                                                           /* 0x000ff00000000800 */
+        /*0010*/                   LDC R13, c[0x0][0x3b4] ;                                /* 0x0000ed00ff0d7b82 */
+                                                                                           /* 0x000e220000000800 */
+        /*0020*/                   CS2R.32 R20, SR_CgaSize ;                               /* 0x0000000000147805 */
+                                                                                           /* 0x000fca0000008a00 */
+        /*0030*/                   IMAD R20, R20, -0xa0, RZ ;                              /* 0xffffff6014147824 */
+                                                                                           /* 0x000fca00078e02ff */
+        /*0040*/                   R2UR UR5, R20 ;                                         /* 0x00000000140572ca */
+                                                                                           /* 0x000fdc00000e0000 */
+        /*0050*/                   LDCU UR5, c[0x0][UR5+0x2b0] ;                           /* 0x00005600050577ac */
+                                                                                           /* 0x000e620008000800 */
+        /*0060*/                   S2R R2, SR_TID.X ;                                      /* 0x0000000000027919 */
+                                                                                           /* 0x000ea20000002100 */
+        /*0070*/                   LOP3.LUT R11, R11, 0xfffffbff, RZ, 0xc0, !PT ;          /* 0xfffffbff0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*0080*/                   CS2R R18, SRZ ;                                         /* 0x0000000000127805 */
+                                                                                           /* 0x000fe2000001ff00 */
+        /*0090*/                   LDCU.64 UR8, c[0x0][0x358] ;                            /* 0x00006b00ff0877ac */
+                                                                                           /* 0x000ee20008000a00 */
+        /*00a0*/                   S2UR UR4, SR_CTAID.X ;                                  /* 0x00000000000479c3 */
+                                                                                           /* 0x000f220000002500 */
+        /*00b0*/                   LDCU UR15, c[0x0][0x388] ;                              /* 0x00007100ff0f77ac */
+                                                                                           /* 0x000ee20008000800 */
+        /*00c0*/                   LDCU UR18, c[0x0][0x3b8] ;                              /* 0x00007700ff1277ac */
+                                                                                           /* 0x000eec0008000800 */
+        /*00d0*/                   LDC.64 R16, c[0x0][0x390] ;                             /* 0x0000e400ff107b82 */
+                                                                                           /* 0x000ee20000000a00 */
+        /*00e0*/                   LDCU UR7, c[0x0][0x398] ;                               /* 0x00007300ff0777ac */
+                                                                                           /* 0x000ee20008000800 */
+        /*00f0*/                   LDCU.64 UR10, c[0x0][0x3b0] ;                           /* 0x00007600ff0a77ac */
+                                                                                           /* 0x000ee20008000a00 */
+        /*0100*/                   IABS R9, R13 ;                                          /* 0x0000000d00097213 */
+                                                                                           /* 0x001fe20000000000 */
+        /*0110*/                   LDCU.64 UR12, c[0x0][0x380] ;                           /* 0x00007000ff0c77ac */
+                                                                                           /* 0x000e260008000a00 */
+        /*0120*/                   I2F.RP R0, R9 ;                                         /* 0x0000000900007306 */
+                                                                                           /* 0x000f620000209400 */
+        /*0130*/                   I2FP.F32.U32 R3, UR4 ;                                  /* 0x0000000400037c45 */
+                                                                                           /* 0x010fe20008201000 */
+        /*0140*/                   LDCU UR4, c[0x0][0x388] ;                               /* 0x00007100ff0477ac */
+                                                                                           /* 0x000f280008000800 */
+        /*0150*/                   FMUL R3, R3, UR5 ;                                      /* 0x0000000503037c20 */
+                                                                                           /* 0x002fe20008400000 */
+        /*0160*/                   LDCU UR5, c[0x0][0x3b8] ;                               /* 0x00007700ff0577ac */
+                                                                                           /* 0x000e620008000800 */
+        /*0170*/                   MUFU.RCP R0, R0 ;                                       /* 0x0000000000007308 */
+                                                                                           /* 0x020f700000001000 */
+        /*0180*/                   F2I.U32.TRUNC.NTZ R3, R3 ;                              /* 0x0000000300037305 */
+                                                                                           /* 0x000ea2000020f000 */
+        /*0190*/                   USHF.R.S32.HI UR4, URZ, 0x1f, UR4 ;                     /* 0x0000001fff047899 */
+                                                                                           /* 0x010fe20008011404 */
+        /*01a0*/                   VIADD R6, R0, 0xffffffe ;                               /* 0x0ffffffe00067836 */
+                                                                                           /* 0x020fcc0000000000 */
+        /*01b0*/                   F2I.FTZ.U32.TRUNC.NTZ R7, R6 ;                          /* 0x0000000600077305 */
+                                                                                           /* 0x000962000021f000 */
+        /*01c0*/                   IMAD R4, R3, 0x100, R2 ;                                /* 0x0000010003047824 */
+                                                                                           /* 0x004fca00078e0202 */
+        /*01d0*/                   LOP3.LUT R5, R4.reuse, 0x80, RZ, 0xfc, !PT ;            /* 0x0000008004057812 */
+                                                                                           /* 0x040fe200078efcff */
+        /*01e0*/                   IMAD.MOV.U32 R6, RZ, RZ, RZ ;                           /* 0x000000ffff067224 */
+                                                                                           /* 0x010fe200078e00ff */
+        /*01f0*/                   LOP3.LUT R14, R4, R13, RZ, 0x3c, !PT ;                  /* 0x0000000d040e7212 */
+                                                                                           /* 0x000fe400078e3cff */
+        /*0200*/                   IABS R10, R5 ;                                          /* 0x00000005000a7213 */
+                                                                                           /* 0x000fe40000000000 */
+        /*0210*/                   ISETP.GE.AND P3, PT, R14, RZ, PT ;                      /* 0x000000ff0e00720c */
+                                                                                           /* 0x000fe20003f66270 */
+        /*0220*/                   IMAD.MOV R8, RZ, RZ, -R7 ;                              /* 0x000000ffff087224 */
+                                                                                           /* 0x020fc800078e0a07 */
+        /*0230*/                   IMAD R15, R8, R9, RZ ;                                  /* 0x00000009080f7224 */
+                                                                                           /* 0x000fe200078e02ff */
+        /*0240*/                   IABS R8, R4 ;                                           /* 0x0000000400087213 */
+                                                                                           /* 0x000fc60000000000 */
+        /*0250*/                   IMAD.HI.U32 R6, R7, R15, R6 ;                           /* 0x0000000f07067227 */
+                                                                                           /* 0x000fe200078e0006 */
+        /*0260*/                   LOP3.LUT R15, R13, 0x80, R4, 0x1e, !PT ;                /* 0x000000800d0f7812 */
+                                                                                           /* 0x000fca00078e1e04 */
+        /*0270*/                   IMAD.HI.U32 R0, R6, R8, RZ ;                            /* 0x0000000806007227 */
+                                                                                           /* 0x000fc800078e00ff */
+        /*0280*/                   IMAD.HI.U32 R7, R6, R10, RZ ;                           /* 0x0000000a06077227 */
+                                                                                           /* 0x000fc800078e00ff */
+        /*0290*/                   IMAD.MOV R6, RZ, RZ, -R0 ;                              /* 0x000000ffff067224 */
+                                                                                           /* 0x000fe400078e0a00 */
+        /*02a0*/                   IMAD.MOV R12, RZ, RZ, -R7 ;                             /* 0x000000ffff0c7224 */
+                                                                                           /* 0x000fe400078e0a07 */
+        /*02b0*/                   IMAD R6, R9.reuse, R6, R8 ;                             /* 0x0000000609067224 */
+                                                                                           /* 0x040fe400078e0208 */
+        /*02c0*/                   IMAD R8, R9, R12, R10 ;                                 /* 0x0000000c09087224 */
+                                                                                           /* 0x000fc600078e020a */
+        /*02d0*/                   ISETP.GT.U32.AND P2, PT, R9.reuse, R6, PT ;             /* 0x000000060900720c */
+                                                                                           /* 0x040fe40003f44070 */
+        /*02e0*/                   ISETP.GT.U32.AND P4, PT, R9, R8, PT ;                   /* 0x000000080900720c */
+                                                                                           /* 0x000fd60003f84070 */
+        /*02f0*/              @!P2 IMAD.IADD R6, R6, 0x1, -R9.reuse ;                      /* 0x000000010606a824 */
+                                                                                           /* 0x100fe400078e0a09 */
+        /*0300*/              @!P4 IMAD.IADD R8, R8, 0x1, -R9 ;                            /* 0x000000010808c824 */
+                                                                                           /* 0x000fe400078e0a09 */
+        /*0310*/              @!P2 VIADD R0, R0, 0x1 ;                                     /* 0x000000010000a836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0320*/                   ISETP.GE.U32.AND P0, PT, R6, R9.reuse, PT ;             /* 0x000000090600720c */
+                                                                                           /* 0x080fe20003f06070 */
+        /*0330*/              @!P4 VIADD R7, R7, 0x1 ;                                     /* 0x000000010707c836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0340*/                   ISETP.GE.U32.AND P1, PT, R8, R9, PT ;                   /* 0x000000090800720c */
+                                                                                           /* 0x000fe40003f26070 */
+        /*0350*/                   ISETP.GE.AND P2, PT, R15, RZ, PT ;                      /* 0x000000ff0f00720c */
+                                                                                           /* 0x000fd20003f46270 */
+        /*0360*/               @P0 VIADD R0, R0, 0x1 ;                                     /* 0x0000000100000836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0370*/                   ISETP.NE.AND P0, PT, R13, RZ, PT ;                      /* 0x000000ff0d00720c */
+                                                                                           /* 0x000fe20003f05270 */
+        /*0380*/               @P1 VIADD R7, R7, 0x1 ;                                     /* 0x0000000107071836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*0390*/              @!P3 IMAD.MOV R0, RZ, RZ, -R0 ;                              /* 0x000000ffff00b224 */
+                                                                                           /* 0x000fe400078e0a00 */
+        /*03a0*/                   IMAD.MOV.U32 R6, RZ, RZ, R7 ;                           /* 0x000000ffff067224 */
+                                                                                           /* 0x000fe200078e0007 */
+        /*03b0*/                   LOP3.LUT R7, RZ, R13, RZ, 0x33, !PT ;                   /* 0x0000000dff077212 */
+                                                                                           /* 0x000fc600078e33ff */
+        /*03c0*/              @!P2 IMAD.MOV R6, RZ, RZ, -R6 ;                              /* 0x000000ffff06a224 */
+                                                                                           /* 0x000fe200078e0a06 */
+        /*03d0*/                   SEL R0, R7, R0, !P0 ;                                   /* 0x0000000007007207 */
+                                                                                           /* 0x000fc80004000000 */
+        /*03e0*/                   SEL R10, R7, R6, !P0 ;                                  /* 0x00000006070a7207 */
+                                                                                           /* 0x000fe20004000000 */
+        /*03f0*/                   IMAD R7, R0, R13, RZ ;                                  /* 0x0000000d00077224 */
+                                                                                           /* 0x000fc800078e02ff */
+        /*0400*/                   IMAD.IADD R6, R4.reuse, 0x1, -R7 ;                      /* 0x0000000104067824 */
+                                                                                           /* 0x040fe200078e0a07 */
+        /*0410*/                   ISETP.NE.U32.AND P0, PT, R4, R7, PT ;                   /* 0x000000070400720c */
+                                                                                           /* 0x000fe20003f05070 */
+        /*0420*/                   IMAD R8, R10, R13, RZ ;                                 /* 0x0000000d0a087224 */
+                                                                                           /* 0x000fc600078e02ff */
+        /*0430*/                   LOP3.LUT R7, R6, R13.reuse, RZ, 0x3c, !PT ;             /* 0x0000000d06077212 */
+                                                                                           /* 0x080fe200078e3cff */
+        /*0440*/                   IMAD.IADD R12, R5.reuse, 0x1, -R8 ;                     /* 0x00000001050c7824 */
+                                                                                           /* 0x040fe200078e0a08 */
+        /*0450*/                   ISETP.NE.U32.AND P1, PT, R5, R8, PT ;                   /* 0x000000080500720c */
+                                                                                           /* 0x000fe40003f25070 */
+        /*0460*/                   SHF.R.S32.HI R8, RZ, 0x1f, R7 ;                         /* 0x0000001fff087819 */
+                                                                                           /* 0x000fe40000011407 */
+        /*0470*/                   LOP3.LUT R9, R12, R13.reuse, RZ, 0x3c, !PT ;            /* 0x0000000d0c097212 */
+                                                                                           /* 0x080fe400078e3cff */
+        /*0480*/                   ISETP.NE.U32.AND P2, PT, R6, RZ, PT ;                   /* 0x000000ff0600720c */
+                                                                                           /* 0x000fe40003f45070 */
+        /*0490*/                   LOP3.LUT R8, R8, R13, RZ, 0xc0, !PT ;                   /* 0x0000000d08087212 */
+                                                                                           /* 0x000fc400078ec0ff */
+        /*04a0*/                   ISETP.LT.AND P0, PT, R14, RZ, P0 ;                      /* 0x000000ff0e00720c */
+                                                                                           /* 0x000fe40000701270 */
+        /*04b0*/                   SHF.R.S32.HI R14, RZ, 0x1f, R9 ;                        /* 0x0000001fff0e7819 */
+                                                                                           /* 0x000fe40000011409 */
+        /*04c0*/                   SEL R7, R8, RZ, P2 ;                                    /* 0x000000ff08077207 */
+                                                                                           /* 0x000fe40001000000 */
+        /*04d0*/                   ISETP.NE.U32.AND P3, PT, R12, RZ, PT ;                  /* 0x000000ff0c00720c */
+                                                                                           /* 0x000fe40003f65070 */
+        /*04e0*/                   LOP3.LUT R14, R14, R13, RZ, 0xc0, !PT ;                 /* 0x0000000d0e0e7212 */
+                                                                                           /* 0x000fe200078ec0ff */
+        /*04f0*/                   IMAD.IADD R20, R6, 0x1, R7 ;                            /* 0x0000000106147824 */
+                                                                                           /* 0x000fe200078e0207 */
+        /*0500*/                   ISETP.LT.AND P1, PT, R15, RZ, P1 ;                      /* 0x000000ff0f00720c */
+                                                                                           /* 0x000fe20000f21270 */
+        /*0510*/                   VIADD R6, R0, 0xffffffff ;                              /* 0xffffffff00067836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0520*/                   SEL R9, R14, RZ, P3 ;                                   /* 0x000000ff0e097207 */
+                                                                                           /* 0x000fe20001800000 */
+        /*0530*/                   VIADD R8, R20, 0xfffffffe ;                             /* 0xfffffffe14087836 */
+                                                                                           /* 0x000fc40000000000 */
+        /*0540*/              @!P0 IMAD.MOV R6, RZ, RZ, R0 ;                               /* 0x000000ffff068224 */
+                                                                                           /* 0x000fe400078e0200 */
+        /*0550*/                   IMAD.IADD R12, R12, 0x1, R9 ;                           /* 0x000000010c0c7824 */
+                                                                                           /* 0x000fe200078e0209 */
+        /*0560*/                   ISETP.GE.AND P0, PT, R8, R13.reuse, PT ;                /* 0x0000000d0800720c */
+                                                                                           /* 0x080fe20003f06270 */
+        /*0570*/                   VIADD R7, R10, 0xffffffff ;                             /* 0xffffffff0a077836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*0580*/                   VIADD R0, R12, 0xfffffffe ;                             /* 0xfffffffe0c007836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0590*/                   ISETP.GT.AND P3, PT, R8, -0x1, !P0 ;                    /* 0xffffffff0800780c */
+                                                                                           /* 0x000fe20004764270 */
+        /*05a0*/              @!P1 IMAD.MOV R7, RZ, RZ, R10 ;                              /* 0x000000ffff079224 */
+                                                                                           /* 0x000fe400078e020a */
+        /*05b0*/                   VIADD R10, R20, 0xffffffff ;                            /* 0xffffffff140a7836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*05c0*/                   ISETP.GE.AND P1, PT, R0, R13, PT ;                      /* 0x0000000d0000720c */
+                                                                                           /* 0x000fe20003f26270 */
+        /*05d0*/                   VIADD R14, R12, 0xffffffff ;                            /* 0xffffffff0c0e7836 */
+                                                                                           /* 0x000fc40000000000 */
+        /*05e0*/                   VIADD R8, R12, 0x1 ;                                    /* 0x000000010c087836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*05f0*/                   ISETP.GT.AND P2, PT, R0, -0x1, !P1 ;                    /* 0xffffffff0000780c */
+                                                                                           /* 0x000fe20004f44270 */
+        /*0600*/                   VIADD R0, R20, 0x1 ;                                    /* 0x0000000114007836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0610*/                   ISETP.GE.AND P0, PT, R10, R13.reuse, PT ;               /* 0x0000000d0a00720c */
+                                                                                           /* 0x080fe20003f06270 */
+        /*0620*/                   VIADD R9, R20, 0xfffffffd ;                             /* 0xfffffffd14097836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0630*/                   ISETP.GE.AND P1, PT, R14, R13, PT ;                     /* 0x0000000d0e00720c */
+                                                                                           /* 0x000fe40003f26270 */
+        /*0640*/               @P3 LOP3.LUT R11, R11, 0x400, RZ, 0xfc, !PT ;               /* 0x000004000b0b3812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*0650*/                   ISETP.GE.AND P3, PT, R4, UR5, PT ;                      /* 0x0000000504007c0c */
+                                                                                           /* 0x002fe4000bf66270 */
+        /*0660*/                   LOP3.LUT R11, R11, 0xfffffdff, RZ, 0xc0, !PT ;          /* 0xfffffdff0b0b7812 */
+                                                                                           /* 0x000fc800078ec0ff */
+        /*0670*/               @P2 LOP3.LUT R11, R11, 0x200, RZ, 0xfc, !PT ;               /* 0x000002000b0b2812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*0680*/                   ISETP.GT.AND P2, PT, R10, -0x1, !P0 ;                   /* 0xffffffff0a00780c */
+                                                                                           /* 0x000fe20004744270 */
+        /*0690*/                   VIADD R10, R20, 0x2 ;                                   /* 0x00000002140a7836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*06a0*/                   ISETP.GT.AND P0, PT, R14, -0x1, !P1 ;                   /* 0xffffffff0e00780c */
+                                                                                           /* 0x000fe40004f04270 */
+        /*06b0*/                   LOP3.LUT R11, R11, 0xfffffeff, RZ, 0xc0, !PT ;          /* 0xfffffeff0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*06c0*/                   ISETP.GE.AND P1, PT, R8, R13, PT ;                      /* 0x0000000d0800720c */
+                                                                                           /* 0x000fc80003f26270 */
+        /*06d0*/                   ISETP.GT.AND P1, PT, R8, -0x1, !P1 ;                    /* 0xffffffff0800780c */
+                                                                                           /* 0x000fe20004f24270 */
+        /*06e0*/                   VIADD R8, R20, 0x3 ;                                    /* 0x0000000314087836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*06f0*/               @P2 LOP3.LUT R11, R11, 0x100, RZ, 0xfc, !PT ;               /* 0x000001000b0b2812 */
+                                                                                           /* 0x000fc800078efcff */
+        /*0700*/                   LOP3.LUT R11, R11, 0xffffff7f, RZ, 0xc0, !PT ;          /* 0xffffff7f0b0b7812 */
+                                                                                           /* 0x000fc800078ec0ff */
+        /*0710*/               @P0 LOP3.LUT R11, R11, 0x80, RZ, 0xfc, !PT ;                /* 0x000000800b0b0812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*0720*/                   ISETP.GE.AND P0, PT, R0.reuse, R13.reuse, PT ;          /* 0x0000000d0000720c */
+                                                                                           /* 0x0c0fe40003f06270 */
+        /*0730*/                   LOP3.LUT R11, R11, 0xffffffef, RZ, 0xc0, !PT ;          /* 0xffffffef0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*0740*/                   ISETP.GT.AND P2, PT, R0, -0x1, !P0 ;                    /* 0xffffffff0000780c */
+                                                                                           /* 0x000fe20004744270 */
+        /*0750*/                   VIADD R0, R12, 0x2 ;                                    /* 0x000000020c007836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0760*/                   ISETP.GE.AND P0, PT, R10, R13, PT ;                     /* 0x0000000d0a00720c */
+                                                                                           /* 0x000fc80003f06270 */
+        /*0770*/                   ISETP.GT.AND P0, PT, R10, -0x1, !P0 ;                   /* 0xffffffff0a00780c */
+                                                                                           /* 0x000fe20004704270 */
+        /*0780*/                   VIADD R10, R12, 0xfffffffd ;                            /* 0xfffffffd0c0a7836 */
+                                                                                           /* 0x000fcc0000000000 */
+        /*0790*/               @P2 LOP3.LUT R11, R11, 0x10, RZ, 0xfc, !PT ;                /* 0x000000100b0b2812 */
+                                                                                           /* 0x000fc800078efcff */
+        /*07a0*/                   LOP3.LUT R11, R11, 0xfffffff7, RZ, 0xc0, !PT ;          /* 0xfffffff70b0b7812 */
+                                                                                           /* 0x000fc800078ec0ff */
+        /*07b0*/               @P1 LOP3.LUT R11, R11, 0x8, RZ, 0xfc, !PT ;                 /* 0x000000080b0b1812 */
+                                                                                           /* 0x000fc800078efcff */
+        /*07c0*/                   LOP3.LUT R11, R11, 0xfffffffb, RZ, 0xc0, !PT ;          /* 0xfffffffb0b0b7812 */
+                                                                                           /* 0x000fc800078ec0ff */
+        /*07d0*/               @P0 LOP3.LUT R11, R11, 0x4, RZ, 0xfc, !PT ;                 /* 0x000000040b0b0812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*07e0*/                   ISETP.GE.AND P0, PT, R0.reuse, R13, PT ;                /* 0x0000000d0000720c */
+                                                                                           /* 0x040fe40003f06270 */
+        /*07f0*/                   LOP3.LUT R11, R11, 0xfffffffd, RZ, 0xc0, !PT ;          /* 0xfffffffd0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*0800*/                   ISETP.GT.AND P0, PT, R0, -0x1, !P0 ;                    /* 0xffffffff0000780c */
+                                                                                           /* 0x000fe20004704270 */
+        /*0810*/                   VIADD R0, R12, 0x3 ;                                    /* 0x000000030c007836 */
+                                                                                           /* 0x000fd80000000000 */
+        /*0820*/               @P0 LOP3.LUT R11, R11, 0x2, RZ, 0xfc, !PT ;                 /* 0x000000020b0b0812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*0830*/                   ISETP.GE.AND P0, PT, R8.reuse, R13.reuse, PT ;          /* 0x0000000d0800720c */
+                                                                                           /* 0x0c0fe40003f06270 */
+        /*0840*/                   LOP3.LUT R11, R11, 0xfffffffe, RZ, 0xc0, !PT ;          /* 0xfffffffe0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*0850*/                   ISETP.GT.AND P1, PT, R8, -0x1, !P0 ;                    /* 0xffffffff0800780c */
+                                                                                           /* 0x000fe20004724270 */
+        /*0860*/                   IMAD.MOV.U32 R8, RZ, RZ, RZ ;                           /* 0x000000ffff087224 */
+                                                                                           /* 0x000fe200078e00ff */
+        /*0870*/                   ISETP.GE.AND P0, PT, R0, R13, PT ;                      /* 0x0000000d0000720c */
+                                                                                           /* 0x000fc80003f06270 */
+        /*0880*/                   ISETP.GT.AND P0, PT, R0, -0x1, !P0 ;                    /* 0xffffffff0000780c */
+                                                                                           /* 0x000fce0004704270 */
+        /*0890*/               @P1 LOP3.LUT R11, R11, 0x1, RZ, 0xfc, !PT ;                 /* 0x000000010b0b1812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*08a0*/                   ISETP.GE.AND P1, PT, R20.reuse, R13.reuse, PT ;         /* 0x0000000d1400720c */
+                                                                                           /* 0x0c0fe40003f26270 */
+        /*08b0*/                   LOP3.LUT R11, R11, 0xffffffbf, RZ, 0xc0, !PT ;          /* 0xffffffbf0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*08c0*/                   ISETP.GT.AND P2, PT, R20, -0x1, !P1 ;                   /* 0xffffffff1400780c */
+                                                                                           /* 0x000fe40004f44270 */
+        /*08d0*/                   ISETP.GE.AND P1, PT, R12, R13, PT ;                     /* 0x0000000d0c00720c */
+                                                                                           /* 0x000fd60003f26270 */
+        /*08e0*/               @P2 LOP3.LUT R11, R11, 0x40, RZ, 0xfc, !PT ;                /* 0x000000400b0b2812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*08f0*/                   ISETP.GT.AND P2, PT, R12, -0x1, !P1 ;                   /* 0xffffffff0c00780c */
+                                                                                           /* 0x000fe40004f44270 */
+        /*0900*/                   LOP3.LUT R11, R11, 0xffffffdf, RZ, 0xc0, !PT ;          /* 0xffffffdf0b0b7812 */
+                                                                                           /* 0x000fe400078ec0ff */
+        /*0910*/                   ISETP.GE.AND P1, PT, R9, R13, PT ;                      /* 0x0000000d0900720c */
+                                                                                           /* 0x000fd20003f26270 */
+        /*0920*/               @P2 LOP3.LUT R11, R11, 0x20, RZ, 0xfc, !PT ;                /* 0x000000200b0b2812 */
+                                                                                           /* 0x000fe400078efcff */
+        /*0930*/                   ISETP.GT.AND P2, PT, R9, -0x1, PT ;                     /* 0xffffffff0900780c */
+                                                                                           /* 0x009fda0003f44270 */
+        /*0940*/                   IMAD R15, R8, 0x7, RZ ;                                 /* 0x00000007080f7824 */
+                                                                                           /* 0x000fe200078e02ff */
+        /*0950*/                   LOP3.LUT P6, RZ, R11, 0x200, RZ, 0xc0, !PT ;            /* 0x000002000bff7812 */
+                                                                                           /* 0x000fc600078cc0ff */
+        /*0960*/                   IMAD.WIDE.U32 R36, R15.reuse, 0x2, R16 ;                /* 0x000000020f247825 */
+                                                                                           /* 0x040fe200078e0010 */
+        /*0970*/                   ISETP.GE.AND P4, PT, R15, UR7, PT ;                     /* 0x000000070f007c0c */
+                                                                                           /* 0x000fc8000bf86270 */
+        /*0980*/                   ISETP.GE.U32.OR P4, PT, R15, UR7, P4 ;                  /* 0x000000070f007c0c */
+                                                                                           /* 0x000fda000a786470 */
+        /*0990*/              @!P4 LDG.E.U16 R0, desc[UR8][R36.64] ;                       /* 0x000000082400c981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*09a0*/                   VIADD R12, R15, 0x1 ;                                   /* 0x000000010f0c7836 */
+                                                                                           /* 0x000fca0000000000 */
+        /*09b0*/                   ISETP.GE.AND P4, PT, R12, UR7, PT ;                     /* 0x000000070c007c0c */
+                                                                                           /* 0x000fc8000bf86270 */
+        /*09c0*/                   ISETP.GE.U32.OR P4, PT, R12, UR7, P4 ;                  /* 0x000000070c007c0c */
+                                                                                           /* 0x000fe2000a786470 */
+        /*09d0*/                   VIADD R12, R15, 0x2 ;                                   /* 0x000000020f0c7836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*09e0*/                   HADD2.F32 R35, -RZ, R0.H0_H0 ;                          /* 0x20000000ff237230 */
+                                                                                           /* 0x004fd40000004100 */
+        /*09f0*/              @!P4 LDG.E.U16 R0, desc[UR8][R36.64+0x2] ;                   /* 0x000002082400c981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*0a00*/                   ISETP.GE.AND P4, PT, R12, UR7, PT ;                     /* 0x000000070c007c0c */
+                                                                                           /* 0x000fc8000bf86270 */
+        /*0a10*/                   ISETP.GE.U32.OR P4, PT, R12, UR7, P4 ;                  /* 0x000000070c007c0c */
+                                                                                           /* 0x000fe2000a786470 */
+        /*0a20*/                   VIADD R12, R15, 0x3 ;                                   /* 0x000000030f0c7836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*0a30*/                   HADD2.F32 R32, -RZ, R0.H0_H0 ;                          /* 0x20000000ff207230 */
+                                                                                           /* 0x004fd40000004100 */
+        /*0a40*/              @!P4 LDG.E.U16 R0, desc[UR8][R36.64+0x4] ;                   /* 0x000004082400c981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*0a50*/                   ISETP.GE.AND P4, PT, R12, UR7, PT ;                     /* 0x000000070c007c0c */
+                                                                                           /* 0x000fc8000bf86270 */
+        /*0a60*/                   ISETP.GE.U32.OR P4, PT, R12, UR7, P4 ;                  /* 0x000000070c007c0c */
+                                                                                           /* 0x000fe2000a786470 */
+        /*0a70*/                   VIADD R12, R8, 0xfffffffd ;                             /* 0xfffffffd080c7836 */
+                                                                                           /* 0x000fc80000000000 */
+        /*0a80*/                   IMAD.IADD R22, R6, 0x1, R12.reuse ;                     /* 0x0000000106167824 */
+                                                                                           /* 0x100fe400078e020c */
+        /*0a90*/                   IMAD.IADD R25, R7, 0x1, R12 ;                           /* 0x0000000107197824 */
+                                                                                           /* 0x000fe400078e020c */
+        /*0aa0*/                   IMAD R14, R22, UR11, R9 ;                               /* 0x0000000b160e7c24 */
+                                                                                           /* 0x000fe4000f8e0209 */
+        /*0ab0*/                   IMAD R20, R25, UR11, R10 ;                              /* 0x0000000b19147c24 */
+                                                                                           /* 0x000fc6000f8e020a */
+        /*0ac0*/                   SHF.R.S32.HI R13, RZ, 0x1f, R14 ;                       /* 0x0000001fff0d7819 */
+                                                                                           /* 0x000fe4000001140e */
+        /*0ad0*/                   SHF.R.S32.HI R12, RZ, 0x1f, R20 ;                       /* 0x0000001fff0c7819 */
+                                                                                           /* 0x000fe20000011414 */
+        /*0ae0*/                   HADD2.F32 R29, -RZ, R0.H0_H0 ;                          /* 0x20000000ff1d7230 */
+                                                                                           /* 0x004fe40000004100 */
+        /*0af0*/              @!P4 LDG.E.U16 R0, desc[UR8][R36.64+0x6] ;                   /* 0x000006082400c981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*0b00*/                   ISETP.GT.AND P4, PT, R22, -0x1, PT ;                    /* 0xffffffff1600780c */
+                                                                                           /* 0x000fe20003f84270 */
+        /*0b10*/                   VIADD R26, R15, 0x4 ;                                   /* 0x000000040f1a7836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*0b20*/                   SEL R23, R14, 0xffffffff, P4 ;                          /* 0xffffffff0e177807 */
+                                                                                           /* 0x000fe40002000000 */
+        /*0b30*/                   SEL R24, R13, 0xffffffff, P4 ;                          /* 0xffffffff0d187807 */
+                                                                                           /* 0x000fe40002000000 */
+        /*0b40*/                   ISETP.GT.AND P4, PT, R25, -0x1, PT ;                    /* 0xffffffff1900780c */
+                                                                                           /* 0x000fe40003f84270 */
+        /*0b50*/                   SEL R13, R23, 0xffffffff, !P3 ;                         /* 0xffffffff170d7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0b60*/                   SEL R23, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18177807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0b70*/                   SEL R21, R20, 0xffffffff, P4 ;                          /* 0xffffffff14157807 */
+                                                                                           /* 0x000fc40002000000 */
+        /*0b80*/                   SEL R12, R12, 0xffffffff, P4 ;                          /* 0xffffffff0c0c7807 */
+                                                                                           /* 0x000fe40002000000 */
+        /*0b90*/                   ISETP.GE.AND P3, PT, R22, UR10, PT ;                    /* 0x0000000a16007c0c */
+                                                                                           /* 0x000fe4000bf66270 */
+        /*0ba0*/                   ISETP.GE.AND P4, PT, R5, UR18, PT ;                     /* 0x0000001205007c0c */
+                                                                                           /* 0x000fe4000bf86270 */
+        /*0bb0*/                   SEL R22, R13, 0xffffffff, !P3 ;                         /* 0xffffffff0d167807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0bc0*/                   SEL R23, R23, 0xffffffff, !P3 ;                         /* 0xffffffff17177807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0bd0*/                   SEL R21, R21, 0xffffffff, !P4 ;                         /* 0xffffffff15157807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*0be0*/                   SEL R28, R12, 0xffffffff, !P4 ;                         /* 0xffffffff0c1c7807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*0bf0*/                   ISETP.GE.AND P3, PT, R25, UR10, PT ;                    /* 0x0000000a19007c0c */
+                                                                                           /* 0x000fe4000bf66270 */
+        /*0c00*/                   SEL R22, R22, 0xffffffff, !P1 ;                         /* 0xffffffff16167807 */
+                                                                                           /* 0x000fe40004800000 */
+        /*0c10*/                   SEL R21, R21, 0xffffffff, !P3 ;                         /* 0xffffffff15157807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0c20*/                   SEL R28, R28, 0xffffffff, !P3 ;                         /* 0xffffffff1c1c7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0c30*/                   ISETP.GE.AND P3, PT, R10, UR11, PT ;                    /* 0x0000000b0a007c0c */
+                                                                                           /* 0x000fc4000bf66270 */
+        /*0c40*/                   SEL R23, R23, 0xffffffff, !P1 ;                         /* 0xffffffff17177807 */
+                                                                                           /* 0x000fe40004800000 */
+        /*0c50*/                   SEL R21, R21, 0xffffffff, !P3 ;                         /* 0xffffffff15157807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0c60*/                   SEL R28, R28, 0xffffffff, !P3 ;                         /* 0xffffffff1c1c7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0c70*/                   ISETP.GT.AND P3, PT, R10, -0x1, PT ;                    /* 0xffffffff0a00780c */
+                                                                                           /* 0x000fe40003f64270 */
+        /*0c80*/                   SEL R22, R22, 0xffffffff, P2 ;                          /* 0xffffffff16167807 */
+                                                                                           /* 0x000fe40001000000 */
+        /*0c90*/                   SEL R21, R21, 0xffffffff, P3 ;                          /* 0xffffffff15157807 */
+                                                                                           /* 0x000fc40001800000 */
+        /*0ca0*/                   SEL R28, R28, 0xffffffff, P3 ;                          /* 0xffffffff1c1c7807 */
+                                                                                           /* 0x000fe40001800000 */
+        /*0cb0*/                   SEL R23, R23, 0xffffffff, P2 ;                          /* 0xffffffff17177807 */
+                                                                                           /* 0x000fe40001000000 */
+        /*0cc0*/                   LEA R24, P3, R22, UR12, 0x1 ;                           /* 0x0000000c16187c11 */
+                                                                                           /* 0x000fc8000f8608ff */
+        /*0cd0*/                   LEA.HI.X R25, R22, UR13, R23, 0x1, P3 ;                 /* 0x0000000d16197c11 */
+                                                                                           /* 0x000fe400098f0c17 */
+        /*0ce0*/                   LEA R12, P3, R21, UR12, 0x1 ;                           /* 0x0000000c150c7c11 */
+                                                                                           /* 0x000fc8000f8608ff */
+        /*0cf0*/                   LEA.HI.X R13, R21, UR13, R28, 0x1, P3 ;                 /* 0x0000000d150d7c11 */
+                                                                                           /* 0x000fe400098f0c1c */
+        /*0d00*/                   ISETP.GE.AND P3, PT, R26, UR7, PT ;                     /* 0x000000071a007c0c */
+                                                                                           /* 0x000fc8000bf66270 */
+        /*0d10*/                   ISETP.GE.U32.OR P3, PT, R26, UR7, P3 ;                  /* 0x000000071a007c0c */
+                                                                                           /* 0x000fe20009f66470 */
+        /*0d20*/                   VIADD R27, R20, 0x1 ;                                   /* 0x00000001141b7836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*0d30*/                   PRMT R34, RZ, 0x7610, R34 ;                             /* 0x00007610ff227816 */
+                                                                                           /* 0x000fe40000000022 */
+        /*0d40*/                   PRMT R31, RZ, 0x7610, R31 ;                             /* 0x00007610ff1f7816 */
+                                                                                           /* 0x000fe2000000001f */
+        /*0d50*/                   HADD2.F32 R26, -RZ, R0.H0_H0 ;                          /* 0x20000000ff1a7230 */
+                                                                                           /* 0x004fd00000004100 */
+        /*0d60*/              @!P3 LDG.E.U16 R0, desc[UR8][R36.64+0x8] ;                   /* 0x000008082400b981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*0d70*/                   ISETP.GE.U32.AND P3, PT, R22, UR15, PT ;                /* 0x0000000f16007c0c */
+                                                                                           /* 0x000fe4000bf66070 */
+        /*0d80*/                   PRMT R22, RZ, 0x7610, R22 ;                             /* 0x00007610ff167816 */
+                                                                                           /* 0x000fe40000000016 */
+        /*0d90*/                   ISETP.GE.U32.AND.EX P3, PT, R23, UR4, PT, P3 ;          /* 0x0000000417007c0c */
+                                                                                           /* 0x000fda000bf66130 */
+        /*0da0*/              @!P3 LDG.E.U16 R22, desc[UR8][R24.64] ;                      /* 0x000000081816b981 */
+                                                                                           /* 0x0000e2000c1e1500 */
+        /*0db0*/                   ISETP.GE.U32.AND P3, PT, R21, UR15, PT ;                /* 0x0000000f15007c0c */
+                                                                                           /* 0x000fe4000bf66070 */
+        /*0dc0*/                   IADD3 R21, PT, PT, R8, -0x3, R7 ;                       /* 0xfffffffd08157810 */
+                                                                                           /* 0x000fe40007ffe007 */
+        /*0dd0*/                   ISETP.GE.U32.AND.EX P3, PT, R28, UR4, PT, P3 ;          /* 0x000000041c007c0c */
+                                                                                           /* 0x000fe4000bf66130 */
+        /*0de0*/                   ISETP.GT.AND P5, PT, R21, -0x1, PT ;                    /* 0xffffffff1500780c */
+                                                                                           /* 0x000fe40003fa4270 */
+        /*0df0*/                   PRMT R23, RZ, 0x7610, R23 ;                             /* 0x00007610ff177816 */
+                                                                                           /* 0x000fe40000000017 */
+        /*0e00*/                   SHF.R.S32.HI R28, RZ, 0x1f, R27 ;                       /* 0x0000001fff1c7819 */
+                                                                                           /* 0x000fc4000001141b */
+        /*0e10*/                   SEL R27, R27, 0xffffffff, P5 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*0e20*/                   SEL R28, R28, 0xffffffff, P5 ;                          /* 0xffffffff1c1c7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*0e30*/                   SEL R24, R27, 0xffffffff, !P4 ;                         /* 0xffffffff1b187807 */
+                                                                                           /* 0x001fe20006000000 */
+        /*0e40*/              @!P3 LDG.E.U16 R23, desc[UR8][R12.64] ;                      /* 0x000000080c17b981 */
+                                                                                           /* 0x000122000c1e1500 */
+        /*0e50*/                   ISETP.GE.AND P3, PT, R21, UR10, PT ;                    /* 0x0000000a15007c0c */
+                                                                                           /* 0x000fe4000bf66270 */
+        /*0e60*/                   SEL R25, R28, 0xffffffff, !P4 ;                         /* 0xffffffff1c197807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*0e70*/                   SEL R21, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18157807 */
+                                                                                           /* 0x000fc40005800000 */
+        /*0e80*/                   SEL R24, R25, 0xffffffff, !P3 ;                         /* 0xffffffff19187807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0e90*/                   SEL R21, R21, 0xffffffff, P6 ;                          /* 0xffffffff15157807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*0ea0*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*0eb0*/                   LEA R12, P6, R21, UR12, 0x1 ;                           /* 0x0000000c150c7c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*0ec0*/                   LEA.HI.X R13, R21.reuse, UR13, R24, 0x1, P6 ;           /* 0x0000000d150d7c11 */
+                                                                                           /* 0x040fe4000b0f0c18 */
+        /*0ed0*/                   ISETP.GE.U32.AND P6, PT, R21, UR15, PT ;                /* 0x0000000f15007c0c */
+                                                                                           /* 0x000fe4000bfc6070 */
+        /*0ee0*/                   PRMT R21, RZ, 0x7610, R21 ;                             /* 0x00007610ff157816 */
+                                                                                           /* 0x000fe40000000015 */
+        /*0ef0*/                   ISETP.GE.U32.AND.EX P6, PT, R24, UR4, PT, P6 ;          /* 0x0000000418007c0c */
+                                                                                           /* 0x000fe2000bfc6160 */
+        /*0f00*/                   VIADD R24, R20, 0x2 ;                                   /* 0x0000000214187836 */
+                                                                                           /* 0x000fca0000000000 */
+        /*0f10*/                   SHF.R.S32.HI R25, RZ, 0x1f, R24 ;                       /* 0x0000001fff197819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*0f20*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*0f30*/                   SEL R25, R25, 0xffffffff, P5 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*0f40*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*0f50*/              @!P6 LDG.E.U16 R21, desc[UR8][R12.64] ;                      /* 0x000000080c15e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*0f60*/                   SEL R25, R25, 0xffffffff, !P4 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*0f70*/                   LOP3.LUT P6, RZ, R11, 0x80, RZ, 0xc0, !PT ;             /* 0x000000800bff7812 */
+                                                                                           /* 0x000fc400078cc0ff */
+        /*0f80*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0f90*/                   SEL R25, R25, 0xffffffff, !P3 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*0fa0*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*0fb0*/                   SEL R25, R25, 0xffffffff, P6 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*0fc0*/                   LEA R12, P6, R24, UR12, 0x1 ;                           /* 0x0000000c180c7c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*0fd0*/                   LEA.HI.X R13, R24.reuse, UR13, R25, 0x1, P6 ;           /* 0x0000000d180d7c11 */
+                                                                                           /* 0x040fe4000b0f0c19 */
+        /*0fe0*/                   ISETP.GE.U32.AND P6, PT, R24, UR15, PT ;                /* 0x0000000f18007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*0ff0*/                   VIADD R24, R20, 0x3 ;                                   /* 0x0000000314187836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*1000*/                   ISETP.GE.U32.AND.EX P6, PT, R25, UR4, PT, P6 ;          /* 0x0000000419007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1010*/                   SHF.R.S32.HI R25, RZ, 0x1f, R24 ;                       /* 0x0000001fff197819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*1020*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1030*/                   SEL R25, R25, 0xffffffff, P5 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1040*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1050*/                   SEL R25, R25, 0xffffffff, !P4 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1060*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe20005800000 */
+        /*1070*/              @!P6 LDG.E.U16 R34, desc[UR8][R12.64] ;                      /* 0x000000080c22e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1080*/                   LOP3.LUT P6, RZ, R11, 0x20, RZ, 0xc0, !PT ;             /* 0x000000200bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1090*/                   SEL R25, R25, 0xffffffff, !P3 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*10a0*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*10b0*/                   SEL R25, R25, 0xffffffff, P6 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*10c0*/                   LEA R12, P6, R24, UR12, 0x1 ;                           /* 0x0000000c180c7c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*10d0*/                   LEA.HI.X R13, R24.reuse, UR13, R25, 0x1, P6 ;           /* 0x0000000d180d7c11 */
+                                                                                           /* 0x040fe4000b0f0c19 */
+        /*10e0*/                   ISETP.GE.U32.AND P6, PT, R24, UR15, PT ;                /* 0x0000000f18007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*10f0*/                   VIADD R24, R20, 0x4 ;                                   /* 0x0000000414187836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*1100*/                   ISETP.GE.U32.AND.EX P6, PT, R25, UR4, PT, P6 ;          /* 0x0000000419007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1110*/                   SHF.R.S32.HI R25, RZ, 0x1f, R24 ;                       /* 0x0000001fff197819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*1120*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1130*/                   SEL R25, R25, 0xffffffff, P5 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1140*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1150*/                   SEL R25, R25, 0xffffffff, !P4 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1160*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe20005800000 */
+        /*1170*/              @!P6 LDG.E.U16 R31, desc[UR8][R12.64] ;                      /* 0x000000080c1fe981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1180*/                   LOP3.LUT P6, RZ, R11, 0x8, RZ, 0xc0, !PT ;              /* 0x000000080bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1190*/                   SEL R25, R25, 0xffffffff, !P3 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*11a0*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*11b0*/                   SEL R25, R25, 0xffffffff, P6 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*11c0*/                   PRMT R28, RZ, 0x7610, R28 ;                             /* 0x00007610ff1c7816 */
+                                                                                           /* 0x000fc4000000001c */
+        /*11d0*/                   LEA R12, P6, R24, UR12, 0x1 ;                           /* 0x0000000c180c7c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*11e0*/                   LEA.HI.X R13, R24.reuse, UR13, R25, 0x1, P6 ;           /* 0x0000000d180d7c11 */
+                                                                                           /* 0x040fe4000b0f0c19 */
+        /*11f0*/                   ISETP.GE.U32.AND P6, PT, R24, UR15, PT ;                /* 0x0000000f18007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*1200*/                   VIADD R24, R20, 0x5 ;                                   /* 0x0000000514187836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*1210*/                   ISETP.GE.U32.AND.EX P6, PT, R25, UR4, PT, P6 ;          /* 0x0000000419007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1220*/                   SHF.R.S32.HI R25, RZ, 0x1f, R24 ;                       /* 0x0000001fff197819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*1230*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1240*/                   SEL R25, R25, 0xffffffff, P5 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1250*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1260*/                   SEL R25, R25, 0xffffffff, !P4 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1270*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe20005800000 */
+        /*1280*/              @!P6 LDG.E.U16 R28, desc[UR8][R12.64] ;                      /* 0x000000080c1ce981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1290*/                   LOP3.LUT P6, RZ, R11, 0x2, RZ, 0xc0, !PT ;              /* 0x000000020bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*12a0*/                   SEL R25, R25, 0xffffffff, !P3 ;                         /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*12b0*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*12c0*/                   SEL R25, R25, 0xffffffff, P6 ;                          /* 0xffffffff19197807 */
+                                                                                           /* 0x000fe20003000000 */
+        /*12d0*/                   VIADD R20, R20, 0x6 ;                                   /* 0x0000000614147836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*12e0*/                   LEA R12, P6, R24, UR12, 0x1 ;                           /* 0x0000000c180c7c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*12f0*/                   LEA.HI.X R13, R24.reuse, UR13, R25, 0x1, P6 ;           /* 0x0000000d180d7c11 */
+                                                                                           /* 0x040fe4000b0f0c19 */
+        /*1300*/                   ISETP.GE.U32.AND P6, PT, R24, UR15, PT ;                /* 0x0000000f18007c0c */
+                                                                                           /* 0x000fe4000bfc6070 */
+        /*1310*/                   SHF.R.S32.HI R24, RZ, 0x1f, R20 ;                       /* 0x0000001fff187819 */
+                                                                                           /* 0x000fe40000011414 */
+        /*1320*/                   SEL R20, R20, 0xffffffff, P5 ;                          /* 0xffffffff14147807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1330*/                   ISETP.GE.U32.AND.EX P6, PT, R25, UR4, PT, P6 ;          /* 0x0000000419007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1340*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fc40002800000 */
+        /*1350*/                   SEL R20, R20, 0xffffffff, !P4 ;                         /* 0xffffffff14147807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1360*/                   SEL R27, R24, 0xffffffff, !P4 ;                         /* 0xffffffff181b7807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1370*/                   SEL R20, R20, 0xffffffff, !P3 ;                         /* 0xffffffff14147807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1380*/                   PRMT R25, RZ, 0x7610, R25 ;                             /* 0x00007610ff197816 */
+                                                                                           /* 0x000fe40000000019 */
+        /*1390*/                   SEL R27, R27, 0xffffffff, !P3 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*13a0*/                   SEL R20, R20, 0xffffffff, P0 ;                          /* 0xffffffff14147807 */
+                                                                                           /* 0x000fc40000000000 */
+        /*13b0*/              @!P6 LDG.E.U16 R25, desc[UR8][R12.64] ;                      /* 0x000000080c19e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*13c0*/                   SEL R27, R27, 0xffffffff, P0 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40000000000 */
+        /*13d0*/                   LEA R38, P3, R20, UR12, 0x1 ;                           /* 0x0000000c14267c11 */
+                                                                                           /* 0x000fe2000f8608ff */
+        /*13e0*/                   VIADD R24, R14, 0x1 ;                                   /* 0x000000010e187836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*13f0*/                   LOP3.LUT P6, RZ, R11, 0x400, RZ, 0xc0, !PT ;            /* 0x000004000bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1400*/                   LEA.HI.X R39, R20, UR13, R27, 0x1, P3 ;                 /* 0x0000000d14277c11 */
+                                                                                           /* 0x000fe200098f0c1b */
+        /*1410*/                   VIADD R12, R15, 0x5 ;                                   /* 0x000000050f0c7836 */
+                                                                                           /* 0x001fca0000000000 */
+        /*1420*/                   ISETP.GE.AND P3, PT, R12, UR7, PT ;                     /* 0x000000070c007c0c */
+                                                                                           /* 0x000fc8000bf66270 */
+        /*1430*/                   ISETP.GE.U32.OR P3, PT, R12, UR7, P3 ;                  /* 0x000000070c007c0c */
+                                                                                           /* 0x000fe20009f66470 */
+        /*1440*/                   HADD2.F32 R13, -RZ, R0.H0_H0 ;                          /* 0x20000000ff0d7230 */
+                                                                                           /* 0x004fd80000004100 */
+        /*1450*/              @!P3 LDG.E.U16 R0, desc[UR8][R36.64+0xa] ;                   /* 0x00000a082400b981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*1460*/                   ISETP.GE.U32.AND P3, PT, R20, UR15, PT ;                /* 0x0000000f14007c0c */
+                                                                                           /* 0x000fe4000bf66070 */
+        /*1470*/                   PRMT R12, RZ, 0x7610, R12 ;                             /* 0x00007610ff0c7816 */
+                                                                                           /* 0x000fe4000000000c */
+        /*1480*/                   ISETP.GE.U32.AND.EX P3, PT, R27, UR4, PT, P3 ;          /* 0x000000041b007c0c */
+                                                                                           /* 0x000fe4000bf66130 */
+        /*1490*/                   IADD3 R20, PT, PT, R8, -0x3, R6 ;                       /* 0xfffffffd08147810 */
+                                                                                           /* 0x000fc80007ffe006 */
+        /*14a0*/                   ISETP.GT.AND P5, PT, R20, -0x1, PT ;                    /* 0xffffffff1400780c */
+                                                                                           /* 0x000fe40003fa4270 */
+        /*14b0*/                   SHF.R.S32.HI R27, RZ, 0x1f, R24 ;                       /* 0x0000001fff1b7819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*14c0*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fc60002800000 */
+        /*14d0*/              @!P3 LDG.E.U16 R12, desc[UR8][R38.64] ;                      /* 0x00000008260cb981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*14e0*/                   ISETP.GE.AND P3, PT, R4, UR18, PT ;                     /* 0x0000001204007c0c */
+                                                                                           /* 0x000fe4000bf66270 */
+        /*14f0*/                   SEL R27, R27, 0xffffffff, P5 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1500*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1510*/                   ISETP.GE.AND P4, PT, R20, UR10, PT ;                    /* 0x0000000a14007c0c */
+                                                                                           /* 0x000fe4000bf86270 */
+        /*1520*/                   SEL R27, R27, 0xffffffff, !P3 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1530*/                   SEL R20, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18147807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1540*/                   SEL R27, R27, 0xffffffff, !P4 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1550*/                   SEL R20, R20, 0xffffffff, P6 ;                          /* 0xffffffff14147807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1560*/                   SEL R27, R27, 0xffffffff, P6 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1570*/                   LEA R38, P6, R20, UR12, 0x1 ;                           /* 0x0000000c14267c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*1580*/                   LEA.HI.X R39, R20.reuse, UR13, R27, 0x1, P6 ;           /* 0x0000000d14277c11 */
+                                                                                           /* 0x040fe4000b0f0c1b */
+        /*1590*/                   ISETP.GE.U32.AND P6, PT, R20, UR15, PT ;                /* 0x0000000f14007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*15a0*/                   VIADD R24, R14, 0x2 ;                                   /* 0x000000020e187836 */
+                                                                                           /* 0x000fe20000000000 */
+        /*15b0*/                   PRMT R20, RZ, 0x7610, R20 ;                             /* 0x00007610ff147816 */
+                                                                                           /* 0x000fe40000000014 */
+        /*15c0*/                   ISETP.GE.U32.AND.EX P6, PT, R27, UR4, PT, P6 ;          /* 0x000000041b007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*15d0*/                   SHF.R.S32.HI R27, RZ, 0x1f, R24 ;                       /* 0x0000001fff1b7819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*15e0*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fc40002800000 */
+        /*15f0*/                   SEL R27, R27, 0xffffffff, P5 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1600*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1610*/                   SEL R27, R27, 0xffffffff, !P3 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1620*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*1630*/              @!P6 LDG.E.U16 R20, desc[UR8][R38.64] ;                      /* 0x000000082614e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1640*/                   LOP3.LUT P6, RZ, R11, 0x100, RZ, 0xc0, !PT ;            /* 0x000001000bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1650*/                   SEL R27, R27, 0xffffffff, !P4 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1660*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1670*/                   SEL R27, R27, 0xffffffff, P6 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1680*/                   PRMT R33, RZ, 0x7610, R33 ;                             /* 0x00007610ff217816 */
+                                                                                           /* 0x000fe40000000021 */
+        /*1690*/                   LEA R38, P6, R24, UR12, 0x1 ;                           /* 0x0000000c18267c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*16a0*/                   LEA.HI.X R39, R24.reuse, UR13, R27, 0x1, P6 ;           /* 0x0000000d18277c11 */
+                                                                                           /* 0x040fe4000b0f0c1b */
+        /*16b0*/                   ISETP.GE.U32.AND P6, PT, R24, UR15, PT ;                /* 0x0000000f18007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*16c0*/                   VIADD R24, R14, 0x3 ;                                   /* 0x000000030e187836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*16d0*/                   ISETP.GE.U32.AND.EX P6, PT, R27, UR4, PT, P6 ;          /* 0x000000041b007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*16e0*/                   SHF.R.S32.HI R27, RZ, 0x1f, R24 ;                       /* 0x0000001fff1b7819 */
+                                                                                           /* 0x000fe40000011418 */
+        /*16f0*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1700*/                   SEL R30, R27, 0xffffffff, P5 ;                          /* 0xffffffff1b1e7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1710*/                   SEL R27, R24, 0xffffffff, !P3 ;                         /* 0xffffffff181b7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1720*/                   SEL R24, R30, 0xffffffff, !P3 ;                         /* 0xffffffff1e187807 */
+                                                                                           /* 0x000fc40005800000 */
+        /*1730*/                   SEL R27, R27, 0xffffffff, !P4 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*1740*/              @!P6 LDG.E.U16 R33, desc[UR8][R38.64] ;                      /* 0x000000082621e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1750*/                   LOP3.LUT P6, RZ, R11, 0x40, RZ, 0xc0, !PT ;             /* 0x000000400bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1760*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1770*/                   SEL R27, R27, 0xffffffff, P6 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1780*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1790*/                   PRMT R30, RZ, 0x7610, R30 ;                             /* 0x00007610ff1e7816 */
+                                                                                           /* 0x000fc4000000001e */
+        /*17a0*/                   LEA R38, P6, R27, UR12, 0x1 ;                           /* 0x0000000c1b267c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*17b0*/                   LEA.HI.X R39, R27.reuse, UR13, R24, 0x1, P6 ;           /* 0x0000000d1b277c11 */
+                                                                                           /* 0x040fe4000b0f0c18 */
+        /*17c0*/                   ISETP.GE.U32.AND P6, PT, R27, UR15, PT ;                /* 0x0000000f1b007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*17d0*/                   VIADD R27, R14, 0x4 ;                                   /* 0x000000040e1b7836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*17e0*/                   ISETP.GE.U32.AND.EX P6, PT, R24, UR4, PT, P6 ;          /* 0x0000000418007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*17f0*/                   SHF.R.S32.HI R24, RZ, 0x1f, R27 ;                       /* 0x0000001fff187819 */
+                                                                                           /* 0x000fe4000001141b */
+        /*1800*/                   SEL R27, R27, 0xffffffff, P5 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1810*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1820*/                   SEL R27, R27, 0xffffffff, !P3 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1830*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fc40005800000 */
+        /*1840*/                   SEL R27, R27, 0xffffffff, !P4 ;                         /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*1850*/              @!P6 LDG.E.U16 R30, desc[UR8][R38.64] ;                      /* 0x00000008261ee981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1860*/                   LOP3.LUT P6, RZ, R11, 0x10, RZ, 0xc0, !PT ;             /* 0x000000100bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1870*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1880*/                   SEL R27, R27, 0xffffffff, P6 ;                          /* 0xffffffff1b1b7807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1890*/                   SEL R24, R24, 0xffffffff, P6 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*18a0*/                   LEA R40, P6, R27, UR12, 0x1 ;                           /* 0x0000000c1b287c11 */
+                                                                                           /* 0x000fc8000f8c08ff */
+        /*18b0*/                   LEA.HI.X R41, R27.reuse, UR13, R24, 0x1, P6 ;           /* 0x0000000d1b297c11 */
+                                                                                           /* 0x040fe4000b0f0c18 */
+        /*18c0*/                   ISETP.GE.U32.AND P6, PT, R27, UR15, PT ;                /* 0x0000000f1b007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*18d0*/                   VIADD R38, R14, 0x5 ;                                   /* 0x000000050e267836 */
+                                                                                           /* 0x001fe20000000000 */
+        /*18e0*/                   PRMT R27, RZ, 0x7610, R27 ;                             /* 0x00007610ff1b7816 */
+                                                                                           /* 0x000fe4000000001b */
+        /*18f0*/                   ISETP.GE.U32.AND.EX P6, PT, R24, UR4, PT, P6 ;          /* 0x0000000418007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1900*/                   SHF.R.S32.HI R24, RZ, 0x1f, R38 ;                       /* 0x0000001fff187819 */
+                                                                                           /* 0x000fe40000011426 */
+        /*1910*/                   SEL R38, R38, 0xffffffff, P5 ;                          /* 0xffffffff26267807 */
+                                                                                           /* 0x000fc40002800000 */
+        /*1920*/                   SEL R24, R24, 0xffffffff, P5 ;                          /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1930*/                   SEL R38, R38, 0xffffffff, !P3 ;                         /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1940*/                   SEL R24, R24, 0xffffffff, !P3 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1950*/                   SEL R38, R38, 0xffffffff, !P4 ;                         /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*1960*/              @!P6 LDG.E.U16 R27, desc[UR8][R40.64] ;                      /* 0x00000008281be981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1970*/                   LOP3.LUT P6, RZ, R11, 0x4, RZ, 0xc0, !PT ;              /* 0x000000040bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1980*/                   SEL R24, R24, 0xffffffff, !P4 ;                         /* 0xffffffff18187807 */
+                                                                                           /* 0x000fc40006000000 */
+        /*1990*/                   SEL R38, R38, 0xffffffff, P6 ;                          /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*19a0*/                   SEL R39, R24, 0xffffffff, P6 ;                          /* 0xffffffff18277807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*19b0*/                   PRMT R24, RZ, 0x7610, R24 ;                             /* 0x00007610ff187816 */
+                                                                                           /* 0x000fe40000000018 */
+        /*19c0*/                   LEA R40, P6, R38, UR12, 0x1 ;                           /* 0x0000000c26287c11 */
+                                                                                           /* 0x001fc8000f8c08ff */
+        /*19d0*/                   LEA.HI.X R41, R38.reuse, UR13, R39, 0x1, P6 ;           /* 0x0000000d26297c11 */
+                                                                                           /* 0x040fe4000b0f0c27 */
+        /*19e0*/                   ISETP.GE.U32.AND P6, PT, R38, UR15, PT ;                /* 0x0000000f26007c0c */
+                                                                                           /* 0x000fe2000bfc6070 */
+        /*19f0*/                   VIADD R38, R14, 0x6 ;                                   /* 0x000000060e267836 */
+                                                                                           /* 0x000fc60000000000 */
+        /*1a00*/                   ISETP.GE.U32.AND.EX P6, PT, R39, UR4, PT, P6 ;          /* 0x0000000427007c0c */
+                                                                                           /* 0x000fe4000bfc6160 */
+        /*1a10*/                   SHF.R.S32.HI R14, RZ, 0x1f, R38 ;                       /* 0x0000001fff0e7819 */
+                                                                                           /* 0x000fe40000011426 */
+        /*1a20*/                   SEL R38, R38, 0xffffffff, P5 ;                          /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1a30*/                   SEL R14, R14, 0xffffffff, P5 ;                          /* 0xffffffff0e0e7807 */
+                                                                                           /* 0x000fe40002800000 */
+        /*1a40*/                   SEL R38, R38, 0xffffffff, !P3 ;                         /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe40005800000 */
+        /*1a50*/                   SEL R14, R14, 0xffffffff, !P3 ;                         /* 0xffffffff0e0e7807 */
+                                                                                           /* 0x000fc40005800000 */
+        /*1a60*/                   SEL R38, R38, 0xffffffff, !P4 ;                         /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe20006000000 */
+        /*1a70*/              @!P6 LDG.E.U16 R24, desc[UR8][R40.64] ;                      /* 0x000000082818e981 */
+                                                                                           /* 0x000162000c1e1500 */
+        /*1a80*/                   LOP3.LUT P6, RZ, R11, 0x1, RZ, 0xc0, !PT ;              /* 0x000000010bff7812 */
+                                                                                           /* 0x000fe400078cc0ff */
+        /*1a90*/                   SEL R14, R14, 0xffffffff, !P4 ;                         /* 0xffffffff0e0e7807 */
+                                                                                           /* 0x000fe40006000000 */
+        /*1aa0*/                   SEL R38, R38, 0xffffffff, P6 ;                          /* 0xffffffff26267807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1ab0*/                   SEL R39, R14, 0xffffffff, P6 ;                          /* 0xffffffff0e277807 */
+                                                                                           /* 0x000fe40003000000 */
+        /*1ac0*/                   PRMT R14, RZ, 0x7610, R14 ;                             /* 0x00007610ff0e7816 */
+                                                                                           /* 0x000fc4000000000e */
+        /*1ad0*/                   LEA R40, P4, R38, UR12, 0x1 ;                           /* 0x0000000c26287c11 */
+                                                                                           /* 0x001fc8000f8808ff */
+        /*1ae0*/                   LEA.HI.X R41, R38.reuse, UR13, R39, 0x1, P4 ;           /* 0x0000000d26297c11 */
+                                                                                           /* 0x040fe4000a0f0c27 */
+        /*1af0*/                   ISETP.GE.U32.AND P4, PT, R38, UR15, PT ;                /* 0x0000000f26007c0c */
+                                                                                           /* 0x000fc8000bf86070 */
+        /*1b00*/                   ISETP.GE.U32.AND.EX P4, PT, R39, UR4, PT, P4 ;          /* 0x0000000427007c0c */
+                                                                                           /* 0x000fe2000bf86140 */
+        /*1b10*/                   VIADD R15, R15, 0x6 ;                                   /* 0x000000060f0f7836 */
+                                                                                           /* 0x000fd80000000000 */
+        /*1b20*/              @!P4 LDG.E.U16 R14, desc[UR8][R40.64] ;                      /* 0x00000008280ec981 */
+                                                                                           /* 0x000f62000c1e1500 */
+        /*1b30*/                   ISETP.GE.AND P4, PT, R15, UR7, PT ;                     /* 0x000000070f007c0c */
+                                                                                           /* 0x000fc8000bf86270 */
+        /*1b40*/                   ISETP.GE.U32.OR P4, PT, R15, UR7, P4 ;                  /* 0x000000070f007c0c */
+                                                                                           /* 0x000fe2000a786470 */
+        /*1b50*/                   HADD2.F32 R15, -RZ, R0.H0_H0 ;                          /* 0x20000000ff0f7230 */
+                                                                                           /* 0x004fd80000004100 */
+        /*1b60*/              @!P4 LDG.E.U16 R0, desc[UR8][R36.64+0xc] ;                   /* 0x00000c082400c981 */
+                                                                                           /* 0x000ea2000c1e1500 */
+        /*1b70*/                   HADD2.F32 R22, -RZ, R22.H0_H0 ;                         /* 0x20000016ff167230 */
+                                                                                           /* 0x008fe40000004100 */
+        /*1b80*/                   HADD2.F32 R23, -RZ, R23.H0_H0 ;                         /* 0x20000017ff177230 */
+                                                                                           /* 0x010fe40000004100 */
+        /*1b90*/                   HADD2.F32 R21, -RZ, R21.H0_H0 ;                         /* 0x20000015ff157230 */
+                                                                                           /* 0x020fe40000004100 */
+        /*1ba0*/                   VIADD R8, R8, 0x1 ;                                     /* 0x0000000108087836 */
+                                                                                           /* 0x000fe40000000000 */
+        /*1bb0*/                   FFMA2 R22, R22.F32x2.HI_LO, R35.F32, R18.F32x2.HI_LO ;  /* 0x0000002316167249 */
+                                                                                           /* 0x000fe40001000012 */
+        /*1bc0*/                   HADD2.F32 R19, -RZ, R34.H0_H0 ;                         /* 0x20000022ff137230 */
+                                                                                           /* 0x000fe20000004100 */
+        /*1bd0*/                   ISETP.NE.U32.AND P4, PT, R8, 0x7, PT ;                  /* 0x000000070800780c */
+                                                                                           /* 0x000fe20003f85070 */
+        /*1be0*/                   HADD2.F32 R20, -RZ, R20.H0_H0 ;                         /* 0x20000014ff147230 */
+                                                                                           /* 0x000fca0000004100 */
+        /*1bf0*/                   FFMA2 R22, R20.F32x2.HI_LO, R32.F32, R22.F32x2.HI_LO ;  /* 0x0000002014167249 */
+                                                                                           /* 0x000fe40001000016 */
+        /*1c00*/                   HADD2.F32 R21, -RZ, R31.H0_H0 ;                         /* 0x2000001fff157230 */
+                                                                                           /* 0x000fe40000004100 */
+        /*1c10*/                   HADD2.F32 R18, -RZ, R33.H0_H0 ;                         /* 0x20000021ff127230 */
+                                                                                           /* 0x000fca0000004100 */
+        /*1c20*/                   FFMA2 R22, R18.F32x2.HI_LO, R29.F32, R22.F32x2.HI_LO ;  /* 0x0000001d12167249 */
+                                                                                           /* 0x000fe40001000016 */
+        /*1c30*/                   HADD2.F32 R19, -RZ, R28.H0_H0 ;                         /* 0x2000001cff137230 */
+                                                                                           /* 0x000fe40000004100 */
+        /*1c40*/                   HADD2.F32 R20, -RZ, R30.H0_H0 ;                         /* 0x2000001eff147230 */
+                                                                                           /* 0x000fca0000004100 */
+        /*1c50*/                   FFMA2 R20, R20.F32x2.HI_LO, R26.F32, R22.F32x2.HI_LO ;  /* 0x0000001a14147249 */
+                                                                                           /* 0x000fe40001000016 */
+        /*1c60*/                   HADD2.F32 R23, -RZ, R25.H0_H0 ;                         /* 0x20000019ff177230 */
+                                                                                           /* 0x000fe40000004100 */
+        /*1c70*/                   HADD2.F32 R18, -RZ, R27.H0_H0 ;                         /* 0x2000001bff127230 */
+                                                                                           /* 0x000fca0000004100 */
+        /*1c80*/                   FFMA2 R18, R18.F32x2.HI_LO, R13.F32, R20.F32x2.HI_LO ;  /* 0x0000000d12127249 */
+                                                                                           /* 0x000fe40001000014 */
+        /*1c90*/                   HADD2.F32 R13, -RZ, R12.H0_H0 ;                         /* 0x2000000cff0d7230 */
+                                                                                           /* 0x000fe40000004100 */
+        /*1ca0*/                   HADD2.F32 R22, -RZ, R24.H0_H0 ;                         /* 0x20000018ff167230 */
+                                                                                           /* 0x000fca0000004100 */
+        /*1cb0*/                   FFMA2 R18, R22.F32x2.HI_LO, R15.F32, R18.F32x2.HI_LO ;  /* 0x0000000f16127249 */
+                                                                                           /* 0x000fe40001000012 */
+        /*1cc0*/                   HADD2.F32 R12, -RZ, R14.H0_H0 ;                         /* 0x2000000eff0c7230 */
+                                                                                           /* 0x000fe40000004100 */
+        /*1cd0*/                   HADD2.F32 R14, -RZ, R0.H0_H0 ;                          /* 0x20000000ff0e7230 */
+                                                                                           /* 0x004fca0000004100 */
+        /*1ce0*/                   FFMA2 R18, R12.F32x2.HI_LO, R14.F32, R18.F32x2.HI_LO ;  /* 0x0000000e0c127249 */
+                                                                                           /* 0x000fe20001000012 */
+        /*1cf0*/               @P4 BRA 0x940 ;                                             /* 0xffffffec00104947 */
+                                                                                           /* 0x000fec000383ffff */
+        /*1d00*/                   S2UR UR5, SR_CgaCtaId ;                                 /* 0x00000000000579c3 */
+                                                                                           /* 0x000e220000008800 */
+        /*1d10*/                   LDCU UR14, c[0x0][0x3a8] ;                              /* 0x00007500ff0e77ac */
+                                                                                           /* 0x000e620008000800 */
+        /*1d20*/                   IMAD.SHL.U32 R0, R2.reuse, 0x10, RZ ;                   /* 0x0000001002007824 */
+                                                                                           /* 0x040fe200078e00ff */
+        /*1d30*/                   F2FP.F16.F32.PACK_AB R18, R19, R18 ;                    /* 0x000000121312723e */
+                                                                                           /* 0x000fe200000000ff */
+        /*1d40*/                   IMAD.SHL.U32 R7, R2.reuse, 0x2, RZ ;                    /* 0x0000000202077824 */
+                                                                                           /* 0x040fe200078e00ff */
+        /*1d50*/                   UMOV UR4, 0x400 ;                                       /* 0x0000040000047882 */
+                                                                                           /* 0x000fe20000000000 */
+        /*1d60*/                   IMAD.SHL.U32 R2, R2, 0x4, RZ ;                          /* 0x0000000402027824 */
+                                                                                           /* 0x000fe200078e00ff */
+        /*1d70*/                   LOP3.LUT R5, R0, 0x70, RZ, 0xc0, !PT ;                  /* 0x0000007000057812 */
+                                                                                           /* 0x000fe200078ec0ff */
+        /*1d80*/                   LDCU.64 UR16, c[0x0][0x3a0] ;                           /* 0x00007400ff1077ac */
+                                                                                           /* 0x000ea20008000a00 */
+        /*1d90*/                   PRMT R0, R18, 0x7632, R0 ;                              /* 0x0000763212007816 */
+                                                                                           /* 0x000fe40000000000 */
+        /*1da0*/                   LOP3.LUT R2, R5, 0x180, R2, 0xf8, !PT ;                 /* 0x0000018005027812 */
+                                                                                           /* 0x000fe200078ef802 */
+        /*1db0*/                   IMAD.WIDE.U32 R4, R3, 0x100, RZ ;                       /* 0x0000010003047825 */
+                                                                                           /* 0x000fc600078e00ff */
+        /*1dc0*/                   LOP3.LUT R11, R4, R7, RZ, 0xfc, !PT ;                   /* 0x00000007040b7212 */
+                                                                                           /* 0x000fc800078efcff */
+        /*1dd0*/                   ISETP.GE.U32.AND P0, PT, R11.reuse, UR14, PT ;          /* 0x0000000e0b007c0c */
+                                                                                           /* 0x042fe2000bf06070 */
+        /*1de0*/                   ULEA UR4, UR5, UR4, 0x18 ;                              /* 0x0000000405047291 */
+                                                                                           /* 0x001fe4000f8ec0ff */
+        /*1df0*/                   USHF.R.S32.HI UR5, URZ, 0x1f, UR14 ;                    /* 0x0000001fff057899 */
+                                                                                           /* 0x000fe2000801140e */
+        /*1e00*/                   LEA R4, P1, R11, UR16, 0x1 ;                            /* 0x000000100b047c11 */
+                                                                                           /* 0x004fc6000f8208ff */
+        /*1e10*/                   ULEA.HI UR5, UR5, UR14, URZ, 0x8 ;                      /* 0x0000000e05057291 */
+                                                                                           /* 0x000fc6000f8f40ff */
+        /*1e20*/                   STS.U16 [R7+UR4], R18 ;                                 /* 0x0000001207007988 */
+                                                                                           /* 0x0001e20008000404 */
+        /*1e30*/                   ULOP3.LUT UR6, UR5, 0xffffff00, URZ, 0xc0, !UPT ;       /* 0xffffff0005067892 */
+                                                                                           /* 0x000fc6000f8ec0ff */
+        /*1e40*/                   STS.U16 [R7+UR4+0x100], R0 ;                            /* 0x0001000007007988 */
+                                                                                           /* 0x0001e20008000404 */
+        /*1e50*/                   UISETP.NE.U32.AND UP0, UPT, UR6, UR14, UPT ;            /* 0x0000000e0600728c */
+                                                                                           /* 0x000fe4000bf05070 */
+        /*1e60*/                   USHF.R.S32.HI UR6, URZ, 0x1f, UR14 ;                    /* 0x0000001fff067899 */
+                                                                                           /* 0x000fe2000801140e */
+        /*1e70*/                   BAR.SYNC.DEFER_BLOCKING 0x0 ;                           /* 0x0000000000007b1d */
+                                                                                           /* 0x000fe20000010000 */
+        /*1e80*/                   UISETP.GT.AND UP0, UPT, UR14, -0x1, UP0 ;               /* 0xffffffff0e00788c */
+                                                                                           /* 0x000fc80008704270 */
+        /*1e90*/                   ISETP.GE.AND.EX P0, PT, R5, UR6, PT, P0 ;               /* 0x0000000605007c0c */
+                                                                                           /* 0x000fe4000bf06300 */
+        /*1ea0*/                   LEA.HI.X R5, R11, UR17, R5, 0x1, P1 ;                   /* 0x000000110b057c11 */
+                                                                                           /* 0x000fe200088f0c05 */
+        /*1eb0*/                   LDSM.16.M88 R9, [R2+UR4] ;                              /* 0x000000040209783b */
+                                                                                           /* 0x0000620008000000 */
+        /*1ec0*/                   USHF.R.S32.HI UR4, URZ, 0x8, UR5 ;                      /* 0x00000008ff047899 */
+                                                                                           /* 0x000fe40008011405 */
+        /*1ed0*/                   ULEA.HI.SX32 UR5, UR5, 0x1, 0x18 ;                      /* 0x0000000105057891 */
+                                                                                           /* 0x000fe4000f8fc2ff */
+        /*1ee0*/                   @!UP0 UIADD3 UR5, UPT, UPT, UR4, URZ, URZ ;             /* 0x000000ff04058290 */
+                                                                                           /* 0x000fcc000fffe0ff */
+        /*1ef0*/                   ISETP.GE.U32.OR P0, PT, R3, UR5, P0 ;                   /* 0x0000000503007c0c */
+                                                                                           /* 0x000fda0008706470 */
+        /*1f00*/               @P0 EXIT ;                                                  /* 0x000000000000094d */
+                                                                                           /* 0x000fea0003800000 */
+        /*1f10*/                   STG.E desc[UR8][R4.64], R9 ;                            /* 0x0000000904007986 */
+                                                                                           /* 0x002fe2000c101908 */
+        /*1f20*/                   EXIT ;                                                  /* 0x000000000000794d */
+                                                                                           /* 0x000fea0003800000 */
+        /*1f30*/                   BRA 0x1f30;                                             /* 0xfffffffc00fc7947 */
+                                                                                           /* 0x000fc0000383ffff */
+        /*1f40*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1f50*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1f60*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1f70*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1f80*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1f90*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1fa0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1fb0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1fc0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1fd0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1fe0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+        /*1ff0*/                   NOP;                                                    /* 0x0000000000007918 */
+                                                                                           /* 0x000fc00000000000 */
+		..........
+
+

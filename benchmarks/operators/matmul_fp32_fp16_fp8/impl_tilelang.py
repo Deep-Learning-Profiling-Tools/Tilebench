@@ -27,7 +27,7 @@ _last_autotune_config: dict = {}
 def matmul_configs():
     BLOCK_SIZE_M = [128, 256]
     BLOCK_SIZE_N = [128, 256]
-    BLOCK_SIZE_K = [128, 256]
+    BLOCK_SIZE_K = [64, 128]
     GROUP_SIZE_M = [64, 128]
     threads = [128, 256]
     stages = [3]
@@ -43,7 +43,9 @@ def matmul_configs():
     ]
 
 @tilelang.autotune(configs=matmul_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
+@tilelang.jit(
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+)
 
 def matmul_kernel(
     a, b, c, dtype,
@@ -74,12 +76,22 @@ def matmul_kernel(
         a_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
         b_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
         acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
-        T.clear(acc)
+        use_tmem = dtype != "float32"
+        if use_tmem:
+            acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
+            mbar = T.alloc_barrier(1)
+        else:
+            T.clear(acc)
         for k in T.Pipelined(T.ceildiv(K, BLOCK_SIZE_K), num_stages=num_stages):
             T.copy(a[start_m, k * BLOCK_SIZE_K], a_tile)
             T.copy(b[k * BLOCK_SIZE_K, start_n], b_tile)
-            T.gemm(a_tile, b_tile, acc)
+            if use_tmem:
+                T.gemm(a_tile, b_tile, acc_tmem, mbar=mbar, clear_accum=k == 0)
+            else:
+                T.gemm(a_tile, b_tile, acc)
 
+        if use_tmem:
+            T.copy(acc_tmem, acc)
         T.copy(acc, c[start_m, start_n])
 
 

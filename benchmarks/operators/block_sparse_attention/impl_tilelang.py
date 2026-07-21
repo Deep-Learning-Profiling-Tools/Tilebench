@@ -70,8 +70,15 @@ def block_sparse_attention_kernel(
             o_shared = T.alloc_shared((BLOCK_M, total_d), dtype)
 
             qk = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+            qk_tc = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+            qk_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
+            qk_bridge = T.alloc_shared((BLOCK_M, BLOCK_N), accum_dtype)
             p_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
+            pv = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
+            pv_tmem = T.alloc_tmem((BLOCK_M, total_d), accum_dtype)
+            qk_mbar = T.alloc_barrier(1)
+            pv_mbar = T.alloc_barrier(1)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_scale = T.alloc_fragment((BLOCK_M,), accum_dtype)
@@ -106,15 +113,25 @@ def block_sparse_attention_kernel(
                 start_n = col_idx * BLOCK_N
 
                 T.copy(K[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:total_d], k_shared)
+                T.gemm(
+                    q_shared,
+                    k_shared,
+                    qk_tmem,
+                    transpose_B=True,
+                    mbar=qk_mbar,
+                    clear_accum=True,
+                )
+                T.sync_threads()
+                T.copy(qk_tmem, qk_tc)
+                T.copy(qk_tc, qk_bridge)
+                T.sync_threads()
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                     qk[i, j] = T.if_then_else(
                         start_m * BLOCK_M + i >= start_n + j,
-                        0.0,
+                        qk_bridge[i, j],
                         -T.infinity(accum_dtype),
                     )
-
-                T.gemm(q_shared, k_shared, qk, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                     qk[i, j] *= T.cast(softmax_scale, accum_dtype)
@@ -152,7 +169,13 @@ def block_sparse_attention_kernel(
                     )
 
                 T.copy(V[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:total_d], v_shared)
-                T.gemm(p_shared, v_shared, acc, policy=T.GemmWarpPolicy.FullRow)
+                T.gemm(p_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
+                T.sync_threads()
+                T.copy(pv_tmem, pv)
+                T.copy(pv, o_shared)
+                T.sync_threads()
+                for i, j in T.Parallel(BLOCK_M, total_d):
+                    acc[i, j] += o_shared[i, j]
 
                 l += 1
 

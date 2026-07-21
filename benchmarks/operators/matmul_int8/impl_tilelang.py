@@ -20,14 +20,13 @@ def matmul_configs():
         dict(
             BLOCK_SIZE_M=bm,
             BLOCK_SIZE_N=bn,
-            BLOCK_SIZE_K=bk,
+            BLOCK_SIZE_K=64,
             GROUP_SIZE_M=8,
             threads=nt,
             num_stages=ns,
         )
         for bm in [64, 128, 256]
         for bn in [64, 128, 256]
-        for bk in [32, 64]
         for nt in [128, 256, 512]
         for ns in [3, 4]
         if bm * bn <= 128 * 256
@@ -35,7 +34,7 @@ def matmul_configs():
 
 
 @tilelang.autotune(configs=matmul_configs(), warmup=3, rep=10, timeout=60)
-@tilelang.jit
+@tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
 def matmul_kernel(
     a,
     b,
@@ -66,9 +65,11 @@ def matmul_kernel(
         b_packed_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
         b_packed_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
         b_unpacked_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
+        b_unpacked_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
         acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
+        acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
+        mbar = T.alloc_barrier(1)
 
-        T.clear(acc)
         for kb_tile in T.Pipelined(T.ceildiv(K_b, BLOCK_SIZE_K), num_stages=num_stages):
             T.copy(b[kb_tile * BLOCK_SIZE_K, start_n], b_packed_shared)
             T.copy(b_packed_shared, b_packed_local)
@@ -84,8 +85,18 @@ def matmul_kernel(
                     )
                     b_unpacked_local[kk, nn] = T.cast(field, "int8") - T.cast(1, "int8")
 
-                T.gemm(a_shared, b_unpacked_local, acc)
+                T.copy(b_unpacked_local, b_unpacked_shared)
+                T.sync_threads()
+                T.gemm(
+                    a_shared,
+                    b_unpacked_shared,
+                    acc_tmem,
+                    mbar=mbar,
+                    clear_accum=kb_tile + field_i == 0,
+                )
+                T.sync_threads()
 
+        T.copy(acc_tmem, acc)
         T.copy(acc, c[start_m, start_n])
 
 

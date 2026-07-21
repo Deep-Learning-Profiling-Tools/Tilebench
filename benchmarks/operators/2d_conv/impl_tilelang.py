@@ -8,7 +8,7 @@ _DEFAULT_CONFIG = {
     "BLOCK_SIZE_IN_FEAT": 32,
     "BLOCK_SIZE_OUT_FEAT": 64,
     "threads": 128,
-    "num_stages": 3,
+    "num_stages": 1,
 }
 _last_autotune_config: dict = {}
 
@@ -26,7 +26,7 @@ def conv2d_configs():
         for bs_in in [16, 32, 64]
         for bs_out in [64, 128]
         for nt in [64, 128, 256]
-        for ns in [2, 3, 4]
+        for ns in [1]
     ]
 
 
@@ -61,7 +61,9 @@ def conv2d_configs():
 
 
 @tilelang.autotune(configs=conv2d_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
+@tilelang.jit(
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+)
 def conv2d_kernel(
     input,
     weight,
@@ -74,7 +76,7 @@ def conv2d_kernel(
     BLOCK_SIZE_IN_FEAT: int = 32,
     BLOCK_SIZE_OUT_FEAT: int = 64,
     threads: int = 128,
-    num_stages: int = 3,
+    num_stages: int = 1,
 ):
     BATCH, IN_CHANNELS, IN_H, IN_W = T.const("BATCH, IN_CHANNELS, IN_H, IN_W")
     OUT_CHANNELS, IN_CHANNELS_PER_GROUP, KH, KW = T.const(
@@ -111,8 +113,15 @@ def conv2d_kernel(
         acc = T.alloc_fragment(
             (BLOCK_SIZE_BATCH_HEIGHT_WIDTH, BLOCK_SIZE_OUT_FEAT), "float32"
         )
+        use_tmem = dtype != "float32"
+        if use_tmem:
+            acc_tmem = T.alloc_tmem(
+                (BLOCK_SIZE_BATCH_HEIGHT_WIDTH, BLOCK_SIZE_OUT_FEAT), "float32"
+            )
+            mbar = T.alloc_barrier(1)
+        else:
+            T.clear(acc)
 
-        T.clear(acc)
         for feat_block in T.Pipelined(
             T.ceildiv(total_in_feat, BLOCK_SIZE_IN_FEAT), num_stages=num_stages
         ):
@@ -160,9 +169,19 @@ def conv2d_kernel(
                     weight_tile[i, j] = T.Cast(dtype, 0.0)
 
             T.sync_threads()
-            T.gemm(input_tile, weight_tile, acc)
-            T.sync_threads()
+            if use_tmem:
+                T.gemm(
+                    input_tile,
+                    weight_tile,
+                    acc_tmem,
+                    mbar=mbar,
+                    clear_accum=feat_block == 0,
+                )
+            else:
+                T.gemm(input_tile, weight_tile, acc)
 
+        if use_tmem:
+            T.copy(acc_tmem, acc)
         T.copy(acc, output_tile)
         T.sync_threads()
 

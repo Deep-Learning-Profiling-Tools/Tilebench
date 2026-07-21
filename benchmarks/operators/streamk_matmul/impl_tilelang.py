@@ -20,7 +20,7 @@ _last_autotune_config: dict = {}
 def streamk_configs():
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=32, GROUP_M=8, threads=nt, num_stages=3)
-        for bm in [64, 128]
+        for bm in [128]
         for bn in [128, 256]
         for nt in [128, 256]
     ]
@@ -35,7 +35,9 @@ def _streamk_partition(M: int, N: int, BLOCK_M: int, BLOCK_N: int, NUM_SMS: int)
 
 
 @tilelang.autotune(configs=streamk_configs(), warmup=3, rep=10, timeout=60)
-@tilelang.jit
+@tilelang.jit(
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+)
 def first_wave_kernel(
     A,
     B,
@@ -70,12 +72,15 @@ def first_wave_kernel(
         a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
         b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
         acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
+        use_tmem = dtype != T.tfloat32
+        if use_tmem:
+            acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
+            mbar = T.alloc_barrier(1)
 
         start_iter = T.alloc_var("int32")
         last_iter = T.alloc_var("int32")
         end_iter = T.alloc_var("int32")
         tile_id = T.alloc_var("int32")
-        iter_in_tile = T.alloc_var("int32")
         pid_m = T.alloc_var("int32")
         pid_n = T.alloc_var("int32")
         group_id = T.alloc_var("int32")
@@ -98,18 +103,40 @@ def first_wave_kernel(
             pid_m = first_pid_m + (tile_id % group_size_m)
             pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
 
-            T.clear(acc)
-            iter_in_tile = start_iter % iters_per_tile
-            for k_iter in T.Pipelined(end_iter - start_iter, num_stages=num_stages):
-                T.copy(A[pid_m * BLOCK_M, (iter_in_tile + k_iter) * BLOCK_K], a_shared)
-                T.copy(B[(iter_in_tile + k_iter) * BLOCK_K, pid_n * BLOCK_N], b_shared)
-                T.gemm(a_shared, b_shared, acc)
+            if not use_tmem:
+                T.clear(acc)
+            for current_iter in T.Pipelined(
+                start_iter,
+                end_iter,
+                num_stages=1 if use_tmem else num_stages,
+            ):
+                k_tile = current_iter % iters_per_tile
+                T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
+                T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
+                if use_tmem:
+                    T.gemm(
+                        a_shared,
+                        b_shared,
+                        acc_tmem,
+                        mbar=mbar,
+                        clear_accum=current_iter == start_iter,
+                    )
+                    T.sync_threads()
+                else:
+                    T.gemm(a_shared, b_shared, acc)
 
+            if use_tmem:
+                T.copy(acc_tmem, acc)
+                T.sync_threads()
             T.atomic_add(C[pid_m * BLOCK_M, pid_n * BLOCK_N], acc)
+            if use_tmem:
+                T.sync_threads()
             start_iter = end_iter
 
 
-@tilelang.jit
+@tilelang.jit(
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+)
 def full_tiles_kernel(
     A,
     B,
@@ -141,6 +168,12 @@ def full_tiles_kernel(
         a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
         b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
         acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
+        use_tmem = dtype != T.tfloat32
+        if use_tmem:
+            acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
+            mbar = T.alloc_barrier(1)
+        else:
+            T.clear(acc)
 
         tile_id = pid + streamk_tiles
         group_id = tile_id // (GROUP_M * grid_n)
@@ -149,12 +182,22 @@ def full_tiles_kernel(
         pid_m = first_pid_m + (tile_id % group_size_m)
         pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
 
-        T.clear(acc)
         for k_tile in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
             T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
             T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
-            T.gemm(a_shared, b_shared, acc)
+            if use_tmem:
+                T.gemm(
+                    a_shared,
+                    b_shared,
+                    acc_tmem,
+                    mbar=mbar,
+                    clear_accum=k_tile == 0,
+                )
+            else:
+                T.gemm(a_shared, b_shared, acc)
 
+        if use_tmem:
+            T.copy(acc_tmem, acc)
         T.copy(acc, C[pid_m * BLOCK_M, pid_n * BLOCK_N])
 
 

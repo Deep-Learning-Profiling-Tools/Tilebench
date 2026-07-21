@@ -1,0 +1,585 @@
+[2026-07-19T19:08:13Z] Starting run for 45 operators
+
+[2026-07-19T19:08:13Z] START operator=1d_conv
+[2026-07-19T19:22:20Z] DONE operator=1d_conv output=results/runs/20260719_150813_b200tuned/operators/1d_conv.json
+
+[2026-07-19T19:22:20Z] START operator=2d_conv
+[2026-07-19T23:11:09Z] DONE operator=2d_conv output=results/runs/20260719_150813_b200tuned/operators/2d_conv.json
+
+[2026-07-19T23:11:09Z] START operator=2d_max_pooling
+[2026-07-19T23:23:42Z] DONE operator=2d_max_pooling output=results/runs/20260719_150813_b200tuned/operators/2d_max_pooling.json
+
+[2026-07-19T23:23:42Z] START operator=3d_conv
+[2026-07-19T23:38:19Z] DONE operator=3d_conv output=results/runs/20260719_150813_b200tuned/operators/3d_conv.json
+
+[2026-07-19T23:38:19Z] START operator=argmax
+[2026-07-19T23:54:11Z] DONE operator=argmax output=results/runs/20260719_150813_b200tuned/operators/argmax.json
+
+[2026-07-19T23:54:11Z] START operator=batch_normalization
+[2026-07-20T00:06:37Z] DONE operator=batch_normalization output=results/runs/20260719_150813_b200tuned/operators/batch_normalization.json
+
+[2026-07-20T00:06:37Z] START operator=batched_matmul
+[2026-07-20T04:57:18Z] DONE operator=batched_matmul output=results/runs/20260719_150813_b200tuned/operators/batched_matmul.json
+
+[2026-07-20T04:57:18Z] START operator=bitonic_sort
+[2026-07-20T05:21:15Z] DONE operator=bitonic_sort output=results/runs/20260719_150813_b200tuned/operators/bitonic_sort.json
+
+[2026-07-20T05:21:15Z] START operator=block_sparse_attention
+[2026-07-20T05:32:05Z] DONE operator=block_sparse_attention output=results/runs/20260719_150813_b200tuned/operators/block_sparse_attention.json
+
+[2026-07-20T05:32:05Z] START operator=cross_entropy
+[2026-07-20T05:34:08Z] DONE operator=cross_entropy output=results/runs/20260719_150813_b200tuned/operators/cross_entropy.json
+
+[2026-07-20T05:34:08Z] START operator=dequantize_rowwise
+[2026-07-20T05:35:34Z] DONE operator=dequantize_rowwise output=results/runs/20260719_150813_b200tuned/operators/dequantize_rowwise.json
+
+[2026-07-20T05:35:34Z] START operator=destindex
+[2026-07-20T06:06:26Z] DONE operator=destindex output=results/runs/20260719_150813_b200tuned/operators/destindex.json
+
+[2026-07-20T06:06:26Z] START operator=dropout
+[2026-07-20T06:20:25Z] DONE operator=dropout output=results/runs/20260719_150813_b200tuned/operators/dropout.json
+
+[2026-07-20T06:20:25Z] START operator=flash_attention
+[2026-07-20T06:21:20Z] FAIL operator=flash_attention
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 117, in run_benchmark_suite
+    triton_output = impl_triton.run(*inputs, **triton_kw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/benchmarks/operators/flash_attention/impl_triton.py", line 121, in run
+    _fwd_kernel_autotuned[grid](
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py", line 370, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 240, in run
+    benchmark()
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 229, in benchmark
+    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 229, in <dictcomp>
+    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 164, in _bench
+    return self.do_bench(kernel_call, quantiles=(0.5, 0.2, 0.8))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/testing.py", line 149, in do_bench
+    fn()
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 150, in kernel_call
+    self.fn.run(
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py", line 761, in run
+    kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/backends/nvidia/driver.py", line 328, in __call__
+    self.launch(gridX, gridY, gridZ, stream, function, self.launch_cooperative_grid, self.launch_pdl,
+RuntimeError: Triton Error [CUDA]: out of memory
+
+
+[2026-07-20T06:21:20Z] START operator=flash_decode
+[2026-07-20T06:23:55Z] DONE operator=flash_decode output=results/runs/20260719_150813_b200tuned/operators/flash_decode.json
+
+[2026-07-20T06:23:55Z] START operator=fused_activation
+[2026-07-20T06:28:49Z] DONE operator=fused_activation output=results/runs/20260719_150813_b200tuned/operators/fused_activation.json
+
+[2026-07-20T06:28:49Z] START operator=gaussian_blur
+[2026-07-20T06:33:03Z] FAIL operator=gaussian_blur
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=histogramming
+[2026-07-20T06:33:03Z] FAIL operator=histogramming
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=interleave
+[2026-07-20T06:33:03Z] FAIL operator=interleave
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=jacobi_stencil_2d
+[2026-07-20T06:33:03Z] FAIL operator=jacobi_stencil_2d
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=kl_divergence
+[2026-07-20T06:33:03Z] FAIL operator=kl_divergence
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=l2_norm
+[2026-07-20T06:33:03Z] DONE operator=l2_norm output=results/runs/20260719_150813_b200tuned/operators/l2_norm.json
+
+[2026-07-20T06:33:03Z] START operator=layernorm
+[2026-07-20T06:33:03Z] FAIL operator=layernorm
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=leaky_relu
+[2026-07-20T06:33:03Z] FAIL operator=leaky_relu
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=linear_self_attention
+[2026-07-20T06:33:03Z] FAIL operator=linear_self_attention
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:03Z] START operator=matmul_fp32_fp16_fp8
+[2026-07-20T06:33:04Z] FAIL operator=matmul_fp32_fp16_fp8
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=matmul_int8
+[2026-07-20T06:33:04Z] FAIL operator=matmul_int8
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=matrix_copy
+[2026-07-20T06:33:04Z] FAIL operator=matrix_copy
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=matrix_transpose
+[2026-07-20T06:33:04Z] FAIL operator=matrix_transpose
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=mean_reduction
+[2026-07-20T06:33:04Z] FAIL operator=mean_reduction
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=moe_topk_gating
+[2026-07-20T06:33:04Z] DONE operator=moe_topk_gating output=results/runs/20260719_150813_b200tuned/operators/moe_topk_gating.json
+
+[2026-07-20T06:33:04Z] START operator=mul2
+[2026-07-20T06:33:04Z] FAIL operator=mul2
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=quantize_global
+[2026-07-20T06:33:04Z] FAIL operator=quantize_global
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=radix_sort
+[2026-07-20T06:33:04Z] FAIL operator=radix_sort
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=relu
+[2026-07-20T06:33:04Z] FAIL operator=relu
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=reverse_array
+[2026-07-20T06:33:04Z] FAIL operator=reverse_array
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=rmsnorm
+[2026-07-20T06:33:04Z] FAIL operator=rmsnorm
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:04Z] START operator=rope
+[2026-07-20T06:33:05Z] FAIL operator=rope
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=sigmoid
+[2026-07-20T06:33:05Z] FAIL operator=sigmoid
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=softmax
+[2026-07-20T06:33:05Z] FAIL operator=softmax
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=streamk_matmul
+[2026-07-20T06:33:05Z] FAIL operator=streamk_matmul
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=swiglu
+[2026-07-20T06:33:05Z] FAIL operator=swiglu
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=top_k_selection
+[2026-07-20T06:33:05Z] DONE operator=top_k_selection output=results/runs/20260719_150813_b200tuned/operators/top_k_selection.json
+
+[2026-07-20T06:33:05Z] START operator=vector_add
+[2026-07-20T06:33:05Z] FAIL operator=vector_add
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+
+
+[2026-07-20T06:33:05Z] START operator=weight_dequant
+[2026-07-20T06:33:05Z] FAIL operator=weight_dequant
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 112, in run_benchmark_suite
+    torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 63, in _bench
+    return report_benchmark(
+           ^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/timer.py", line 187, in report_benchmark
+    proton.finalize(session=session_id)
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py", line 195, in finalize
+    libproton.finalize(session, output_format)
+RuntimeError: Failed to execute cuptiActivityFlushAll with error 39
+

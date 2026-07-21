@@ -16,7 +16,7 @@ _last_autotune_config: dict = {}
 
 
 def bmm_configs():
-    block_m = [32, 64, 128]
+    block_m = [32, 128]
     block_n = [32, 64, 128]
     block_k = [32, 64]
     group_size_m = [1, 8]
@@ -41,7 +41,9 @@ def bmm_configs():
 
 
 @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
+@tilelang.jit(
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+)
 def bmm_kernel(
     A,
     B,
@@ -73,13 +75,23 @@ def bmm_kernel(
         A_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
         B_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
         acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
+        use_tmem = dtype != "float32"
+        if use_tmem:
+            acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
+            mbar = T.alloc_barrier(1)
+        else:
+            T.clear(acc)
 
-        T.clear(acc)
         for k in T.Pipelined(T.ceildiv(K, BLOCK_SIZE_K), num_stages=num_stages):
             T.copy(A[pid_b, start_m, k * BLOCK_SIZE_K], A_tile)
             T.copy(B[pid_b, k * BLOCK_SIZE_K, start_n], B_tile)
-            T.gemm(A_tile, B_tile, acc)
+            if use_tmem:
+                T.gemm(A_tile, B_tile, acc_tmem, mbar=mbar, clear_accum=k == 0)
+            else:
+                T.gemm(A_tile, B_tile, acc)
 
+        if use_tmem:
+            T.copy(acc_tmem, acc)
         T.copy(acc, C[pid_b, start_m, start_n])
 
 

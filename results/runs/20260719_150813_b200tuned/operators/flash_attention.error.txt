@@ -1,0 +1,32 @@
+Traceback (most recent call last):
+  File "/home/arustagi/repos/Tilebench/scripts/run_bench_all.py", line 158, in main
+    results = run_benchmark_suite(op, benchmark_overrides=overrides)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/core/engine.py", line 117, in run_benchmark_suite
+    triton_output = impl_triton.run(*inputs, **triton_kw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/repos/Tilebench/benchmarks/operators/flash_attention/impl_triton.py", line 121, in run
+    _fwd_kernel_autotuned[grid](
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py", line 370, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 240, in run
+    benchmark()
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 229, in benchmark
+    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 229, in <dictcomp>
+    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 164, in _bench
+    return self.do_bench(kernel_call, quantiles=(0.5, 0.2, 0.8))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/testing.py", line 149, in do_bench
+    fn()
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py", line 150, in kernel_call
+    self.fn.run(
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py", line 761, in run
+    kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,
+  File "/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/backends/nvidia/driver.py", line 328, in __call__
+    self.launch(gridX, gridY, gridZ, stream, function, self.launch_cooperative_grid, self.launch_pdl,
+RuntimeError: Triton Error [CUDA]: out of memory

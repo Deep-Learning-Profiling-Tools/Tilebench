@@ -1,0 +1,188 @@
+{
+  "created_at_utc": "2026-07-19T19:08:13Z",
+  "autotune": true,
+  "hostname": "dgx003.orc.gmu.edu",
+  "python_executable": "/home/arustagi/anaconda3/envs/tilebench/bin/python",
+  "python_version": "3.11.15 (main, Jun 11 2026, 15:20:16) [GCC 14.3.0]",
+  "operators_requested": [
+    "1d_conv",
+    "2d_conv",
+    "2d_max_pooling",
+    "3d_conv",
+    "argmax",
+    "batch_normalization",
+    "batched_matmul",
+    "bitonic_sort",
+    "block_sparse_attention",
+    "cross_entropy",
+    "dequantize_rowwise",
+    "destindex",
+    "dropout",
+    "flash_attention",
+    "flash_decode",
+    "fused_activation",
+    "gaussian_blur",
+    "histogramming",
+    "interleave",
+    "jacobi_stencil_2d",
+    "kl_divergence",
+    "l2_norm",
+    "layernorm",
+    "leaky_relu",
+    "linear_self_attention",
+    "matmul_fp32_fp16_fp8",
+    "matmul_int8",
+    "matrix_copy",
+    "matrix_transpose",
+    "mean_reduction",
+    "moe_topk_gating",
+    "mul2",
+    "quantize_global",
+    "radix_sort",
+    "relu",
+    "reverse_array",
+    "rmsnorm",
+    "rope",
+    "sigmoid",
+    "softmax",
+    "streamk_matmul",
+    "swiglu",
+    "top_k_selection",
+    "vector_add",
+    "weight_dequant"
+  ],
+  "operators_succeeded": [
+    "1d_conv",
+    "2d_conv",
+    "2d_max_pooling",
+    "3d_conv",
+    "argmax",
+    "batch_normalization",
+    "batched_matmul",
+    "bitonic_sort",
+    "block_sparse_attention",
+    "cross_entropy",
+    "dequantize_rowwise",
+    "destindex",
+    "dropout",
+    "flash_decode",
+    "fused_activation",
+    "l2_norm",
+    "moe_topk_gating",
+    "top_k_selection"
+  ],
+  "operators_failed": [
+    {
+      "operator": "flash_attention",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 117, in run_benchmark_suite\n    triton_output = impl_triton.run(*inputs, **triton_kw)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/benchmarks/operators/flash_attention/impl_triton.py\", line 121, in run\n    _fwd_kernel_autotuned[grid](\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py\", line 240, in run\n    benchmark()\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py\", line 229, in benchmark\n    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py\", line 229, in <dictcomp>\n    timings = {config: self._bench(*args, config=config, **kwargs) for config in pruned_configs}\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py\", line 164, in _bench\n    return self.do_bench(kernel_call, quantiles=(0.5, 0.2, 0.8))\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/testing.py\", line 149, in do_bench\n    fn()\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/autotuner.py\", line 150, in kernel_call\n    self.fn.run(\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/runtime/jit.py\", line 761, in run\n    kernel.run(grid_0, grid_1, grid_2, stream, kernel.function, kernel.packed_metadata, launch_metadata,\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/backends/nvidia/driver.py\", line 328, in __call__\n    self.launch(gridX, gridY, gridZ, stream, function, self.launch_cooperative_grid, self.launch_pdl,\nRuntimeError: Triton Error [CUDA]: out of memory\n"
+    },
+    {
+      "operator": "gaussian_blur",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "histogramming",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "interleave",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "jacobi_stencil_2d",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "kl_divergence",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "layernorm",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "leaky_relu",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "linear_self_attention",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "matmul_fp32_fp16_fp8",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "matmul_int8",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "matrix_copy",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "matrix_transpose",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "mean_reduction",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "mul2",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "quantize_global",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "radix_sort",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "relu",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "reverse_array",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "rmsnorm",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "rope",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "sigmoid",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "softmax",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "streamk_matmul",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "swiglu",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "vector_add",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    },
+    {
+      "operator": "weight_dequant",
+      "error": "Traceback (most recent call last):\n  File \"/home/arustagi/repos/Tilebench/scripts/run_bench_all.py\", line 158, in main\n    results = run_benchmark_suite(op, benchmark_overrides=overrides)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 112, in run_benchmark_suite\n    torch_stats = _bench(impl_torch.run, inputs, label=f\"{lbl}_torch\")\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/engine.py\", line 63, in _bench\n    return report_benchmark(\n           ^^^^^^^^^^^^^^^^^\n  File \"/home/arustagi/repos/Tilebench/core/timer.py\", line 187, in report_benchmark\n    proton.finalize(session=session_id)\n  File \"/home/arustagi/anaconda3/envs/tilebench/lib/python3.11/site-packages/triton/profiler/profile.py\", line 195, in finalize\n    libproton.finalize(session, output_format)\nRuntimeError: Failed to execute cuptiActivityFlushAll with error 39\n"
+    }
+  ],
+  "artifacts": {
+    "profiles": []
+  },
+  "finished_at_utc": "2026-07-20T06:33:05Z"
+}

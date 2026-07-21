@@ -174,6 +174,7 @@ def report_benchmark(
         data="tree",
         backend=proton_backend,
     )
+    runner = None
     try:
         runner = _prepare_runner(f, tuple_of_args, kwargs, use_cuda_graph=use_cuda_graph)
         torch.cuda.synchronize()
@@ -185,6 +186,14 @@ def report_benchmark(
         torch.cuda.synchronize()
     finally:
         proton.finalize(session=session_id)
+        # Drop the runner closure. When use_cuda_graph is set this releases the
+        # captured CUDAGraph and the tensors it holds; the graph's private
+        # memory pool stays *reserved* by the caching allocator until it is
+        # explicitly reclaimed, so free it here to stop device memory from
+        # accumulating across benchmark calls and operators.
+        runner = None
+        if use_cuda_graph:
+            torch.cuda.empty_cache()
 
     # Parse hatchet
     hatchet_data, path = _load_profile_data(profile_base)

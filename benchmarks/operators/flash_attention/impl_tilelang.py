@@ -4,17 +4,18 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 
-_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 32, "threads": 256, "num_stages": 4}
+_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 64, "threads": 256, "num_stages": 4}
 _last_autotune_config: dict = {}
 
 
 def flash_attention_configs():
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt, num_stages=ns)
-        for bm in [64, 128]
+        for bm in [128]
         for bn in [32, 64, 128]
         for nt in [64, 128, 256]
         for ns in [2, 3, 4]
+        if not (bn == 64 and nt == 256 and ns == 2)
     ]
 
 
@@ -32,7 +33,7 @@ def flash_attention_kernel(
     dtype,
     is_causal,
     BLOCK_M: int = 64,
-    BLOCK_N: int = 32,
+    BLOCK_N: int = 64,
     threads: int = 256,
     num_stages: int = 4,
 ):
@@ -52,8 +53,16 @@ def flash_attention_kernel(
             v_shared = T.alloc_shared((BLOCK_N, dim), dtype)
 
             scores = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+            scores_tc = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+            scores_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
+            scores_bridge = T.alloc_shared((BLOCK_M, BLOCK_N), accum_dtype)
             scores_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc_o = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
+            pv = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
+            pv_shared = T.alloc_shared((BLOCK_M, dim), accum_dtype)
+            pv_tmem = T.alloc_tmem((BLOCK_M, dim), accum_dtype)
+            qk_mbar = T.alloc_barrier(1)
+            pv_mbar = T.alloc_barrier(1)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_scale = T.alloc_fragment((BLOCK_M,), accum_dtype)
@@ -61,8 +70,6 @@ def flash_attention_kernel(
             logsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
 
             T.copy(Q[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :], q_shared)
-            for i, j in T.Parallel(BLOCK_M, dim):
-                q_shared[i, j] = T.Cast(dtype, T.cast(q_shared[i, j], accum_dtype) * T.cast(qk_scale, accum_dtype))
             T.fill(acc_o, 0)
             T.fill(logsum, 0)
             T.fill(scores_max, -T.infinity(accum_dtype))
@@ -75,11 +82,23 @@ def flash_attention_kernel(
 
             for k_tile in T.Pipelined(loop_range, num_stages=num_stages):
                 T.copy(K[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], k_shared)
+                T.gemm(
+                    q_shared,
+                    k_shared,
+                    scores_tmem,
+                    transpose_B=True,
+                    mbar=qk_mbar,
+                    clear_accum=True,
+                )
+                T.sync_threads()
+                T.copy(scores_tmem, scores_tc)
+                T.copy(scores_tc, scores_bridge)
+                T.sync_threads()
                 if is_causal:
                     for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                         scores[i, j] = T.if_then_else(
                             pid_m * BLOCK_M + i >= k_tile * BLOCK_N + j,
-                            0,
+                            scores_bridge[i, j],
                             -T.infinity(accum_dtype),
                         )
                 else:
@@ -87,20 +106,18 @@ def flash_attention_kernel(
                         scores[i, j] = T.if_then_else(
                             k_tile * BLOCK_N + j >= seq_len,
                             -T.infinity(accum_dtype),
-                            0,
+                            scores_bridge[i, j],
                         )
-
-                T.gemm(q_shared, k_shared, scores, transpose_B=True, policy=T.GemmWarpPolicy.FullRow)
 
                 T.copy(scores_max, scores_max_prev)
                 T.fill(scores_max, -T.infinity(accum_dtype))
                 T.reduce_max(scores, scores_max, dim=1, clear=False)
                 for i in T.Parallel(BLOCK_M):
                     scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
-                    scores_scale[i] = T.exp2(scores_max_prev[i] - scores_max[i])
+                    scores_scale[i] = T.exp2(scores_max_prev[i] * qk_scale - scores_max[i] * qk_scale)
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                    scores[i, j] = T.exp2(scores[i, j] - scores_max[i])
+                    scores[i, j] = T.exp2(scores[i, j] * qk_scale - scores_max[i] * qk_scale)
 
                 T.reduce_sum(scores, scores_sum, dim=1)
                 for i in T.Parallel(BLOCK_M):
@@ -111,7 +128,13 @@ def flash_attention_kernel(
                     acc_o[i, j] *= scores_scale[i]
 
                 T.copy(V[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], v_shared)
-                T.gemm(scores_shared, v_shared, acc_o, policy=T.GemmWarpPolicy.FullRow)
+                T.gemm(scores_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
+                T.sync_threads()
+                T.copy(pv_tmem, pv)
+                T.copy(pv, pv_shared)
+                T.sync_threads()
+                for i, j in T.Parallel(BLOCK_M, dim):
+                    acc_o[i, j] += pv_shared[i, j]
 
             for i, j in T.Parallel(BLOCK_M, dim):
                 acc_o[i, j] /= logsum[i]

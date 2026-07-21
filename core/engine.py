@@ -216,4 +216,12 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
         })
 
+        # Free this case's device tensors before moving on. Without this, inputs,
+        # reference/candidate outputs and any CUDA-graph pools accumulate for the
+        # lifetime of the (single) process and eventually exhaust device memory,
+        # OOM-ing later operators even though no individual case is large.
+        inputs = ref_output = None
+        triton_output = cutile_output = tilelang_output = None
+        torch.cuda.empty_cache()
+
     return results
