@@ -33,3 +33,42 @@
 ## Notes
 
 Bottleneck verdicts above come from NCU's own SOLBottleneck rule (headline `OPT` recommendation). For per-section detail, open the .ncu-rep in `ncu-ui` or run `ncu --import <file> --page details | less`.
+
+## SASS instruction-level findings (manual analysis, 2026-07-20)
+
+Both reports above are `--set full` captures at the sweep-max autotune
+winners (triton kv 32x32x64 nw4 ns3 / out 64x128x32 nw4 ns3; cuTile
+kv 16x64x32 / out 32x64x32, occupancy 4).
+
+| backend | MMA in SASS | TMA |
+|---|---|---|
+| torch (cuBLAS TF32) | `UTCHMMA.2CTA` (tcgen05) | UTMALDG/UTMASTG |
+| triton | `UTCHMMA` (tcgen05, via host-side TensorDescriptor) | UTMALDG/UTMASTG |
+| cuTile | `HMMA.1688.F32.TF32` (legacy mma.sync) | UTMALDG/UTMASTG |
+
+Why cuTile stays on legacy HMMA despite `ct.mma` + explicit
+`astype(ct.tfloat32)`: the tcgen05 lowering has a **tile_m >= 64
+threshold** (tcgen05 MMA atoms are M=64/128). Controlled probe, same
+`ct.mma` call, only tile_m varied:
+
+| tile (MxNxK), tf32 inputs | lowering |
+|---|---|
+| 16x64x32 (= kv winner) | `HMMA.1688.F32.TF32` |
+| 32x64x32 (= out winner) | `HMMA.1688.F32.TF32` |
+| 64x64x32 | `UTCHMMA` (tcgen05) |
+| 128x64x32 | `UTCHMMA` (tcgen05) |
+
+The fallback is silent (no diagnostic). The autotuner's small-tile
+winners are rational for this geometry: the kv output is only D x D =
+256x256, so 64x64 tiles leave 16 CTAs on 148 SMs — CTA parallelism
+outweighs instruction quality. tcgen05-eligible configs were in the
+search space and lost fairly. Enabling tcgen05 for the kv GEMM
+therefore requires split-K (parallelism at large tiles), not a code
+tweak. Same failure class as the conv-series before the implicit-GEMM
+rebuild: kernel/tile structure kept `ct.mma` below the tensor-core
+mapping threshold.
+
+Triton's mirror-image precondition, verified on this op: TF32 `tl.dot`
+lowers to tcgen05 only on the TMA-descriptor path; the earlier
+pointer-based version emitted `HMMA.1688.F32.TF32` and no TMA
+(2.1x slower end-to-end at sweep-max).
