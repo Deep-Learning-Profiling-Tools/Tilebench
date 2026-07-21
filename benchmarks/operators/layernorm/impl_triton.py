@@ -55,7 +55,7 @@ def layernorm_kernel(
 _layernorm_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_N_SIZE": bs}, num_warps=nw, num_stages=ns)
-        for bs in [512, 1024, 2048]
+        for bs in [512, 1024, 2048, 4096, 8192]
         for nw in [2, 4, 8]
         for ns in [2, 3, 4]
     ],

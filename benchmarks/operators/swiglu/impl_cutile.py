@@ -13,7 +13,7 @@ _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
-    for t in [1024, 2048, 4096]
+    for t in [1024, 2048, 4096, 8192, 16384]
     for occ in [4, 8, 16, 32]
 ]
 

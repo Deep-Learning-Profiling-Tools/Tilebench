@@ -26,7 +26,7 @@ def swiglu_kernel(
 _swiglu_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [512, 1024, 2048]
+        for bs in [512, 1024, 2048, 4096, 8192, 16384]
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
