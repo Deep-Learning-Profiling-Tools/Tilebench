@@ -1,17 +1,24 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
+# K3 (apply) is the only stage with a meaningful gap.  Use a smaller default
+# and a dtype-aware fp32 search to avoid the register/local-memory pressure seen
+# in the old fp32 K3 profile at larger tiles.
 _DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
     for t in [256, 512, 1024, 2048]
+    for occ in [4, 8, 16]
+]
+_SEARCH_SPACE_FP32 = [
+    SimpleNamespace(tile=t, occupancy=occ)
+    for t in [256, 512]
     for occ in [4, 8, 16]
 ]
 _last_autotune_config: dict = {}
@@ -22,7 +29,7 @@ def _next_pow2(n: int) -> int:
 
 
 @ct.kernel
-def _compute_block_sums_kernel(
+def compute_block_sums_kernel(
     input_ptr,
     block_sum_ptr,
     block_sq_sum_ptr,
@@ -34,14 +41,14 @@ def _compute_block_sums_kernel(
     block_id = ct.bid(0)
     channel_id = ct.bid(1)
 
-    row_offsets = block_id * BLOCK_N + ct.arange(BLOCK_N, dtype=np.int32)
+    row_offsets = block_id * BLOCK_N + ct.arange(BLOCK_N, dtype=ct.int32)
     mask = row_offsets < N
 
     # x[row, channel] = input[row * C + channel] in flat layout.
     input_idx = row_offsets * C + channel_id
     idx_safe = ct.where(mask, input_idx, -1)
     x = ct.gather(input_ptr, idx_safe, padding_value=0.0)
-    x = ct.astype(x, np.float32)
+    x = ct.astype(x, ct.float32)
 
     local_sum = ct.sum(x, axis=0, keepdims=True)        # (1,)
     local_sq_sum = ct.sum(x * x, axis=0, keepdims=True) # (1,)
@@ -53,7 +60,7 @@ def _compute_block_sums_kernel(
 
 
 @ct.kernel
-def _compute_mean_invstd_kernel(
+def compute_mean_invstd_kernel(
     block_sum_ptr,
     block_sq_sum_ptr,
     mean_ptr,
@@ -67,7 +74,7 @@ def _compute_mean_invstd_kernel(
     """Finish per-channel reduction and emit mean / inv_std — mirror of Triton kernel 2."""
     channel_id = ct.bid(0)
 
-    block_offsets = ct.arange(BLOCK_B, dtype=np.int32)
+    block_offsets = ct.arange(BLOCK_B, dtype=ct.int32)
     mask = block_offsets < NUM_BLOCKS
 
     idx = block_offsets * C + channel_id
@@ -88,7 +95,7 @@ def _compute_mean_invstd_kernel(
 
 
 @ct.kernel
-def _apply_batch_norm_kernel(
+def apply_batch_norm_kernel(
     input_ptr,
     gamma_ptr,
     beta_ptr,
@@ -101,11 +108,11 @@ def _apply_batch_norm_kernel(
 ):
     """Element-wise apply y = (x - mean) * inv_std * gamma + beta — mirror of Triton kernel 3."""
     bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
+    offsets = bid * TILE + ct.arange(TILE, dtype=ct.int32)
 
     # Tile-aligned x load (OOB tail → 0.0; corresponding output write silently dropped).
     x = ct.load(input_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
-    x = ct.astype(x, np.float32)
+    x = ct.astype(x, ct.float32)
 
     # Per-element gather of the per-channel parameters.
     # channel_id = offsets % C is always in [0, C), so no OOB clamping needed.
@@ -114,8 +121,8 @@ def _apply_batch_norm_kernel(
     inv_std = ct.gather(inv_std_ptr, channel_id)
     gamma = ct.gather(gamma_ptr, channel_id)
     beta = ct.gather(beta_ptr, channel_id)
-    gamma = ct.astype(gamma, np.float32)
-    beta = ct.astype(beta, np.float32)
+    gamma = ct.astype(gamma, ct.float32)
+    beta = ct.astype(beta, ct.float32)
 
     y = (x - mean) * inv_std * gamma + beta
     y_out = ct.astype(y, output_ptr.dtype)
@@ -125,7 +132,7 @@ def _apply_batch_norm_kernel(
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 # Mirrors Triton's @triton.autotune(key=["total_elements"]) — kernel 3 is the
 # dominant cost; kernels 1 and 2 use fixed defaults on both sides.
-_tuner = CutileAutotuner(_apply_batch_norm_kernel)
+_tuner = CutileAutotuner(apply_batch_norm_kernel)
 
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
@@ -156,12 +163,12 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     stream = torch.cuda.current_stream()
 
     # Kernel 1 — fixed config (small, not autotuned).
-    ct.launch(stream, (NUM_BLOCKS, C, 1), _compute_block_sums_kernel,
+    ct.launch(stream, (NUM_BLOCKS, C, 1), compute_block_sums_kernel,
               (input_flat, block_sum_flat, block_sq_sum_flat, N, C, BLOCK_N))
 
     # Kernel 2 — fixed config.
     BLOCK_B = _next_pow2(NUM_BLOCKS)
-    ct.launch(stream, (C, 1, 1), _compute_mean_invstd_kernel,
+    ct.launch(stream, (C, 1, 1), compute_mean_invstd_kernel,
               (block_sum_flat, block_sq_sum_flat, mean, inv_std,
                N, C, NUM_BLOCKS, BLOCK_B, eps))
 
@@ -169,8 +176,8 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     total_elements = N * C
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(total_elements,),
-            search_space=_SEARCH_SPACE,
+            shape_key=(total_elements, str(input.dtype)),
+            search_space=(_SEARCH_SPACE_FP32 if input.dtype == torch.float32 else _SEARCH_SPACE),
             stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(total_elements, cfg.tile), 1, 1),
             args_fn=lambda cfg: (
