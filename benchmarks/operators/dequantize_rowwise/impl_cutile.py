@@ -1,10 +1,11 @@
 """cuTile dequantize_rowwise (mirrors impl_triton.py).
 
-Each CTA dequantises one row. Since cuTile tile dims must be powers of
-two and case_grid restricts cols to powers of two, the entire row
-loads in one ct.load((1, COLS)) — no inner tiled loop, no padding.
+Each CTA dequantises one row chunk.  The previous version loaded the entire
+(1, COLS) row tile in one CTA, which keeps thousands of elements live for
+COLS=8192.  This version splits each row into CHUNK-sized tiles to reduce
+register/local-memory pressure.
 
-Autotune knob: occupancy (cuTile's analogue of Triton num_warps).
+Autotune knobs: chunk size and occupancy.
 """
 from types import SimpleNamespace
 
@@ -17,26 +18,28 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(chunk=512, occupancy=8)
 _SEARCH_SPACE = [
-    SimpleNamespace(occupancy=occ)
-    for occ in [2, 4, 8, 16, 32]
+    SimpleNamespace(chunk=ch, occupancy=occ)
+    for ch in [256, 512, 1024]
+    for occ in [4, 8, 16]
 ]
 
 _INV_127 = 1.0 / 127.0
 
 
 @ct.kernel
-def dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt):
-    bid = ct.bid(0)
-    # x: (rows, cols) int8 -- load row `bid` as (1, COLS).
-    x_tile = ct.load(x, index=(bid, 0), shape=(1, COLS))
-    # state_x: (rows,) fp32 -- load element `bid` as (1,), reshape for broadcast.
-    scale = ct.load(state_x, index=(bid,), shape=(1,))
-    scale_2d = ct.reshape(scale, (1, 1))
+def dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt, CHUNK: ConstInt):
+    row = ct.bid(0)
+    col_tile = ct.bid(1)
 
-    out = x_tile * scale_2d * _INV_127
-    ct.store(output, index=(bid, 0), tile=ct.astype(out, ct.float16))
+    x_tile = ct.load(
+        x, index=(row, col_tile), shape=(1, CHUNK),
+        padding_mode=ct.PaddingMode.ZERO,
+    )
+    scale = ct.load(state_x, index=(row,), shape=(1,))
+    out = x_tile * ct.reshape(scale, (1, 1)) * _INV_127
+    ct.store(output, index=(row, col_tile), tile=ct.astype(out, ct.float16))
 
 
 _tuner = CutileAutotuner(dequantize_rowwise_kernel)
@@ -54,17 +57,18 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
             shape_key=(rows, cols),
             search_space=_SEARCH_SPACE,
             stream=stream,
-            grid_fn=lambda cfg: (rows, 1, 1),
-            args_fn=lambda cfg: (x, state_x, output, cols),
+            grid_fn=lambda cfg: (rows, (cols + cfg.chunk - 1) // cfg.chunk, 1),
+            args_fn=lambda cfg: (x, state_x, output, cols, cfg.chunk),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
-        _last_autotune_config.update({"occupancy": cfg.occupancy})
+        _last_autotune_config.update({"chunk": cfg.chunk, "occupancy": cfg.occupancy})
     else:
         cfg = _DEFAULT_CONFIG
 
     kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(stream, (rows, 1, 1), kernel, (x, state_x, output, cols))
+    grid = (rows, (cols + cfg.chunk - 1) // cfg.chunk, 1)
+    ct.launch(stream, grid, kernel, (x, state_x, output, cols, cfg.chunk))
     return output
 
 
