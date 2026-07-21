@@ -19,10 +19,14 @@ _SEARCH_SPACE = [
     for ts in [256, 512, 1024, 2048]
     for occ in [4, 8, 16]
 ]
+# cuobjdump -res-usage: the per-row fp32 reduction state spills (STACK>0) as
+# soon as occupancy is raised above 4 at these tiles (tile=256/512 @ occ=8 ->
+# STACK=80..112; @ occ=16 -> STACK=8..24), while occ=4 is spill-free
+# (REG=80..83, STACK=0).  Restrict the fp16 search to the spill-free occupancy
+# so no config in the space can raise local_ld.
 _SEARCH_SPACE_FP16 = [
-    SimpleNamespace(tile_size=ts, occupancy=occ)
+    SimpleNamespace(tile_size=ts, occupancy=4)
     for ts in [256, 512]
-    for occ in [4, 8, 16]
 ]
 
 
