@@ -7,18 +7,18 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'batch_size': 4, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480, 'causal': True}` | `{'BLOCK_M': 128, 'BLOCK_N': 64, 'num_warps': 8, 'num_stages': 2}` | `{'tile_m': 128, 'tile_n': 128, 'occupancy': 4}` |
+| fp16 | `{'batch_size': 4, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480, 'causal': True}` | `{'BLOCK_M': 128, 'BLOCK_N': 64, 'num_warps': 8, 'num_stages': 2}` | `{'tile_m': 128, 'tile_n': 128, 'occupancy': 16}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 19410.00 us | 24.06 % | 1.80 % | 32.59 % | 24.08 % | 51.24 % | 138.14 Gbyte/s | 256 | 128 register/thread | 0 byte/block | 98.88 Kbyte/block | 2 block / 2 block |
-| fp16 | cutile | 17670.00 us | 26.40 % | 1.97 % | 26.72 % | 26.41 % | 43.20 % | 151.51 Gbyte/s | 384 | 168 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 19340.00 us | 24.14 % | 1.80 % | 32.77 % | 24.14 % | 51.54 % | 138.23 Gbyte/s | 256 | 128 register/thread | 0 byte/block | 98.88 Kbyte/block | 2 block / 2 block |
+| fp16 | cutile | 17680.00 us | 26.38 % | 1.97 % | 26.72 % | 26.37 % | 43.21 % | 151.23 Gbyte/s | 384 | 168 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.10× faster** (17670.0 µs vs 19410.0 µs).
+- **fp16**: cuTile is **1.09× faster** (17680.0 µs vs 19340.0 µs).
 
 ## NCU's own bottleneck verdict
 
