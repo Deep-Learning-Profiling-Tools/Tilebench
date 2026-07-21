@@ -19,46 +19,38 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _interleave_kernel(a_ptr, b_ptr, out_ptr, TILE: ConstInt):
-    """
-    In-tile interleave matching Triton's tl.interleave method:
-      1. Coalesced load of TILE consecutive elements from A and B.
-      2. Stack into (2, TILE), transpose to (TILE, 2), flatten. Row-major
-         layout of (TILE, 2) is [a0, b0, a1, b1, ..., a_{TILE-1}, b_{TILE-1}].
-      3. Single coalesced contiguous store of 2*TILE elements at bid*2*TILE.
+def interleave_kernel(a_ptr, b_ptr, out_ptr_2d, TILE: ConstInt):
+    """Direct interleave without cat/transpose materialization.
 
-    Out-of-bounds tail elements are zeroed on load (padding_mode=ZERO) and
-    silently dropped on store.
+    Output is viewed as (N, 2).  Each CTA writes one A tile to column 0 and
+    one B tile to column 1.  This preserves the final flat layout
+    [a0, b0, a1, b1, ...] while avoiding the old (2,TILE)->transpose->reshape
+    intermediate that spilled for fp32 at large TILE.
     """
     bid = ct.bid(0)
     a_tile = ct.load(a_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
     b_tile = ct.load(b_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
-
-    a_2d = ct.reshape(a_tile, (1, TILE))
-    b_2d = ct.reshape(b_tile, (1, TILE))
-    stacked = ct.cat((a_2d, b_2d), axis=0)          # (2, TILE) — rows are A, B
-    transposed = ct.transpose(stacked)               # (TILE, 2) — row i = (a_i, b_i)
-    interleaved = ct.reshape(transposed, (2 * TILE,))
-
-    ct.store(out_ptr, index=(bid,), tile=interleaved)
+    ct.store(out_ptr_2d, index=(bid, 0), tile=ct.reshape(a_tile, (TILE, 1)))
+    ct.store(out_ptr_2d, index=(bid, 1), tile=ct.reshape(b_tile, (TILE, 1)))
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_interleave_kernel)
+_tuner = CutileAutotuner(interleave_kernel)
 
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     output = torch.empty(2 * N, dtype=A.dtype, device=A.device)
+    output_2d = output.view(N, 2)
     stream = torch.cuda.current_stream()
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(A.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((N + cfg.tile - 1) // cfg.tile, 1, 1),
-            args_fn=lambda cfg: (A, B, output, cfg.tile),
+            args_fn=lambda cfg: (A, B, output_2d, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
@@ -71,7 +63,7 @@ def run(A: torch.Tensor, B: torch.Tensor, N: int,
 
     grid = ((N + cfg.tile - 1) // cfg.tile, 1, 1)
     kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(stream, grid, kernel, (A, B, output, cfg.tile))
+    ct.launch(stream, grid, kernel, (A, B, output_2d, cfg.tile))
 
     return output
 
