@@ -1,12 +1,3 @@
-"""cuTile dequantize_rowwise (mirrors impl_triton.py).
-
-Each CTA dequantises one row chunk.  The previous version loaded the entire
-(1, COLS) row tile in one CTA, which keeps thousands of elements live for
-COLS=8192.  This version splits each row into CHUNK-sized tiles to reduce
-register/local-memory pressure.
-
-Autotune knobs: chunk size and occupancy.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct

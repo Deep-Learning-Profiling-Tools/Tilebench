@@ -1,13 +1,3 @@
-"""Triton dequantize_rowwise (matches bitsandbytes' kernel of the same name).
-
-Per-(row, chunk) decomposition — one CTA dequantises one CHUNK of one row,
-grid (rows, cdiv(cols, CHUNK)) — the same CTA granularity, chunk search
-space, and explicit fp32 internal dtype as impl_cutile.py, so the remaining
-backend gap is attributable to lowering rather than schedule. (The previous
-version gave one CTA a whole row, a different decomposition from cuTile.)
-
-Autotune knobs: CHUNK and num_warps.
-"""
 import torch
 import triton
 import triton.language as tl
