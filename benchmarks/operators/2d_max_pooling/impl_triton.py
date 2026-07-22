@@ -1,7 +1,3 @@
-"""2D max pooling via 2D output tiles + shifted 2D loads: grid is
-(plane, oh_tile, ow_tile); each program owns a (BLOCK_R, BLOCK_C) output
-tile and takes the max over kernel_size^2 shifted 2D masked loads.
-No flat-offset decode (div/mod) per element; max in native dtype."""
 import torch
 import triton
 import triton.language as tl
@@ -23,7 +19,7 @@ def max_pool2d_kernel(
     BLOCK_R: tl.constexpr,
     BLOCK_C: tl.constexpr,
 ):
-    plane = tl.program_id(0)          # n * C + c
+    plane = tl.program_id(0)
     pid_r = tl.program_id(1)
     pid_c = tl.program_id(2)
 

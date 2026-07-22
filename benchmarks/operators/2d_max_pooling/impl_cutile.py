@@ -1,17 +1,3 @@
-"""2D max pooling via 2D output tiles + broadcast-index gathers.
-
-Each block owns a (TILE_R, TILE_C) output tile of one (n, c) plane; for
-every kernel tap the input positions come from broadcast 2D index
-arithmetic (oh*stride + kh - padding) — the cuTile equivalent of
-Triton's 2D pointer offsets, and the same pattern as jacobi_stencil_2d.
-No flat-offset decode (div/mod) per element. Negative / out-of-range
-indices are OOB for ct.gather and return -inf, which never wins the max.
-
-A pure box-load formulation was measured and rejected: stride=2 windows
-shifted by -1 are not expressible as tile-aligned loads (Array.slice
-crashes on negative starts), and a hybrid box+gather variant benched
-slower than uniform gathers (0.354 vs 0.299 ms at sweep-max fp32).
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -33,8 +19,8 @@ _last_autotune_config: dict = {}
 
 @ct.kernel
 def max_pool2d_kernel(
-    x3,        # (N*C, H, W)
-    out3,      # (N*C, H_out, W_out)
+    x3,
+    out3,
     kernel_size: ConstInt,
     stride: ConstInt,
     padding: ConstInt,
@@ -50,8 +36,8 @@ def max_pool2d_kernel(
 
     acc = ct.full((TILE_R, TILE_C), -float("inf"), dtype=x3.dtype)
 
-    for kh in range(kernel_size):        # compile-time unrolled
-        for kw in range(kernel_size):    # compile-time unrolled
+    for kh in range(kernel_size):
+        for kw in range(kernel_size):
             ih = oh2 * stride + (kh - padding)
             iw = ow2 * stride + (kw - padding)
             x = ct.gather(x3, (plane, ih, iw), padding_value=-float("inf"))
@@ -61,17 +47,11 @@ def max_pool2d_kernel(
              tile=ct.reshape(acc, (1, TILE_R, TILE_C)))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(max_pool2d_kernel)
 
 
 def run(input, N, C, H, W, kernel_size, stride, padding,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """
-    cuTile 2D max pooling — tiled 2D output, broadcast-index gathers.
-    input:  flat 1D tensor of size N * C * H * W
-    output: flat 1D tensor of size N * C * H_out * W_out
-    """
     H_out = (H + 2 * padding - kernel_size) // stride + 1
     W_out = (W + 2 * padding - kernel_size) // stride + 1
     total_out = N * C * H_out * W_out
