@@ -1,45 +1,3 @@
-"""Triton Stream-K GEMM (Osama et al., PPoPP 2023).
-
-Two-kernel decomposition with the Stream-K scheduler computed INSIDE
-each kernel from M/N/K/NUM_SMS/BLOCK_M/BLOCK_N/BLOCK_K. This lets
-the autotuner sweep BLOCK_* freely — host code never sees those
-values, so there's nothing to keep in sync.
-
-  first_wave  - launches NUM_SMS programs; each owns a contiguous range
-                of K-iterations spanning multiple (M, N) output tiles.
-                Combines partial tiles via tl.atomic_add into a
-                pre-zeroed C — order-independent, no locks needed.
-  full_tiles  - data-parallel; one program per leftover whole tile
-                after wave-quantization. Writes pre-zeroed disjoint
-                regions via TMA store (non-atomic).
-
-Both kernels must share BLOCK_* (otherwise their tile partitions
-disagree and the result is corrupt), so a config choice affects both.
-The tuner therefore times the **whole two-kernel pipeline**
-(first_wave + full_tiles back-to-back) per config. Tuning a single
-kernel as a proxy mis-ranks the other's preferences both ways: tuning
-first_wave only picked BLOCK_M=64 at m=8192/n=28672 fp32 (~70% slower
-end-to-end than default — full_tiles does >99% of the work there);
-tuning full_tiles only picked configs that doubled the small shapes,
-where first_wave is ~half the work.
-
-The tuner is hand-rolled (mirroring cuTile's CutileAutotuner) because
-`triton.autotune` can neither time a two-kernel sequence nor tune on a
-SCRATCH buffer — and scratch is required: trial configs partition the
-tile space differently, so their stores would leave garbage in regions
-the winner's partition expects pre-zeroed.
-
-A/B are loaded through host-side TMA descriptors (TensorDescriptor —
-the tutorial-09 pattern, same as matmul_fp32_fp16_fp8; device-side
-tl.make_tensor_descriptor is broken). B is consumed transposed (N, K)
-so both operand boxes have the K axis innermost (≤128B ⇒ TMA swizzle
-fast path). first_wave's output combine stays a pointer-based
-tl.atomic_add (TMA stores can't atomic-add); full_tiles' disjoint tiles
-go out via TMA store.
-
-`tl.dot(..., input_precision="tf32")` is explicit so the precision
-choice mirrors cuTile (which casts fp32 → ct.tfloat32 before ct.mma).
-"""
 import torch
 import triton
 from triton import language as tl
@@ -52,9 +10,7 @@ _DEFAULT_CONFIG = {
     "num_warps": 8, "num_stages": 3,
 }
 
-# Tile space (BLOCK_M, BLOCK_N, BLOCK_K) is 1:1 with impl_cutile.py's
-# _SEARCH_SPACE; num_warps is Triton's scheduling knob like cuTile's
-# occupancy.
+
 _SEARCH_SPACE = [
     {"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk, "GROUP_M": 8,
      "num_warps": nw, "num_stages": 3}
@@ -64,30 +20,21 @@ _SEARCH_SPACE = [
     for nw in (4, 8)
 ]
 
-# DT_ID keeps fp16 / bf16 / fp32 compilations unambiguously separate:
-# TensorDescriptor args are not torch.Tensors, and C (a real tensor arg)
-# is the fp32 staging buffer for every input dtype.
+
 _DT_IDS = {torch.float16: 0, torch.bfloat16: 1, torch.float32: 2}
 
-# (M, N, K, DT_ID) -> winning config dict, filled by _tune_full_tiles.
+
 _autotune_cache: dict = {}
 _last_autotune_config: dict = {}
 
-# The kernel consumes B transposed to (N, K) for the TMA swizzle fast
-# path. Build the transposed copy once per input tensor so the unmeasured
-# warmup call pays for it. Keyed by tensor IDENTITY, not data_ptr: the
-# sweep repeats B's (shape, dtype) across cases (k, n recur while m
-# varies) and the caching allocator readily hands a freed data_ptr to the
-# next same-sized tensor, so a data_ptr key can return the STALE
-# transpose (sporadic ~99%-mismatch verify failures). Weak keys drop the
-# entry when the source B is collected.
+
 _bt_cache = torch.utils.weak.WeakTensorKeyDictionary()
 
 
 def _b_transposed(b: torch.Tensor) -> torch.Tensor:
     bt = _bt_cache.get(b)
     if bt is None:
-        bt = b.t().contiguous()   # (N, K) row-major
+        bt = b.t().contiguous()
         _bt_cache[b] = bt
     return bt
 
@@ -139,13 +86,13 @@ def first_wave(
         acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=ACC_TYPE)
         iter_in_tile = start_iter % iters_per_tile
         for current_iter in range(start_iter, end_iter):
-            # TMA boxes zero-fill OOB lanes — no K/M/N masks needed.
+
             a = a_desc.load([offs_am, iter_in_tile * BLOCK_K])
             b = b_desc.load([offs_bn, iter_in_tile * BLOCK_K])
             acc = tl.dot(a, b.T, acc, input_precision="tf32")
             iter_in_tile += 1
 
-        # Partial-tile combine must be atomic — pointer store, not TMA.
+
         rm = offs_am + tl.arange(0, BLOCK_M)
         rn = offs_bn + tl.arange(0, BLOCK_N)
         mask = (rm < M)[:, None] & (rn < N)[None, :]
@@ -182,7 +129,7 @@ def full_tiles(
         b = b_desc.load([offs_bn, k * BLOCK_K])
         acc = tl.dot(a, b.T, acc, input_precision="tf32")
 
-    # Whole tiles are disjoint — plain (non-atomic) TMA store.
+
     c_desc.store([offs_am, offs_bn], acc.to(c_desc.dtype))
 
 
@@ -191,7 +138,6 @@ def _device_sm_count() -> int:
 
 
 def _streamk_partition(M, N, BLK_M, BLK_N, NUM_SMS):
-    """Mirror the kernel's scheduler. Returns (total_tiles, streamk_tiles)."""
     total_tiles = triton.cdiv(M, BLK_M) * triton.cdiv(N, BLK_N)
     streamk_tiles = total_tiles % NUM_SMS
     if total_tiles - streamk_tiles > NUM_SMS:
@@ -227,11 +173,6 @@ def _launch_first_wave(a, bt, c, M, N, K, NUM_SMS, dt_id, cfg):
 
 
 def _tune_pipeline(a, bt, M, N, K, NUM_SMS, dt_id) -> dict:
-    """Exhaustively time the first_wave + full_tiles pipeline over
-    _SEARCH_SPACE on a scratch buffer (do_bench warmup=1/rep=3 ms — the
-    repo-wide autotune budget) and return the winning config. Cached per
-    (M, N, K, DT_ID); the engine's warmup calls pay for the sweep, so
-    tuning stays out of the measured window."""
     key = (M, N, K, dt_id)
     cached = _autotune_cache.get(key)
     if cached is not None:
@@ -245,8 +186,8 @@ def _tune_pipeline(a, bt, M, N, K, NUM_SMS, dt_id) -> dict:
         blocking_tiles = total_tiles - streamk_tiles
 
         def _pipeline():
-            # Scratch values are garbage across trials — only the timing
-            # matters, and GEMM/atomic runtime is data-independent.
+
+
             _launch_first_wave(a, bt, scratch, M, N, K, NUM_SMS, dt_id, cfg)
             if blocking_tiles > 0:
                 _launch_full_tiles(a, bt, scratch, M, N, K, NUM_SMS,
@@ -254,7 +195,7 @@ def _tune_pipeline(a, bt, M, N, K, NUM_SMS, dt_id) -> dict:
 
         try:
             ms = do_bench(_pipeline, warmup=1, rep=3)
-        except Exception as e:   # OutOfResources / compile errors → skip
+        except Exception as e:
             failures.append((cfg, f"{type(e).__name__}: {e}"))
             continue
         if ms < best_ms:
@@ -280,12 +221,7 @@ def run(a: torch.Tensor, b: torch.Tensor,
     NUM_SMS = _device_sm_count()
     DT_ID = _DT_IDS[a.dtype]
 
-    # Mirror impl_cutile.py: route non-fp32 dtypes through an fp32 staging
-    # buffer. cuTile *has* to do this (ct.atomic_add doesn't support bf16);
-    # Triton matches it so both backends do identical memory traffic and
-    # use fp32-precision atomics — otherwise the fp16/bf16 cases would
-    # compare Triton's lower-precision fp16 atomic against cuTile's fp32
-    # accumulate, plus 2× the C-write bandwidth.
+
     out = torch.empty((M, N), device=a.device, dtype=a.dtype)
     if a.dtype == torch.float32:
         c = out
@@ -293,7 +229,7 @@ def run(a: torch.Tensor, b: torch.Tensor,
     else:
         c = torch.zeros((M, N), device=a.device, dtype=torch.float32)
 
-    bt = _b_transposed(b)   # (N, K); cached, so warmup pays the copy
+    bt = _b_transposed(b)
 
     if autotune:
         cfg = _tune_pipeline(a, bt, M, N, K, NUM_SMS, DT_ID)
@@ -303,10 +239,10 @@ def run(a: torch.Tensor, b: torch.Tensor,
         cfg = _DEFAULT_CONFIG
     BLK_M, BLK_N = cfg["BLOCK_M"], cfg["BLOCK_N"]
 
-    # ---- Stage 1: first_wave (Stream-K) ----
+
     _launch_first_wave(a, bt, c, M, N, K, NUM_SMS, DT_ID, cfg)
 
-    # ---- Stage 2: full_tiles (data-parallel) ----
+
     total_tiles, streamk_tiles = _streamk_partition(M, N, BLK_M, BLK_N, NUM_SMS)
     blocking_tiles = total_tiles - streamk_tiles
     if blocking_tiles > 0:
@@ -319,6 +255,6 @@ def run(a: torch.Tensor, b: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    # Hand-rolled tuner (no triton.autotune wrapper to read best_config
-    # from) — mutable-dict pattern, same as the cuTile side.
+
+
     return dict(_last_autotune_config) if _last_autotune_config else None
