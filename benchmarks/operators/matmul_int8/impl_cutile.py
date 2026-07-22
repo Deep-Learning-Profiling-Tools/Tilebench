@@ -1,16 +1,3 @@
-"""cuTile implementation of int8 GEMM with 2-bit packed B.
-
-Algorithm mirrors Triton: each CTA owns one (TM × TN) output tile under
-grouped scheduling; the outer i loop (4 iterations) extracts each 2-bit
-field of B; the inner j loop walks K_b = K/4 in TK-wide tiles. The
-accumulator is int32 via `ct.mma`'s IMMA path.
-
-The benchmark always uses (M, N, K_b) divisible by the chosen tile sizes,
-so out-of-bounds tiles never appear in practice; `padding_mode=ZERO` is
-present only as a safety net (note that strict OOB correctness for B
-would require padding to 1 << (2*i), since (B - 1) on a zero-padded byte
-yields -1, not 0).
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -59,9 +46,7 @@ def matmul_kernel(
     acc = ct.zeros((TM, TN), dtype=ct.int32)
     num_tiles_kb = ct.cdiv(K_b, TK)
 
-    # Outer loop walks K_b in TK tiles; each B byte tile is loaded from HBM
-    # exactly once and the inner unrolled `for i in range(4)` extracts each
-    # 2-bit field in registers. Mirrors the Triton structure.
+
     for j in range(num_tiles_kb):
         B_tile = ct.load(
             B, index=(j, pid_n), shape=(TK, TN),
@@ -75,21 +60,19 @@ def matmul_kernel(
                 padding_mode=ct.PaddingMode.ZERO,
             )
             mask_i = 3 << (2 * i)
-            # Subtract in int32, then cast once — keeps the {0..3} -> {-1..2}
-            # mapping's dtype promotion explicit.
+
+
             b_unpacked = ct.astype(((B_int32 & mask_i) >> (2 * i)) - 1, ct.int8)
             acc = ct.mma(A_tile, b_unpacked, acc)
 
     ct.store(C, index=(pid_m, pid_n), tile=acc)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(matmul_kernel)
 
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
-    """cuTile int8 GEMM with 2-bit packed B."""
 
     assert a.shape[1] == b.shape[0] * 4, (
         "Incompatible dims: A's K must equal 4 * B's K_b (B is packed 4-per-byte)"
