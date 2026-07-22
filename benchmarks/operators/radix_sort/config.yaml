@@ -1,6 +1,3 @@
-# Radix Sort — 16-pass 2-bit LSD radix sort (packed per-digit counters)
-# Per-pass pipeline: digit histogram → chunk sums → chunk-sums prefix → per-chunk prefix → scatter.
-
 verify:
   atol: 0.0
   rtol: 0.0
@@ -12,19 +9,11 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep n across 20 points; BLOCK_SIZE=1024, and the single-block scan tile
-# grows as next_pow2(RADIX * ceil(N/1024) / 1024) — 1024 for this whole sweep.
 case_grid:
   n:
-    expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
+    expr: "[1000000 * i for i in range(1, 21)]"
   dtype: ["int32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   16 passes × 5 kernel launches per pass = 80 launches per sort.
-#   Bytes: per-pass ~ 2*N read (histogram + scatter) + N write (scatter)
-#   + small prefix traffic → 16 * 3N * dtype_size.
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
   bytes_expr: "16 * 3 * n * dtype_size"

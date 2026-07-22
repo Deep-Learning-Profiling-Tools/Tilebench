@@ -6,8 +6,8 @@ _DEFAULT_CONFIG = {"num_warps": 4}
 _BLOCK_SIZE = 1024
 _RADIX_BITS = 2
 _RADIX = 1 << _RADIX_BITS
-_FIELD_BITS = 16          # per-digit counter field inside one int64
-_FIELD_MASK = (1 << _FIELD_BITS) - 1  # block counts <= BLOCK_SIZE < 2^16
+_FIELD_BITS = 16
+_FIELD_MASK = (1 << _FIELD_BITS) - 1
 
 
 @triton.jit
@@ -22,13 +22,11 @@ def radix_histogram_kernel(input, hist, N, K, shift,
     block = tl.load(input + offset, mask=mask, other=0)
     digit = ((block >> shift) & (RADIX - 1)).to(tl.int32)
 
-    # All RADIX per-digit counters packed into one int64 (FIELD_BITS each),
-    # so the block histogram is a single tl.sum instead of RADIX of them.
+
     packed = tl.where(mask, 1, 0).to(tl.int64) << (digit * FIELD_BITS)
     total = tl.sum(packed)
 
-    # Digit-major layout hist[v * K + pid]: the flat exclusive scan of this
-    # buffer is directly the scatter base for (digit v, block pid).
+
     counts = ((total >> (tl.arange(0, RADIX) * FIELD_BITS)) & FIELD_MASK).to(tl.int32)
     tl.store(hist + tl.arange(0, RADIX) * K + pid, counts)
 
@@ -45,7 +43,7 @@ def radix_sum_chunks_kernel(src, dst, M, BLOCK_SIZE: tl.constexpr):
 
 @triton.jit
 def radix_scan_chunk_sums_kernel(sums, L, BLOCK_BB: tl.constexpr):
-    # Grid of 1 block.
+
     offset = tl.arange(0, BLOCK_BB)
     mask = offset < L
 
@@ -77,8 +75,7 @@ def radix_scatter_kernel(input, output, hist, N, K, shift,
     block = tl.load(input + offset, mask=mask, other=0)
     digit = ((block >> shift) & (RADIX - 1)).to(tl.int32)
 
-    # Packed-counter multi-split: one exclusive cumsum of the packed int64
-    # yields the stable local rank for all RADIX digits at once.
+
     packed = tl.where(mask, 1, 0).to(tl.int64) << (digit * FIELD_BITS)
     excl = tl.cumsum(packed) - packed
     rank = ((excl >> (digit * FIELD_BITS)) & FIELD_MASK).to(tl.int32)
@@ -87,7 +84,6 @@ def radix_scatter_kernel(input, output, hist, N, K, shift,
     tl.store(output + base + rank, block, mask=mask)
 
 
-# Autotune the scatter kernel (dominant cost), matching the previous methodology.
 _radix_scatter_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw)
@@ -101,11 +97,6 @@ _radix_scatter_kernel_autotuned = triton.autotune(
 
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """ceil(32/_RADIX_BITS) passes of _RADIX_BITS-bit LSD radix sort.
-
-    Per pass: per-block digit histogram (digit-major, packed counters) ->
-    hierarchical exclusive scan of the flat histogram -> stable scatter.
-    """
     if N <= 1:
         return input.clone()
 
@@ -141,7 +132,7 @@ def run(input: torch.Tensor, N: int,
                 num_warps=cfg["num_warps"],
             )
 
-        # Ping-pong swap instead of a device copy. Mirrored in impl_cutile.py.
+
         work, output = output, work
 
     return work

@@ -14,8 +14,8 @@ _last_autotune_config: dict = {}
 _BLOCK_SIZE = 1024
 _RADIX_BITS = 2
 _RADIX = 1 << _RADIX_BITS
-_FIELD_BITS = 16          # per-digit counter field inside one int64
-_FIELD_MASK = (1 << _FIELD_BITS) - 1  # block counts <= BLOCK_SIZE < 2^16
+_FIELD_BITS = 16
+_FIELD_MASK = (1 << _FIELD_BITS) - 1
 
 
 @ct.kernel
@@ -30,13 +30,11 @@ def radix_histogram_kernel(input_ptr, hist_ptr, N, K, shift,
                     padding_mode=ct.PaddingMode.ZERO)
     digit = ct.astype((block >> shift) & (RADIX - 1), ct.int32)
 
-    # All RADIX per-digit counters packed into one int64 (FIELD_BITS each),
-    # so the block histogram is a single ct.sum instead of RADIX of them.
+
     packed = ct.astype(mask, ct.int64) << ct.astype(digit * FIELD_BITS, ct.int64)
     total = ct.sum(packed, axis=0)
 
-    # Digit-major layout hist[v * K + bid]: the flat exclusive scan of this
-    # buffer is directly the scatter base for (digit v, block bid).
+
     lanes = ct.arange(RADIX, dtype=ct.int32)
     counts = ct.astype((total >> ct.astype(lanes * FIELD_BITS, ct.int64)) & FIELD_MASK,
                        ct.int32)
@@ -53,7 +51,7 @@ def radix_sum_chunks_kernel(src_ptr, dst_ptr, TILE: ConstInt):
 
 @ct.kernel
 def radix_scan_chunk_sums_kernel(sums_ptr, TILE_BB: ConstInt):
-    # Grid of 1 block.
+
     vals = ct.load(sums_ptr, index=(0,), shape=(TILE_BB,),
                    padding_mode=ct.PaddingMode.ZERO)
     excl = ct.cumsum(vals, axis=0) - vals
@@ -82,41 +80,30 @@ def radix_scatter_kernel(input_ptr, output_ptr, hist_ptr, N, K, shift,
                     padding_mode=ct.PaddingMode.ZERO)
     digit = ct.astype((block >> shift) & (RADIX - 1), ct.int32)
 
-    # Packed-counter multi-split: one exclusive cumsum of the packed int64
-    # yields the stable local rank for all RADIX digits at once.
+
     field = ct.astype(digit * FIELD_BITS, ct.int64)
     packed = ct.astype(mask, ct.int64) << field
     excl = ct.cumsum(packed, axis=0) - packed
     rank = ct.astype((excl >> field) & FIELD_MASK, ct.int32)
 
     base = ct.gather(hist_ptr, digit * K + bid, padding_value=0)
-    # Inactive lanes route to N (OOB, silently dropped by ct.scatter).
+
     dest = ct.where(mask, base + rank, N)
     ct.scatter(output_ptr, dest, block)
 
 
-# Box-load reduction kernels are occupancy-starved under the compiler's
-# default hint (measured 115 us -> 20 us for the histogram at occupancy=8);
-# hinted kernel objects are module-level so CUDA graph capture sees stable
-# kernels across launches.
 _HELPER_OCC = 8
 _hist_kernel = radix_histogram_kernel.replace_hints(occupancy=_HELPER_OCC)
 _sum_chunks_kernel = radix_sum_chunks_kernel.replace_hints(occupancy=_HELPER_OCC)
 _scan_chunk_sums_kernel = radix_scan_chunk_sums_kernel.replace_hints(occupancy=_HELPER_OCC)
 _scan_chunks_kernel = radix_scan_chunks_kernel.replace_hints(occupancy=_HELPER_OCC)
 
-# Autotune the scatter kernel (dominant cost), matching the previous methodology.
+
 _tuner = CutileAutotuner(radix_scatter_kernel)
 
 
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """ceil(32/_RADIX_BITS) passes of _RADIX_BITS-bit LSD radix sort.
-
-    Direct mirror of the Triton pipeline: per-block digit histogram
-    (digit-major, packed counters) -> hierarchical exclusive scan of the
-    flat histogram -> stable scatter.
-    """
     if N <= 1:
         return input.clone()
 
@@ -136,8 +123,7 @@ def run(input: torch.Tensor, N: int,
     grid_chunks = (G2, 1, 1)
     grid_one = (1, 1, 1)
 
-    # Tune the scatter once per N (matching Triton's key=["N"]); the optimal
-    # config doesn't depend on the pass, only on the problem size.
+
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(N,),
@@ -171,7 +157,7 @@ def run(input: torch.Tensor, N: int,
                   (work, output, hist, N, K, shift,
                    _BLOCK_SIZE, _RADIX, _FIELD_BITS, _FIELD_MASK))
 
-        # Ping-pong swap instead of a device copy. Mirrored in impl_triton.py.
+
         work, output = output, work
 
     return work
