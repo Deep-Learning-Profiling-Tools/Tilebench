@@ -7,13 +7,6 @@ _DEFAULT_CONFIG = {"BLOCK_M": 128, "BLOCK_N": 64, "num_warps": 8, "num_stages": 
 
 
 def _tma_set_block_size_hook(nargs):
-    """Autotune pre-hook: point the host-side TMA descriptors at the current
-    config's block shape before each trial launch (pattern from Triton tutorial
-    09-persistent-matmul and bowen/fix/operator-matmul_fp32_fp16_fp8).
-
-    Host-side ``TensorDescriptor`` is the supported TMA API. Building the
-    descriptors in ``run()`` hoists descriptor construction out of every CTA,
-    avoiding per-program-instance overhead."""
     BLOCK_M = nargs["BLOCK_M"]
     BLOCK_N = nargs["BLOCK_N"]
     DIM = nargs["DIM"]
@@ -36,7 +29,7 @@ def fwd_kernel(
     start_m = tl.program_id(0)
     off_bs_head = tl.program_id(1)
 
-    # Batch / head indices for the 4D [BS, HEAD, SEQLEN, DIM] TMA descriptors.
+
     off_b = off_bs_head // HEAD
     off_h = off_bs_head % HEAD
 
@@ -47,14 +40,14 @@ def fwd_kernel(
     out_buffer = tl.zeros([BLOCK_M, DIM], dtype=tl.float32)
     qk_scale = sm_scale * 1.44269504
 
-    # TMA load of the Q tile: [1, 1, BLOCK_M, DIM] -> [BLOCK_M, DIM].
+
     q = desc_q.load([off_b, off_h, start_m * BLOCK_M, 0]).reshape([BLOCK_M, DIM])
     q = (q * qk_scale).to(tl.float16)
     lo = 0
     hi = (start_m + 1) * BLOCK_M if IS_CAUSAL else SEQLEN
     for start_n in range(lo, hi, BLOCK_N):
-        # K tile loaded as [BLOCK_N, DIM] then transposed to [DIM, BLOCK_N] so the
-        # contiguous DIM axis stays innermost for the TMA box.
+
+
         k = desc_k.load([off_b, off_h, start_n, 0]).reshape([BLOCK_N, DIM])
         k = tl.trans(k)
         v = desc_v.load([off_b, off_h, start_n, 0]).reshape([BLOCK_N, DIM])
@@ -98,7 +91,7 @@ _fwd_kernel_autotuned = triton.autotune(
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
 
-    # TMA descriptors require contiguous inputs.
+
     q = q.contiguous()
     k = k.contiguous()
     v = v.contiguous()
@@ -111,7 +104,7 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
     BS, HEAD, SEQLEN, _ = q.shape
 
     if autotune:
-        # Dummy block shape — the autotune pre_hook overwrites it per config.
+
         dummy = [1, 1, 1, 1]
         desc_q = TensorDescriptor.from_tensor(q, dummy)
         desc_k = TensorDescriptor.from_tensor(k, dummy)
