@@ -11,7 +11,7 @@ def sigmoid_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
 
-    # Upcast to fp32 for tl.sigmoid (requires fp32/fp64 input); tl.store auto-casts back.
+
     x = tl.load(x_ptr + offsets, mask=mask).to(tl.float32)
     y = tl.sigmoid(x)
     tl.store(y_ptr + offsets, y, mask=mask)

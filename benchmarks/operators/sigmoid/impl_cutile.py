@@ -18,14 +18,6 @@ _last_autotune_config: dict = {}
 
 @ct.kernel
 def sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
-    """
-    Element-wise sigmoid matching Triton's method:
-      y[i] = 1 / (1 + exp(-x[i]))
-
-    Compute in fp32 for accuracy, cast back to input dtype on store.
-    ct.load with padding_mode=ZERO handles the last partial tile; the
-    corresponding ct.store at OOB positions is silently dropped.
-    """
     bid = ct.bid(0)
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
     x_f32 = ct.astype(x_tile, ct.float32)
@@ -36,13 +28,11 @@ def sigmoid_kernel(x_ptr, y_ptr, TILE: ConstInt):
     ct.store(y_ptr, index=(bid,), tile=y_out)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(sigmoid_kernel)
 
 
 def run(X: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """cuTile element-wise sigmoid mirroring Triton's tl.sigmoid method."""
     output = torch.empty_like(X)
     stream = torch.cuda.current_stream()
 
