@@ -7,18 +7,18 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp32 | `{'rows': 4096, 'cols': 8192}` | `{'num_warps': 16}` | `{'chunk': 1024, 'occupancy': 16}` |
+| fp32 | `{'rows': 4096, 'cols': 8192}` | `{'CHUNK': 1024, 'num_warps': 2}` | `{'chunk': 1024, 'occupancy': 8}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 18.56 us | 43.21 % | 32.16 % | 54.27 % | 35.80 % | 40.59 % | 2.46 Tbyte/s | 512 | 32 register/thread | 0 byte/block | 16.38 Kbyte/block | 4 block / 7 block |
-| fp32 | cutile | 22.78 us | 35.00 % | 26.81 % | 43.12 % | 29.44 % | 56.95 % | 2.05 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
+| fp32 | triton | 21.63 us | 36.66 % | 27.73 % | 47.19 % | 30.95 % | 34.12 % | 2.12 Tbyte/s | 64 | 30 register/thread | 0 byte/block | 2.05 Kbyte/block | 32 block / 33 block |
+| fp32 | cutile | 22.85 us | 34.78 % | 26.75 % | 42.51 % | 29.34 % | 56.60 % | 2.05 Tbyte/s | 128 | 18 register/thread | 0 byte/block | 0 byte/block | 21 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **1.23× faster** (18.6 µs vs 22.8 µs).
+- **fp32**: Triton is **1.06× faster** (21.6 µs vs 22.9 µs).
 
 ## NCU's own bottleneck verdict
 

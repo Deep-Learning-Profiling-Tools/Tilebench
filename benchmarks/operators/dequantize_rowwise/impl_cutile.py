@@ -37,8 +37,10 @@ def dequantize_rowwise_kernel(x, state_x, output, COLS: ConstInt, CHUNK: ConstIn
         x, index=(row, col_tile), shape=(1, CHUNK),
         padding_mode=ct.PaddingMode.ZERO,
     )
+    x_f32 = ct.astype(x_tile, ct.float32)
     scale = ct.load(state_x, index=(row,), shape=(1,))
-    out = x_tile * ct.reshape(scale, (1, 1)) * _INV_127
+    scale_f32 = ct.astype(scale, ct.float32)
+    out = x_f32 * ct.reshape(scale_f32, (1, 1)) * _INV_127
     ct.store(output, index=(row, col_tile), tile=ct.astype(out, ct.float16))
 
 

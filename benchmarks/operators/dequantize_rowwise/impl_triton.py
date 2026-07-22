@@ -1,45 +1,50 @@
 """Triton dequantize_rowwise (matches bitsandbytes' kernel of the same name).
 
-One program per row. BLOCK_SIZE = cols (compile-time constant), so the
-kernel is shape-specialised — recompiled per cols. P2 = next_pow2(cols)
-gives the tl.arange size; cols < P2 is masked off. We restrict cols to
-powers of 2 in case_grid so P2 == BLOCK_SIZE and the mask is a no-op.
+Per-(row, chunk) decomposition — one CTA dequantises one CHUNK of one row,
+grid (rows, cdiv(cols, CHUNK)) — the same CTA granularity, chunk search
+space, and explicit fp32 internal dtype as impl_cutile.py, so the remaining
+backend gap is attributable to lowering rather than schedule. (The previous
+version gave one CTA a whole row, a different decomposition from cuTile.)
 
-Autotune knob: num_warps. BLOCK_SIZE / P2 are dictated by cols and not
-sweepable.
+Autotune knobs: CHUNK and num_warps.
 """
 import torch
 import triton
 import triton.language as tl
 
 
-_DEFAULT_CONFIG = {"num_warps": 4}
+_DEFAULT_CONFIG = {"CHUNK": 512, "num_warps": 4}
+
+_INV_127 = tl.constexpr(1.0 / 127.0)
 
 
 @triton.jit
 def dequantize_rowwise_kernel(
-    x_ptr, state_x, output_ptr,
-    inv_127, n_elements,
-    BLOCK_SIZE: tl.constexpr,
-    P2: tl.constexpr,
+    x_ptr, state_ptr, out_ptr,
+    ROWS, COLS,
+    CHUNK: tl.constexpr,
 ):
-    pid = tl.program_id(axis=0)
-    block_start = pid * BLOCK_SIZE
-    arange = tl.arange(0, P2)
-    offsets = block_start + arange
-    row_mask = arange < BLOCK_SIZE
-    x = tl.load(x_ptr + offsets, mask=row_mask)
-    max_val = tl.load(state_x + pid)
-    output = max_val * x * inv_127
-    tl.store(output_ptr + offsets, output, mask=row_mask)
+    row = tl.program_id(0)
+    chunk = tl.program_id(1)
+
+    cols = chunk * CHUNK + tl.arange(0, CHUNK)
+    mask = cols < COLS
+    offsets = row * COLS + cols
+
+    x = tl.load(x_ptr + offsets, mask=mask, other=0).to(tl.float32)
+    scale = tl.load(state_ptr + row).to(tl.float32)
+
+    out = x * scale * _INV_127
+    tl.store(out_ptr + offsets, out.to(tl.float16), mask=mask)
 
 
 _dequantize_rowwise_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({}, num_warps=nw)
-        for nw in [2, 4, 8, 16]
+        triton.Config({"CHUNK": ch}, num_warps=nw)
+        for ch in [256, 512, 1024]
+        for nw in [2, 4, 8]
     ],
-    key=["BLOCK_SIZE"],
+    key=["ROWS", "COLS"],
 )(dequantize_rowwise_kernel)
 
 
@@ -47,20 +52,19 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     rows, cols = x.shape
     output = torch.empty(rows, cols, device=x.device, dtype=torch.float16)
-    n_elements = output.numel()
-    P2 = triton.next_power_of_2(cols)
-    grid = (rows,)
 
     if autotune:
+        grid = lambda meta: (rows, triton.cdiv(cols, meta["CHUNK"]))
         _dequantize_rowwise_kernel_autotuned[grid](
-            x, state_x, output, 1.0 / 127.0, n_elements,
-            BLOCK_SIZE=cols, P2=P2,
+            x, state_x, output, rows, cols,
         )
     else:
+        cfg = _DEFAULT_CONFIG
+        grid = (rows, triton.cdiv(cols, cfg["CHUNK"]))
         dequantize_rowwise_kernel[grid](
-            x, state_x, output, 1.0 / 127.0, n_elements,
-            BLOCK_SIZE=cols, P2=P2,
-            num_warps=_DEFAULT_CONFIG["num_warps"],
+            x, state_x, output, rows, cols,
+            CHUNK=cfg["CHUNK"],
+            num_warps=cfg["num_warps"],
         )
     return output
 
@@ -69,4 +73,4 @@ def get_last_config() -> dict | None:
     cfg = getattr(_dequantize_rowwise_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
-    return {"num_warps": cfg.num_warps}
+    return {"CHUNK": cfg.kwargs["CHUNK"], "num_warps": cfg.num_warps}
