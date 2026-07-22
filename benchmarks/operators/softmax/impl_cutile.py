@@ -10,9 +10,8 @@ ConstInt = ct.Constant[int]
 _last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(block_size=1024, occupancy=8)
-# Excluded cfgs that hang the cuTile codegen indefinitely on B200 / cuTile 1.3.0
-# (observed via per-cfg 60s probe; see tilebench_run/autotune_timing_rerun/
-# softmax_probe.out). Pattern: occupancy=16 with non-1024 block_size.
+
+
 _HANG_CFGS = {(512, 16), (1024, 16), (2048, 16)}
 _SEARCH_SPACE_BASE = [
     SimpleNamespace(block_size=bs, occupancy=occ)
@@ -30,14 +29,9 @@ def softmax_online_kernel(
     N_TILES: ConstInt,
     BLOCK_SIZE: ConstInt,
 ):
-    """
-    Online softmax matching Triton's two-pass BLOCK_SIZE-tiled algorithm.
-    Each CTA processes one row in N_TILES chunks of BLOCK_SIZE.
-    Pass 1: running max/sum; Pass 2: re-read, normalize, store.
-    """
     row_idx = ct.bid(0)
 
-    # Pass 1: online max + sum
+
     m = ct.full((), -float('inf'), dtype=ct.float32)
     l = ct.full((), 0.0, dtype=ct.float32)
 
@@ -50,11 +44,11 @@ def softmax_online_kernel(
 
         block_max = ct.max(tile)
         m_new = ct.maximum(m, block_max)
-        # exp(-inf - m_new) = 0 for padded lanes, so they don't affect the sum
+
         l = l * ct.exp(m - m_new) + ct.sum(ct.exp(tile - m_new))
         m = m_new
 
-    # Pass 2: normalize and write back. OOB writes are silently dropped.
+
     for i in range(N_TILES):
         tile = ct.load(
             input_tensor, index=(row_idx, i), shape=(1, BLOCK_SIZE),
@@ -67,8 +61,6 @@ def softmax_online_kernel(
         ct.store(output_tensor, index=(row_idx, i), tile=y)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-# See core/cutile_autotune.py for why both layers matter.
 _tuner = CutileAutotuner(softmax_online_kernel)
 
 
@@ -80,7 +72,7 @@ def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
     stream = torch.cuda.current_stream()
 
     if autotune:
-        # n_tiles depends on n_cols, so derive search_space per shape.
+
         search_space = [
             SimpleNamespace(
                 block_size=cfg.block_size,
