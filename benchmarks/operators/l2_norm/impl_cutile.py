@@ -19,15 +19,12 @@ _SEARCH_SPACE = [
     for ts in [256, 512, 1024, 2048]
     for occ in [4, 8, 16]
 ]
-# cuobjdump -res-usage: the per-row fp32 reduction state spills (STACK>0) as
-# soon as occupancy is raised above 4 at these tiles (tile=256/512 @ occ=8 ->
-# STACK=80..112; @ occ=16 -> STACK=8..24), while occ=4 is spill-free
-# (REG=80..83, STACK=0).  Restrict the fp16 search to the spill-free occupancy
-# so no config in the space can raise local_ld.
-_SEARCH_SPACE_FP16 = [
-    SimpleNamespace(tile_size=ts, occupancy=4)
-    for ts in [256, 512]
-]
+# Note: fp16 codegen carries far more register pressure than bf16 for the
+# same kernel (82 vs 30 regs at the sweep-max winner), so fp16 configs above
+# occupancy=4 do spill (STACK>0 per cuobjdump). Measurements show the spills
+# are cheaper than the lost residency though — 512/occ8 with spills runs
+# 0.0297 ms vs 0.0349 ms for the spill-free 512/occ4 winner — so fp16 shares
+# the full search space instead of a spill-free-only subset.
 
 
 @ct.kernel
@@ -81,7 +78,7 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(batch_M, K, str(x.dtype)),
-            search_space=(_SEARCH_SPACE_FP16 if x.dtype == torch.float16 else _SEARCH_SPACE),
+            search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,
             args_fn=lambda cfg: (x_2d, out_2d, eps, K, cfg.tile_size),
