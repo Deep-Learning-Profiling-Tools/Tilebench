@@ -23,15 +23,6 @@ def argmax_rowwise_kernel(
     N_TILES: ConstInt,
     BLOCK_N: ConstInt,
 ):
-    """
-    Chunked row-wise argmax matching Triton's BLOCK_N-tiled scan.
-    Each CTA processes one row in N_TILES chunks of BLOCK_N via
-    tile-aligned (1, BLOCK_N) box loads — the row chunks are contiguous,
-    so no per-element gather index is needed; NEG_INF padding covers the
-    tail beyond N and never wins the max.
-    Per chunk: ct.max + ct.argmax → scalar, then sequential comparison
-    (mirrors Triton's tl.max / tl.argmax + scalar best_val / best_idx).
-    """
     row = ct.bid(0)
 
     best_val = ct.full((), -float("inf"), dtype=ct.float32)
@@ -53,7 +44,6 @@ def argmax_rowwise_kernel(
     ct.store(output_flat, index=(row,), tile=ct.reshape(best_idx, (1,)))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(argmax_rowwise_kernel)
 
 
@@ -72,7 +62,7 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     stream = torch.cuda.current_stream()
 
     if autotune:
-        # n_tiles depends on N, so derive search_space per shape.
+
         search_space = [
             SimpleNamespace(block_n=cfg.block_n,
                             n_tiles=(N + cfg.block_n - 1) // cfg.block_n,

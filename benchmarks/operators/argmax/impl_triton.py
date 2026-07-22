@@ -7,12 +7,6 @@ _DEFAULT_CONFIG = {"BLOCK_N": 256, "num_warps": 4, "num_stages": 2}
 
 @triton.jit
 def argmax_rowwise_kernel(X, Out, N, BLOCK_N: tl.constexpr):
-    """
-    X:   pointer to input, logically [M, N]
-    Out: pointer to output, shape [M], int64
-    N:   number of columns (reduction dimension)
-    Each program handles one row.
-    """
     row = tl.program_id(0)
     offs = tl.arange(0, BLOCK_N)
     neg_inf = float("-inf")
