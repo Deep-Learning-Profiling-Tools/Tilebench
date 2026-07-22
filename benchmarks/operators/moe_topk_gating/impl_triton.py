@@ -15,16 +15,6 @@ def moe_topk_gating_kernel(
     BLOCK_SIZE_E: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
 ):
-    """
-    Row-wise iterative top-K + softmax.
-    Grid: (M,) — one program per row.
-    Algorithm (unchanged from the original LeetGPU kernel):
-      1. Load full row of logits with -inf padding for OOB lanes.
-      2. K iterations: find (max, argmax) of current logits tile, write them
-         into the top-K buffer at position i via tl.where(offsets_k == i, ...),
-         then clear the chosen position in logits with -inf.
-      3. Numerically stable softmax on top-K values.
-    """
     pid = tl.program_id(0)
     offsets_le = tl.arange(0, BLOCK_SIZE_E)
     mask_le = offsets_le < E
@@ -54,7 +44,6 @@ def moe_topk_gating_kernel(
     tl.store(topk_idx_ptr + pid * K + offsets_k, topk_idxs, mask=mask_k)
 
 
-# Only num_warps / num_stages are tunable; BLOCK_SIZE_E and BLOCK_SIZE_K are fixed by E, K.
 _moe_topk_gating_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw)
