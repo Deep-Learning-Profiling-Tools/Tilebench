@@ -19,19 +19,22 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def interleave_kernel(a_ptr, b_ptr, out_ptr_2d, TILE: ConstInt):
-    """Direct interleave without cat/transpose materialization.
+def interleave_kernel(a_ptr, b_ptr, out_ptr, TILE: ConstInt):
+    """Merge in-tile, then one contiguous store — the ct analogue of Triton's
+    tl.interleave.
 
-    Output is viewed as (N, 2).  Each CTA writes one A tile to column 0 and
-    one B tile to column 1.  This preserves the final flat layout
-    [a0, b0, a1, b1, ...] while avoiding the old (2,TILE)->transpose->reshape
-    intermediate that spilled for fp32 at large TILE.
+    cat((TILE,1),(TILE,1), axis=1) -> (TILE,2), row-major reshape to
+    (2*TILE,) yields [a0, b0, a1, b1, ...]; the single contiguous store
+    vectorises (STG.E.128) where the previous per-column strided stores
+    degraded to per-element STG.E.U8 at int8. Unlike the old
+    (2,TILE)->transpose->reshape form, the axis=1 cat has no transpose and
+    does not spill at fp32 (probe: 52 regs, no STL/LDL).
     """
     bid = ct.bid(0)
     a_tile = ct.load(a_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
     b_tile = ct.load(b_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
-    ct.store(out_ptr_2d, index=(bid, 0), tile=ct.reshape(a_tile, (TILE, 1)))
-    ct.store(out_ptr_2d, index=(bid, 1), tile=ct.reshape(b_tile, (TILE, 1)))
+    merged = ct.cat((ct.reshape(a_tile, (TILE, 1)), ct.reshape(b_tile, (TILE, 1))), axis=1)
+    ct.store(out_ptr, index=(bid,), tile=ct.reshape(merged, (2 * TILE,)))
 
 
 # Module-level: caches replace_hints per-occupancy and autotune-best per shape.
@@ -41,7 +44,6 @@ _tuner = CutileAutotuner(interleave_kernel)
 def run(A: torch.Tensor, B: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     output = torch.empty(2 * N, dtype=A.dtype, device=A.device)
-    output_2d = output.view(N, 2)
     stream = torch.cuda.current_stream()
 
     if autotune:
@@ -50,7 +52,7 @@ def run(A: torch.Tensor, B: torch.Tensor, N: int,
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((N + cfg.tile - 1) // cfg.tile, 1, 1),
-            args_fn=lambda cfg: (A, B, output_2d, cfg.tile),
+            args_fn=lambda cfg: (A, B, output, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
@@ -63,7 +65,7 @@ def run(A: torch.Tensor, B: torch.Tensor, N: int,
 
     grid = ((N + cfg.tile - 1) // cfg.tile, 1, 1)
     kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(stream, grid, kernel, (A, B, output_2d, cfg.tile))
+    ct.launch(stream, grid, kernel, (A, B, output, cfg.tile))
 
     return output
 
