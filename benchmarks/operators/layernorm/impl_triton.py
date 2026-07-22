@@ -13,20 +13,12 @@ def layernorm_kernel(
     eps,
     BLOCK_N_SIZE: tl.constexpr,
 ):
-    """One CTA normalises one row using two-pass LayerNorm.
-
-    Pass 1 – single tiled scan accumulates sum(x) and sum(x²) simultaneously,
-             then derives mean and rstd.
-    Pass 2 – tiled scan: y = (x - mean) * rstd * weight + bias.
-
-    All accumulators use float32 for numerical stability.
-    """
     pid = tl.program_id(0)
     row_ptr     = x_ptr   + pid * stride_row
     out_row_ptr = out_ptr + pid * stride_row
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
-    # --- Pass 1: compute mean and variance ---
+
     sum_x  = tl.zeros((BLOCK_N_SIZE,), tl.float32)
     sum_x2 = tl.zeros((BLOCK_N_SIZE,), tl.float32)
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
@@ -37,11 +29,11 @@ def layernorm_kernel(
         sum_x2 += x * x
 
     mean_val = tl.sum(sum_x,  axis=0) / N_SIZE
-    # var = E[x^2] - E[x]^2; OOB elements loaded as 0 contribute 0 to both sums.
+
     var_val  = tl.sum(sum_x2, axis=0) / N_SIZE - mean_val * mean_val
     rstd     = tl.math.rsqrt(var_val + eps)
 
-    # --- Pass 2: normalize and apply weight / bias ---
+
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE

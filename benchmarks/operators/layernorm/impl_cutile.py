@@ -20,11 +20,10 @@ _SEARCH_SPACE = [
 
 @ct.kernel
 def layernorm_kernel(x, weight, bias, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
-    """One CTA normalises one row using tiled two-pass LayerNorm."""
     row       = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
-    # Pass 1: accumulate sum(x) and sum(x²) in a single scan.
+
     _sum_x  = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     _sum_x2 = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
@@ -41,7 +40,7 @@ def layernorm_kernel(x, weight, bias, out, eps, N: ConstInt, TILE_SIZE: ConstInt
     var  = ct.sum(_sum_x2, axis=1, keepdims=False) / N - mean * mean
     rstd = ct.rsqrt(var + eps)
 
-    # Pass 2: normalize, scale, and shift.
+
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
@@ -65,7 +64,6 @@ def layernorm_kernel(x, weight, bias, out, eps, N: ConstInt, TILE_SIZE: ConstInt
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(layernorm_kernel)
 
 
