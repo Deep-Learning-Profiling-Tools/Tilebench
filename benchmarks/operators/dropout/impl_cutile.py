@@ -27,7 +27,6 @@ def dropout_kernel(x, x_keep, output, scale, TILE: ConstInt):
     ct.store(output, index=(bid,), tile=out_tile)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(dropout_kernel)
 
 
