@@ -4,8 +4,7 @@ import triton.language as tl
 
 _DEFAULT_CONFIG = {"ROWS": 16, "num_warps": 8}
 
-# Rows consumed per load inside the row loops. (STEP, C) fp32 sub-tiles keep
-# register pressure flat across dtypes and ROWS choices.
+
 _STEP = 8
 _K1_BLOCK_N = 64
 
@@ -20,10 +19,6 @@ def compute_block_sums_kernel(
     BLOCK_N: tl.constexpr,
     STEP: tl.constexpr,
 ):
-    """Row-contiguous partial sums: each CTA owns BLOCK_N full rows and
-    accumulates per-channel sum / sum-of-squares over them. Replaces the
-    per-(block, channel) column-strided version (DRAM 6-13%, one sector per
-    element) with (STEP, C) row-major loads."""
     block_id = tl.program_id(0)
     cols = tl.arange(0, C)
 
@@ -87,9 +82,6 @@ def apply_batch_norm_kernel(
     ROWS: tl.constexpr,
     STEP: tl.constexpr,
 ):
-    """2D apply: the four per-channel parameter rows are loaded once per CTA
-    and broadcast across its ROWS rows — replaces the flat kernel's four
-    per-element `% C` indexed loads."""
     block_id = tl.program_id(0)
     cols = tl.arange(0, C)
 
@@ -110,8 +102,6 @@ def apply_batch_norm_kernel(
         tl.store(output_ptr + ptrs, y, mask=mask[:, None])
 
 
-# Only the apply kernel is autotuned (dominates total work for large N*C).
-# Block sums and mean/invstd kernels use fixed defaults.
 _apply_batch_norm_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"ROWS": rows}, num_warps=nw)
@@ -133,20 +123,20 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     mean = torch.empty((C,), device=input.device, dtype=torch.float32)
     inv_std = torch.empty((C,), device=input.device, dtype=torch.float32)
 
-    # Kernel 1: row-contiguous per-block partial sums.
+
     compute_block_sums_kernel[(NUM_BLOCKS,)](
         input, block_sum, block_sq_sum, N, C=C, BLOCK_N=_K1_BLOCK_N, STEP=_STEP,
         num_warps=4,
     )
 
-    # Kernel 2: finish reduction per channel, compute mean/inv_std.
+
     BLOCK_B = triton.next_power_of_2(NUM_BLOCKS)
     compute_mean_invstd_kernel[(C,)](
         block_sum, block_sq_sum, mean, inv_std,
         N, C, NUM_BLOCKS, BLOCK_B=BLOCK_B, eps=eps,
     )
 
-    # Kernel 3: 2D apply over row blocks.
+
     if autotune:
         grid = lambda meta: (triton.cdiv(N, meta["ROWS"]),)
         _apply_batch_norm_kernel_autotuned[grid](

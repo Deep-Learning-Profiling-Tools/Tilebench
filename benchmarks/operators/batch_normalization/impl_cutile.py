@@ -7,9 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-# K3 (apply) is the only autotuned stage. `rows` is rows-per-CTA of the 2D
-# apply; one shared space for all dtypes (register pressure is flat because
-# both row loops read fixed (STEP, C) sub-tiles).
+
 _DEFAULT_CONFIG = SimpleNamespace(rows=16, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(rows=r, occupancy=occ)
@@ -18,7 +16,7 @@ _SEARCH_SPACE = [
 ]
 _last_autotune_config: dict = {}
 
-# Rows consumed per load inside the row loops — mirror of impl_triton.py.
+
 _STEP = 8
 _K1_BLOCK_N = 64
 
@@ -37,10 +35,6 @@ def compute_block_sums_kernel(
     BLOCK_N: ConstInt,
     STEP: ConstInt,
 ):
-    """Row-contiguous partial sums: each CTA owns BLOCK_N full rows and
-    accumulates per-channel sum / sum-of-squares over them. Replaces the
-    per-(block, channel) column-strided gather version (DRAM 6-13%, one
-    sector per element) with (STEP, C) row-major box loads."""
     block_id = ct.bid(0)
 
     acc_sum = ct.zeros((1, C), dtype=ct.float32)
@@ -72,7 +66,6 @@ def compute_mean_invstd_kernel(
     BLOCK_B: ConstInt,
     eps,
 ):
-    """Finish per-channel reduction and emit mean / inv_std — mirror of Triton kernel 2."""
     channel_id = ct.bid(0)
 
     block_offsets = ct.arange(BLOCK_B, dtype=ct.int32)
@@ -83,8 +76,8 @@ def compute_mean_invstd_kernel(
     sums = ct.gather(block_sum_ptr, idx_safe, padding_value=0.0)
     sq_sums = ct.gather(block_sq_sum_ptr, idx_safe, padding_value=0.0)
 
-    total_sum = ct.sum(sums, axis=0, keepdims=True)        # (1,)
-    total_sq_sum = ct.sum(sq_sums, axis=0, keepdims=True)  # (1,)
+    total_sum = ct.sum(sums, axis=0, keepdims=True)
+    total_sq_sum = ct.sum(sq_sums, axis=0, keepdims=True)
 
     mean = total_sum / N
     var = total_sq_sum / N - mean * mean
@@ -108,9 +101,6 @@ def apply_batch_norm_kernel(
     ROWS: ConstInt,
     STEP: ConstInt,
 ):
-    """2D apply: the four per-channel parameter rows are loaded once per CTA
-    and broadcast across its ROWS rows — replaces the flat kernel's four
-    per-element ct.gather calls (which lower to uncoalesced scalar loads)."""
     block_id = ct.bid(0)
 
     mean = ct.reshape(ct.load(mean_ptr, index=(0,), shape=(C,)), (1, C))
@@ -130,21 +120,12 @@ def apply_batch_norm_kernel(
         ct.store(output_2d, index=(tile_row, 0), tile=ct.astype(y, output_2d.dtype))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-# Mirrors Triton's @triton.autotune(key=["N"]) — kernel 3 is the dominant
-# cost; kernels 1 and 2 use fixed defaults on both sides.
 _tuner = CutileAutotuner(apply_batch_norm_kernel)
 
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         N: int, C: int, eps: float,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """
-    cuTile batch normalization — direct mirror of the 3-kernel Triton pipeline:
-      kernel 1: row-contiguous per-block partial sums  (grid: cdiv(N, BLOCK_N))
-      kernel 2: finish reduction -> mean / inv_std      (grid: C)
-      kernel 3: 2D apply over row blocks                (grid: cdiv(N, ROWS))
-    """
 
     output = torch.empty_like(input)
     NUM_BLOCKS = (N + _K1_BLOCK_N - 1) // _K1_BLOCK_N
@@ -161,17 +142,17 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
 
     stream = torch.cuda.current_stream()
 
-    # Kernel 1 — fixed config (small, not autotuned).
+
     ct.launch(stream, (NUM_BLOCKS, 1, 1), compute_block_sums_kernel,
               (input_2d, block_sum, block_sq_sum, N, C, _K1_BLOCK_N, _STEP))
 
-    # Kernel 2 — fixed config.
+
     BLOCK_B = _next_pow2(NUM_BLOCKS)
     ct.launch(stream, (C, 1, 1), compute_mean_invstd_kernel,
               (block_sum_flat, block_sq_sum_flat, mean, inv_std,
                N, C, NUM_BLOCKS, BLOCK_B, eps))
 
-    # Kernel 3 — autotuned (dominant cost for large N*C).
+
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(N, C, str(input.dtype)),
