@@ -8,7 +8,10 @@ def run(logits: torch.Tensor, M: int, E: int, k: int, **kwargs):
     behavior (first-occurrence argmax) so that fp16 / bf16 runs verify bit-exact
     against the GPU kernels even when input quantization creates tied values.
     """
-    logits_f32 = logits.float().clone()
+    # One forced copy serves both the fp32 upcast (matches the DSL kernels' fp32
+    # compare path) and the mutation guard for the scatter_ below — the old
+    # .float().clone() double-copied fp16/bf16 inputs.
+    logits_f32 = logits.to(torch.float32, copy=True)
     topk_vals = torch.empty(M, k, dtype=torch.float32, device=logits.device)
     topk_idxs = torch.empty(M, k, dtype=torch.int32, device=logits.device)
 
