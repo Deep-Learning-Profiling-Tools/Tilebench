@@ -1,8 +1,3 @@
-"""cuTile fp32 -> fp16 quantization (elementwise cast).
-
-1D grid; each CTA loads a TILE of fp32 and stores it as fp16. Pure
-bandwidth-bound, so the autotune sweep is over (TILE, occupancy) only.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -14,9 +9,7 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-# 1:1 mirrors impl_triton.py: tile <-> BLOCK_SIZE, occupancy <-> num_warps
-# (nw * occ ~= 64 on B200, so Triton's nw in [4, 8, 16] pairs with
-# cuTile's occ in [16, 8, 4]).
+
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
