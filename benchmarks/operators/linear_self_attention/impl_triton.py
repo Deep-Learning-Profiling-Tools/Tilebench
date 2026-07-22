@@ -1,32 +1,9 @@
-"""Blocked-GEMM Triton linear self-attention with host-side TMA descriptors.
-
-The two matrix products follow the TMA-descriptor pattern from
-``bowen/fix/operator-batched_matmul``: A/B/C tiles are loaded and stored through
-host-side ``TensorDescriptor`` objects (the tutorial-09 pattern), never via plain
-pointer arithmetic. On sm100/sm120 the TMA path is what makes Triton lower
-``tl.dot`` to the newest ``tcgen05`` MMA -- the plain pointer / ``cp.async``
-version lowers a TF32 dot to Ampere-era ``HMMA.1688.F32.TF32`` and starves the
-tensor cores, which is exactly why the earlier pointer-based rewrite showed no
-TMA / no tcgen05 on the Triton side while Torch used both.
-
-Both GEMMs consume the operand whose contraction axis would otherwise be the
-outer box dim in a transposed layout, so every TMA box has the contraction (K)
-axis innermost (the ``<=128 B`` swizzle fast path), then ``tl.dot(a, b.T, ...)``
-restores the math -- the same trick batched_matmul uses for B.
-
-Algorithm (fp32 in/out, TF32 tensor-core matmul, fp32 accumulation):
-
-  S = phi(K)^T @ V                         # (D, D), contraction over M
-  Z = sum_m phi(K[m, :])                   # (D,)
-  O = (phi(Q) @ S) / (phi(Q) @ Z + eps)    # (M, D), contraction over D
-"""
 import torch
 import triton
 import triton.language as tl
 from triton.tools.tensor_descriptor import TensorDescriptor
 
 
-# Stage-1 (S = phi(K)^T @ V) tiles over the (D, D) output with contraction M.
 _DEFAULT_KV_CONFIG = {
     "BLOCK_M": 64,
     "BLOCK_N": 64,
@@ -35,7 +12,7 @@ _DEFAULT_KV_CONFIG = {
     "num_stages": 3,
 }
 
-# Stage-3 (O = phi(Q) @ S) tiles over the (M, D) output with contraction D.
+
 _DEFAULT_OUT_CONFIG = {
     "BLOCK_M": 64,
     "BLOCK_N": 64,
@@ -44,8 +21,7 @@ _DEFAULT_OUT_CONFIG = {
     "num_stages": 3,
 }
 
-# Shared GEMM tile-shape search space (matches the cuTile side). num_warps and
-# num_stages are the Triton-specific scheduling knobs.
+
 _TILE_SHAPES = [
     (bm, bn, bk)
     for bm in [32, 64, 128]
@@ -56,7 +32,7 @@ _TILE_SHAPES = [
 
 @triton.jit
 def _phi(x):
-    # ELU(x) + 1: x > 0 -> x + 1, otherwise exp(x).
+
     return tl.where(x > 0, x + 1.0, tl.exp(x))
 
 
@@ -67,18 +43,12 @@ def phi_kernel(Y, X, n_elements, BLOCK: tl.constexpr):
     tl.store(Y + offs, _phi(x), mask=offs < n_elements)
 
 
-# --------------------------------------------------------------------------- #
-# Stage 1: S = phi(K)^T @ V                                                    #
-#   PhiK, V are (M, D) row-major.  S[d0, d1] = sum_m PhiK[m, d0] * V[m, d1].   #
-#   Contraction is over M, so both operands are viewed as (D, M) via a         #
-#   cached transpose, giving the M (=K) axis innermost for the TMA box.        #
-# --------------------------------------------------------------------------- #
 def _kv_set_block_size_hook(nargs):
     bm = nargs["BLOCK_M"]
     bn = nargs["BLOCK_N"]
     bk = nargs["BLOCK_K"]
-    nargs["kt_desc"].block_shape = [bm, bk]   # PhiK^T view (D, M)
-    nargs["vt_desc"].block_shape = [bn, bk]   # V^T view   (D, M)
+    nargs["kt_desc"].block_shape = [bm, bk]
+    nargs["vt_desc"].block_shape = [bn, bk]
     nargs["s_desc"].block_shape = [bm, bn]
 
 
@@ -90,7 +60,6 @@ def kv_gemm_kernel(
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
-    """One [BLOCK_M, BLOCK_N] tile of S = phi(K)^T @ V (contraction over M)."""
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
 
@@ -99,8 +68,8 @@ def kv_gemm_kernel(
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     for k in tl.range(tl.cdiv(M, BLOCK_K)):
-        # kt: (BLOCK_M, BLOCK_K) rows of phi(K)^T ; vt: (BLOCK_N, BLOCK_K) rows
-        # of V^T.  Both boxes have the M (contraction) axis innermost.
+
+
         kt = kt_desc.load([offs_dm, k * BLOCK_K])
         vt = vt_desc.load([offs_dn, k * BLOCK_K])
         acc = tl.dot(kt, vt.T, acc, input_precision="tf32")
@@ -108,9 +77,6 @@ def kv_gemm_kernel(
     s_desc.store([offs_dm, offs_dn], acc.to(s_desc.dtype))
 
 
-# --------------------------------------------------------------------------- #
-# Stage 2: Z = sum_m phi(K[m, :])  (small (D,) reduction; plain load is fine). #
-# --------------------------------------------------------------------------- #
 @triton.jit
 def z_kernel(
     Z, PhiK,
@@ -138,19 +104,12 @@ def z_kernel(
     tl.store(Z + offs_d, acc, mask=offs_d < D)
 
 
-# --------------------------------------------------------------------------- #
-# Stage 3: O = (phi(Q) @ S) / (phi(Q) @ Z + eps)                              #
-#   PhiQ (M, D), S (D, D).  numer[m, n] = sum_d PhiQ[m, d] * S[d, n].          #
-#   Contraction is over D.  S is consumed transposed (N, D) so both boxes      #
-#   have the D (=K) axis innermost.  The denominator phi(Q) @ Z is accumulated #
-#   from the same PhiQ tiles.                                                  #
-# --------------------------------------------------------------------------- #
 def _out_set_block_size_hook(nargs):
     bm = nargs["BLOCK_M"]
     bn = nargs["BLOCK_N"]
     bk = nargs["BLOCK_K"]
     nargs["q_desc"].block_shape = [bm, bk]
-    nargs["st_desc"].block_shape = [bn, bk]   # S^T view (D, D)
+    nargs["st_desc"].block_shape = [bn, bk]
     nargs["o_desc"].block_shape = [bm, bn]
 
 
@@ -162,7 +121,6 @@ def out_gemm_kernel(
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
-    """One [BLOCK_M, BLOCK_N] output tile (contraction over D)."""
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
 
@@ -173,8 +131,8 @@ def out_gemm_kernel(
     denom = tl.zeros((BLOCK_M,), dtype=tl.float32)
 
     for k in tl.range(tl.cdiv(D, BLOCK_K)):
-        q = q_desc.load([offs_m, k * BLOCK_K])        # (BLOCK_M, BLOCK_K)
-        st = st_desc.load([offs_n, k * BLOCK_K])      # (BLOCK_N, BLOCK_K) of S^T
+        q = q_desc.load([offs_m, k * BLOCK_K])
+        st = st_desc.load([offs_n, k * BLOCK_K])
         numer = tl.dot(q, st.T, numer, input_precision="tf32")
 
         offs_k = k * BLOCK_K + tl.arange(0, BLOCK_K)
@@ -261,10 +219,9 @@ def run(
     phi_kernel[phi_grid](PhiQ, Q, n_elements, BLOCK=1024, num_warps=8)
     phi_kernel[phi_grid](PhiK, K, n_elements, BLOCK=1024, num_warps=8)
 
-    # Transposed operands so each TMA box has the contraction axis innermost
-    # (the swizzle fast path), mirroring batched_matmul's transposed B.
-    PhiK_t = PhiK.t().contiguous()   # (D, M)
-    V_t = V.t().contiguous()         # (D, M)
+
+    PhiK_t = PhiK.t().contiguous()
+    V_t = V.t().contiguous()
 
     if autotune:
         dummy = [1, 1]
@@ -279,7 +236,7 @@ def run(
 
         _launch_z(Z, PhiK, M, D)
 
-        S_t = S.t().contiguous()     # (D, D) transpose of S
+        S_t = S.t().contiguous()
         q_desc = TensorDescriptor.from_tensor(PhiQ, dummy)
         st_desc = TensorDescriptor.from_tensor(S_t, dummy)
         o_desc = TensorDescriptor.from_tensor(O, dummy)

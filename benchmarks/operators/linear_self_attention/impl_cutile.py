@@ -1,11 +1,3 @@
-"""Blocked-GEMM cuTile implementation of linear self-attention.
-
-Stage 1 and Stage 3 mirror the Triton implementation: each CTA owns an output
-tile and uses ``ct.mma`` across the reduction dimension.  The old scalar CTA
-decomposition was intentionally removed because it repeatedly reread columns of
-K/V and rows of S.  Tile shapes match Triton's search space exactly.
-"""
-
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -32,8 +24,7 @@ _DEFAULT_OUT_CONFIG = SimpleNamespace(
     occupancy=4,
 )
 
-# Same GEMM tile-shape search space as Triton.  occupancy is the cuTile-specific
-# scheduling control corresponding to Triton's independent num_warps search.
+
 _GEMM_SEARCH_SPACE = [
     SimpleNamespace(block_m=bm, block_n=bn, block_k=bk, occupancy=occ)
     for bm in [16, 32]
@@ -68,7 +59,6 @@ def kv_gemm_kernel(
     BLOCK_N: ConstInt,
     BLOCK_K: ConstInt,
 ):
-    """Compute one [BLOCK_M, BLOCK_N] tile of S = phi(K)^T @ V."""
     pid_m = ct.bid(0)
     pid_n = ct.bid(1)
 
@@ -107,7 +97,6 @@ def z_kernel(
     BLOCK_M: ConstInt,
     BLOCK_D: ConstInt,
 ):
-    """Compute one BLOCK_D slice of Z = sum_m phi(K[m, :])."""
     pid_d = ct.bid(0)
     acc = ct.zeros((BLOCK_D,), dtype=ct.float32)
     num_m_tiles = ct.cdiv(M, BLOCK_M)
@@ -135,7 +124,6 @@ def out_gemm_kernel(
     BLOCK_N: ConstInt,
     BLOCK_K: ConstInt,
 ):
-    """Compute an output tile with blocked phi(Q) @ S and tiled phi(Q) @ Z."""
     pid_m = ct.bid(0)
     pid_n = ct.bid(1)
 
@@ -285,8 +273,8 @@ def run(
             "out_occupancy": out_cfg.occupancy,
         })
     else:
-        # `block_size` is a generic framework argument, not an operator
-        # parameter.  Keep the backend-selected GEMM tile.
+
+
         out_cfg = SimpleNamespace(**vars(_DEFAULT_OUT_CONFIG))
 
     out_kernel = _out_tuner.kernel_with_hints(occupancy=out_cfg.occupancy)
