@@ -1,9 +1,3 @@
-"""Triton fused element-wise activation: out = silu(x * gate + bias).
-
-silu(z) = z * sigmoid(z). 1D grid; each program handles BLOCK_SIZE
-elements. Pure bandwidth-bound (3 reads + 1 write per element +
-sigmoid via SFU).
-"""
 import torch
 import triton
 import triton.language as tl
@@ -24,7 +18,7 @@ def fused_activation_kernel(
     gate = tl.load(gate_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
     bias = tl.load(bias_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
     z = x * gate + bias
-    out = z * tl.sigmoid(z)  # SiLU
+    out = z * tl.sigmoid(z)
     tl.store(out_ptr + offsets, out, mask=mask)
 
 
