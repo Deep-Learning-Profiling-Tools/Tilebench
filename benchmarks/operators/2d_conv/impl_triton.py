@@ -23,62 +23,55 @@ def conv2d_kernel(
     groups,
     out_channels_per_group,
     in_channels_per_group,
-    # strides
+
     stride_input_b, stride_input_c, stride_input_h, stride_input_w,
     stride_weight_oc, stride_weight_ic, stride_weight_kh, stride_weight_kw,
     stride_output_b, stride_output_c, stride_output_h, stride_output_w,
-    # tile sizes
+
     BLOCK_SIZE_BATCH_HEIGHT_WIDTH: tl.constexpr,
     BLOCK_SIZE_IN_FEAT: tl.constexpr,
     BLOCK_SIZE_OUT_FEAT: tl.constexpr,
 ):
-    """
-    Implicit GEMM Conv2d kernel.
-    Grid: (cdiv(batch*out_H*out_W, BLOCK_SIZE_BATCH_HEIGHT_WIDTH),
-           cdiv(out_channels_per_group, BLOCK_SIZE_OUT_FEAT),
-           groups)
-    Each block computes a (BLOCK_SIZE_BATCH_HEIGHT_WIDTH x BLOCK_SIZE_OUT_FEAT) output tile.
-    """
     pid_bhw   = tl.program_id(0)
     pid_oc    = tl.program_id(1)
     group_id  = tl.program_id(2)
 
-    # Tile offsets into (batch*out_H*out_W) and output-channels-per-group
+
     bhw_offsets = pid_bhw * BLOCK_SIZE_BATCH_HEIGHT_WIDTH + tl.arange(0, BLOCK_SIZE_BATCH_HEIGHT_WIDTH)
     oc_offsets  = pid_oc  * BLOCK_SIZE_OUT_FEAT            + tl.arange(0, BLOCK_SIZE_OUT_FEAT)
 
-    # Decode bhw → (b, oh, ow)
+
     b_idx  = bhw_offsets // (out_H * out_W)
     hw_idx = bhw_offsets %  (out_H * out_W)
     oh_idx = hw_idx // out_W
     ow_idx = hw_idx %  out_W
 
-    # Absolute output channel
+
     oc_abs = group_id * out_channels_per_group + oc_offsets
 
-    # Input channel base for this group
+
     ic_base = group_id * in_channels_per_group
 
     acc = tl.zeros((BLOCK_SIZE_BATCH_HEIGHT_WIDTH, BLOCK_SIZE_OUT_FEAT), dtype=tl.float32)
 
-    # Iterate over (in_channels_per_group * kH * kW) in blocks of BLOCK_SIZE_IN_FEAT
+
     total_in_feat = in_channels_per_group * kH * kW
     for in_feat_start in range(0, tl.cdiv(total_in_feat, BLOCK_SIZE_IN_FEAT)):
         in_feat_offsets = in_feat_start * BLOCK_SIZE_IN_FEAT + tl.arange(0, BLOCK_SIZE_IN_FEAT)
 
-        # Decode in_feat → (ic, kh, kw)
+
         ic_local = in_feat_offsets // (kH * kW)
         kh_idx   = (in_feat_offsets % (kH * kW)) // kW
         kw_idx   = in_feat_offsets % kW
 
-        # Absolute input channel
+
         ic_abs = ic_base + ic_local
 
-        # Input spatial positions
+
         ih_idx = oh_idx[:, None] * stride_h + kh_idx[None, :] - pad_h
         iw_idx = ow_idx[:, None] * stride_w + kw_idx[None, :] - pad_w
 
-        # Masks
+
         in_feat_mask = in_feat_offsets < total_in_feat
         bhw_mask     = bhw_offsets < batch * out_H * out_W
         valid_h      = (ih_idx >= 0) & (ih_idx < in_H)
@@ -86,7 +79,7 @@ def conv2d_kernel(
         valid_b      = b_idx[:, None] < batch
         in_mask      = bhw_mask[:, None] & valid_h & valid_w & valid_b & in_feat_mask[None, :]
 
-        # Load input tile: (BLOCK_SIZE_BATCH_HEIGHT_WIDTH, BLOCK_SIZE_IN_FEAT)
+
         in_ptrs = (
             input_ptr
             + b_idx[:, None] * stride_input_b
@@ -96,8 +89,7 @@ def conv2d_kernel(
         )
         in_tile = tl.load(in_ptrs, mask=in_mask, other=0.0)
 
-        # Load weight tile: (BLOCK_SIZE_IN_FEAT, BLOCK_SIZE_OUT_FEAT)
-        # weight layout: (out_channels, in_channels_per_group, kH, kW)
+
         oc_mask    = oc_abs < out_channels
         weight_mask = in_feat_mask[:, None] & oc_mask[None, :]
         w_ptrs = (
@@ -109,12 +101,10 @@ def conv2d_kernel(
         )
         w_tile = tl.load(w_ptrs, mask=weight_mask, other=0.0)
 
-        # input_precision="tf32" enables TF32 Tensor Cores for fp32 inputs;
-        # no-op for fp16, which already uses HMMA with fp32 accumulation.
-        # Matches torch (cuDNN TF32) and impl_cutile's tfloat32 cast.
+
         acc += tl.dot(in_tile, w_tile, input_precision="tf32")
 
-    # Store output tile
+
     out_mask = (bhw_offsets < batch * out_H * out_W)[:, None] & (oc_abs < out_channels)[None, :]
     out_ptrs = (
         output_ptr
@@ -162,11 +152,6 @@ def run(
     autotune: bool = False,
     **kwargs,
 ):
-    """
-    Triton Conv2d forward — implicit GEMM.
-    input:  (batch, in_channels, H, W)
-    weight: (out_channels, in_channels // groups, kH, kW)
-    """
     assert input.is_contiguous() and weight.is_contiguous()
     batch, in_channels, in_H, in_W = input.shape
     out_channels, in_channels_per_group, kH, kW = weight.shape
