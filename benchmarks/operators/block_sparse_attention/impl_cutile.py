@@ -25,7 +25,6 @@ def block_sparse_attention_kernel(
     BLOCK_M: ConstInt, BLOCK_N: ConstInt,
     BLOCK_D: ConstInt, NUM_D_BLOCKS: ConstInt,
 ):
-    """CSR block-sparse attention with the same D blocking and recurrence as Triton."""
     start_m = ct.bid(0)
     off_bh = ct.bid(1)
 
@@ -34,8 +33,7 @@ def block_sparse_attention_kernel(
     head_groups = num_heads // num_kv_heads
     off_h_kv = off_h // head_groups
 
-    # Keep only one BLOCK_D slice live at a time (two accumulators maximum),
-    # matching the Triton kernel instead of materializing a TOTAL_D tile.
+
     q = ct.load(
         Q,
         index=(off_b, off_h, start_m, 0),
@@ -104,7 +102,7 @@ def block_sparse_attention_kernel(
         mask = (offs_m >= offs_n) & valid_m & valid_n
         qk = ct.where(mask, qk, -float("inf"))
 
-        # Same compact unnormalized online-softmax recurrence as Triton.
+
         row_has_prev = l_i > 0.0
         row_has_valid = (
             ct.sum(ct.astype(mask, ct.int32), axis=1, keepdims=True) > 0
