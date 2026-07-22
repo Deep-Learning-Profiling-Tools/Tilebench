@@ -27,7 +27,6 @@ def reverse_kernel(x_ptr, out_ptr, N, TILE: ConstInt):
     ct.store(out_ptr, index=(bid,), tile=vals)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(reverse_kernel)
 
 
