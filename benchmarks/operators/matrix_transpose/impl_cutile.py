@@ -26,7 +26,6 @@ def transpose_kernel(x, output, TILE: ConstInt):
     ct.store(output, index=(bid_n, bid_m), tile=ct.transpose(x_tile))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(transpose_kernel)
 
 
