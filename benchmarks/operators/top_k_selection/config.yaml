@@ -5,20 +5,6 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Top-k via hierarchical block-topk tournament reduction: each block emits
-# its local top-k' (k' = next_pow2(k), sorted descending), the kernel is
-# re-launched on the candidates until one block remains (2-6 launches,
-# ~1.1-1.5 passes over the data — same complexity class as torch.topk's
-# RadixSelect). flops/bytes metrics below are algorithm-intrinsic
-# (read N once + write k) and unchanged.
-#
-# Practical range for top-k selection:
-#   N (input size): from MoE-routing scale (~1K) up to recommendation /
-#                   vector-retrieval scale (~256K). All values are
-#                   powers of 2 to keep bitonic padding trivial.
-#   k:              8 (MoE-small / kNN-tight), 32 (LLM beam search),
-#                   128 (MoE-large), 512 (recommendation top-k).
-# 5 N x 4 k x 1 dtype = 20 cases.
 case_grid:
   N: [4096, 16384, 65536, 262144, 1048576]
   k: [16, 64, 256, 1024]

@@ -1,12 +1,3 @@
-"""Top-k via hierarchical block-topk tournament reduction.
-
-Each CTA writes its chunk's sorted top-k' candidates. The wrapper re-launches
-on the candidate buffer until one block remains.
-
-This version avoids external source generation and uses ct.static_iter for
-compile-time unrolling of the in-tile bitonic network.
-"""
-
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -30,13 +21,6 @@ def _next_pow2(x: int) -> int:
 
 
 def _make_bitonic_stages(B: int):
-    """Return compile-time stage descriptors for descending bitonic sort.
-
-    Each tuple is (G, j, ksz):
-      - reshape x as (G, 2, j)
-      - compare/swap the two halves
-      - ksz controls ascending/descending direction for this stage
-    """
     stages = []
     for kb in range(1, B.bit_length()):
         ksz = 1 << kb
@@ -176,10 +160,6 @@ _tuners = {B: CutileAutotuner(KERNELS[B]) for B in _BLOCKS}
 
 
 def _resolve_block(block_size: int | None, K2: int) -> int:
-    """Pick a supported block size that guarantees hierarchy progress.
-
-    Need block >= 2*K2. Otherwise candidate count may not shrink.
-    """
     requested = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block
     min_block = max(requested, 2 * K2)
 
@@ -214,11 +194,6 @@ def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg, stream) -> torch.Tenso
 
 
 def _tune(x: torch.Tensor, k: int, K2: int, stream) -> SimpleNamespace:
-    """Autotune occupancy for each viable block size.
-
-    The first hierarchy level is usually dominant, so this matches the
-    existing implementation's tuning strategy.
-    """
     key = (x.numel(), K2)
     cached = _autotune_cache.get(key)
     if cached is not None:

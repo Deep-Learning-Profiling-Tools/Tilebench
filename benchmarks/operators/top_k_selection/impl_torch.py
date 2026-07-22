@@ -2,7 +2,6 @@ import torch
 
 
 def run(input: torch.Tensor, N: int, k: int, **kwargs):
-    """Reference top-k via torch.topk (descending, sorted)."""
     assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
