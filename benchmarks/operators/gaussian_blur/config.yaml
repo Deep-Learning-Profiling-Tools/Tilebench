@@ -1,6 +1,3 @@
-# 2D Gaussian blur: 2D convolution with same-size zero-padded boundary.
-# Loose tolerances: 49-tap fp32 accumulation order differs between the
-# DSL stencils and cuDNN's internal conv accumulation.
 verify:
   atol: 0.1
   rtol: 1e-2
@@ -12,27 +9,15 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep spatial dimension (input_rows = input_cols) across 20 points.
-# input_cols defaults to input_rows in the generator when unspecified.
-# kernel_rows = kernel_cols = 7 matches the LeetGPU performance-measured configuration.
 case_defaults:
   kernel_rows: 7
   kernel_cols: 7
 
 case_grid:
   input_rows:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+    expr: "[512 * i for i in range(1, 21)]"
   dtype: ["fp16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions  (input_cols = input_rows, so input_rows appears twice)
-#
-# FLOPs: 2 * input_rows * input_cols * kernel_rows * kernel_cols
-# Bytes:
-#   Read  input:  input_rows * input_cols * dtype_size
-#   Read  kernel: kernel_rows * kernel_cols * dtype_size
-#   Write output: input_rows * input_cols * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
     2 * input_rows * input_rows * kernel_rows * kernel_cols

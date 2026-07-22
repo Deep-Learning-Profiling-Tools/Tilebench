@@ -1,8 +1,3 @@
-"""2D Gaussian blur via 2D output tiles + shifted 2D loads: each program
-owns a (BLOCK_R, BLOCK_C) output tile and accumulates kernel_rows *
-kernel_cols shifted masked loads into an fp32 accumulator (49-tap
-weighted sum — the fp32 accumulation is load-bearing, unlike selection
-ops). No flat-offset decode (div/mod) per element."""
 import torch
 import triton
 import triton.language as tl
