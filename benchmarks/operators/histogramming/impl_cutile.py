@@ -9,18 +9,14 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-# Field names match get_last_config()'s output exactly: the NCU harness
-# replays the autotune winner by merging that dict into _DEFAULT_CONFIG,
-# so mismatched names would silently profile the default config instead.
+
 _DEFAULT_CONFIG = SimpleNamespace(
     partial_block_size=1024, partial_occupancy=8,
     reduce_block_rows=64, reduce_block_bins=256, reduce_occupancy=8,
 )
 _NUM_PARTIAL = 256
 
-# Shrunk from 16 partial + 60 reduce to 4 + 8 so per-op autotune
-# completes in <30min. Triton-side autotune (impl_triton.py) is shrunk
-# accordingly to keep the comparison fair.
+
 _PARTIAL_SEARCH_SPACE = [
     SimpleNamespace(block_size=bs, occupancy=occ)
     for bs in [1024, 2048]
@@ -60,8 +56,7 @@ def histogram_partial_kernel(
         in_range = ct.bitwise_and(vals >= 0, vals < num_bins)
         valid = ct.bitwise_and(valid, in_range)
 
-        # Sanitise indices and values so invalid lanes contribute 0
-        # (no-op add at bin 0). Equivalent to Triton's mask=valid.
+
         row_idx = ct.full((BLOCK_SIZE,), pid, dtype=ct.int32)
         bin_idx = ct.where(valid, vals, 0)
         update = ct.astype(valid, ct.int32)
@@ -95,7 +90,6 @@ def histogram_reduce_kernel(
     ct.store(hist_ptr, index=(pid_b,), tile=acc)
 
 
-# Module-level: one tuner per @ct.kernel; caches persist across run() calls.
 _partial_tuner = CutileAutotuner(histogram_partial_kernel)
 _reduce_tuner = CutileAutotuner(histogram_reduce_kernel)
 
@@ -112,26 +106,21 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     input = input.contiguous()
     histogram = torch.empty((num_bins,), device=input.device, dtype=torch.int32)
 
-    # Choose a partial BLOCK_SIZE up-front (autotune may override below) so
-    # we know how many partial rows to allocate.
+
     default_block_size = (
         int(block_size) if block_size is not None else _DEFAULT_CONFIG.partial_block_size
     )
     num_partials = min(_NUM_PARTIAL, (N + default_block_size - 1) // default_block_size)
-    # Allocate + zero the partial buffer per call. The TileBench engine has no
-    # setup hook, so this memset gets recorded into the CUDA graph and inflates
-    # absolute latency by a few us. impl_triton.py does the exact same
-    # `torch.zeros(...)`, keeping the Triton-vs-cuTile comparison symmetric.
+
+
     partial = torch.zeros((num_partials, num_bins), device=input.device, dtype=torch.int32)
 
     stream = torch.cuda.current_stream()
 
-    # ---- Stage 1: partial histogram ----
+
     if autotune:
-        # Tune on a scratch buffer (streamk pattern): the sweep atomic_adds
-        # inflated counts into its target, and keeping that off the real
-        # `partial` avoids the extra per-call memset that undoing it would
-        # need (Triton's reset_to_zero handles this inside its autotuner).
+
+
         scratch = torch.empty_like(partial)
         partial_cfg = _partial_tuner.tune_or_cached(
             shape_key=(N, num_bins, num_partials),
@@ -155,7 +144,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
         (input, partial, N, num_bins, num_partials, partial_cfg.block_size),
     )
 
-    # ---- Stage 2: reduce ----
+
     if autotune:
         reduce_cfg = _reduce_tuner.tune_or_cached(
             shape_key=(num_partials, num_bins),
