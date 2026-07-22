@@ -7,7 +7,6 @@ _DEFAULT_CONFIG = {"BLOCK": 1024, "num_warps": 4}
 
 @triton.jit
 def pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
-    """Copy data[0:N] → work[0:N], fill work[N:M] with +inf."""
     offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     vals = tl.load(data_ptr + offs, mask=offs < N, other=float("inf"))
     tl.store(work_ptr + offs, vals, mask=offs < M)
@@ -15,11 +14,6 @@ def pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
 
 @triton.jit
 def bitonic_step_kernel(work_ptr, k, j, M, BLOCK: tl.constexpr):
-    """
-    One compare-exchange pass of bitonic sort.
-    Each thread handles a pair (offs, ixj=offs^j); the ixj > offs guard
-    ensures each pair is processed by exactly one thread.
-    """
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     ixj = offs ^ j
@@ -47,12 +41,6 @@ _bitonic_step_kernel_autotuned = triton.autotune(
 
 def run(data: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """
-    Bitonic sort (multi-launch), matching the LeetGPU algorithm:
-      1. Pad input to M = next_pow2(N) with +inf.
-      2. Host loop over (k, j); each step launches one compare-exchange pass.
-      3. Return the first N elements of the sorted work buffer.
-    """
     if N <= 1:
         return data.clone()
 
@@ -60,12 +48,11 @@ def run(data: torch.Tensor, N: int,
     work = torch.empty((M,), device=data.device, dtype=data.dtype)
     cfg = _DEFAULT_CONFIG
 
-    # Pad phase — always uses the default config (cheap, single launch).
+
     grid_pad = (triton.cdiv(M, cfg["BLOCK"]),)
     pad_kernel[grid_pad](data, work, N, M, BLOCK=cfg["BLOCK"])
 
-    # Bitonic sort phase — triton.autotune caches per `key=["M"]`, so the first
-    # step autotunes and the remaining log²(M)/2 steps are cache hits.
+
     if autotune:
         grid = lambda meta: (triton.cdiv(M, meta["BLOCK"]),)
         k = 2
