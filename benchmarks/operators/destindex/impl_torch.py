@@ -1,11 +1,6 @@
 import torch
 
-# Output buffers cached per input tensor identity: the full-copy clone is
-# operator semantics (rows not updated must be preserved), but Proton
-# cannot time DtoD memcpys, so all three backends initialise the outputs
-# OUTSIDE the measured region (warmup pays the clone) and the timed
-# quantity is the scatter work itself. Safe across repeats: dest_loc is a
-# permutation, so re-scattering into the same buffer is idempotent.
+
 _out_cache = torch.utils.weak.WeakTensorKeyDictionary()
 
 

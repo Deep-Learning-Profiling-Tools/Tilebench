@@ -1,15 +1,3 @@
-"""Token-scatter KV-cache copy, flat elementwise decomposition.
-
-Each CTA owns BLOCK_SIZE contiguous flat elements of the (tokens, heads,
-head_dim) source; (token, head, d) is decoded per element and the value
-is scattered to row dest_loc[token] — the same task decomposition as
-ATen's index_copy_ (element-flat grid, several independent elements per
-thread), replacing the old per-(token, head) grid whose ~4x more tiny
-CTAs were scheduler-bound (NCU: 0.82 vs 1.20 TB/s).
-
-Output buffers are cached per input tensor (see impl_torch) so the timed
-region contains only the scatter kernels on every backend.
-"""
 import torch
 import triton
 import triton.language as tl
@@ -46,10 +34,7 @@ def copy_by_dest_kernel(
     head = tmp % head_num
     token = tmp // head_num
 
-    # int64 in memory (index_copy_'s requirement, shared by all three
-    # backends); truncated to int32 for the address math — max flat offset
-    # is total_tokens * head_num * head_dim ~= 63M << 2^31, and the other
-    # index components are already int32. Mirrors impl_cutile.py.
+
     dest = tl.load(dest_ptr + token, mask=mask, other=0).to(tl.int32)
     dst_off = (dest * head_num + head) * head_dim + d
 
