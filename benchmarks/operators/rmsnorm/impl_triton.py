@@ -8,26 +8,17 @@ _DEFAULT_CONFIG = {"BLOCK_N_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 @triton.jit
 def rmsnorm_kernel(
     x_ptr, rms_w_ptr, out_ptr,
-    stride_row,       # stride for one row in the (batch*M, K) view (= K for contiguous)
-    N_SIZE,           # K dimension; NOT constexpr so one kernel handles all K values
-    eps,              # numerical stability epsilon
+    stride_row,
+    N_SIZE,
+    eps,
     BLOCK_N_SIZE: tl.constexpr,
 ):
-    """One CTA handles one row of the (batch*M, K) matrix.
-
-    Two-pass algorithm:
-      Pass 1 – accumulate sum(x^2) across K to compute rstd.
-      Pass 2 – write x * rstd * rms_w to the output.
-
-    The accumulation is done in float32 for numerical stability; the result
-    is stored as the original dtype (Triton auto-casts on store).
-    """
     pid = tl.program_id(0)
     row_ptr     = x_ptr   + pid * stride_row
     out_row_ptr = out_ptr + pid * stride_row
     block_N = tl.arange(0, BLOCK_N_SIZE)
 
-    # --- Pass 1: sum of squares ---
+
     var = tl.zeros((BLOCK_N_SIZE,), tl.float32)
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
@@ -36,7 +27,7 @@ def rmsnorm_kernel(
         var += x * x
     rstd = tl.math.rsqrt(tl.sum(var, axis=0) / N_SIZE + eps)
 
-    # --- Pass 2: normalize and scale ---
+
     for n_start in range(0, N_SIZE, BLOCK_N_SIZE):
         offs_n = n_start + block_N
         mask   = offs_n < N_SIZE
@@ -45,15 +36,6 @@ def rmsnorm_kernel(
         tl.store(out_row_ptr + offs_n, x * rstd * rms_w, mask=mask)
 
 
-# ---------------------------------------------------------------------------
-# Autotune wrapper
-# ---------------------------------------------------------------------------
-# Autotune parameters:
-#   Category 1 – Tile size    : BLOCK_N_SIZE (elements per CTA per loop iteration)
-#   Category 2 – Exec params  : num_warps (warp-level parallelism), num_stages
-#                               (software-pipeline depth for memory latency hiding)
-# Key = N_SIZE (K): different hidden dims may prefer different tile sizes.
-# ---------------------------------------------------------------------------
 _rmsnorm_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_N_SIZE": bs}, num_warps=nw, num_stages=ns)
@@ -71,19 +53,11 @@ def run(
     eps: float = 1e-6,
     autotune: bool = False,
 ) -> torch.Tensor:
-    """Launch the RMSNorm Triton kernel.
-
-    Args:
-        x:        Input tensor of shape (batch, M, K).
-        rms_w:    Per-channel weight of shape (K,).
-        eps:      Epsilon for numerical stability.
-        autotune: If True, use triton.autotune to search over configs.
-    """
     orig_shape = x.shape
     K          = orig_shape[-1]
     batch_M    = x.numel() // K
 
-    # Reshape to (batch*M, K) to use a 1-D grid (one CTA per row).
+
     x_2d   = x.reshape(batch_M, K)
     out    = torch.empty_like(x)
     out_2d = out.reshape(batch_M, K)

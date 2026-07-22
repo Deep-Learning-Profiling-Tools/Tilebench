@@ -1,23 +1,3 @@
-"""cuTile implementation of RMSNorm using tiled two-pass loops.
-
-Algorithm (one CTA per row):
-
-  Pass 1 – tiled accumulation of sum(x²):
-      for j in range(num_tiles):
-          xj = ct.load(x, index=(row, j), shape=(1, TILE_SIZE), padding_mode=ZERO)
-          _rms += xj * xj
-      rstd = ct.rsqrt(sum(_rms) / N + eps)
-
-  Pass 2 – tiled normalize and scale:
-      for j in range(num_tiles):
-          yj = xj * rstd * wj
-          ct.store(out, index=(row, j), tile=yj)
-
-padding_mode=ZERO on the last tile handles non-power-of-2 N correctly:
-out-of-bounds elements load as zero, contributing nothing to sum(x²).
-
-Autotune parameters: TILE_SIZE (tile width, must be power of 2), occupancy.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -40,11 +20,10 @@ _SEARCH_SPACE = [
 
 @ct.kernel
 def rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
-    """One CTA normalises one row using tiled two-pass RMSNorm."""
     row = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
-    # Pass 1: accumulate sum(x²); padding_mode=ZERO handles the last partial tile.
+
     _rms = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
         xj = ct.astype(
@@ -57,7 +36,7 @@ def rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
 
     rstd = ct.rsqrt(ct.sum(_rms, axis=1, keepdims=False) / N + eps)
 
-    # Pass 2: normalize and scale.
+
     for j in range(0, num_tiles):
         wj = ct.astype(
             ct.load(rms_w, index=(j,), shape=(TILE_SIZE,),
@@ -75,7 +54,6 @@ def rmsnorm_kernel(x, rms_w, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(rmsnorm_kernel)
 
 
