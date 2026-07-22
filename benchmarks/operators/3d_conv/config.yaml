@@ -1,10 +1,3 @@
-# Conv3d forward pass: multi-channel implicit GEMM (3D analog of 2d_conv).
-# Conv is C_in*kD*kH*kW multiply-adds per output element (1728 for 3^3 +
-# C_in=64). Triton's fp32 path is single-pass TF32 while the torch (cuDNN
-# conv3d) reference and cuTile keep near-full fp32 precision, so the TF32
-# error tail (~1e-3 relative over 1728 accumulations, i.e. |err| up to ~0.3)
-# trips atol=0.1 on a handful of elements out of 1e8. atol=0.5 covers the
-# tail; same convention as the GEMM operators (matmul uses atol=5 at K=20480).
 verify:
   atol: 5e-1
   rtol: 1e-2
@@ -16,9 +9,6 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep spatial dimension H (= W) with depth and channel dims fixed.
-# out_D/H/W = (dim + 2*padding - kernel_size) // stride + 1 = dim
-#             (for padding=1, kernel_size=3, stride=1)
 case_defaults:
   batch: 1
   in_channels: 64
@@ -31,20 +21,9 @@ case_defaults:
 
 case_grid:
   H:
-    expr: "[16 * i for i in range(1, 21)]"   # 16, 32, ..., 320 (20 points)
+    expr: "[16 * i for i in range(1, 21)]"
   dtype: ["fp16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   out_dim = (dim + 2*padding - kernel_size) // stride + 1  (W = H)
-#
-# FLOPs: 2 * batch * out_channels * out_D * out_H * out_W
-#        * (in_channels // groups) * kernel_size^3
-# Bytes:
-#   Read  input:  batch * in_channels * D * H * H * dtype_size
-#   Read  weight: out_channels * (in_channels // groups) * kernel_size^3 * dtype_size
-#   Write output: batch * out_channels * out_D * out_H * out_W * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
     2 * batch * out_channels
