@@ -24,16 +24,16 @@ def dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE
     base = bid * TILE
     offsets = ct.arange(TILE, dtype=ct.int32) + base
 
-    # Load X tile (flattened 1D)
+
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
 
-    # Compute scale indices into 2D S array
+
     row = offsets // N
     col = offsets % N
     s_row = row // TILE_SIZE
     s_col = col // TILE_SIZE
 
-    # Gather scales from 2D scale array
+
     scale_tile = ct.gather(s_ptr, (s_row, s_col), padding_value=0)
 
     result = x_tile * scale_tile
@@ -41,7 +41,6 @@ def dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE
     ct.store(out_ptr, index=(bid,), tile=result)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(dequant_kernel)
 
 
