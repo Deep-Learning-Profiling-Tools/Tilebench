@@ -46,23 +46,27 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
                 sparse_mask[h, r_start:r_end, c_start:c_end] = 0.0
 
     # 3. Dense attention computed in query-row chunks (bounded memory).
-    Kf_t = K_expanded.float().transpose(-2, -1)   # [B, H, D, N]
-    Vf = V_expanded.float()                        # [B, H, N, D]
+    #    Matmuls run in the input dtype (fp16 tensor cores, fp32 accumulate)
+    #    instead of the old K/V/Q .float() copies that forced every GEMM onto
+    #    the fp32 SIMT path; the softmax runs in fp32 via mask promotion,
+    #    matching the DSL kernels' compute layout.
+    K_t = K_expanded.transpose(-2, -1)                   # [B, H, D, N]
     cols = torch.arange(N, device=Q.device).view(1, -1)  # [1, N]
     out = torch.empty((B, H, M, D), device=Q.device, dtype=Q.dtype)
 
     for i0 in range(0, M, _REF_QUERY_CHUNK):
         i1 = min(i0 + _REF_QUERY_CHUNK, M)
-        q_chunk = Q[:, :, i0:i1, :].float()                    # [B, H, c, D]
-        scores = torch.matmul(q_chunk, Kf_t) * softmax_scale   # [B, H, c, N]
+        q_chunk = Q[:, :, i0:i1, :]                            # [B, H, c, D]
+        scores = torch.matmul(q_chunk, K_t) * softmax_scale    # [B, H, c, N]
 
         # Causal mask for this chunk of query rows.
         rows = torch.arange(i0, i1, device=Q.device).view(-1, 1)          # [c, 1]
         causal = torch.where(rows >= cols, 0.0, float('-inf')).to(torch.float32)  # [c, N]
 
+        # fp16 scores + fp32 masks promote to fp32 inside the fused add.
         scores = scores + sparse_mask[:, i0:i1, :].unsqueeze(0) + causal
-        probs = torch.softmax(scores, dim=-1)
-        out[:, :, i0:i1, :] = torch.matmul(probs, Vf).to(Q.dtype)
+        probs = torch.softmax(scores, dim=-1).to(Q.dtype)
+        out[:, :, i0:i1, :] = torch.matmul(probs, V_expanded)
 
         del scores, probs, q_chunk, causal
 
