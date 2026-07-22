@@ -8,9 +8,9 @@ _DEFAULT_CONFIG = {"num_warps": 4, "num_stages": 2}
 @triton.jit
 def fwd_kernel_flash_decode_stage2(
     B_Seqlen,
-    Mid_O,  # [batch, head, seq_block_num, head_dim]
-    Mid_O_LogExpSum,  # [batch, head, seq_block_num]
-    Out,  # [batch, head, head_dim]
+    Mid_O,
+    Mid_O_LogExpSum,
+    Out,
     stride_mid_ob,
     stride_mid_oh,
     stride_mid_os,
@@ -66,31 +66,22 @@ _fwd_kernel_flash_decode_stage2_autotuned = triton.autotune(
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
-    """
-    Args:
-        mid_o: Partial outputs from Stage 1. Shape: [Batch, Heads, Num_Blocks, HeadDim]
-        mid_o_lse: Partial LogSumExp from Stage 1. Shape: [Batch, Heads, Num_Blocks]
-        b_seqlen: Actual sequence lengths. Shape: [Batch]
-        block_seq_tensor: The block size used in Stage 1 partitioning.
-                          Can be an int or a scalar Tensor.
-        block_size: (Optional) Block size config from benchmark framework, usually ignored here.
-    """
-    # Handle block_seq parameter which might be passed as a Tensor or int
+
     if isinstance(block_seq_tensor, torch.Tensor):
         block_seq = block_seq_tensor.item()
     else:
         block_seq = block_seq_tensor
 
-    # Extract shapes
+
     batch, head_num, num_blocks, head_dim = mid_o.shape
 
-    # Allocate output tensor
+
     output = torch.empty((batch, head_num, head_dim), dtype=mid_o.dtype, device=mid_o.device)
 
-    # Determine Triton block size for the head dimension (must be power of 2)
+
     BLOCK_DMODEL = triton.next_power_of_2(head_dim)
 
-    # Grid configuration: One kernel instance per (Batch, Head)
+
     grid = (batch, head_num)
 
     if autotune:
@@ -120,20 +111,20 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
             Mid_O=mid_o,
             Mid_O_LogExpSum=mid_o_lse,
             Out=output,
-            # Strides for Mid_O
+
             stride_mid_ob=mid_o.stride(0),
             stride_mid_oh=mid_o.stride(1),
             stride_mid_os=mid_o.stride(2),
             stride_mid_od=mid_o.stride(3),
-            # Strides for Mid_O_LogExpSum
+
             stride_mid_o_eb=mid_o_lse.stride(0),
             stride_mid_o_eh=mid_o_lse.stride(1),
             stride_mid_o_es=mid_o_lse.stride(2),
-            # Strides for Out
+
             stride_obs=output.stride(0),
             stride_oh=output.stride(1),
             stride_od=output.stride(2),
-            # Constants
+
             head_dim=head_dim,
             BLOCK_SEQ=block_seq,
             BLOCK_DMODEL=BLOCK_DMODEL,
@@ -158,7 +149,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # 1. Setup Parameters
+
     device = "cuda"
     dtype = getattr(torch, args.dtype)
 
@@ -170,34 +161,31 @@ if __name__ == "__main__":
 
     print(f"Profiling Config: Batch={batch}, Heads={heads}, SeqLen={seq_len}, Dim={head_dim}, BlockSeq={block_seq}, Dtype={dtype}")
 
-    # 2. Data Generation (Simulation)
+
     num_blocks = (seq_len + block_seq - 1) // block_seq
 
-    # B_Seqlen: Full context length
+
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
 
-    # Mid_O: Simulated output from Stage 1
+
     mid_o = torch.randn((batch, heads, num_blocks, head_dim), dtype=dtype, device=device)
 
-    # Mid_O_LSE: Simulated LSE from Stage 1
+
     mid_o_lse = torch.randn((batch, heads, num_blocks), dtype=dtype, device=device)
 
-    # Block Seq as Tensor (matches signature)
+
     block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu')
 
-    # 3. Warmup (Essential for JIT compilation)
+
     print("Warming up...")
     for _ in range(10):
         run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
     torch.cuda.synchronize()
 
-    # 4. Profiling Run
-    # Use nvtx to mark the range if viewing in Nsight Systems,
-    # but for ncu (Nsight Compute), just running it is enough.
+
     print("Starting Profile Run...")
 
-    # Optional: Loop to ensure we capture enough samples if needed,
-    # but usually 1 run is enough for ncu --set full
+
     torch.cuda.nvtx.range_push("FlashDecodeStage2_Triton")
     run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
     torch.cuda.nvtx.range_pop()
