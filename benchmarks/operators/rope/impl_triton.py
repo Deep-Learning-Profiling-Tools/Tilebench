@@ -20,12 +20,6 @@ def rope_embedding(
     BLOCK_SIZE      : tl.constexpr,
     ROPE_GROUP_SIZE : tl.constexpr,
 ):
-    """RoPE embedding: Q * cos + rotate_half(Q) * sin (in-place on Q).
-
-    Each CTA processes ROPE_GROUP_SIZE consecutive heads of one (batch, seq)
-    row as one [ROPE_GROUP_SIZE, BLOCK_SIZE] 2D tile per half, sharing a
-    single cos/sin row broadcast across the heads.
-    """
     row_position  = tl.program_id(0)
     group_head_position = tl.program_id(1)
     col_offsets  = tl.arange(0, BLOCK_SIZE)
@@ -68,7 +62,7 @@ _rope_embedding_autotuned = triton.autotune(
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
-    # RoPE is in-place; clone so the caller's q stays pristine across backends.
+
     output = q.clone().contiguous()
     batch, seq_len, n_heads, head_dim = output.shape
 

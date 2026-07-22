@@ -20,32 +20,25 @@ _SEARCH_SPACE = [
 
 @ct.kernel
 def rope_embedding(
-    Q,                    # Rank 4: [TotalTokens, Heads, 2, HalfDim]
-    Cos,                  # Rank 2: [SeqLen, HalfDim]
-    Sin,                  # Rank 2: [SeqLen, HalfDim]
+    Q,
+    Cos,
+    Sin,
     SeqLen:     ConstInt,
-    TILE_DIM:   ConstInt,  # HalfDim
+    TILE_DIM:   ConstInt,
     GROUP_SIZE: ConstInt,
 ):
-    """RoPE in-place. One CTA processes GROUP_SIZE consecutive heads of one
-    (batch, seq) row with a single group-level box load/store per half,
-    sharing one cos/sin tile broadcast across the heads.
-    """
-    row_id = ct.bid(0)    # Batch*Seq
-    group_id = ct.bid(1)  # Head group
+    row_id = ct.bid(0)
+    group_id = ct.bid(1)
 
     seq_idx = row_id % SeqLen
 
-    # cos/sin shared across all heads in this group; reshape to rank 4 so
-    # they broadcast over the head axis.
+
     cos_tile = ct.reshape(ct.load(Cos, index=(seq_idx, 0), shape=(1, TILE_DIM)),
                           (1, 1, 1, TILE_DIM))
     sin_tile = ct.reshape(ct.load(Sin, index=(seq_idx, 0), shape=(1, TILE_DIM)),
                           (1, 1, 1, TILE_DIM))
 
-    # One box load per half covering all GROUP_SIZE heads at once.
-    # padding_mode=ZERO handles the partial last group when
-    # n_heads % GROUP_SIZE != 0; OOB stores are silently dropped.
+
     q1 = ct.load(Q, index=(row_id, group_id, 0, 0),
                  shape=(1, GROUP_SIZE, 1, TILE_DIM),
                  padding_mode=ct.PaddingMode.ZERO)
@@ -60,14 +53,13 @@ def rope_embedding(
     ct.store(Q, index=(row_id, group_id, 1, 0), tile=out2)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(rope_embedding)
 
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
 
-    # RoPE is in-place; clone so the caller's q stays pristine across backends.
+
     output = q.clone().contiguous()
 
     batch, seq_len, n_heads, head_dim = output.shape
@@ -80,8 +72,8 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
     stream = torch.cuda.current_stream()
 
     if autotune:
-        # rope is in-place; tune on a tmp buffer so trial rotations don't
-        # accumulate into the real output.
+
+
         tmp = output.clone()
         tmp_view = tmp.view(batch * seq_len, n_heads, 2, half_dim)
         cfg = _tuner.tune_or_cached(
