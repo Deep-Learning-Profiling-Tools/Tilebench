@@ -18,11 +18,14 @@ _last_autotune_config: dict = {}
 
 
 def streamk_configs():
+    # num_stages=3 is racy in the fp32 first-wave split-tile path on B200.
+    # The 128x256 TMEM fragment is not mapped correctly across two warpgroups.
     return [
-        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=32, GROUP_M=8, threads=nt, num_stages=3)
+        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=32, GROUP_M=8, threads=nt, num_stages=4)
         for bm in [128]
         for bn in [128, 256]
         for nt in [128, 256]
+        if not (bn == 256 and nt == 256)
     ]
 
 
@@ -193,6 +196,7 @@ def full_tiles_kernel(
                     mbar=mbar,
                     clear_accum=k_tile == 0,
                 )
+                T.sync_threads()
             else:
                 T.gemm(a_shared, b_shared, acc)
 

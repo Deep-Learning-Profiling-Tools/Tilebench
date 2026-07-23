@@ -22,6 +22,19 @@ def bmm_configs():
     group_size_m = [1, 8]
     threads = [128, 256]
     num_stages = [2, 3, 4]
+
+    def runtime_timeout_prone(bm, bn, bk):
+        # Leave compile-time failures to TileLang's autotuner. Only prune
+        # shapes observed to benchmark-timeout / poison the CUDA context at
+        # BATCH=32, M=N=K=352.
+        if bm == 32 and bk == 32:
+            return True
+        if bm == 32 and bk == 64 and bn in (64, 128):
+            return True
+        if bm == 128 and bn in (32, 64):
+            return True
+        return False
+
     return [
         dict(
             BLOCK_SIZE_M=bm,
@@ -37,6 +50,7 @@ def bmm_configs():
         for gs in group_size_m
         for nt in threads
         for ns in num_stages
+        if not runtime_timeout_prone(bm, bn, bk)
     ]
 
 
@@ -87,10 +101,12 @@ def bmm_kernel(
             T.copy(B[pid_b, k * BLOCK_SIZE_K, start_n], B_tile)
             if use_tmem:
                 T.gemm(A_tile, B_tile, acc_tmem, mbar=mbar, clear_accum=k == 0)
+                T.sync_threads()
             else:
                 T.gemm(A_tile, B_tile, acc)
 
         if use_tmem:
+            T.sync_threads()
             T.copy(acc_tmem, acc)
         T.copy(acc, C[pid_b, start_m, start_n])
 
