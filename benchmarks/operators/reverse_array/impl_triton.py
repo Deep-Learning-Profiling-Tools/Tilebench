@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _reverse_kernel(input_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
+def reverse_kernel(input_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
     """
     Out-of-place reverse matching the cuTile backend's method:
       output[i] = input[N - 1 - i]
@@ -32,7 +32,7 @@ _reverse_kernel_autotuned = triton.autotune(
 
     ],
     key=["N"],
-)(_reverse_kernel)
+)(reverse_kernel)
 
 
 def run(input: torch.Tensor, N: int,
@@ -45,7 +45,7 @@ def run(input: torch.Tensor, N: int,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(N, cfg["BLOCK_SIZE"]),)
-        _reverse_kernel[grid](
+        reverse_kernel[grid](
             input, output, N,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],

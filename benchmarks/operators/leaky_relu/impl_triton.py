@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _leaky_relu_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+def leaky_relu_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
@@ -23,7 +23,7 @@ _leaky_relu_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["n_elements"],
-)(_leaky_relu_kernel)
+)(leaky_relu_kernel)
 
 
 def run(input: torch.Tensor, N: int,
@@ -36,7 +36,7 @@ def run(input: torch.Tensor, N: int,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(N, cfg["BLOCK_SIZE"]),)
-        _leaky_relu_kernel[grid](
+        leaky_relu_kernel[grid](
             input, output, N,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],

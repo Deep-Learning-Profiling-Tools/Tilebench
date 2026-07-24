@@ -13,7 +13,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
-def _fused_activation_kernel(
+def fused_activation_kernel(
     x_ptr, gate_ptr, bias_ptr, out_ptr, n_elements,
     BLOCK_SIZE: tl.constexpr,
 ):
@@ -35,7 +35,7 @@ _fused_activation_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
-)(_fused_activation_kernel)
+)(fused_activation_kernel)
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
@@ -54,7 +54,7 @@ def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
-        _fused_activation_kernel[grid](
+        fused_activation_kernel[grid](
             x, gate, bias, out, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
