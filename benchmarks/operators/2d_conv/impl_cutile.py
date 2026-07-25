@@ -1,19 +1,6 @@
-"""cuTile Conv2d forward — implicit GEMM, mirrors impl_triton.py.
-
-Each CTA produces one (BLOCK_BHW x BLOCK_OUT) output tile. The inner
-loop walks (in_channels_per_group * kH * kW) in BLOCK_IN chunks, computing
-input/weight indices on-the-fly (no host-side im2col, no padding buffers).
-
-Loads use ct.gather with linearised indices into the flat input/weight
-tensors; OOB lanes are masked via ct.where after the gather. Stores use
-ct.scatter — invalid output lanes get an OOB index so the write is
-silently dropped. This matches Triton's mask=...; tl.load(other=0.0)
-pattern, just spelled with cuTile primitives.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -34,17 +21,17 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _conv2d_kernel(
-    input_flat,    # 1D view of (batch, in_channels, in_H, in_W)
-    weight_flat,   # 1D view of (out_channels, in_channels_per_group, kH, kW)
-    output_flat,   # 1D view of (batch, out_channels, out_H, out_W)
+def conv2d_kernel(
+    input_flat,
+    weight_flat,
+    output_flat,
     batch, in_channels, out_channels,
     in_H, in_W, out_H, out_W,
     kH, kW,
     stride_h, stride_w,
     pad_h, pad_w,
     out_channels_per_group, in_channels_per_group,
-    # Strides for the original 4D layouts, baked at launch time as runtime args.
+
     stride_input_b, stride_input_c, stride_input_h, stride_input_w,
     stride_weight_oc, stride_weight_ic, stride_weight_kh, stride_weight_kw,
     stride_output_b, stride_output_c, stride_output_h, stride_output_w,
@@ -52,8 +39,6 @@ def _conv2d_kernel(
     BLOCK_IN: ConstInt,
     BLOCK_OUT: ConstInt,
 ):
-    """Implicit GEMM Conv2d. Grid: (cdiv(batch*out_HW, BLOCK_BHW),
-    cdiv(out_channels_per_group, BLOCK_OUT), groups)."""
     pid_bhw = ct.bid(0)
     pid_oc = ct.bid(1)
     group_id = ct.bid(2)
@@ -63,11 +48,11 @@ def _conv2d_kernel(
     total_in_feat = in_channels_per_group * kH * kW
     kHkW = kH * kW
 
-    # bhw_offsets [BLOCK_BHW], oc_offsets [BLOCK_OUT]
-    bhw_offsets = pid_bhw * BLOCK_BHW + ct.arange(BLOCK_BHW, dtype=np.int32)
-    oc_offsets = pid_oc * BLOCK_OUT + ct.arange(BLOCK_OUT, dtype=np.int32)
 
-    # Decode bhw -> (b, oh, ow)
+    bhw_offsets = pid_bhw * BLOCK_BHW + ct.arange(BLOCK_BHW, dtype=ct.int32)
+    oc_offsets = pid_oc * BLOCK_OUT + ct.arange(BLOCK_OUT, dtype=ct.int32)
+
+
     b_idx = bhw_offsets // out_HW
     hw_idx = bhw_offsets % out_HW
     oh_idx = hw_idx // out_W
@@ -76,29 +61,32 @@ def _conv2d_kernel(
     oc_abs = group_id * out_channels_per_group + oc_offsets
     ic_base = group_id * in_channels_per_group
 
-    bhw_mask = bhw_offsets < total_bhw                 # [BLOCK_BHW]
-    oc_mask = oc_abs < out_channels                    # [BLOCK_OUT]
+    bhw_mask = bhw_offsets < total_bhw
+    oc_mask = oc_abs < out_channels
 
     acc = ct.full((BLOCK_BHW, BLOCK_OUT), 0.0, dtype=ct.float32)
 
-    for in_feat_start in range(0, ct.cdiv(total_in_feat, BLOCK_IN)):
-        in_feat_offsets = in_feat_start * BLOCK_IN + ct.arange(BLOCK_IN, dtype=np.int32)
 
-        # Decode in_feat -> (ic_local, kh, kw)
+    mma_dtype = ct.tfloat32 if input_flat.dtype == ct.float32 else input_flat.dtype
+
+    for in_feat_start in range(0, ct.cdiv(total_in_feat, BLOCK_IN)):
+        in_feat_offsets = in_feat_start * BLOCK_IN + ct.arange(BLOCK_IN, dtype=ct.int32)
+
+
         ic_local = in_feat_offsets // kHkW
         kh_idx = (in_feat_offsets % kHkW) // kW
         kw_idx = in_feat_offsets % kW
         ic_abs = ic_base + ic_local
 
-        in_feat_mask = in_feat_offsets < total_in_feat  # [BLOCK_IN]
+        in_feat_mask = in_feat_offsets < total_in_feat
 
-        # ih, iw: [BLOCK_BHW, BLOCK_IN]
+
         ih_idx = ct.expand_dims(oh_idx, 1) * stride_h + ct.expand_dims(kh_idx, 0) - pad_h
         iw_idx = ct.expand_dims(ow_idx, 1) * stride_w + ct.expand_dims(kw_idx, 0) - pad_w
 
         valid_h = ct.bitwise_and(ih_idx >= 0, ih_idx < in_H)
         valid_w = ct.bitwise_and(iw_idx >= 0, iw_idx < in_W)
-        valid_b = ct.expand_dims(b_idx, 1) < batch                       # [BLOCK_BHW, 1]
+        valid_b = ct.expand_dims(b_idx, 1) < batch
         in_mask = ct.bitwise_and(
             ct.bitwise_and(ct.expand_dims(bhw_mask, 1), valid_b),
             ct.bitwise_and(
@@ -107,13 +95,13 @@ def _conv2d_kernel(
             ),
         )
 
-        # Sanitise OOB indices to 0 so pointer arithmetic stays in-range.
+
         ih_safe = ct.where(valid_h, ih_idx, 0)
         iw_safe = ct.where(valid_w, iw_idx, 0)
         b_safe = ct.where(valid_b, ct.expand_dims(b_idx, 1), 0)
-        ic_abs_2d = ct.expand_dims(ic_abs, 0)                            # [1, BLOCK_IN]
+        ic_abs_2d = ct.expand_dims(ic_abs, 0)
 
-        # Linearised input index: same arithmetic Triton computes via pointers.
+
         in_lin = (
             b_safe * stride_input_b
             + ic_abs_2d * stride_input_c
@@ -123,13 +111,13 @@ def _conv2d_kernel(
         in_tile = ct.gather(input_flat, in_lin, padding_value=0.0)
         in_tile = ct.where(in_mask, in_tile, 0.0)
 
-        # Weight: [BLOCK_IN, BLOCK_OUT] tile of weight[oc_abs, ic_local, kh, kw].
-        oc_abs_2d = ct.expand_dims(oc_abs, 0)                            # [1, BLOCK_OUT]
-        ic_local_2d = ct.expand_dims(ic_local, 1)                        # [BLOCK_IN, 1]
+
+        oc_abs_2d = ct.expand_dims(oc_abs, 0)
+        ic_local_2d = ct.expand_dims(ic_local, 1)
         kh_idx_2d = ct.expand_dims(kh_idx, 1)
         kw_idx_2d = ct.expand_dims(kw_idx, 1)
-        in_feat_mask_2d = ct.expand_dims(in_feat_mask, 1)                # [BLOCK_IN, 1]
-        oc_mask_2d = ct.expand_dims(oc_mask, 0)                          # [1, BLOCK_OUT]
+        in_feat_mask_2d = ct.expand_dims(in_feat_mask, 1)
+        oc_mask_2d = ct.expand_dims(oc_mask, 0)
         weight_mask = ct.bitwise_and(in_feat_mask_2d, oc_mask_2d)
 
         w_lin = (
@@ -141,9 +129,10 @@ def _conv2d_kernel(
         w_tile = ct.gather(weight_flat, w_lin, padding_value=0.0)
         w_tile = ct.where(weight_mask, w_tile, 0.0)
 
-        acc = ct.mma(in_tile, w_tile, acc)
+        acc = ct.mma(ct.astype(in_tile, mma_dtype),
+                     ct.astype(w_tile, mma_dtype), acc)
 
-    # Store output: scatter into 1D view; mask invalid lanes with OOB indices.
+
     out_mask = ct.bitwise_and(
         ct.expand_dims(bhw_mask, 1),
         ct.expand_dims(oc_mask, 0),
@@ -159,15 +148,14 @@ def _conv2d_kernel(
         + oh_idx_2d * stride_output_h
         + ow_idx_2d * stride_output_w
     )
-    # Force invalid lanes to a clearly-OOB linear index so scatter drops them.
+
     out_lin = ct.where(out_mask, out_lin, batch * out_channels * out_H * out_W)
 
     acc_cast = ct.astype(acc, output_flat.dtype)
     ct.scatter(output_flat, out_lin, acc_cast)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_conv2d_kernel)
+_tuner = CutileAutotuner(conv2d_kernel)
 
 
 def run(
@@ -180,7 +168,6 @@ def run(
     autotune: bool = False,
     **kwargs,
 ):
-    """cuTile Conv2d forward via implicit GEMM. Matches impl_triton.py."""
 
     assert input.is_contiguous() and weight.is_contiguous()
     batch, in_channels, in_H, in_W = input.shape
