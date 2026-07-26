@@ -624,25 +624,27 @@
   {
     "op": "dequantize_rowwise",
     "dtypes": [
-      "fp32"
+      "int8"
     ],
     "default_params_per_dtype": {
-      "fp32": {
+      "int8": {
         "rows": 4096,
         "cols": 8192
       }
     },
     "autotune_winner_per_dtype": {
-      "fp32": {
+      "int8": {
         "params": {
           "rows": 4096,
           "cols": 8192
         },
         "triton": {
-          "num_warps": 16
+          "CHUNK": 1024,
+          "num_warps": 2
         },
         "cutile": {
-          "occupancy": 8
+          "chunk": 1024,
+          "occupancy": 16
         }
       }
     },
