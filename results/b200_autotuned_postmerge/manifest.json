@@ -1,0 +1,417 @@
+{
+  "created_at_utc": "2026-07-26T20:10:33Z",
+  "description": "Post-merge B200 comparison. Torch/Triton/cuTile timings come from main's refreshed results/csv (rewritten kernels); TileLang timings are carried over from final_b200_autotuned. Speedups are recomputed against main's torch_ms baseline.",
+  "gpu": "NVIDIA B200 (sm_100), dgx003",
+  "autotune": true,
+  "caveat": "TileLang timings were measured in a separate run (2026-07-23) from the Torch/Triton/cuTile timings. Cross-backend comparisons are indicative, not a controlled single-run measurement.",
+  "operators": {
+    "1d_conv": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/1d_conv_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/1d_conv.json"
+    },
+    "2d_conv": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/2d_conv_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/2d_conv.json"
+    },
+    "2d_max_pooling": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/2d_max_pooling_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/2d_max_pooling.json"
+    },
+    "3d_conv": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/3d_conv_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/3d_conv.json"
+    },
+    "argmax": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/argmax_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/argmax.json"
+    },
+    "batch_normalization": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/batch_normalization_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/batch_normalization.json"
+    },
+    "batched_matmul": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/batched_matmul_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/batched_matmul.json"
+    },
+    "bitonic_sort": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/bitonic_sort_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/bitonic_sort.json"
+    },
+    "block_sparse_attention": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/block_sparse_attention_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/block_sparse_attention.json"
+    },
+    "cross_entropy": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/cross_entropy_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/cross_entropy.json"
+    },
+    "dequantize_rowwise": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/dequantize_rowwise_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/dequantize_rowwise.json",
+      "note": "dtype label taken from CSV; params verified"
+    },
+    "destindex": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/destindex_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/destindex.json"
+    },
+    "dropout": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/dropout_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/dropout.json"
+    },
+    "flash_attention": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/flash_attention_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/flash_attention.json"
+    },
+    "flash_decode": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/flash_decode_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/flash_decode.json"
+    },
+    "fused_activation": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/fused_activation_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/fused_activation.json"
+    },
+    "gaussian_blur": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/gaussian_blur_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/gaussian_blur.json"
+    },
+    "histogramming": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/histogramming_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/histogramming.json"
+    },
+    "interleave": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/interleave_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/interleave.json"
+    },
+    "jacobi_stencil_2d": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/jacobi_stencil_2d_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/jacobi_stencil_2d.json"
+    },
+    "kl_divergence": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/kl_divergence_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/kl_divergence.json"
+    },
+    "l2_norm": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/l2_norm_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/l2_norm.json"
+    },
+    "layernorm": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/layernorm_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/layernorm.json"
+    },
+    "leaky_relu": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/leaky_relu_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/leaky_relu.json"
+    },
+    "linear_self_attention": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/linear_self_attention_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/linear_self_attention.json"
+    },
+    "matmul_fp32_fp16_fp8": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 20,
+      "triton_cutile_source": "results/csv/matmul_fp32_fp16_fp8_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/matmul_fp32_fp16_fp8.json",
+      "note": "20 cases dropped: dtype no longer benchmarked upstream"
+    },
+    "matmul_int8": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/matmul_int8_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/matmul_int8.json"
+    },
+    "matrix_copy": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/matrix_copy_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/matrix_copy.json"
+    },
+    "matrix_transpose": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/matrix_transpose_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/matrix_transpose.json"
+    },
+    "mean_reduction": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/mean_reduction_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/mean_reduction.json"
+    },
+    "moe_topk_gating": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/moe_topk_gating_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/moe_topk_gating.json"
+    },
+    "mul2": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/mul2_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/mul2.json"
+    },
+    "quantize_global": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/quantize_global_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/quantize_global.json"
+    },
+    "radix_sort": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/radix_sort_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/radix_sort.json"
+    },
+    "relu": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 20,
+      "triton_cutile_source": "results/csv/relu_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/relu.json",
+      "note": "20 cases dropped: dtype no longer benchmarked upstream"
+    },
+    "reverse_array": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/reverse_array_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/reverse_array.json"
+    },
+    "rmsnorm": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/rmsnorm_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/rmsnorm.json"
+    },
+    "rope": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/rope_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/rope.json"
+    },
+    "sigmoid": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/sigmoid_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/sigmoid.json"
+    },
+    "softmax": {
+      "cases": 40,
+      "tilelang_pass": 40,
+      "triton_pass": 40,
+      "cutile_pass": 40,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/softmax_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/softmax.json"
+    },
+    "streamk_matmul": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/streamk_matmul_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/streamk_matmul.json"
+    },
+    "swiglu": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/swiglu_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/swiglu.json"
+    },
+    "top_k_selection": {
+      "cases": 20,
+      "tilelang_pass": 20,
+      "triton_pass": 20,
+      "cutile_pass": 20,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/top_k_selection_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/top_k_selection.json"
+    },
+    "vector_add": {
+      "cases": 80,
+      "tilelang_pass": 80,
+      "triton_pass": 80,
+      "cutile_pass": 80,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/vector_add_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/vector_add.json"
+    },
+    "weight_dequant": {
+      "cases": 60,
+      "tilelang_pass": 60,
+      "triton_pass": 60,
+      "cutile_pass": 60,
+      "dropped_cases": 0,
+      "triton_cutile_source": "results/csv/weight_dequant_autotune.csv",
+      "tilelang_source": "results/final_b200_autotuned/operators/weight_dequant.json"
+    }
+  }
+}
