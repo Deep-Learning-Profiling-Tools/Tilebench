@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_TILE": 64, "num_warps": 4}
 
 
 @triton.jit
-def _transpose_kernel(
+def transpose_kernel(
     x_ptr,
     output_ptr,
     m,
@@ -38,7 +38,7 @@ _transpose_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["m", "n"],
-)(_transpose_kernel)
+)(transpose_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
@@ -55,7 +55,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
         cfg = _DEFAULT_CONFIG
         tile = cfg["BLOCK_TILE"]
         grid = (triton.cdiv(m, tile), triton.cdiv(n, tile))
-        _transpose_kernel[grid](
+        transpose_kernel[grid](
             x, output, m, n,
             x.stride(0), x.stride(1), output.stride(0), output.stride(1),
             BLOCK_TILE=tile,

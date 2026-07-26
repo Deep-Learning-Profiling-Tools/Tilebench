@@ -1,93 +1,67 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=256, occupancy=8)
+_DEFAULT_CONFIG = SimpleNamespace(tile_r=2, tile_c=128, occupancy=4)
 _SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [256, 512, 1024, 2048]
+    SimpleNamespace(tile_r=tr, tile_c=tc, occupancy=occ)
+    for tr, tc in [(1, 128), (1, 256), (1, 512), (2, 128), (2, 256),
+                   (4, 128), (4, 256), (8, 64)]
     for occ in [4, 8, 16]
 ]
-_last_autotune_config = None
+_last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _gaussian_blur_stencil_kernel(
-    input_flat,
+def gaussian_blur_kernel(
+    x2d,
     kernel_flat,
-    output_flat,
-    input_rows,
-    input_cols,
-    total_elements,
+    out2d,
     kernel_rows: ConstInt,
     kernel_cols: ConstInt,
-    TILE: ConstInt,
+    TILE_R: ConstInt,
+    TILE_C: ConstInt,
 ):
-    """
-    Direct 2D stencil matching Triton's per-pixel-offset method:
-      - Each block handles TILE consecutive output pixels (flat 1D layout).
-      - For each (kr, kc), compute per-pixel input index and use ct.gather
-        for runtime-computed loads (equivalent to Triton's pointer arithmetic).
-      - ct.gather's padding_value handles zero-padded boundaries.
-    """
-    bid = ct.bid(0)
-    offsets = bid * TILE + ct.arange(TILE, dtype=np.int32)
-    mask = offsets < total_elements
+    bh = ct.bid(0)
+    bw = ct.bid(1)
 
-    row = offsets // input_cols
-    col = offsets % input_cols
+    r2 = (bh * TILE_R + ct.arange(TILE_R, dtype=ct.int32))[:, None]
+    c2 = (bw * TILE_C + ct.arange(TILE_C, dtype=ct.int32))[None, :]
 
-    center_r = kernel_rows // 2
-    center_c = kernel_cols // 2
+    acc = ct.zeros((TILE_R, TILE_C), dtype=ct.float32)
 
-    acc = ct.zeros((TILE,), dtype=np.float32)
-
-    for kr in range(kernel_rows):  # compile-time unrolled
+    for kr in range(kernel_rows):
         for kc in range(kernel_cols):
-            in_r = row + (kr - center_r)
-            in_c = col + (kc - center_c)
-            valid = mask & (in_r >= 0) & (in_r < input_rows) & (in_c >= 0) & (in_c < input_cols)
+            in_r = r2 + (kr - kernel_rows // 2)
+            in_c = c2 + (kc - kernel_cols // 2)
+            x = ct.gather(x2d, (in_r, in_c), padding_value=0.0)
 
-            # ct.where clamps invalid positions to -1; ct.gather treats negatives as OOB → 0.0
-            input_idx = ct.where(valid, in_r * input_cols + in_c, -1)
-            x = ct.gather(input_flat, input_idx, padding_value=0.0)
-            x = ct.astype(x, np.float32)
+            w_scalar = ct.load(kernel_flat,
+                               index=(kr * kernel_cols + kc,), shape=())
+            acc = acc + ct.astype(x, ct.float32) * ct.astype(w_scalar,
+                                                             ct.float32)
 
-            w_scalar = ct.load(kernel_flat, index=(kr * kernel_cols + kc,), shape=())
-            w_scalar = ct.astype(w_scalar, np.float32)
-
-            acc = acc + x * w_scalar
-
-    acc = ct.astype(acc, output_flat.dtype)
-    ct.store(output_flat, index=(bid,), tile=acc)
+    ct.store(out2d, index=(bh, bw), tile=ct.astype(acc, out2d.dtype))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_gaussian_blur_stencil_kernel)
+_tuner = CutileAutotuner(gaussian_blur_kernel)
 
 
 def run(input, kernel, input_rows, input_cols,
         kernel_rows, kernel_cols,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """
-    cuTile 2D Gaussian blur — direct stencil matching Triton's method.
-    input:  flat 1D tensor of size input_rows * input_cols
-    kernel: flat 1D tensor of size kernel_rows * kernel_cols
-    output: flat 1D tensor of size input_rows * input_cols
-    """
-    global _last_autotune_config
-
     total_elements = input_rows * input_cols
     if total_elements <= 0:
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
     output = torch.empty(total_elements, dtype=input.dtype, device=input.device)
+    x2d = input.view(input_rows, input_cols)
+    out2d = output.view(input_rows, input_cols)
     stream = torch.cuda.current_stream()
 
     if autotune:
@@ -95,34 +69,38 @@ def run(input, kernel, input_rows, input_cols,
             shape_key=(total_elements, kernel_rows, kernel_cols),
             search_space=_SEARCH_SPACE,
             stream=stream,
-            grid_fn=lambda cfg: (ct.cdiv(total_elements, cfg.tile), 1, 1),
+            grid_fn=lambda cfg: (
+                ct.cdiv(input_rows, cfg.tile_r),
+                ct.cdiv(input_cols, cfg.tile_c),
+                1,
+            ),
             args_fn=lambda cfg: (
-                input, kernel, output,
-                input_rows, input_cols, total_elements,
-                kernel_rows, kernel_cols,
-                cfg.tile,
+                x2d, kernel, out2d, kernel_rows, kernel_cols,
+                cfg.tile_r, cfg.tile_c,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
-            "tile":      cfg.tile,
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
+            "tile_r":    cfg.tile_r,
+            "tile_c":    cfg.tile_c,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
-    grid = (ct.cdiv(total_elements, cfg.tile), 1, 1)
-    kernel_obj = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    ct.launch(
-        stream, grid, kernel_obj,
-        (input, kernel, output,
-         input_rows, input_cols, total_elements,
-         kernel_rows, kernel_cols,
-         cfg.tile),
+    grid = (
+        ct.cdiv(input_rows, cfg.tile_r),
+        ct.cdiv(input_cols, cfg.tile_c),
+        1,
     )
+    kernel_obj = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel_obj,
+              (x2d, kernel, out2d, kernel_rows, kernel_cols,
+               cfg.tile_r, cfg.tile_c))
 
     return output
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
