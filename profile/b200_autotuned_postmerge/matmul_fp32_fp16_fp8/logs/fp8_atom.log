@@ -1,0 +1,45 @@
+
+===== fp8_bn256_BROKEN  (256x256x128) -> atom_fp8_bn256_BROKEN.cu =====
+  #include <tl_templates/cuda/instruction/tcgen05mma.h>
+  __shared__ __align__(16) uint acc_tmem[1];
+  tl::tcgen05_before_thread_sync();
+  tl::tcgen05_after_thread_sync();
+  tl::tmem_allocate((&(acc_tmem[0])), 512);
+  tl::Tcgen05SMemDescriptor desc_a;
+  tl::Tcgen05SMemDescriptor desc_b;
+  tl::initialize_tcgen05_descriptor(desc_a, (&(((fp8_e4_t*)a_tile)[((k_1 % 3) * 32768)])), 1, 64, 0, 0, 2);
+  tl::initialize_tcgen05_descriptor(desc_b, (&(((fp8_e4_t*)b_tile)[((k_1 % 3) * 32768)])), 512, 64, 0, 0, 2);
+  tl::tcgen05mma_ws_ss<tl::DataType::kFloat8_e4m3>(uint64_t(desc_a + ((i * 16384) + (ki * 32))), uint64_t(desc_b + (ki * 4096)), (*reinterpret_cast<uint32_t*>(acc_tmem)) + (i * 256), ((0 < ki) ? 1 : ((k_1 == 0) ? 0 : 1)), static_cast<uint32_t>(138477584), 0, 0, 0, 0);
+  tl::tcgen05_mma_arrive((&(mbar[(k_1 % 3)])));
+  tl::tcgen05_ld_32dp32bNx<256, false>(acc_tmem[0], (((((int)threadIdx.x) >> 7) * 256) - 256), (&(acc[0])));
+  tl::tmem_deallocate((&(acc_tmem[0])), 512);
+
+===== fp8_bn128_ok  (256x128x128) -> atom_fp8_bn128_ok.cu =====
+  #include <tl_templates/cuda/instruction/tcgen05mma.h>
+  __shared__ __align__(16) uint acc_tmem[1];
+  tl::tcgen05_before_thread_sync();
+  tl::tcgen05_after_thread_sync();
+  tl::tmem_allocate((&(acc_tmem[0])), 256);
+  tl::Tcgen05SMemDescriptor desc_a;
+  tl::Tcgen05SMemDescriptor desc_b;
+  tl::initialize_tcgen05_descriptor(desc_a, (&(((fp8_e4_t*)a_tile)[((k_1 % 3) * 32768)])), 1, 64, 0, 0, 2);
+  tl::initialize_tcgen05_descriptor(desc_b, (&(((fp8_e4_t*)b_tile)[((k_1 % 3) * 16384)])), 0, 64, 0, 0, 2);
+  tl::tcgen05mma_ws_ss<tl::DataType::kFloat8_e4m3>(uint64_t(desc_a + ((i * 16384) + (ki * 32))), uint64_t(desc_b + (ki * 4096)), (*reinterpret_cast<uint32_t*>(acc_tmem)) + (i * 128), ((0 < ki) ? 1 : ((k_1 == 0) ? 0 : 1)), static_cast<uint32_t>(136380432), 0, 0, 0, 0);
+  tl::tcgen05_mma_arrive((&(mbar[(k_1 % 3)])));
+  tl::tcgen05_ld_32dp32bNx<128, false>(acc_tmem[0], (((((int)threadIdx.x) >> 7) * 128) - 128), (&(acc[0])));
+  tl::tmem_deallocate((&(acc_tmem[0])), 256);
+
+===== fp16_bn256_ok  (256x256x64) -> atom_fp16_bn256_ok.cu =====
+  #include <tl_templates/cuda/instruction/tcgen05mma.h>
+  __shared__ __align__(16) uint acc_tmem[1];
+  tl::tcgen05_before_thread_sync();
+  tl::tcgen05_after_thread_sync();
+  tl::tmem_allocate((&(acc_tmem[0])), 512);
+  tl::Tcgen05SMemDescriptor desc_a;
+  tl::Tcgen05SMemDescriptor desc_b;
+  tl::initialize_tcgen05_descriptor(desc_a, (&(((half_t*)a_tile)[((k_1 % 3) * 16384)])), 1, 64, 0, 0, 2);
+  tl::initialize_tcgen05_descriptor(desc_b, (&(((half_t*)b_tile)[((k_1 % 3) * 16384)])), 512, 64, 0, 0, 2);
+  tl::tcgen05mma_ss<tl::DataType::kFloat16, false>(uint64_t(desc_a + ((i * 16384) + (ki * 32))), uint64_t(desc_b + (ki * 2048)), (*reinterpret_cast<uint32_t*>(acc_tmem)) + (i * 256), ((0 < ki) ? 1 : ((k_1 == 0) ? 0 : 1)), static_cast<uint32_t>(138477584), 0, 0, 0, 0);
+  tl::tcgen05_mma_arrive((&(mbar[(k_1 % 3)])));
+  tl::tcgen05_ld_32dp32bNx<256, false>(acc_tmem[0], (((((int)threadIdx.x) >> 7) * 256) - 256), (&(acc[0])));
+  tl::tmem_deallocate((&(acc_tmem[0])), 512);

@@ -1,0 +1,700 @@
+[
+  {
+    "backend": "tilelang",
+    "dtype": "fp16",
+    "kernel": "matrix_transpose_kernel_kernel",
+    "duration_ns": 57600.0,
+    "grid_blocks": 5120,
+    "block_threads": 128,
+    "registers_per_thread": 72,
+    "shared_mem_per_block": 66560,
+    "waves_per_sm": 11.531531531531533,
+    "achieved_occupancy_pct": 15.313223920663512,
+    "sm_throughput_pct": 22.798158298074313,
+    "memory_throughput_pct": 64.70118459790899,
+    "alu_active_pct": 6.047795884794776,
+    "executed_warp_instructions": 6164480,
+    "dram_bytes_read": 167783168.0,
+    "dram_bytes_write": 118016768.0,
+    "global_load_sectors": 5242880.0,
+    "global_store_sectors": 0.0,
+    "shared_instructions": 3420160.0,
+    "shared_load_instructions": 2621440.0,
+    "shared_store_instructions": 798720.0,
+    "shared_wavefronts": 6271994.0,
+    "shared_load_wavefronts": 2780970.0,
+    "shared_store_wavefronts": 3406469.0,
+    "shared_bank_conflicts": 865394.0,
+    "shared_load_bank_conflicts": 159530.0,
+    "shared_store_bank_conflicts": 703109.0,
+    "long_scoreboard": 11.952019635070597,
+    "short_scoreboard": 4.7069837196324755,
+    "wait": 2.3087257968230896,
+    "barrier": 1.8724103249584716,
+    "mio_throttle": 1.7922942405523254,
+    "opcodes": {
+      "LDS": 2621440.0,
+      "PRMT": 1228800.0,
+      "STS": 798720.0,
+      "LDG": 327680.0,
+      "LOP3": 327680.0,
+      "LEA": 204800.0,
+      "IMAD": 122880.0,
+      "S2UR": 61440.0,
+      "BAR": 40960.0,
+      "ISETP": 40960.0,
+      "LDC": 40960.0,
+      "SHF": 40960.0,
+      "SHFL": 40960.0,
+      "UMOV": 35840.0,
+      "EXIT": 30720.0,
+      "LDCU": 30720.0,
+      "USHF": 25600.0,
+      "BRA": 20480.0,
+      "S2R": 20480.0,
+      "UIMAD": 20480.0,
+      "ULEA": 20480.0,
+      "UIADD3": 15360.0,
+      "UTMASTG": 10240.0,
+      "DEPBAR": 5120.0,
+      "ELECT": 5120.0,
+      "FENCE": 5120.0,
+      "MEMBAR": 5120.0,
+      "NOP": 5120.0,
+      "UTMACCTL": 5120.0,
+      "UTMACMDFLUSH": 5120.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "High Memory Throughput",
+        "message": "Memory is more heavily utilized than Compute: Look at the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section to identify the DRAM bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or whether there are values you can (re)compute.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 9.8 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 2.48 active warps per scheduler, but only an average of 0.11 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 35.29881540209101
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "Long Scoreboard Stalls",
+        "message": "On average, each warp of this workload spends 12.0 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 49.3% of the total average of 24.2 cycles between issuing two instructions.",
+        "estimated_speedup_pct": 35.29881540209101
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "",
+        "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "HighPipeUtilization",
+        "title": "Low Utilization",
+        "message": "All compute pipelines are under-utilized. Either this workload is very small or it doesn't issue enough warps per scheduler. Check the @section:LaunchStats:Launch Statistics@ and @section:SchedulerStats:Scheduler Statistics@ sections for further details.",
+        "estimated_speedup_pct": 94.48382362895119
+      },
+      {
+        "identifier": "MemoryL2Compression",
+        "title": "Low Compression Rate",
+        "message": "Out of the 167813472.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+        "estimated_speedup_pct": 25.458002360586885
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "SharedMemoryConflicts",
+        "title": "Shared Store Bank Conflicts",
+        "message": "The memory access pattern for shared stores might not be optimal and causes on average a 4.3 - way bank conflict across all 798720 shared store requests.This results in 703109 bank conflicts,  which represent 20.64% of the overall 3406469 wavefronts for shared stores. Check the @section:SourceCounters:Source Counters@ section for uncoalesced shared stores.",
+        "estimated_speedup_pct": 10.410753367881286
+      },
+      {
+        "identifier": "TheoreticalOccupancy",
+        "title": "",
+        "message": "The 3.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the required amount of shared memory.",
+        "estimated_speedup_pct": 35.29881540209101
+      },
+      {
+        "identifier": "UncoalescedSharedAccess",
+        "title": "",
+        "message": "This workload has uncoalesced shared accesses resulting in a total of 491520 excessive wavefronts (8% of the total 5816320 wavefronts). Check the L1 Wavefronts Shared Excessive table for the primary source locations. The @url:CUDA Best Practices Guide:https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#shared-memory-in-matrix-multiplication-c-ab@ has an example on optimizing shared memory accesses.",
+        "estimated_speedup_pct": 7.707861815212621
+      },
+      {
+        "identifier": "UncoalescedSharedAccess",
+        "title": "",
+        "message": "",
+        "estimated_speedup_pct": null
+      }
+    ]
+  },
+  {
+    "backend": "triton",
+    "dtype": "fp16",
+    "kernel": "_transpose_kernel",
+    "duration_ns": 50048.0,
+    "grid_blocks": 20480,
+    "block_threads": 256,
+    "registers_per_thread": 26,
+    "shared_mem_per_block": 9216,
+    "waves_per_sm": 17.2972972972973,
+    "achieved_occupancy_pct": 86.9261031924416,
+    "sm_throughput_pct": 24.531725370253863,
+    "memory_throughput_pct": 73.56909299594278,
+    "alu_active_pct": 26.878000069740448,
+    "executed_warp_instructions": 13762560,
+    "dram_bytes_read": 167783168.0,
+    "dram_bytes_write": 114450944.0,
+    "global_load_sectors": 5242880.0,
+    "global_store_sectors": 5242880.0,
+    "shared_instructions": 655360.0,
+    "shared_load_instructions": 0.0,
+    "shared_store_instructions": 327680.0,
+    "shared_wavefronts": 2855488.0,
+    "shared_load_wavefronts": 1348911.0,
+    "shared_store_wavefronts": 1323146.0,
+    "shared_bank_conflicts": 51182.0,
+    "shared_load_bank_conflicts": 38191.0,
+    "shared_store_bank_conflicts": 12426.0,
+    "long_scoreboard": 32.478108360653835,
+    "short_scoreboard": 3.0253861200241814,
+    "wait": 0.8368424188523066,
+    "barrier": 10.104733203706289,
+    "mio_throttle": 0.837812950497582,
+    "opcodes": {
+      "IMAD": 2785280.0,
+      "LOP3": 1802240.0,
+      "LEA": 1474560.0,
+      "PRMT": 1310720.0,
+      "ISETP": 983040.0,
+      "LDCU": 983040.0,
+      "CS2R": 655360.0,
+      "S2R": 491520.0,
+      "SHF": 491520.0,
+      "EXIT": 327680.0,
+      "LDG": 327680.0,
+      "LDSM": 327680.0,
+      "SGXT": 327680.0,
+      "STG": 327680.0,
+      "STS": 327680.0,
+      "BAR": 163840.0,
+      "LDC": 163840.0,
+      "S2UR": 163840.0,
+      "ULEA": 163840.0,
+      "UMOV": 163840.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "High Memory Throughput",
+        "message": "Memory is more heavily utilized than Compute: Look at the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section to identify the DRAM bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or whether there are values you can (re)compute.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 3.8 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 13.95 active warps per scheduler, but only an average of 0.50 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 26.430907004057214
+      },
+      {
+        "identifier": "AchievedOccupancy",
+        "title": "",
+        "message": "The difference between calculated theoretical (100.0%) and measured achieved occupancy (86.9%) can be the result of warp scheduling overheads or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block as well as across blocks of the same kernel. See the @url:CUDA Best Practices Guide:https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy@ for more details on optimizing occupancy.",
+        "estimated_speedup_pct": 13.0738968075584
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "Long Scoreboard Stalls",
+        "message": "On average, each warp of this workload spends 32.5 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 61.6% of the total average of 52.8 cycles between issuing two instructions.",
+        "estimated_speedup_pct": 26.430907004057214
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "",
+        "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "MemoryL2Compression",
+        "title": "Low Compression Rate",
+        "message": "Out of the 167797824.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+        "estimated_speedup_pct": 29.32861497751543
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      }
+    ]
+  },
+  {
+    "backend": "cutile",
+    "dtype": "fp16",
+    "kernel": "_transpose_kernel_Kt1_A2f16_1v8l0_2t1_3i16_p16_A2f16_1v8l0_2t1_3i16_p16_I128",
+    "duration_ns": 50272.0,
+    "grid_blocks": 5120,
+    "block_threads": 128,
+    "registers_per_thread": 111,
+    "shared_mem_per_block": 33804,
+    "waves_per_sm": 8.64864864864865,
+    "achieved_occupancy_pct": 22.90777201612175,
+    "sm_throughput_pct": 27.758689944802555,
+    "memory_throughput_pct": 76.90323394982993,
+    "alu_active_pct": 29.819877381911713,
+    "executed_warp_instructions": 14090240,
+    "dram_bytes_read": 167797248.0,
+    "dram_bytes_write": 128550656.0,
+    "global_load_sectors": 5242880.0,
+    "global_store_sectors": 5242880.0,
+    "shared_instructions": 2949120.0,
+    "shared_load_instructions": 327680.0,
+    "shared_store_instructions": 2621440.0,
+    "shared_wavefronts": 4279620.0,
+    "shared_load_wavefronts": 1430524.0,
+    "shared_store_wavefronts": 2809918.0,
+    "shared_bank_conflicts": 308755.0,
+    "shared_load_bank_conflicts": 119804.0,
+    "shared_store_bank_conflicts": 188478.0,
+    "long_scoreboard": 7.0134515806686055,
+    "short_scoreboard": 1.9983003838117734,
+    "wait": 1.097156542400981,
+    "barrier": 0.7952405352925146,
+    "mio_throttle": 0.15687362316042877,
+    "opcodes": {
+      "PRMT": 2621440.0,
+      "STS": 2621440.0,
+      "ISETP": 1884160.0,
+      "IMAD": 1556480.0,
+      "LOP3": 1372160.0,
+      "SHF": 1024000.0,
+      "VIADD": 737280.0,
+      "LEA": 368640.0,
+      "LDG": 327680.0,
+      "LDS": 327680.0,
+      "STG": 327680.0,
+      "IADD3": 143360.0,
+      "LDCU": 122880.0,
+      "LDC": 102400.0,
+      "P2R": 81920.0,
+      "EXIT": 61440.0,
+      "S2UR": 61440.0,
+      "BRA": 40960.0,
+      "CS2R": 40960.0,
+      "F2I": 40960.0,
+      "FMUL": 40960.0,
+      "I2FP": 40960.0,
+      "R2UR": 40960.0,
+      "S2R": 40960.0,
+      "BAR": 20480.0,
+      "ULEA": 20480.0,
+      "UMOV": 20480.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "High Memory Throughput",
+        "message": "Memory is more heavily utilized than Compute: Look at the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section to identify the DRAM bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or whether there are values you can (re)compute.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 3.6 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 3.65 active warps per scheduler, but only an average of 0.36 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 23.09676605017007
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "Long Scoreboard Stalls",
+        "message": "On average, each warp of this workload spends 7.0 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 52.9% of the total average of 13.3 cycles between issuing two instructions.",
+        "estimated_speedup_pct": 23.09676605017007
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "",
+        "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "FPInstructions",
+        "title": "FP32 Non-Fused Instructions",
+        "message": "This workload executes 0 fused and 40960 non-fused FP32 instructions. By converting pairs of non-fused instructions to their @url:fused:https://docs.nvidia.com/cuda/floating-point/#cuda-and-floating-point@, higher-throughput equivalent, the achieved FP32 performance could be increased by up to 50% (relative to its current performance).",
+        "estimated_speedup_pct": 2.6746654373898293
+      },
+      {
+        "identifier": "MemoryL2Compression",
+        "title": "Low Compression Rate",
+        "message": "Out of the 167794080.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+        "estimated_speedup_pct": 29.2014720407501
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved  close to 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "TheoreticalOccupancy",
+        "title": "",
+        "message": "The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required registers, and the required amount of shared memory.",
+        "estimated_speedup_pct": 23.09676605017007
+      },
+      {
+        "identifier": "TileAnalysis",
+        "title": "Tile Mapping",
+        "message": "One thread block is mapped to execute one tile block instructions.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "TileAnalysis",
+        "title": "Tensor Core Unused",
+        "message": "Tensor core pipe utilization is 0%. Consider changing the tile size or using tensor core compatible data types for matmul or MMA to better utilize tensor core resources.",
+        "estimated_speedup_pct": null
+      }
+    ]
+  },
+  {
+    "backend": "tilelang",
+    "dtype": "int8",
+    "kernel": "matrix_transpose_kernel_kernel",
+    "duration_ns": 63296.0,
+    "grid_blocks": 20480,
+    "block_threads": 128,
+    "registers_per_thread": 21,
+    "shared_mem_per_block": 9216,
+    "waves_per_sm": 8.64864864864865,
+    "achieved_occupancy_pct": 91.38470527795373,
+    "sm_throughput_pct": 32.20509281298285,
+    "memory_throughput_pct": 89.70299493595412,
+    "alu_active_pct": 3.679015552357385,
+    "executed_warp_instructions": 9093120,
+    "dram_bytes_read": 83909120.0,
+    "dram_bytes_write": 45069568.0,
+    "global_load_sectors": 2621440.0,
+    "global_store_sectors": 0.0,
+    "shared_instructions": 5406720.0,
+    "shared_load_instructions": 2621440.0,
+    "shared_store_instructions": 2785280.0,
+    "shared_wavefronts": 14887274.0,
+    "shared_load_wavefronts": 2691970.0,
+    "shared_store_wavefronts": 11864582.0,
+    "shared_bank_conflicts": 8668348.0,
+    "shared_load_bank_conflicts": 70530.0,
+    "shared_store_bank_conflicts": 8587782.0,
+    "long_scoreboard": 11.452601417335304,
+    "short_scoreboard": 50.51697492169904,
+    "wait": 2.5148373715512387,
+    "barrier": 7.306637875668637,
+    "mio_throttle": 32.21950188714105,
+    "opcodes": {
+      "STS": 2785280.0,
+      "LDS": 2621440.0,
+      "LOP3": 737280.0,
+      "IMAD": 573440.0,
+      "S2UR": 245760.0,
+      "SHF": 245760.0,
+      "LDCU": 204800.0,
+      "BAR": 163840.0,
+      "ISETP": 163840.0,
+      "LDG": 163840.0,
+      "SHFL": 163840.0,
+      "EXIT": 122880.0,
+      "UMOV": 122880.0,
+      "USHF": 102400.0,
+      "BRA": 81920.0,
+      "IADD3": 81920.0,
+      "LDC": 81920.0,
+      "S2R": 81920.0,
+      "UIMAD": 81920.0,
+      "ULEA": 81920.0,
+      "DEPBAR": 20480.0,
+      "ELECT": 20480.0,
+      "FENCE": 20480.0,
+      "MEMBAR": 20480.0,
+      "NOP": 20480.0,
+      "UIADD3": 20480.0,
+      "UTMACCTL": 20480.0,
+      "UTMACMDFLUSH": 20480.0,
+      "UTMASTG": 20480.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "High Throughput",
+        "message": "This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 7.4 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 14.65 active warps per scheduler, but only an average of 0.55 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 10.297005064045873
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "Short Scoreboard Stalls",
+        "message": "On average, each warp of this workload spends 50.5 cycles being stalled waiting for a scoreboard dependency on a MIO (memory input/output) operation (not to L1TEX). The primary reason for a high number of stalls due to short scoreboards is typically memory operations to shared memory. Other reasons include frequent execution of special math instructions (e.g. MUFU) or dynamic branching (e.g. BRX, JMX). Consult the Memory Workload Analysis section to verify if there are shared memory operations and reduce bank conflicts, if reported. Assigning frequently accessed values to variables can assist the compiler in using low-latency registers instead of direct memory accesses. This stall type represents about 46.3% of the total average of 109.0 cycles between issuing two instructions.",
+        "estimated_speedup_pct": 10.297005064045873
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "",
+        "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "HighPipeUtilization",
+        "title": "Low Utilization",
+        "message": "All compute pipelines are under-utilized. Either this workload is very small or it doesn't issue enough warps per scheduler. Check the @section:LaunchStats:Launch Statistics@ and @section:SchedulerStats:Scheduler Statistics@ sections for further details.",
+        "estimated_speedup_pct": 96.56554080141267
+      },
+      {
+        "identifier": "MemoryL2Compression",
+        "title": "Low Compression Rate",
+        "message": "Out of the 83923584.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+        "estimated_speedup_pct": 12.957951192240978
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "SharedMemoryConflicts",
+        "title": "Shared Store Bank Conflicts",
+        "message": "The memory access pattern for shared stores might not be optimal and causes on average a 4.3 - way bank conflict across all 2785280 shared store requests.This results in 8587782 bank conflicts,  which represent 72.38% of the overall 11864582 wavefronts for shared stores. Check the @section:SourceCounters:Source Counters@ section for uncoalesced shared stores.",
+        "estimated_speedup_pct": 69.55186417716759
+      },
+      {
+        "identifier": "UncoalescedSharedAccess",
+        "title": "",
+        "message": "This workload has uncoalesced shared accesses resulting in a total of 7864320 excessive wavefronts (57% of the total 13762560 wavefronts). Check the L1 Wavefronts Shared Excessive table for the primary source locations. The @url:CUDA Best Practices Guide:https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#shared-memory-in-matrix-multiplication-c-ab@ has an example on optimizing shared memory accesses.",
+        "estimated_speedup_pct": 53.34438209213177
+      },
+      {
+        "identifier": "UncoalescedSharedAccess",
+        "title": "",
+        "message": "",
+        "estimated_speedup_pct": null
+      }
+    ]
+  },
+  {
+    "backend": "triton",
+    "dtype": "int8",
+    "kernel": "_transpose_kernel",
+    "duration_ns": 30912.0,
+    "grid_blocks": 5120,
+    "block_threads": 256,
+    "registers_per_thread": 32,
+    "shared_mem_per_block": 17408,
+    "waves_per_sm": 4.324324324324325,
+    "achieved_occupancy_pct": 96.73501924538512,
+    "sm_throughput_pct": 52.171318148238456,
+    "memory_throughput_pct": 69.84761102471056,
+    "alu_active_pct": 62.64326982487326,
+    "executed_warp_instructions": 13680640,
+    "dram_bytes_read": 83931648.0,
+    "dram_bytes_write": 81632000.0,
+    "global_load_sectors": 2621440.0,
+    "global_store_sectors": 2621440.0,
+    "shared_instructions": 3276800.0,
+    "shared_load_instructions": 655360.0,
+    "shared_store_instructions": 2621440.0,
+    "shared_wavefronts": 3644193.0,
+    "shared_load_wavefronts": 681973.0,
+    "shared_store_wavefronts": 2876267.0,
+    "shared_bank_conflicts": 281917.0,
+    "shared_load_bank_conflicts": 26613.0,
+    "shared_store_bank_conflicts": 254827.0,
+    "long_scoreboard": 5.310378608018338,
+    "short_scoreboard": 2.0448763361947977,
+    "wait": 0.9954363246163921,
+    "barrier": 4.147224837434505,
+    "mio_throttle": 8.722081276899326,
+    "opcodes": {
+      "PRMT": 4587520.0,
+      "STS": 2621440.0,
+      "LOP3": 1966080.0,
+      "IMAD": 737280.0,
+      "IADD3": 655360.0,
+      "LDS": 655360.0,
+      "SHF": 573440.0,
+      "ISETP": 409600.0,
+      "CS2R": 327680.0,
+      "LDCU": 245760.0,
+      "LDG": 163840.0,
+      "S2R": 163840.0,
+      "STG": 163840.0,
+      "EXIT": 81920.0,
+      "SGXT": 81920.0,
+      "BAR": 40960.0,
+      "LDC": 40960.0,
+      "S2UR": 40960.0,
+      "ULEA": 40960.0,
+      "UMOV": 40960.0,
+      "VIADD": 40960.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "High Memory Throughput",
+        "message": "Memory is more heavily utilized than Compute: Look at the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section to identify the DRAM bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or whether there are values you can (re)compute.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 2.0 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 15.32 active warps per scheduler, but only an average of 3.18 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 30.152388975289448
+      },
+      {
+        "identifier": "LaunchConfiguration",
+        "title": "Tail Effect",
+        "message": "A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical occupancy of the kernel. This kernel launch results in 4 full waves and a partial wave of 385 thread blocks. Under the assumption of a uniform execution duration of all thread blocks, this partial wave may account for up to 20.0% of the total runtime of this kernel. Try launching a grid with no partial wave. The overall impact of this tail effect also lessens with the number of full waves executed for a grid. See the @url:Hardware Model:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model@ description for more details on launch configurations.",
+        "estimated_speedup_pct": 20.0
+      },
+      {
+        "identifier": "MemoryL2Compression",
+        "title": "Low Compression Rate",
+        "message": "Out of the 83894016.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+        "estimated_speedup_pct": 23.922956719141133
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      }
+    ]
+  },
+  {
+    "backend": "cutile",
+    "dtype": "int8",
+    "kernel": "_transpose_kernel_Kt1_A2i8_1v16l0_2t1_3i16_p16_A2i8_1v16l0_2t1_3i16_p16_I128",
+    "duration_ns": 39488.0,
+    "grid_blocks": 5120,
+    "block_threads": 128,
+    "registers_per_thread": 113,
+    "shared_mem_per_block": 17420,
+    "waves_per_sm": 8.64864864864865,
+    "achieved_occupancy_pct": 25.535263917187635,
+    "sm_throughput_pct": 46.751562340178744,
+    "memory_throughput_pct": 58.458360844464764,
+    "alu_active_pct": 54.61546676290424,
+    "executed_warp_instructions": 15278080,
+    "dram_bytes_read": 84368640.0,
+    "dram_bytes_write": 92422912.0,
+    "global_load_sectors": 2621440.0,
+    "global_store_sectors": 2621440.0,
+    "shared_instructions": 2785280.0,
+    "shared_load_instructions": 163840.0,
+    "shared_store_instructions": 2621440.0,
+    "shared_wavefronts": 3337295.0,
+    "shared_load_wavefronts": 658648.0,
+    "shared_store_wavefronts": 2632249.0,
+    "shared_bank_conflicts": 13511.0,
+    "shared_load_bank_conflicts": 3288.0,
+    "shared_store_bank_conflicts": 10809.0,
+    "long_scoreboard": 3.019585641651307,
+    "short_scoreboard": 0.8754971828920912,
+    "wait": 0.8948522327412869,
+    "barrier": 0.7553769190893097,
+    "mio_throttle": 0.03964064856317025,
+    "opcodes": {
+      "PRMT": 3932160.0,
+      "STS": 2621440.0,
+      "LOP3": 1576960.0,
+      "SHF": 1556480.0,
+      "VIADD": 1351680.0,
+      "ISETP": 962560.0,
+      "IMAD": 757760.0,
+      "IADD3": 409600.0,
+      "LEA": 409600.0,
+      "LDCU": 225280.0,
+      "LDG": 163840.0,
+      "LDS": 163840.0,
+      "STG": 163840.0,
+      "USHF": 122880.0,
+      "LDC": 102400.0,
+      "ULEA": 102400.0,
+      "UISETP": 81920.0,
+      "EXIT": 61440.0,
+      "P2R": 61440.0,
+      "S2UR": 61440.0,
+      "CS2R": 40960.0,
+      "F2I": 40960.0,
+      "FMUL": 40960.0,
+      "I2FP": 40960.0,
+      "R2UR": 40960.0,
+      "S2R": 40960.0,
+      "UIADD3": 40960.0,
+      "ULOP3": 40960.0,
+      "BAR": 20480.0,
+      "BRA": 20480.0,
+      "UMOV": 20480.0
+    },
+    "rules": [
+      {
+        "identifier": "SOLBottleneck",
+        "title": "Latency Issue",
+        "message": "This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at @section:SchedulerStats:Scheduler Statistics@ and @section:WarpStateStats:Warp State Statistics@ for potential reasons.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "IssueSlotUtilization",
+        "title": "",
+        "message": "Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only issues an instruction every 2.2 cycles. This might leave hardware resources underutilized and may lead to less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average of 4.09 active warps per scheduler, but only an average of 0.75 warps were eligible per cycle. Eligible warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no eligible warp results in no instruction being issued and the issue slot remains unused. To increase the number of eligible warps, avoid possible load imbalances due to highly different execution durations per warp. Reducing stalls indicated on the @section:WarpStateStats:Warp State Statistics@ and @section:SourceCounters:Source Counters@ sections can help, too.",
+        "estimated_speedup_pct": 41.541639155535236
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "Long Scoreboard Stalls",
+        "message": "On average, each warp of this workload spends 3.0 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 34.2% of the total average of 8.8 cycles between issuing two instructions.",
+        "estimated_speedup_pct": 34.2341193743198
+      },
+      {
+        "identifier": "CPIStall",
+        "title": "",
+        "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "FPInstructions",
+        "title": "FP32 Non-Fused Instructions",
+        "message": "This workload executes 0 fused and 40960 non-fused FP32 instructions. By converting pairs of non-fused instructions to their @url:fused:https://docs.nvidia.com/cuda/floating-point/#cuda-and-floating-point@, higher-throughput equivalent, the achieved FP32 performance could be increased by up to 50% (relative to its current performance).",
+        "estimated_speedup_pct": 2.915346857947654
+      },
+      {
+        "identifier": "SOLFPRoofline",
+        "title": "Roofline Analysis",
+        "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved  close to 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "TheoreticalOccupancy",
+        "title": "",
+        "message": "The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required registers.",
+        "estimated_speedup_pct": 41.541639155535236
+      },
+      {
+        "identifier": "TileAnalysis",
+        "title": "Tile Mapping",
+        "message": "One thread block is mapped to execute one tile block instructions.",
+        "estimated_speedup_pct": null
+      },
+      {
+        "identifier": "TileAnalysis",
+        "title": "Tensor Core Unused",
+        "message": "Tensor core pipe utilization is 0%. Consider changing the tile size or using tensor core compatible data types for matmul or MMA to better utilize tensor core resources.",
+        "estimated_speedup_pct": null
+      }
+    ]
+  }
+]

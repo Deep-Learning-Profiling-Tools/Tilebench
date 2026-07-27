@@ -1,0 +1,27 @@
+stall               meaning                                 tilelang                  triton                  cutile
+                                              warps  (% of resident)  warps  (% of resident)  warps  (% of resident)
+long_scoreboard     global/L1 data wait             4.3740 ( 35.1%)        6.8712 ( 56.8%)        3.2364 ( 31.6%)
+short_scoreboard    MIO: smem + addr gen            0.2273 (  1.8%)        0.2192 (  1.8%)        0.3877 (  3.8%)
+wait                arithmetic dependency           0.5302 (  4.3%)        0.6060 (  5.0%)        1.1174 ( 10.9%)
+mio_throttle        MIO queue full                  0.4190 (  3.4%)        1.0819 (  8.9%)        1.7363 ( 16.9%)
+math_pipe_throttle  math pipe busy                  1.8574 ( 14.9%)        0.2396 (  2.0%)        0.2384 (  2.3%)
+branch_resolving    branch resolution               0.0326 (  0.3%)        0.0466 (  0.4%)        0.3392 (  3.3%)
+no_instruction      instruction fetch               0.1572 (  1.3%)        0.2077 (  1.7%)        0.1395 (  1.4%)
+not_selected        another warp won                3.7125 ( 29.8%)        1.6977 ( 14.0%)        2.0164 ( 19.7%)
+dispatch_stall      dispatch                        0.2744 (  2.2%)        0.1330 (  1.1%)        0.2773 (  2.7%)
+drain               drain                           0.1457 (  1.2%)        0.2196 (  1.8%)        0.0603 (  0.6%)
+
+TOTAL stalled                                      11.7303 ( 94.1%)       11.3226 ( 93.7%)        9.5489 ( 93.1%)
+resident warps / scheduler                         12.4693               12.0889               10.2512        
+issued warps / scheduler                            0.7466                0.7420                0.7126        
+cycles_active                                       81,643                57,081               101,309        
+
+  !! Every backend is >85% stalled AND the distributions are
+     similar. Stall composition cannot explain the gap -- they
+     are all latency-bound the same way. Go to method step 5b:
+       cycles = instructions / issue_rate
+     and collect --section SchedulerStats for eligible warps.
+
+Also check the ESSENTIAL-WORK counter in absolute terms, e.g.
+  tensor cycles = pipe_tensor_cycles_active.pct_of_peak_active/100 * sm__cycles_active.avg
+If those match across backends, the whole gap is overhead.

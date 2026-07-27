@@ -1,0 +1,17 @@
+benchmark inputs (1/sqrt(K)-scaled), verify atol=5.0 rtol=0.1
+
+=== float16  M=N=4096 K=8192  at tuned 256x256x64 ===
+variant                              TFLOP/s    maxabs   verify
+warp_spec=off (was shipped)            953.0    0.0057   PASS
+warp_spec=on                          1100.0    0.0000   PASS
+
+=== float8_e4m3fn  M=N=4096 K=8192  at tuned 256x256x128 ===
+variant                              TFLOP/s    maxabs   verify
+warp_spec=off (was shipped)           1790.2    0.0801   PASS
+warp_spec=on                          2025.7    0.0801   PASS
+
+=== shipped impl_tilelang.run with the new flag, all dtypes ===
+dtype              TFLOP/s    maxabs   verify
+float32              151.3    0.0001   PASS
+float16              154.2    0.0000   PASS
+float8_e4m3fn        147.5    0.0859   PASS

@@ -1,0 +1,30 @@
+=== tile sweep (ws=on), fp8 e4m3, M=N=512 K=1024 ===
+bm x bn x bk  thr              rel err   ok
+128x128x64  thr128           5.305e-02   OK
+128x128x64  thr256           5.305e-02   OK
+128x128x128  thr128          5.305e-02   OK
+128x128x128  thr256          5.305e-02   OK
+128x256x64  thr256           1.357e+00   WRONG
+256x128x64  thr256           5.305e-02   OK
+256x256x64  thr256           1.357e+00   WRONG
+256x256x128  thr256          1.402e+00   WRONG
+256x256x128  thr128          1.402e+00   WRONG
+64x64x64  thr128             5.305e-02   OK
+
+=== structure of the wrong result (256x256x128) ===
+sorted-value match (multiset): max diff 16.0000
+elements exactly right: 132934 / 262144 (50.7%)
+fully-correct rows: 0/512   fully-correct cols: 256/512
+
+per-64x64 subtile % correct (first 8x8 subtiles):
+    100   100     2     1   100   100     2     2
+    100   100     2     2   100   100     1     1
+    100   100     2     1   100   100     2     1
+    100   100     1     1   100   100     1     1
+    100   100     1     1   100   100     1     1
+    100   100     2     2   100   100     1     2
+    100   100     2     1   100   100     2     1
+    100   100     1     1   100   100     1     2
+
+searching for a row permutation...
+  rows found elsewhere in ref: 0/8 sampled

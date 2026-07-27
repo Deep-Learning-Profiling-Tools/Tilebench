@@ -102,10 +102,15 @@ lower (40.5 vs 58.4) is a consequence of the longer runtime, not a cause: the
 same bytes spread over more cycles.
 
 TileLang also runs 384 threads/CTA against cuTile's 256 and Triton's 128, with
-2.85x Triton's resident warps (11.33 vs 3.98 per cycle). More warps, less tensor
-throughput — the extra warps are consuming issue slots on bookkeeping.
+2.85x Triton's resident warps (11.33 vs 3.98 per cycle).
 
-Two stalls are TileLang-exclusive and corroborate scalar pressure:
+> **Corrected below.** It is tempting to read "more warps, less tensor
+> throughput" as the extra warps wasting issue slots on bookkeeping. The
+> scheduler data (see "Scheduler statistics") shows the opposite: those warps
+> *earn their keep*, raising TileLang's issue rate 1.60x over Triton's. They are
+> not the problem — they are a partial fix for it.
+
+Two stalls are TileLang-exclusive:
 
 | Stall (per issue-active) | TileLang | Triton | cuTile |
 |---|---:|---:|---:|
@@ -113,8 +118,12 @@ Two stalls are TileLang-exclusive and corroborate scalar pressure:
 | `branch_resolving` | **0.952** | 0.088 | 0.214 |
 | `math_pipe_throttle` | **0.118** | 0 | 0.001 |
 
-`math_pipe_throttle` being nonzero only for TileLang means its scalar pipes are
-actually beginning to back up — the only kernel of the three where that happens.
+> **Read with care.** These are `per_issue_active` ratios, normalized per kernel
+> — see "What the warps are actually stalled on" for why that form misleads.
+> `math_pipe_throttle` at 0.118 against a `long_scoreboard` of 21.61 is noise,
+> not evidence that the scalar pipes are backing up; that earlier reading was
+> wrong. `branch_resolving` does survive normalization, and SASS locates it:
+> `BSSY`/`BSYNC` at 395,520 against Triton's zero.
 
 ## Retracted: "synchronous `T.gemm` serializes the MMA"
 
@@ -301,7 +310,9 @@ section for what does.
 `SchedulerStats` was missing from the original capture, so eligible-warp counts
 were never collected. Recaptured (`reports/sch_*.ncu-rep`, same shape and
 matched tiles, `harness/run_ncu_sched.sh`). Per scheduler, averaged over active
-cycles:
+cycles. Raw metric dump: `analysis/metrics_sched_all.json` (1,896 metrics across
+the six kernels, including every `issue_stalled` and `inst_executed_pipe_*`
+counter used in this report).
 
 | fp16 | TileLang | Triton | cuTile |
 |---|---:|---:|---:|
@@ -345,13 +356,41 @@ residual is the gap.
 Where the excess sits (% of peak sustained per pipe, so a *rate*; multiply by
 the 1.33x cycle ratio for absolute counts):
 
+**fp16**, matched tile, M=N=4096, K=2048:
+
+| pipe | | TileLang | Triton | cuTile | TL/TR |
+|---|---|---:|---:|---:|---:|
+| `alu` | integer/logic, vector | 6.49% | 2.41% | 2.23% | 2.69x |
+| `fma` | float multiply-add, vector | 2.71% | 0.33% | 0.15% | 8.15x |
+| `xu` | transcendental / convert | 0.47% | 0.10% | 0.07% | 4.52x |
+| `cbu` | branch / reconvergence | 0.80% | 0.02% | 0.07% | **43.19x** |
+| **`uniform`** | **scalar datapath** | **0.23%** | **4.32%** | **3.04%** | **0.05x** |
+| `lsu` | load/store | 0.72% | 1.29% | 0.85% | 0.56x |
+| `adu` | address generation | 3.80% | 4.03% | 2.36% | 0.94x |
+| `tma` | tensor memory accelerator | 0.27% | 0.61% | 0.50% | 0.44x |
+| `tmem` | tensor memory | 0.01% | 0.04% | 0.15% | 0.18x |
+| `tc` | tensor core issue | 0.48% | 0.63% | 0.69% | 0.75x |
+
+**fp8_e4m3fn**, same shape:
+
 | pipe | TileLang | Triton | cuTile | TL/TR |
 |---|---:|---:|---:|---:|
-| `alu` | 6.49% | 2.41% | 2.23% | 2.7x |
-| `fma` | 2.71% | 0.33% | 0.15% | 8.2x |
-| `xu` | 0.47% | 0.11% | 0.07% | 4.5x |
-| `cbu` (branch/reconverge) | 0.80% | 0.02% | 0.07% | 43x |
-| **`uniform` (scalar datapath)** | **0.23%** | **4.32%** | **3.04%** | **0.05x** |
+| `alu` | 13.68% | 3.56% | 3.66% | 3.85x |
+| `fma` | 3.25% | 0.57% | 0.24% | 5.67x |
+| `xu` | 0.78% | 0.19% | 0.12% | 4.01x |
+| `cbu` | 0.71% | 0.03% | 0.11% | **20.58x** |
+| **`uniform`** | **0.16%** | **4.01%** | **2.75%** | **0.04x** |
+| `lsu` | 0.67% | 0.67% | 0.85% | 0.99x |
+| `adu` | 3.63% | 4.33% | 2.72% | 0.84x |
+| `tma` | 0.13% | 0.61% | 0.32% | 0.22x |
+| `tmem` | 0.01% | 0.07% | 0.28% | 0.16x |
+| `tc` | 0.39% | 0.59% | 0.64% | 0.67x |
+
+Note `lsu` (0.56x / 0.99x), `adu` (0.94x / 0.84x) and `tma` (0.44x / 0.22x) are
+at or **below** Triton on both dtypes. TileLang is not issuing more loads, more
+address-generation, or more TMA work — the excess is confined to the vector
+arithmetic and branch pipes, which is what makes the `uniform` row meaningful
+rather than incidental.
 
 The `uniform` row is the most suggestive line in this report. Triton and cuTile
 push loop counters, predicates and address arithmetic onto the **uniform
@@ -368,6 +407,103 @@ In a kernel that issues nothing 90% of cycles, instruction count still sets
 runtime through issue-slot and dependency-chain length. The low utilizations
 are consistent with instruction count mattering, not evidence against it.
 
+## SASS confirmation
+
+`--set source --section SourceCounters` gives per-instruction **dynamic** counts
+(each SASS line weighted by its own `Instructions Executed`). fp16, matched
+tile, M=N=2048, K=4096, `harness/sass_opcodes.py`:
+
+| | TileLang | Triton | cuTile |
+|---|---:|---:|---:|
+| uniform-datapath opcodes (`U*`) | **13.90%** | **55.56%** | 36.69% |
+| instructions with any `UR*` operand | 39.98% | 70.09% | 66.49% |
+
+This confirms the `uniform`-pipe reading directly, and more starkly than the NCU
+counter did. Named opcodes, dynamic counts:
+
+| opcode | what it is | TileLang | Triton | cuTile |
+|---|---|---:|---:|---:|
+| `R2UR` | move vector reg -> uniform reg | **397,568** | **1,024** | 11,008 |
+| `IMAD` | integer multiply-add, vector datapath | **2,350,408** | 60,416 | 206,578 |
+| `BSSY`/`BSYNC` | divergent-branch sync stack | **395,520** each | **0** | ~2,500 |
+| `NANOSLEEP` | spin-wait backoff | **1,144,101** | **0** | 458,259 |
+| `PRMT`+`UPRMT` | byte permute (swizzle/layout) | **909,312** | **0** | **0** |
+| `SYNCS` | warp sync | 2,765,642 | 52,224 | 1,014,566 |
+| `UTCHMMA` | the actual MMA | **65,536** | **32,768** | 65,536 |
+
+Reading these:
+
+- **`R2UR` at 388x Triton** is the mechanism behind the `uniform` gap. TileLang
+  does not fail to use uniform registers — it computes the values in the *vector*
+  datapath first and then copies them across. That is the expensive way to get a
+  scalar: every thread computes it, then one result is kept.
+- **`IMAD` at 39x Triton** is per-thread integer address arithmetic — the work
+  Triton keeps on `UIADD3`/`ULEA`.
+- **`BSSY`/`BSYNC` at ~0 for Triton** means Triton's inner loop has *no*
+  divergent control flow. TileLang's warp-specialized producer/consumer code is
+  full of it.
+- **`PRMT`/`UPRMT` only in TileLang** — 909K byte-permute ops that neither
+  competitor emits at all, i.e. swizzle/layout computed at runtime rather than
+  folded into descriptors.
+- **`UTCHMMA` 65,536 vs Triton's 32,768.** TileLang issues **2x the MMA
+  instructions** for the same math — a smaller `tcgen05` atom. Tensor-busy
+  *cycles* are identical (56,680), so this is not extra work; it is the same work
+  in twice as many instructions, with twice the surrounding bookkeeping.
+
+Full opcode table: `analysis/sass_opcodes_fp16.txt`.
+
+### Memory path: all three load via TMA, only TileLang stores without it
+
+Complete memory-opcode inventory (`harness/sass_memops.py`,
+`analysis/sass_memops_fp16.txt`) — `sass_opcodes.py` prints only a top-N union
+and hides low-count-but-decisive opcodes:
+
+| opcode | | TileLang | Triton | cuTile |
+|---|---|---:|---:|---:|
+| `UTMALDG` | TMA bulk tensor load | 49,152 | 33,792 | 49,152 |
+| `LDG` / `LDGSTS` | plain / `cp.async` global load | **0** | **0** | **0** |
+| `UTMASTG` | TMA bulk tensor store | **0** | 256 | 512 |
+| `STG` | plain global store | **8,192** | **0** | **0** |
+
+**Loads: yes, uniformly.** Every backend feeds operands exclusively through TMA.
+No one falls back to a plain or `cp.async` path, so the load mechanism is not a
+differentiator.
+
+**Stores: no.** TileLang is the only backend that writes its output with plain
+global stores; Triton and cuTile use a TMA store. This is independent
+corroboration of the K-sweep, which put the prologue/epilogue at 14-16% of the
+gap with TileLang's intercept 2.05x worse — two unrelated methods landing on the
+same component.
+
+Three further rows, reported as observations only:
+
+| opcode | | TileLang | Triton | cuTile |
+|---|---|---:|---:|---:|
+| `MEMBAR` | memory barrier | **16,384** | 256 | 2,048 |
+| `FENCE` | fence | **16,640** | 768 | 2,304 |
+| `YIELD` | warp yield | **65,536** | **0** | **0** |
+| `LDS` / `STS` | shared load / store | 19,456 / 256 | 448 / 16,512 | 2,048 / 16,896 |
+| `LDL` / `STL` | local (register spill) | 2,048 / 3,072 | 9,472 / 9,472 | 0 / 0 |
+
+- **64x the `MEMBAR` and 21x the `FENCE` of Triton.** Fences serialize memory
+  operations; at ~16K executions this is unlikely to be free, and it appears in
+  no NCU counter examined in this report.
+- **`YIELD` 65,536 against zero for both competitors**, consistent with the
+  `NANOSLEEP` spin-wait pattern.
+- **`LDS` 43x Triton while `STS` runs 64x the other way.** TileLang reads shared
+  memory far more and writes it far less, suggesting operands are staged through
+  registers where the competitors feed the tensor core from shared directly.
+- Note Triton spills *more* than TileLang (`LDL`/`STL` 9,472 vs 2,048/3,072) and
+  is still faster — spill volume is not the discriminator here.
+
+None of these five rows is tied to time. They are located, not costed.
+
+**Caveat:** this capture is at a different shape (M=N=2048, K=4096) than the
+counter run (M=N=4096, K=2048), and the source page sums over the whole grid
+rather than averaging per SM. So the *total* instruction ratios here are not
+comparable to the 2.11x from the counter table — only the **composition** and
+the **per-opcode ratios** should be read. fp16 only; fp8 not captured.
+
 ## What is still not established
 
 **That the excess instructions are causal rather than correlated.** The
@@ -376,13 +512,15 @@ it relocates the question rather than answering it. The missing experiment is
 an intervention: reduce TileLang's emitted instruction count at a fixed tile and
 show cycles fall proportionally. Nothing here does that.
 
-Two specific follow-ups, neither run:
+The SASS above names the code patterns but still does not time them. Remaining:
 
-1. **Uniform-datapath attribution.** Confirm from SASS that Triton's `uniform`
-   traffic is loop/address arithmetic and that TileLang's ALU excess is the same
-   work in vector form. `--set source --section SourceCounters` on a small shape.
+1. **fp8 SASS**, to check the same patterns hold where the gap is larger (1.50x).
 2. **`T.tcgen05_gemm` async variant**, to separate "inherent to warp-specialized
    lowering" from "`T.gemm`'s in-loop `mbarrier_wait_parity`."
+3. **MMA atom width.** TileLang emits 2x the `UTCHMMA` of Triton for identical
+   tensor cycles. Whether forcing the wider atom is possible from the TileLang
+   API — and what it is worth — is untested, and is the most directly
+   actionable item here.
 
 *Which* property of the generated pipeline causes the longer wait.
 
@@ -436,6 +574,28 @@ PYTHONPATH=/opt/nvidia/nsight-compute/2026.1.1/extras/python:$PYTHONPATH \
     --report reports/f_tilelang_ws_fp16.ncu-rep --tag tl_fp16 \
     --report reports/f_triton_fp16.ncu-rep      --tag tr_fp16 \
     --report reports/f_cutile_fp16.ncu-rep      --tag ct_fp16
+
+# scheduler budget: eligible warps + cycles = instructions / issue_rate
+PYTHONPATH=/opt/nvidia/nsight-compute/2026.1.1/extras/python:$PYTHONPATH \
+  $PY ~/.claude/skills/kernel-perf-differential/helpers/scheduler_budget.py \
+    reports/sch_tilelang_ws_fp16.ncu-rep+reports/m_tilelang_ws_fp16.ncu-rep:tilelang \
+    reports/sch_cutile_fp16.ncu-rep+reports/m_cutile_fp16.ncu-rep:cutile \
+    reports/sch_triton_fp16.ncu-rep+reports/m_triton_fp16.ncu-rep:triton
+
+# SASS: per-instruction dynamic opcode histogram (M=N=2048, K=4096)
+$NCU --profile-from-start off --set source --section SourceCounters \
+     --target-processes all --force-overwrite -o reports/src_triton_fp16 \
+     $PY -u harness/profile_matmul.py --backend triton --dtype fp16 \
+        --M 2048 --N 2048 --K 4096 --matched
+$PY harness/sass_opcodes.py \
+    reports/src_tilelang_ws_fp16.ncu-rep:tilelang \
+    reports/src_triton_fp16.ncu-rep:triton \
+    reports/src_cutile_fp16.ncu-rep:cutile
+# full memory / TMA / fence inventory (catches UTMASTG, STG, MEMBAR)
+$PY harness/sass_memops.py \
+    reports/src_tilelang_ws_fp16.ncu-rep:tilelang \
+    reports/src_triton_fp16.ncu-rep:triton \
+    reports/src_cutile_fp16.ncu-rep:cutile
 
 $PY harness/final_headtohead.py      # tuned-vs-tuned timings, all dtypes
 $PY harness/ws_flag_check.py         # warp-spec flag A/B on benchmark inputs

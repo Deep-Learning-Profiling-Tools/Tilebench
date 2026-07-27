@@ -1,0 +1,30 @@
+
+===== fp16  M=N=4096 K=8192  (all at the recorded tuned tile) =====
+backend / config                                         ms   TFLOP/s   max_err
+>>> building tilelang ws=off
+2026-07-27 00:30:19  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `kern` with `out_idx=None`
+2026-07-27 00:30:28  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `kern`
+TileLang 256x256x64 thr256 st3 ws=off                 0.279     986.7   45.932
+>>> building tilelang ws=on
+2026-07-27 00:30:29  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `kern` with `out_idx=None`
+2026-07-27 00:30:35  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `kern`
+TileLang 256x256x64 thr256 st3 ws=on                  0.246    1116.8   0.233
+>>> running Triton
+Triton (forced to same tile)                          0.214    1283.8   0.233
+>>> running cuTile
+cuTile (forced to same tile)                          0.193    1422.7   0.233
+
+===== fp8  M=N=4096 K=8192  (all at the recorded tuned tile) =====
+backend / config                                         ms   TFLOP/s   max_err
+>>> building tilelang ws=off
+2026-07-27 00:30:41  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `kern` with `out_idx=None`
+2026-07-27 00:30:49  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `kern`
+TileLang 256x256x128 thr256 st3 ws=off                0.153    1796.0   691.992
+>>> building tilelang ws=on
+2026-07-27 00:30:50  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `kern` with `out_idx=None`
+2026-07-27 00:30:57  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `kern`
+TileLang 256x256x128 thr256 st3 ws=on                 0.135    2032.1   691.992
+>>> running Triton
+Triton (forced to same tile)                          0.101    2718.0   65.658
+>>> running cuTile
+cuTile (forced to same tile)                          0.095    2901.4   65.658

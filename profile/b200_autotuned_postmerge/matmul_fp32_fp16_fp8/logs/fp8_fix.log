@@ -1,0 +1,19 @@
+fp8 bn=256: cols   0-127 max err 0.0000   cols 128-255 max err 208.0000
+  bad half: absmax 128.00  zeros 0.0%  mean 0.121  (good half mean -0.102)
+  bad half vs good half of same tile: max diff 216.0000   -> not a copy
+fp16 control at bn=256: rel err 3.59e-04  -> OK, fp8-specific
+
+=== fp8 configs at M=N=4096 K=8192 (ws=on) ===
+config                                   ms   TFLOP/s     rel err   ok
+256x256x128 thr256                    0.136    2023.5    1.47e+00   WRONG
+256x256x64 thr256                     0.160    1721.9    1.46e+00   WRONG
+256x128x128 thr256                    0.177    1549.2    5.31e-02   OK
+256x128x64 thr256                     0.228    1207.5    5.31e-02   OK
+128x128x128 thr256                    0.218    1260.1    5.31e-02   OK
+128x128x64 thr256                     0.325     844.8    5.31e-02   OK
+256x128x128 thr128                    0.172    1597.4    5.31e-02   OK
+128x128x128 thr128                    0.210    1308.1    5.31e-02   OK
+Triton  (tuned default)               0.100    2737.1    5.31e-02   OK
+cuTile  (tuned default)               0.102    2702.7    5.31e-02   OK
+
+fastest CORRECT tilelang fp8: 256x128x128 thr128 at 1597 TFLOP/s
