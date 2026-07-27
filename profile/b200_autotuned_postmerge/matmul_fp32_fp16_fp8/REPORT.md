@@ -7,10 +7,18 @@ pointer).
 ## Verdict
 
 At **matched, autotuned tile configs and with warp specialization enabled**,
-TileLang is still last on both dtypes. The cause is **not** MMA serialization
-and **not** a bad tile choice. It is that TileLang issues **~2x the instructions
-per active cycle for identical MMA work**, and that excess sits almost entirely
-in the scalar pipes (FMA, XU, ALU).
+TileLang is still last on both dtypes. The cause is **not** MMA serialization,
+**not** a bad tile choice, **not** a warp-eligibility / latency-hiding failure,
+and **not** a higher stall fraction.
+
+All three kernels are latency-bound in the same way — 87-95% of active cycles
+issue nothing, 94-98% of resident warps are stalled at any instant. What
+separates them is **instruction count for identical MMA work**: TileLang emits
+**2.11x (fp16) / 3.00x (fp8) more instructions than Triton**, concentrated in
+the vector ALU/FMA/XU pipes, while emitting almost nothing on the **uniform
+(scalar) datapath** that Triton and cuTile use heavily for loop and address
+arithmetic. Its warp-specialized schedule recovers 1.60x / 2.00x of that through
+a higher issue rate, and the residual — 1.33x / 1.50x — is the measured gap.
 
 CUDA-graph timed, M=N=4096, K=8192, each backend at its own recorded autotune
 winner, all passing `verify(atol=5.0, rtol=0.1)`:
@@ -269,21 +277,112 @@ fp16, matched tuned tile:
 fp8 is the same shape: TileLang 167,031 total (2.52x cuTile),
 `long_scoreboard` 76.5%.
 
-**Conclusion: the limiter is memory-latency exposure in the K-loop, not
-arithmetic.** 75% of TileLang's stall time is warps waiting for tile data, and
-in absolute warp-cycles that is **2.15x cuTile's**. Per-instruction attribution
-(`analysis/src_tilelang_ws.csv`) places those `long_scoreboard` hits on the
-backward branches of mbarrier spin-wait loops, i.e. waiting for TMA arrival.
+**This table is not comparable across backends as written, and the conclusion
+originally drawn from it was wrong.** Absolute warp-cycles scale with how many
+warps are resident. TileLang runs **2.83 active warps/scheduler against Triton's
+0.99** — 2.85x. So most of the "7.0x more `long_scoreboard`" is a warp-count
+artifact, not a longer wait.
 
-Arithmetic dependency (6.4%), address generation / MIO (6.6%) and branch
-resolution (3.3%) together account for ~16% of the stall budget. They are
-elevated relative to the others — `wait` is 3.7x cuTile, `branch_resolving`
-12.8x — but they are not the mechanism.
+Normalizing by resident warps (stall warps / active warps, i.e. *what fraction
+of resident warp-time is stalled*) removes the artifact:
 
-This agrees with the K-sweep from an independent method: the gap is 86%
-steady-state K-loop, and the K-loop's dominant cost is waiting on the next tile.
+| | TileLang | Triton | cuTile |
+|---|---:|---:|---:|
+| `long_scoreboard` | 72.7% | 39.5% | **81.2%** |
+| total stalled | 97.0% | 94.2% | **98.1%** |
+
+cuTile stalls a *larger* fraction of its warps on data than TileLang and is 27%
+faster. Every backend here has 94-98% of its resident warps stalled at any
+instant. **Stall fraction does not separate these kernels.** See the next
+section for what does.
+
+## Scheduler statistics: it is not an eligibility problem
+
+`SchedulerStats` was missing from the original capture, so eligible-warp counts
+were never collected. Recaptured (`reports/sch_*.ncu-rep`, same shape and
+matched tiles, `harness/run_ncu_sched.sh`). Per scheduler, averaged over active
+cycles:
+
+| fp16 | TileLang | Triton | cuTile |
+|---|---:|---:|---:|
+| Active warps / sched | **2.834** | 1.000 | 1.720 |
+| Eligible warps / sched | **0.1144** | 0.0596 | 0.0483 |
+| Issued warps / sched | **0.0951** | 0.0596 | 0.0480 |
+| % cycles with **no** eligible warp | **90.5%** | 94.0% | 95.2% |
+
+| fp8 | TileLang | Triton | cuTile |
+|---|---:|---:|---:|
+| Active warps / sched | **2.745** | 1.017 | 1.694 |
+| Eligible warps / sched | **0.1863** | 0.0666 | 0.0563 |
+| Issued warps / sched | **0.1333** | 0.0666 | 0.0556 |
+| % cycles with **no** eligible warp | **86.7%** | 93.3% | 94.4% |
+
+The natural hypothesis — TileLang has 3x the warps yet cannot hide latency, so
+something must be hurting warp *eligibility* — is **false**. TileLang has the
+**most** eligible warps and the **fewest** starved cycles of the three. Its
+warp-specialized schedule is doing exactly what it is supposed to do: the extra
+warps buy a 1.60x (fp16) / 2.00x (fp8) higher issue rate than Triton.
+
+All three kernels are deeply latency-bound: 87-95% of active cycles issue
+nothing at all. In that regime runtime is not set by any pipe saturating; it is
+set by **how many instructions must be pushed through at a near-fixed issue
+rate**.
+
+## The gap decomposes exactly into instruction count vs issue rate
+
+Since `cycles = instructions / issue_rate`, the cycle ratio is forced:
+
+| vs Triton | instructions/SM | issue rate | predicted cycles | measured cycles |
+|---|---:|---:|---:|---:|
+| fp16 | 39,399 / 18,710 = **2.11x** | **1.60x** | 2.11 / 1.60 = **1.32x** | **1.33x** |
+| fp8 | 33,726 / 11,245 = **3.00x** | **2.00x** | 3.00 / 2.00 = **1.50x** | **1.50x** |
+
+The identity closes to within measurement noise. TileLang issues 2.1x (fp16) /
+3.0x (fp8) more instructions for **identical** MMA work (56,680 tensor-busy
+cycles, all three), and its extra warps recover only 1.6-2.0x of that. The
+residual is the gap.
+
+Where the excess sits (% of peak sustained per pipe, so a *rate*; multiply by
+the 1.33x cycle ratio for absolute counts):
+
+| pipe | TileLang | Triton | cuTile | TL/TR |
+|---|---:|---:|---:|---:|
+| `alu` | 6.49% | 2.41% | 2.23% | 2.7x |
+| `fma` | 2.71% | 0.33% | 0.15% | 8.2x |
+| `xu` | 0.47% | 0.11% | 0.07% | 4.5x |
+| `cbu` (branch/reconverge) | 0.80% | 0.02% | 0.07% | 43x |
+| **`uniform` (scalar datapath)** | **0.23%** | **4.32%** | **3.04%** | **0.05x** |
+
+The `uniform` row is the most suggestive line in this report. Triton and cuTile
+push loop counters, predicates and address arithmetic onto the **uniform
+datapath** (uniform registers, one lane per warp). TileLang emits essentially
+none — it does that work in the per-thread vector ALU instead, across all 384
+threads. That is a concrete, named codegen difference and a plausible source of
+a 2-3x instruction multiplier.
+
+**Correction to an earlier retraction in this report.** The instruction-volume
+hypothesis was previously dismissed on the grounds that FMA sits at 2.7% of
+peak, and nothing at 2.7% utilization can be a throughput bottleneck. That test
+was the wrong one: it rules out *pipe saturation*, which was never the claim.
+In a kernel that issues nothing 90% of cycles, instruction count still sets
+runtime through issue-slot and dependency-chain length. The low utilizations
+are consistent with instruction count mattering, not evidence against it.
 
 ## What is still not established
+
+**That the excess instructions are causal rather than correlated.** The
+`cycles = instructions / issue_rate` identity is exact, but it is an identity —
+it relocates the question rather than answering it. The missing experiment is
+an intervention: reduce TileLang's emitted instruction count at a fixed tile and
+show cycles fall proportionally. Nothing here does that.
+
+Two specific follow-ups, neither run:
+
+1. **Uniform-datapath attribution.** Confirm from SASS that Triton's `uniform`
+   traffic is loop/address arithmetic and that TileLang's ALU excess is the same
+   work in vector form. `--set source --section SourceCounters` on a small shape.
+2. **`T.tcgen05_gemm` async variant**, to separate "inherent to warp-specialized
+   lowering" from "`T.gemm`'s in-loop `mbarrier_wait_parity`."
 
 *Which* property of the generated pipeline causes the longer wait.
 
@@ -297,12 +396,12 @@ Triton are matched on all three **by construction and in the built binary**:
 | smem static + dynamic | 1,024 + 196,608 B | 0 + 196,656 B |
 | A+B per stage x 3 | 196,608 B exactly | 196,608 B + 48 scratch |
 | tensor-busy cycles | 56,680 | 56,680 |
-| `long_scoreboard` warp-cyc | **216,122** | **31,011 (7.0x fewer)** |
+| instructions / SM | **39,399** | **18,710 (2.11x fewer)** |
 
-Same tile, same depth, same shared memory, same MMA cycles — and 7x the data
-wait. **The difference is therefore in the code TileLang generates for that
-pipeline, not in the schedule it was asked to generate.** This is a lowering
-quality issue, and no stage sweep is needed to establish it.
+Same tile, same depth, same shared memory, same MMA cycles — and 2.11x the
+instructions. **The difference is therefore in the code TileLang generates for
+that pipeline, not in the schedule it was asked to generate.** This is a
+lowering quality issue, and no stage sweep is needed to establish it.
 
 The shape of the difference:
 
@@ -310,27 +409,28 @@ The shape of the difference:
 |---|---:|---:|
 | threads / warps per CTA | 384 / 12 | 128 / 4 |
 | registers per thread | 168 | 255 |
-| `long_scoreboard` | 216,122 (75.0%) | 31,011 (41.9%) |
-| `barrier` | 1,774 (0.6%) | 24,128 (32.6%) |
+| active warps / scheduler | 2.83 | 1.00 |
+| issue rate / scheduler | 0.0951 | 0.0596 |
+| instructions / SM | 39,399 | 18,710 |
+| `uniform` pipe (% peak) | 0.23% | 4.32% |
 
-Triton drives the pipeline with 4 warps that block on real barriers. TileLang
-emits a 12-warp warp-specialized producer/consumer schedule whose consumers
-spin on mbarriers — which is accounted as `long_scoreboard`, not `barrier` —
-and nets 7x the data wait despite having 3x the warps available to hide it.
+Triton drives the pipeline with 4 warps that block on real barriers and keeps
+scalar/address arithmetic on the uniform datapath. TileLang emits a 12-warp
+warp-specialized producer/consumer schedule; the extra warps successfully raise
+its issue rate 1.60x, but it has 2.11x the instructions to issue, so it still
+loses 1.33x on cycles.
 
-What remains untested is whether that is inherent to TileLang's
-warp-specialized lowering or specific to `T.gemm`'s in-loop
-`mbarrier_wait_parity`. A `T.tcgen05_gemm` async variant with the wait hoisted
-out of the K-loop would separate them; it was not run.
-
-Note also that instruction *volume* is unlikely to bind on its own: absolute
-pipe utilizations are low (FMA 2.7%, XU 0.5%, ALU 6.5% of peak).
+Note that the `barrier`-vs-`long_scoreboard` accounting difference between the
+two (mbarrier spins land in `long_scoreboard`) is real but, per the normalized
+table above, does not by itself separate them — cuTile has a *higher*
+`long_scoreboard` fraction than TileLang and is faster.
 
 ## Reproducing
 
 ```bash
 source harness/env.sh
 PREFIX=f_ bash harness/run_ncu_matched.sh          # 8 profiles at tuned tiles
+bash harness/run_ncu_sched.sh                     # SchedulerStats: eligible warps
 PYTHONPATH=/opt/nvidia/nsight-compute/2026.1.1/extras/python:$PYTHONPATH \
   $PY ~/.claude/skills/ncu-report-skill/helpers/analyze_reports.py --run-dir . \
     --report reports/f_tilelang_ws_fp16.ncu-rep --tag tl_fp16 \
