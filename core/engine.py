@@ -9,9 +9,10 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-# CUDA is required for the GPU backends (torch timing via Proton, Triton,
-# cuTile, TileLang). On non-CUDA hosts (e.g. AWS Trainium) those are skipped;
-# only the torch correctness reference + the NKI backend (timed via XLA) run.
+# CUDA is required for the GPU-only backends (Triton, cuTile, TileLang) and for
+# Proton-based torch timing. On non-CUDA hosts (e.g. AWS Trainium) those are
+# skipped; torch and NKI are instead both timed on the XLA (Neuron) device via
+# neuron-profile (see core/nki_timer.py).
 HAS_CUDA = torch.cuda.is_available()
 
 
@@ -158,14 +159,26 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
         # --- Torch (baseline) ---
-        # Proton-timed on CUDA; on non-CUDA hosts torch ran above only as the
-        # correctness reference (no GPU timer here), so torch_ms is nan.
+        # Proton-timed on CUDA. On non-CUDA hosts (e.g. Trainium), Proton can't
+        # observe the device, so torch is timed the same way NKI is: run it once
+        # on the XLA (Neuron) device -- torch ops compile to a NEFF under
+        # torch_xla the same as an @nki.jit kernel does -- then measure on-device
+        # latency via neuron-profile (see core/nki_timer.py). bench_nki is
+        # generic over any fn(*inputs, **kwargs); nothing here is NKI-specific.
         if HAS_CUDA:
             torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
             torch_ms    = torch_stats["mean"]
         else:
-            torch_stats = None
-            torch_ms    = float("nan")
+            try:
+                from core.nki_timer import bench_nki, to_xla_device
+
+                torch_xla_inputs = to_xla_device(inputs)
+                torch_stats = bench_nki(impl_torch.run, torch_xla_inputs, warmup=warmup, repeat=repeat)
+                torch_ms    = torch_stats["mean"]
+            except Exception as e:
+                print(f"  Torch (XLA) timing FAILED: {e}")
+                torch_stats = None
+                torch_ms    = float("nan")
 
         # --- Triton ---
         triton_cfg = None
