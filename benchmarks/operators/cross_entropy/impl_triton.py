@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"num_warps": 8, "num_stages": 2}
 
 
 @triton.jit
-def _cross_entropy_kernel(
+def cross_entropy_kernel(
     logits_ptr,
     targets_ptr,
     output_ptr,
@@ -43,7 +43,7 @@ _cross_entropy_kernel_autotuned = triton.autotune(
         for nw in [1, 2, 4, 8]
     ],
     key=["num_classes"],
-)(_cross_entropy_kernel)
+)(cross_entropy_kernel)
 
 
 def run(
@@ -65,7 +65,7 @@ def run(
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _cross_entropy_kernel[grid](
+        cross_entropy_kernel[grid](
             logits, targets, output,
             num_classes,
             logits.stride(0), logits.stride(1),
