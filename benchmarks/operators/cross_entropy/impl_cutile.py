@@ -15,11 +15,10 @@ _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [4, 8, 16, 32]]
 
 
 @ct.kernel
-def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: ConstInt):
+def cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: ConstInt):
     bid = ct.bid(0)
-    # Kernel-side -inf padding: lanes >= num_classes contribute -inf to max/sum
-    # so they don't affect the row-wise reduction. Mirrors Triton's
-    # tl.load(..., mask=cls_offsets < num_classes, other=-inf).
+
+
     logits_tile = ct.load(
         logits, index=(bid, 0), shape=(1, BLOCK_CLASSES),
         padding_mode=ct.PaddingMode.NEG_INF,
@@ -30,8 +29,8 @@ def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: C
     row_sum = ct.sum(ct.exp(shifted), axis=1)
 
     target_cls = ct.load(targets, index=(bid,), shape=())
-    # Bounds check on the target class (mirrors Triton's target_ok mask).
-    # Out-of-range targets produce loss=+inf, matching Triton's behaviour.
+
+
     target_ok = (target_cls >= 0) & (target_cls < num_classes)
     safe_target = ct.where(target_ok, target_cls, 0)
     target_logit_raw = ct.gather(logits, (bid, safe_target), check_bounds=False)
@@ -41,8 +40,7 @@ def _cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: C
     ct.store(output, index=(bid,), tile=loss)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_cross_entropy_kernel)
+_tuner = CutileAutotuner(cross_entropy_kernel)
 
 
 def run(
@@ -53,7 +51,7 @@ def run(
 ) -> torch.Tensor:
     batch_size, num_classes = logits.shape
 
-    # BLOCK_CLASSES must be a power of 2 >= num_classes.
+
     block_classes = 1
     while block_classes < num_classes:
         block_classes *= 2
