@@ -624,25 +624,27 @@
   {
     "op": "dequantize_rowwise",
     "dtypes": [
-      "fp32"
+      "int8"
     ],
     "default_params_per_dtype": {
-      "fp32": {
+      "int8": {
         "rows": 4096,
         "cols": 8192
       }
     },
     "autotune_winner_per_dtype": {
-      "fp32": {
+      "int8": {
         "params": {
           "rows": 4096,
           "cols": 8192
         },
         "triton": {
-          "num_warps": 16
+          "CHUNK": 1024,
+          "num_warps": 2
         },
         "cutile": {
-          "occupancy": 8
+          "chunk": 1024,
+          "occupancy": 16
         }
       }
     },
@@ -871,8 +873,8 @@
         "batch_size": 4,
         "n_heads": 32,
         "head_dim": 128,
-        "causal": true,
-        "seq_len": 20480
+        "seq_len": 20480,
+        "causal": true
       }
     },
     "autotune_winner_per_dtype": {
@@ -881,19 +883,19 @@
           "batch_size": 4,
           "n_heads": 32,
           "head_dim": 128,
-          "causal": true,
-          "seq_len": 20480
+          "seq_len": 20480,
+          "causal": true
         },
         "triton": {
           "BLOCK_M": 128,
-          "BLOCK_N": 32,
+          "BLOCK_N": 64,
           "num_warps": 8,
-          "num_stages": 4
+          "num_stages": 2
         },
         "cutile": {
           "tile_m": 128,
           "tile_n": 128,
-          "occupancy": 8
+          "occupancy": 16
         }
       }
     },

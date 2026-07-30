@@ -26,7 +26,6 @@ _SEARCH_SPACE = [
 ]
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(matrix_copy_kernel)
 
 
