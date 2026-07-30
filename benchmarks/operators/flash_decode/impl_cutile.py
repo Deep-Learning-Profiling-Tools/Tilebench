@@ -14,16 +14,16 @@ _DEFAULT_CONFIG = SimpleNamespace(occupancy=8)
 _SEARCH_SPACE = [SimpleNamespace(occupancy=occ) for occ in [8, 16, 32]]
 
 @ct.kernel
-def flash_decode_stage2_kernel(
-    Mid_O,              # [Batch, Head, NumBlocks, HeadDim]
-    Mid_O_LSE,          # [Batch, Head, NumBlocks]
-    B_Seqlen,           # [Batch]
-    Out,                # [Batch, Head, HeadDim]
+def fwd_kernel_flash_decode_stage2(
+    Mid_O,
+    Mid_O_LSE,
+    B_Seqlen,
+    Out,
     HEAD_DIM: ConstInt,
     BLOCK_SEQ: ConstInt,
     TOTAL_BLOCKS: ConstInt
 ):
-    # 1. IDs
+
     bid_b = ct.bid(0)
     bid_h = ct.bid(1)
 
@@ -56,21 +56,19 @@ def flash_decode_stage2_kernel(
 
         acc = acc * scale
 
-        # reshape curr_weight (1,1,1) -> (1,1,1,1)
+
         acc = acc + curr_o * curr_weight
 
         sum_exp = sum_exp * scale + curr_weight
         max_logic = new_max
 
-    # 5. Store
+
     final_out = acc / sum_exp
 
     ct.store(Out, index=(bid_b, bid_h, 0, 0), tile=final_out)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-# See core/cutile_autotune.py for why both layers matter.
-_tuner = CutileAutotuner(flash_decode_stage2_kernel)
+_tuner = CutileAutotuner(fwd_kernel_flash_decode_stage2)
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
@@ -126,7 +124,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # 1. Setup Parameters
+
     device = "cuda"
     dtype = getattr(torch, args.dtype)
 
@@ -138,34 +136,31 @@ if __name__ == "__main__":
 
     print(f"Profiling Config: Batch={batch}, Heads={heads}, SeqLen={seq_len}, Dim={head_dim}, BlockSeq={block_seq}, Dtype={dtype}")
 
-    # 2. Data Generation (Simulation)
+
     num_blocks = (seq_len + block_seq - 1) // block_seq
 
-    # B_Seqlen: Full context length
+
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
 
-    # Mid_O: Simulated output from Stage 1
+
     mid_o = torch.randn((batch, heads, num_blocks, head_dim), dtype=dtype, device=device)
 
-    # Mid_O_LSE: Simulated LSE from Stage 1
+
     mid_o_lse = torch.randn((batch, heads, num_blocks), dtype=dtype, device=device)
 
-    # Block Seq as Tensor (matches signature)
+
     block_seq_tensor = torch.tensor(block_seq, dtype=torch.int32, device='cpu')
 
-    # 3. Warmup (Essential for JIT compilation)
+
     print("Warming up...")
     for _ in range(10):
         run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
     torch.cuda.synchronize()
 
-    # 4. Profiling Run
-    # Use nvtx to mark the range if viewing in Nsight Systems,
-    # but for ncu (Nsight Compute), just running it is enough.
+
     print("Starting Profile Run...")
 
-    # Optional: Loop to ensure we capture enough samples if needed,
-    # but usually 1 run is enough for ncu --set full
+
     torch.cuda.nvtx.range_push("FlashDecodeStage2_cuTile")
     run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor)
     torch.cuda.nvtx.range_pop()
