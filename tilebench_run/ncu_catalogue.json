@@ -1241,20 +1241,20 @@
       "fp16": {
         "batch": 1,
         "M": 2048,
-        "eps": 1e-06,
-        "K": 10240
+        "K": 10240,
+        "eps": 1e-06
       },
       "bf16": {
         "batch": 1,
         "M": 2048,
-        "eps": 1e-06,
-        "K": 10240
+        "K": 10240,
+        "eps": 1e-06
       },
       "fp32": {
         "batch": 1,
         "M": 2048,
-        "eps": 1e-06,
-        "K": 10240
+        "K": 10240,
+        "eps": 1e-06
       }
     },
     "autotune_winner_per_dtype": {
@@ -1262,42 +1262,25 @@
         "params": {
           "batch": 1,
           "M": 2048,
-          "eps": 1e-06,
-          "K": 10240
+          "K": 10240,
+          "eps": 1e-06
         },
         "triton": {
           "BLOCK_N": 2048,
-          "num_warps": 4,
-          "num_stages": 3
+          "num_warps": 8,
+          "num_stages": 2
         },
         "cutile": {
           "tile_size": 1024,
-          "occupancy": 32
+          "occupancy": 16
         }
       },
       "bf16": {
         "params": {
           "batch": 1,
           "M": 2048,
-          "eps": 1e-06,
-          "K": 10240
-        },
-        "triton": {
-          "BLOCK_N": 1024,
-          "num_warps": 8,
-          "num_stages": 4
-        },
-        "cutile": {
-          "tile_size": 1024,
-          "occupancy": 32
-        }
-      },
-      "fp32": {
-        "params": {
-          "batch": 1,
-          "M": 2048,
-          "eps": 1e-06,
-          "K": 10240
+          "K": 10240,
+          "eps": 1e-06
         },
         "triton": {
           "BLOCK_N": 2048,
@@ -1306,7 +1289,24 @@
         },
         "cutile": {
           "tile_size": 1024,
-          "occupancy": 32
+          "occupancy": 16
+        }
+      },
+      "fp32": {
+        "params": {
+          "batch": 1,
+          "M": 2048,
+          "K": 10240,
+          "eps": 1e-06
+        },
+        "triton": {
+          "BLOCK_N": 2048,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "cutile": {
+          "tile_size": 512,
+          "occupancy": 4
         }
       }
     },
