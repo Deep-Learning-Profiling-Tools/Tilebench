@@ -361,10 +361,18 @@ def generate_3d_conv_inputs(
     return (input, weight, stride, padding, groups)
 
 
-def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
-    inp = torch.randn(input_size, dtype=dtype, device=device)
-    kern = torch.randn(kernel_size, dtype=dtype, device=device)
-    return (inp, kern, input_size, kernel_size)
+def generate_1d_conv_inputs(
+    batch, in_channels, out_channels, L,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
+):
+    input  = torch.randn(batch, in_channels, L, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
                                   dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
@@ -710,7 +718,16 @@ def infer_problem_size(operator_name, params):
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
     if operator_name == "1d_conv":
-        return int(params.get("input_size", 1))
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        L            = int(params.get("L", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_L        = (L + 2 * padding - kernel_size) // stride + 1
+        return 2 * batch * out_channels * out_L * (in_channels // groups) * kernel_size
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N
