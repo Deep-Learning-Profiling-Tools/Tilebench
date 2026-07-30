@@ -7,14 +7,6 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 @triton.jit
 def reverse_kernel(input_ptr, output_ptr, N, BLOCK_SIZE: tl.constexpr):
-    """
-    Out-of-place reverse matching the cuTile backend's method:
-      output[i] = input[N - 1 - i]
-    Each program handles BLOCK_SIZE consecutive output positions. Boundary
-    tiles are masked; the in-place swap variant is intentionally avoided
-    because repeated kernel launches (autotune / benchmark loops) would
-    cancel out the reversal.
-    """
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < N

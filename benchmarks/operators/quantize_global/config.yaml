@@ -6,19 +6,14 @@ benchmark:
   autotune: false
 
 case_defaults:
-  dtype: "fp32"   # input is always fp32; output is always fp16
+  dtype: "fp32"
 
 case_grid:
   n:
     expr: "[1024 * 1024 * i for i in range(1, 21)]"
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: n (problem size), dtype_size = 4 (fp32 input)
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
-  # fp32 read + fp16 write
   bytes_expr: "n * dtype_size + n * 2"
 
   plots:

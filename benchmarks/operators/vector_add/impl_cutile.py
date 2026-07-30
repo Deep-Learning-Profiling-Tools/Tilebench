@@ -26,7 +26,6 @@ def add_kernel(a, b, c, TILE: ConstInt):
     ct.store(c, index=(bid,), tile=a_tile + b_tile)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(add_kernel)
 
 

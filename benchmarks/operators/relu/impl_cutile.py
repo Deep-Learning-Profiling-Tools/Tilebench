@@ -27,7 +27,6 @@ def relu_kernel(x_ptr, output_ptr, TILE: ConstInt):
     ct.store(output_ptr, index=(bid,), tile=y_tile)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(relu_kernel)
 
 
