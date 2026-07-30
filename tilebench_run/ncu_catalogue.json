@@ -1459,28 +1459,39 @@
     ],
     "default_params_per_dtype": {
       "fp32": {
-        "eps": 1e-06,
         "M": 10000,
-        "D": 256
+        "D": 256,
+        "eps": 1e-06
       }
     },
     "autotune_winner_per_dtype": {
       "fp32": {
         "params": {
-          "eps": 1e-06,
           "M": 10000,
-          "D": 256
+          "D": 256,
+          "eps": 1e-06
         },
         "triton": {
-          "BLOCK_M": 32,
-          "BLOCK_D": 32,
-          "num_warps": 1,
-          "num_stages": 1
+          "kv_BLOCK_M": 32,
+          "kv_BLOCK_N": 32,
+          "kv_BLOCK_K": 64,
+          "kv_num_warps": 4,
+          "kv_num_stages": 3,
+          "out_BLOCK_M": 64,
+          "out_BLOCK_N": 128,
+          "out_BLOCK_K": 32,
+          "out_num_warps": 4,
+          "out_num_stages": 3
         },
         "cutile": {
-          "block_m": 64,
-          "block_d": 32,
-          "occupancy": 16
+          "kv_block_m": 16,
+          "kv_block_n": 64,
+          "kv_block_k": 32,
+          "kv_occupancy": 4,
+          "out_block_m": 32,
+          "out_block_n": 64,
+          "out_block_k": 32,
+          "out_occupancy": 4
         }
       }
     },
