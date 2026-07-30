@@ -16,26 +16,28 @@ def compute_block_sums_kernel(
     block_sq_sum_ptr,
     N,
     C: tl.constexpr,
+    C_P2: tl.constexpr,
     BLOCK_N: tl.constexpr,
     STEP: tl.constexpr,
 ):
     block_id = tl.program_id(0)
-    cols = tl.arange(0, C)
+    cols = tl.arange(0, C_P2)
+    col_mask = cols < C
 
-    acc_sum = tl.zeros([C], dtype=tl.float32)
-    acc_sq = tl.zeros([C], dtype=tl.float32)
+    acc_sum = tl.zeros([C_P2], dtype=tl.float32)
+    acc_sq = tl.zeros([C_P2], dtype=tl.float32)
 
     row0 = block_id * BLOCK_N
     for r in tl.static_range(0, BLOCK_N, STEP):
         rows = row0 + r + tl.arange(0, STEP)
         mask = rows < N
         x = tl.load(input_ptr + rows[:, None] * C + cols[None, :],
-                    mask=mask[:, None], other=0.0).to(tl.float32)
+                    mask=mask[:, None] & col_mask[None, :], other=0.0).to(tl.float32)
         acc_sum += tl.sum(x, axis=0)
         acc_sq += tl.sum(x * x, axis=0)
 
-    tl.store(block_sum_ptr + block_id * C + cols, acc_sum)
-    tl.store(block_sq_sum_ptr + block_id * C + cols, acc_sq)
+    tl.store(block_sum_ptr + block_id * C + cols, acc_sum, mask=col_mask)
+    tl.store(block_sq_sum_ptr + block_id * C + cols, acc_sq, mask=col_mask)
 
 
 @triton.jit
@@ -79,16 +81,18 @@ def apply_batch_norm_kernel(
     inv_std_ptr,
     N,
     C: tl.constexpr,
+    C_P2: tl.constexpr,
     ROWS: tl.constexpr,
     STEP: tl.constexpr,
 ):
     block_id = tl.program_id(0)
-    cols = tl.arange(0, C)
+    cols = tl.arange(0, C_P2)
+    col_mask = cols < C
 
-    mean = tl.load(mean_ptr + cols)
-    inv_std = tl.load(inv_std_ptr + cols)
-    gamma = tl.load(gamma_ptr + cols).to(tl.float32)
-    beta = tl.load(beta_ptr + cols).to(tl.float32)
+    mean = tl.load(mean_ptr + cols, mask=col_mask, other=0.0)
+    inv_std = tl.load(inv_std_ptr + cols, mask=col_mask, other=0.0)
+    gamma = tl.load(gamma_ptr + cols, mask=col_mask, other=0.0).to(tl.float32)
+    beta = tl.load(beta_ptr + cols, mask=col_mask, other=0.0).to(tl.float32)
     scale = inv_std * gamma
     shift = beta - mean * scale
 
@@ -97,9 +101,9 @@ def apply_batch_norm_kernel(
         rows = row0 + r + tl.arange(0, STEP)
         mask = rows < N
         ptrs = rows[:, None] * C + cols[None, :]
-        x = tl.load(input_ptr + ptrs, mask=mask[:, None], other=0.0).to(tl.float32)
+        x = tl.load(input_ptr + ptrs, mask=mask[:, None] & col_mask[None, :], other=0.0).to(tl.float32)
         y = x * scale[None, :] + shift[None, :]
-        tl.store(output_ptr + ptrs, y, mask=mask[:, None])
+        tl.store(output_ptr + ptrs, y, mask=mask[:, None] & col_mask[None, :])
 
 
 _apply_batch_norm_kernel_autotuned = triton.autotune(
@@ -125,7 +129,8 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
 
 
     compute_block_sums_kernel[(NUM_BLOCKS,)](
-        input, block_sum, block_sq_sum, N, C=C, BLOCK_N=_K1_BLOCK_N, STEP=_STEP,
+        input, block_sum, block_sq_sum, N, C=C, C_P2=triton.next_power_of_2(C),
+        BLOCK_N=_K1_BLOCK_N, STEP=_STEP,
         num_warps=4,
     )
 
@@ -141,14 +146,14 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         grid = lambda meta: (triton.cdiv(N, meta["ROWS"]),)
         _apply_batch_norm_kernel_autotuned[grid](
             input, gamma, beta, output, mean, inv_std,
-            N, C=C, STEP=_STEP,
+            N, C=C, C_P2=triton.next_power_of_2(C), STEP=_STEP,
         )
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(N, cfg["ROWS"]),)
         apply_batch_norm_kernel[grid](
             input, gamma, beta, output, mean, inv_std,
-            N, C=C, ROWS=cfg["ROWS"], STEP=_STEP,
+            N, C=C, C_P2=triton.next_power_of_2(C), ROWS=cfg["ROWS"], STEP=_STEP,
             num_warps=cfg["num_warps"],
         )
 

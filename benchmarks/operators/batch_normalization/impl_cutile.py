@@ -32,19 +32,20 @@ def compute_block_sums_kernel(
     block_sq_sum_2d,
     N,
     C: ConstInt,
+    C_P2: ConstInt,
     BLOCK_N: ConstInt,
     STEP: ConstInt,
 ):
     block_id = ct.bid(0)
 
-    acc_sum = ct.zeros((1, C), dtype=ct.float32)
-    acc_sq = ct.zeros((1, C), dtype=ct.float32)
+    acc_sum = ct.zeros((1, C_P2), dtype=ct.float32)
+    acc_sq = ct.zeros((1, C_P2), dtype=ct.float32)
 
     tiles_per_block = BLOCK_N // STEP
     for i in range(tiles_per_block):
         x = ct.load(input_2d,
                     index=(block_id * tiles_per_block + i, 0),
-                    shape=(STEP, C),
+                    shape=(STEP, C_P2),
                     padding_mode=ct.PaddingMode.ZERO)
         x = ct.astype(x, ct.float32)
         acc_sum = acc_sum + ct.sum(x, axis=0, keepdims=True)
@@ -98,22 +99,27 @@ def apply_batch_norm_kernel(
     inv_std_ptr,
     N,
     C: ConstInt,
+    C_P2: ConstInt,
     ROWS: ConstInt,
     STEP: ConstInt,
 ):
     block_id = ct.bid(0)
 
-    mean = ct.reshape(ct.load(mean_ptr, index=(0,), shape=(C,)), (1, C))
-    inv_std = ct.reshape(ct.load(inv_std_ptr, index=(0,), shape=(C,)), (1, C))
-    gamma = ct.reshape(ct.astype(ct.load(gamma_ptr, index=(0,), shape=(C,)), ct.float32), (1, C))
-    beta = ct.reshape(ct.astype(ct.load(beta_ptr, index=(0,), shape=(C,)), ct.float32), (1, C))
+    mean = ct.reshape(ct.load(mean_ptr, index=(0,), shape=(C_P2,),
+                              padding_mode=ct.PaddingMode.ZERO), (1, C_P2))
+    inv_std = ct.reshape(ct.load(inv_std_ptr, index=(0,), shape=(C_P2,),
+                                 padding_mode=ct.PaddingMode.ZERO), (1, C_P2))
+    gamma = ct.reshape(ct.astype(ct.load(gamma_ptr, index=(0,), shape=(C_P2,),
+                                         padding_mode=ct.PaddingMode.ZERO), ct.float32), (1, C_P2))
+    beta = ct.reshape(ct.astype(ct.load(beta_ptr, index=(0,), shape=(C_P2,),
+                                        padding_mode=ct.PaddingMode.ZERO), ct.float32), (1, C_P2))
     scale = inv_std * gamma
     shift = beta - mean * scale
 
     tiles_per_block = ROWS // STEP
     for i in range(tiles_per_block):
         tile_row = block_id * tiles_per_block + i
-        x = ct.load(input_2d, index=(tile_row, 0), shape=(STEP, C),
+        x = ct.load(input_2d, index=(tile_row, 0), shape=(STEP, C_P2),
                     padding_mode=ct.PaddingMode.ZERO)
         x = ct.astype(x, ct.float32)
         y = x * scale + shift
@@ -143,8 +149,9 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     stream = torch.cuda.current_stream()
 
 
+    C_P2 = _next_pow2(C)
     ct.launch(stream, (NUM_BLOCKS, 1, 1), compute_block_sums_kernel,
-              (input_2d, block_sum, block_sq_sum, N, C, _K1_BLOCK_N, _STEP))
+              (input_2d, block_sum, block_sq_sum, N, C, C_P2, _K1_BLOCK_N, _STEP))
 
 
     BLOCK_B = _next_pow2(NUM_BLOCKS)
@@ -161,7 +168,7 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
             grid_fn=lambda cfg: (ct.cdiv(N, cfg.rows), 1, 1),
             args_fn=lambda cfg: (
                 input_2d, gamma, beta, output_2d, mean, inv_std,
-                N, C, cfg.rows, _STEP,
+                N, C, C_P2, cfg.rows, _STEP,
             ),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
@@ -177,7 +184,7 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(stream, grid, kernel,
               (input_2d, gamma, beta, output_2d, mean, inv_std,
-               N, C, cfg.rows, _STEP))
+               N, C, C_P2, cfg.rows, _STEP))
 
     return output
 
