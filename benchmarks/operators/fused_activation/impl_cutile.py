@@ -1,9 +1,3 @@
-"""cuTile fused element-wise mul-add + SiLU: out = silu(x * gate + bias).
-
-1D grid, each CTA loads TILE elements. silu(z) implemented as
-z / (1 + exp(-z)) since cuTile does not expose a fused sigmoid
-primitive (cf. impl_triton.py which uses tl.sigmoid).
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -15,9 +9,7 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-# Mirrors impl_triton.py via nw * occ ~= 64 (Triton sweeps nw in
-# [2, 4, 8]; cuTile sweeps occ in [4, 8, 16, 32], adding occ=4 as the
-# extra low-warps endpoint with no Triton counterpart).
+
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
@@ -42,7 +34,7 @@ def fused_activation_kernel(x, gate, bias, out, TILE: ConstInt):
         ct.float32,
     )
     z = x_tile * gate_tile + bias_tile
-    out_tile = z / (1.0 + ct.exp(-z))  # SiLU = z * sigmoid(z) = z / (1 + exp(-z))
+    out_tile = z / (1.0 + ct.exp(-z))
     ct.store(out, index=(bid,), tile=out_tile)
 
 

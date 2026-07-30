@@ -9,19 +9,12 @@ case_defaults:
   p: 0.5
 
 case_grid:
-  # 1M to 20M elements, step 1M
   n:
     expr: "[1024 * 1024 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32"]
-  # int8 excluded: x / (1-p) is undefined for integer types
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: n (problem size), dtype_size (bytes per element)
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
-  # x read + x_keep read (same dtype) + output write
   bytes_expr: "n * dtype_size * 3"
 
   plots:

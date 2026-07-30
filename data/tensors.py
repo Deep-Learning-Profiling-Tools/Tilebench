@@ -144,7 +144,11 @@ def generate_destindex_inputs(
 
     kv_nope  = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     kv_rope  = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
-    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64).to(torch.int32)
+    # int64 permutation: index_copy_ requires long indices, so all three
+    # backends consume the same dtype (no torch-only conversion pass).
+    # randperm guarantees unique, in-range destinations — concurrent
+    # scatter writes never collide.
+    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64)
     o_nope   = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     o_rope   = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)

@@ -1,14 +1,3 @@
-"""Reference KL divergence forward (per-row sum), matching impl_triton/cutile.
-
-Convention (matches PyTorch F.kl_div with log_target=False):
-    log_y_pred  is log-probabilities  (output of log_softmax)
-    y_true      is plain probabilities (output of softmax)
-
-Per-row formula:
-    loss[b] = sum_s y_true[b, s] * (log(y_true[b, s]) - log_y_pred[b, s])
-
-No final batch reduction -- caller can do .mean() / B for batchmean.
-"""
 import torch
 
 
