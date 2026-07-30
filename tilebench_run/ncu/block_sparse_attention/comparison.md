@@ -7,18 +7,18 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'M': 10240}` | `{'num_warps': 4, 'num_stages': 2}` | `{'occupancy': 32}` |
+| fp16 | `{'B': 2, 'H': 8, 'M': 10240, 'D': 128, 'H_kv': 2, 'BLOCK_M': 64, 'BLOCK_N': 64, 'BLOCK_D': 128}` | `{'num_warps': 4, 'num_stages': 2}` | `{'occupancy': 32}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 55.20 us | 11.56 % | 7.49 % | 11.20 % | 11.58 % | 54.06 % | 573.95 Gbyte/s | 128 | 117 register/thread | 0 byte/block | 41.02 Kbyte/block | 4 block / 4 block |
-| fp16 | cutile | 188.13 us | 20.41 % | 2.20 % | 21.98 % | 3.46 % | 23.89 % | 168.93 Gbyte/s | 384 | 168 register/thread | 125.70 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 92.83 us | 13.76 % | 10.63 % | 13.00 % | 13.74 % | 34.88 % | 815.02 Gbyte/s | 128 | 150 register/thread | 0 byte/block | 81.98 Kbyte/block | 3 block / 2 block |
+| fp16 | cutile | 301.15 us | 31.58 % | 3.29 % | 33.51 % | 4.28 % | 23.33 % | 252.39 Gbyte/s | 384 | 168 register/thread | 207.72 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **3.41× faster** (55.2 µs vs 188.1 µs).
+- **fp16**: Triton is **3.24× faster** (92.8 µs vs 301.1 µs).
 
 ## NCU's own bottleneck verdict
 
