@@ -1,149 +1,279 @@
-"""cuTile top-k selection — same multi-launch bitonic sort as impl_triton.py.
-
-Each compare-exchange kernel handles TILE pairs per CTA (mirrors Triton's
-BLOCK_SIZE), using ct.gather for runtime-strided loads and ct.scatter for
-runtime-strided stores. Inactive lanes route their writes to OOB index N
-(silently dropped) — equivalent to Triton's `tl.store(..., mask=valid)`.
-
-Tune ONCE per padding_len, not per (stage, stride) — `stage` and `stride`
-are runtime ints baked in via args_fn, so the optimal config depends only
-on padding_len and TILE. This matches Triton's `key=["N"]` cache.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict = {}
+_DEFAULT_CONFIG = SimpleNamespace(block=2048, occupancy=8)
 
-# Defaults and search space mirror impl_triton.py 1-to-1:
-#   tile       ↔ BLOCK_SIZE        same values
-#   occupancy  ↔ num_warps         nw * occ ≈ 64 on B200, so cuTile's
-#                                   occ ∈ [8, 16, 32] pairs with Triton's
-#                                   nw ∈ [8, 4, 2]. Default occ=16 ↔ nw=4.
-_DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=16)
-_SEARCH_SPACE = [
-    SimpleNamespace(tile=t, occupancy=occ)
-    for t in [512, 1024, 2048]
-    for occ in [8, 16, 32]
-]
+_BLOCKS = (1024, 2048, 4096)
+_OCC_SPACE = [SimpleNamespace(occupancy=occ) for occ in (4, 8, 16)]
 
-
-@ct.kernel
-def _bitonic_step_kernel(
-    input_ptr,
-    N,
-    stage,
-    stride,
-    TILE: ConstInt,
-):
-    """One compare-exchange pass over TILE pairs per CTA — mirrors Triton."""
-    bid = ct.bid(0)
-    offset = bid * TILE + ct.arange(TILE, dtype=np.int32)
-
-    slice_1_offset = (offset // stride) * (2 * stride) + (offset % stride)
-    slice_2_offset = slice_1_offset + stride
-
-    valid_1 = slice_1_offset < N
-    valid_2 = slice_2_offset < N
-
-    # Two-step OOB handling (defensive):
-    #   1. Clamp OOB lanes to a safe in-range index (0). ct.gather's
-    #      padding_value is documented to fire for negative / out-of-range
-    #      indices only; an in-range (but logically invalid) index returns
-    #      the real element at that address. So clamping to 0 is needed
-    #      first to avoid undefined-bounds reads.
-    #   2. Override the gathered values to -inf for invalid lanes. This is
-    #      what actually neutralises them in the bitonic compare-exchange,
-    #      regardless of what the gather returned.
-    safe_1 = ct.where(valid_1, slice_1_offset, 0)
-    safe_2 = ct.where(valid_2, slice_2_offset, 0)
-    slice_1_t = ct.gather(input_ptr, safe_1, padding_value=-float("inf"))
-    slice_2_t = ct.gather(input_ptr, safe_2, padding_value=-float("inf"))
-    slice_1_t = ct.where(valid_1, slice_1_t, -float("inf"))
-    slice_2_t = ct.where(valid_2, slice_2_t, -float("inf"))
-
-    descend = ((slice_1_offset // stage) % 2) == 1
-    greater = slice_1_t > slice_2_t
-    swap = descend == greater
-
-    new_slice_1_t = ct.where(swap, slice_2_t, slice_1_t)
-    new_slice_2_t = ct.where(swap, slice_1_t, slice_2_t)
-
-    # Route inactive writes to OOB index N (silently dropped by ct.scatter),
-    # equivalent to Triton's mask=valid.
-    store_1 = ct.where(valid_1, slice_1_offset, N)
-    store_2 = ct.where(valid_2, slice_2_offset, N)
-    ct.scatter(input_ptr, store_1, new_slice_1_t)
-    ct.scatter(input_ptr, store_2, new_slice_2_t)
-
-
-# Module-level: caches replace_hints per-occupancy and autotune-best per
-# padding_len. Mirrors Triton's @triton.autotune(key=["N"]) — one sweep per
-# problem size, reused across all log^2(padding_len)/2 step launches.
-_tuner = CutileAutotuner(_bitonic_step_kernel)
+_last_config: dict = {}
+_autotune_cache: dict = {}
 
 
 def _next_pow2(x: int) -> int:
     return 1 << (int(x) - 1).bit_length()
 
 
-def run(input: torch.Tensor, N: int, k: int,
-        block_size: int = None, autotune: bool = False, **kwargs):
+def _make_bitonic_stages(B: int):
+    stages = []
+    for kb in range(1, B.bit_length()):
+        ksz = 1 << kb
+        for jj in range(kb):
+            j = 1 << (kb - 1 - jj)
+            G = B // (2 * j)
+            stages.append((G, j, ksz))
+    return tuple(stages)
 
+
+_STAGES_1024 = _make_bitonic_stages(1024)
+_STAGES_2048 = _make_bitonic_stages(2048)
+_STAGES_4096 = _make_bitonic_stages(4096)
+
+
+def _sort_desc_1024(x):
+    for G, j, ksz in ct.static_iter(_STAGES_1024):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (1024,))
+
+    return x
+
+
+def _sort_desc_2048(x):
+    for G, j, ksz in ct.static_iter(_STAGES_2048):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (2048,))
+
+    return x
+
+
+def _sort_desc_4096(x):
+    for G, j, ksz in ct.static_iter(_STAGES_4096):
+        x3 = ct.reshape(x, (G, 2, j))
+
+        a = ct.extract(x3, index=(0, 0, 0), shape=(G, 1, j))
+        b = ct.extract(x3, index=(0, 1, 0), shape=(G, 1, j))
+
+        lo = ct.minimum(a, b)
+        hi = ct.maximum(a, b)
+
+        m = ((ct.arange(G, dtype=ct.int32) * (2 * j)) & ksz) == 0
+        m3 = ct.reshape(m, (G, 1, 1))
+
+        first = ct.where(m3, hi, lo)
+        second = ct.where(m3, lo, hi)
+
+        x = ct.reshape(ct.cat((first, second), axis=1), (4096,))
+
+    return x
+
+
+@ct.kernel
+def block_topk_kernel_b1024(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(1024,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_1024(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+@ct.kernel
+def block_topk_kernel_b2048(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(2048,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_2048(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+@ct.kernel
+def block_topk_kernel_b4096(inp, out2d, K2: ConstInt):
+    bid = ct.bid(0)
+
+    x = ct.load(
+        inp,
+        index=(bid,),
+        shape=(4096,),
+        padding_mode=ct.PaddingMode.NEG_INF,
+    )
+
+    x = _sort_desc_4096(x)
+
+    top = ct.extract(x, index=(0,), shape=(K2,))
+    ct.store(out2d, index=(bid, 0), tile=ct.reshape(top, (1, K2)))
+
+
+KERNELS = {
+    1024: block_topk_kernel_b1024,
+    2048: block_topk_kernel_b2048,
+    4096: block_topk_kernel_b4096,
+}
+
+_tuners = {B: CutileAutotuner(KERNELS[B]) for B in _BLOCKS}
+
+
+def _resolve_block(block_size: int | None, K2: int) -> int:
+    requested = int(block_size) if block_size is not None else _DEFAULT_CONFIG.block
+    min_block = max(requested, 2 * K2)
+
+    for B in _BLOCKS:
+        if B >= min_block:
+            return B
+
+    raise ValueError(
+        f"Unsupported top-k size: k'={K2}. "
+        f"Need block >= {2 * K2}, but supported blocks are {_BLOCKS}."
+    )
+
+
+def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg, stream) -> torch.Tensor:
+    B = int(cfg.block)
+    kernel = _tuners[B].kernel_with_hints(occupancy=cfg.occupancy)
+
+    cur = x
+    n = x.numel()
+
+    while True:
+        nb = ct.cdiv(n, B)
+        out = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
+
+        ct.launch(stream, (nb, 1, 1), kernel, (cur, out, K2))
+
+        if nb == 1:
+            return out[0, :k]
+
+        cur = out.reshape(-1)
+        n = nb * K2
+
+
+def _tune(x: torch.Tensor, k: int, K2: int, stream) -> SimpleNamespace:
+    key = (x.numel(), K2)
+    cached = _autotune_cache.get(key)
+    if cached is not None:
+        return cached
+
+    n = x.numel()
+    best_us = None
+    best_cfg = None
+
+    for B in _BLOCKS:
+        if B < 2 * K2:
+            continue
+
+        nb = ct.cdiv(n, B)
+        scratch = torch.empty((nb, K2), device=x.device, dtype=x.dtype)
+
+        result = ct.tune.exhaustive_search(
+            _OCC_SPACE,
+            stream,
+            grid_fn=lambda cfg: (nb, 1, 1),
+            kernel=_tuners[B].kernel,
+            args_fn=lambda cfg: (x, scratch, K2),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+
+        mean_us = result.best.mean_us
+        if best_us is None or mean_us < best_us:
+            best_us = mean_us
+            best_cfg = SimpleNamespace(
+                block=B,
+                occupancy=result.best.config.occupancy,
+            )
+
+    if best_cfg is None:
+        raise ValueError(
+            f"No viable cuTile top-k config for k={k}, k'={K2}. "
+            f"Need some block >= {2 * K2}, supported blocks are {_BLOCKS}."
+        )
+
+    _autotune_cache[key] = best_cfg
+    return best_cfg
+
+
+def run(
+    input: torch.Tensor,
+    N: int,
+    k: int,
+    block_size: int = None,
+    autotune: bool = False,
+    **kwargs,
+):
     assert input.is_cuda
     assert input.ndim == 1
     assert input.shape[0] == N
     assert input.dtype == torch.float32
     assert 1 <= k <= N
 
-    input = input.contiguous()
-    padding_len = _next_pow2(N)
-    input_padding = torch.empty((padding_len,), device=input.device, dtype=input.dtype)
-    input_padding[:N] = input
-    input_padding[N:] = -float("inf")
-
+    x = input.contiguous()
+    K2 = _next_pow2(k)
     stream = torch.cuda.current_stream()
-    pair_count = padding_len // 2
 
-    # Tune ONCE per padding_len. (stage, stride) are runtime ints, so the
-    # optimal cfg depends only on padding_len and TILE. Use the first step's
-    # (stage, stride) for the tuning launches.
     if autotune:
-        stage0, stride0 = 2, 1
-        cfg = _tuner.tune_or_cached(
-            shape_key=(padding_len,),
-            search_space=_SEARCH_SPACE,
-            stream=stream,
-            grid_fn=lambda cfg: ((pair_count + cfg.tile - 1) // cfg.tile, 1, 1),
-            args_fn=lambda cfg: (input_padding, padding_len, stage0, stride0, cfg.tile),
-            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-        )
-        _last_autotune_config.clear()
-        _last_autotune_config.update({"tile": cfg.tile, "occupancy": cfg.occupancy})
+        cfg = _tune(x, k, K2, stream)
     else:
-        TILE = int(block_size) if block_size is not None else _DEFAULT_CONFIG.tile
-        cfg = SimpleNamespace(tile=TILE, occupancy=_DEFAULT_CONFIG.occupancy)
+        cfg = SimpleNamespace(
+            block=_resolve_block(block_size, K2),
+            occupancy=_DEFAULT_CONFIG.occupancy,
+        )
 
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
-    grid = ((pair_count + cfg.tile - 1) // cfg.tile, 1, 1)
+    _last_config.clear()
+    _last_config.update(
+        {
+            "block": int(cfg.block),
+            "occupancy": int(cfg.occupancy),
+            "K2": int(K2),
+        }
+    )
 
-    stage = 2
-    while stage <= padding_len:
-        stride = stage >> 1
-        while stride > 0:
-            ct.launch(stream, grid, kernel,
-                      (input_padding, padding_len, stage, stride, cfg.tile))
-            stride >>= 1
-        stage <<= 1
-
-    return input_padding[:k].clone()
+    return _run_hierarchy(x, k, K2, cfg, stream)
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) if _last_autotune_config else None
+    return dict(_last_config) if _last_config else None
