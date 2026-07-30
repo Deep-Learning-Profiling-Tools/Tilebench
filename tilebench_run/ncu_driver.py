@@ -19,6 +19,8 @@ import sys
 import time
 from pathlib import Path
 
+import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
+
 ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
 NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
@@ -35,7 +37,8 @@ def out_path(op: str, backend: str, dtype: str) -> Path:
 
 
 def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
-            n_kernels_per_call: int = 1, timeout_s: int = 1800) -> dict:
+            n_kernels_per_call: int = 1, timeout_s: int = 1800,
+            kernel_names: list[str] | None = None) -> dict:
     out = out_path(op, backend, dtype)
     out.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -50,8 +53,14 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
     # Harness does 3 warmup calls + 1 measured call, each launching
     # n_kernels_per_call kernels. Skip the warmups (3*N) and profile every
     # kernel of the 4th call.
-    skip = 3 * n_kernels_per_call
-    count = n_kernels_per_call
+    rgx = ks.kernel_regex(kernel_names)
+    if rgx:
+        m = ks.real_kernel_count(kernel_names) or n_kernels_per_call
+        skip, count = 3 * m, m
+    else:
+        print(f"  WARNING {op}/{dtype}/{backend}: no kernel names — FRAGILE "
+              f"launch-order capture (cannot validate)", flush=True)
+        skip, count = 3 * n_kernels_per_call, n_kernels_per_call
 
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
@@ -60,6 +69,14 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
         # inside this region so input-generator kernels (randn, *scale,
         # to(dtype), ...) are excluded from NCU's launch counter.
         "--profile-from-start", "off",
+    ]
+    # Select the op's compute kernel(s) by NAME when known (robust against
+    # variable input-gen / auxiliary launch counts). With --kernel-name, ncu's
+    # launch counter counts only matched kernels, so --launch-skip 3N
+    # --launch-count N still lands on the measured (4th) call.
+    if rgx:
+        cmd += ["--kernel-name", f"regex:{rgx}"]
+    cmd += [
         "--launch-skip", str(skip), "--launch-count", str(count),
         "--force-overwrite",
         "-o", str(out).removesuffix(".ncu-rep"),
@@ -73,9 +90,17 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
         )
         elapsed = time.time() - t0
         ok = (r.returncode == 0) and out.exists() and out.stat().st_size > 0
+        # Hardening: confirm NCU profiled ONLY the op's own compute kernel(s).
+        captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
+        validated, unexpected = (True, [])
+        if rgx:
+            validated, unexpected = ks.validate_capture(captured, kernel_names)
+            if ok and not validated:
+                ok = False
         return {
             "op": op, "dtype": dtype, "backend": backend,
             "ok": ok, "rc": r.returncode, "elapsed_s": round(elapsed, 2),
+            "captured": captured, "validated": validated, "unexpected": unexpected,
             "stderr_tail": r.stderr[-600:] if not ok else "",
         }
     except subprocess.TimeoutExpired:
@@ -92,10 +117,14 @@ def main() -> None:
 
     kc_path = NCU_DIR / "kernel_counts.json"
     kernel_counts: dict[tuple[str, str, str], int] = {}
+    kernel_names_map: dict[tuple[str, str, str], list] = {}
     if kc_path.exists():
         for r in json.loads(kc_path.read_text()):
+            key = (r["op"], r["dtype"], r["backend"])
             if r.get("count") is not None:
-                kernel_counts[(r["op"], r["dtype"], r["backend"])] = r["count"]
+                kernel_counts[key] = r["count"]
+            if r.get("names"):
+                kernel_names_map[key] = r["names"]
 
     pairs = []
     for c in catalogue:
@@ -108,7 +137,8 @@ def main() -> None:
                 if winner is not None:
                     cfg = winner.get(backend)
                 n = kernel_counts.get((op, dt, backend), 1)
-                pairs.append((op, dt, backend, params, cfg, n))
+                names = kernel_names_map.get((op, dt, backend))
+                pairs.append((op, dt, backend, params, cfg, n, names))
 
     total = len(pairs)
     log = []
@@ -122,7 +152,7 @@ def main() -> None:
     fails: list[dict] = [e for e in log if not e.get("ok")]
     t_start = time.time()
 
-    for i, (op, dt, backend, params, cfg, n) in enumerate(pairs):
+    for i, (op, dt, backend, params, cfg, n, names) in enumerate(pairs):
         key = (op, dt, backend)
         if key in done_keys:
             continue
@@ -132,7 +162,8 @@ def main() -> None:
                         "rc": 0, "elapsed_s": 0, "stderr_tail": "(pre-existing)"})
             done_keys.add(key)
             continue
-        res = run_one(op, dt, backend, params, cfg, n_kernels_per_call=n)
+        res = run_one(op, dt, backend, params, cfg, n_kernels_per_call=n,
+                      kernel_names=names)
         res["n_kernels"] = n
         log.append(res)
         if not res["ok"]:
