@@ -8,9 +8,6 @@ def _phi(x: torch.Tensor) -> torch.Tensor:
 
 
 def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6, **kwargs):
-    assert Q.is_cuda and K.is_cuda and V.is_cuda
-    assert Q.shape == K.shape == V.shape
-    assert Q.dtype == K.dtype == V.dtype == torch.float32
 
     Q = Q.contiguous()
     K = K.contiguous()
