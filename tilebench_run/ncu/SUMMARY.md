@@ -40,7 +40,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | dropout | bf16 | 18.5 | 18.9 | 1.02× |
 | dropout | fp32 | 34.6 | 36.1 | 1.04× |
 | flash_attention | fp16 | 22770.0 | 17700.0 | 0.78× |
-| flash_decode | fp32 | 47.4 | 168.3 | 3.55× |
+| flash_decode | fp32 | 47.4 | 169.5 | 3.58× |
 | fused_activation | fp32 | 47.3 | 48.0 | 1.01× |
 | gaussian_blur | fp16 | 1790.0 | 4600.0 | 2.57× |
 | gaussian_blur | fp32 | 1610.0 | 5310.0 | 3.30× |
