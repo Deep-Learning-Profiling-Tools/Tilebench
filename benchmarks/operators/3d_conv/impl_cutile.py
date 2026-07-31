@@ -222,7 +222,7 @@ def run(
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(batch, in_channels, out_channels, in_D, in_H, in_W,
-                       kD, kH, kW, stride, padding, groups),
+                       kD, kH, kW, stride, padding, groups, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

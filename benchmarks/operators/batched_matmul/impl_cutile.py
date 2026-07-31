@@ -86,7 +86,7 @@ def run(A: torch.Tensor, B: torch.Tensor,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(BATCH, M, N, K),
+            shape_key=(BATCH, M, N, K, str(A.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

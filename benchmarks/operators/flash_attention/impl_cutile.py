@@ -157,7 +157,7 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, 
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(SeqLen_Q, D_k, Heads, causal),
+            shape_key=(SeqLen_Q, D_k, Heads, causal, str(q.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (math.ceil(SeqLen_Q / cfg.tile_m), Batch * Heads, 1),

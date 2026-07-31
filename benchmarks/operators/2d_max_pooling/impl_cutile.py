@@ -66,7 +66,7 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(total_out, kernel_size, stride, padding),
+            shape_key=(total_out, kernel_size, stride, padding, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

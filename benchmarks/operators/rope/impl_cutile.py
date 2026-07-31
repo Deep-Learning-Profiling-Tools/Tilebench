@@ -77,7 +77,7 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         tmp = output.clone()
         tmp_view = tmp.view(batch * seq_len, n_heads, 2, half_dim)
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch, seq_len, n_heads, head_dim),
+            shape_key=(batch, seq_len, n_heads, head_dim, str(q.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

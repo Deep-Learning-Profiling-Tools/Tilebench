@@ -123,7 +123,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
 
         scratch = torch.empty_like(partial)
         partial_cfg = _partial_tuner.tune_or_cached(
-            shape_key=(N, num_bins, num_partials),
+            shape_key=(N, num_bins, num_partials, str(input.dtype)),
             search_space=_PARTIAL_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (num_partials, 1, 1),
@@ -147,7 +147,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
 
     if autotune:
         reduce_cfg = _reduce_tuner.tune_or_cached(
-            shape_key=(num_partials, num_bins),
+            shape_key=(num_partials, num_bins, str(input.dtype)),
             search_space=_REDUCE_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((num_bins + cfg.block_bins - 1) // cfg.block_bins, 1, 1),

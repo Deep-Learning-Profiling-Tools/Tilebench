@@ -36,7 +36,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(m, n),
+            shape_key=(m, n, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1),

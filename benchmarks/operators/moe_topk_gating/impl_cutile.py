@@ -83,7 +83,7 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(M, E, k),
+            shape_key=(M, E, k, str(logits.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,

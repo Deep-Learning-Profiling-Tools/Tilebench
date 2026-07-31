@@ -194,7 +194,7 @@ def _run_hierarchy(x: torch.Tensor, k: int, K2: int, cfg, stream) -> torch.Tenso
 
 
 def _tune(x: torch.Tensor, k: int, K2: int, stream) -> SimpleNamespace:
-    key = (x.numel(), K2)
+    key = (x.numel(), K2, str(x.dtype))
     cached = _autotune_cache.get(key)
     if cached is not None:
         return cached

@@ -93,7 +93,7 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, au
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch, head_num, head_dim, num_blocks, block_seq),
+            shape_key=(batch, head_num, head_dim, num_blocks, block_seq, str(mid_o.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,

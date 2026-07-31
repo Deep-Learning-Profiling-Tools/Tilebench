@@ -198,8 +198,7 @@ def run(
         cfg = _tuner.tune_or_cached(
             shape_key=(
                 batch_size, num_heads, total_seq_len,
-                BLOCK_M, BLOCK_N, BLOCK_D, NUM_D_BLOCKS,
-            ),
+                BLOCK_M, BLOCK_N, BLOCK_D, NUM_D_BLOCKS, str(Q.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,
