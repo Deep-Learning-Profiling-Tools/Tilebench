@@ -211,7 +211,7 @@ def run(
 
     if autotune:
         kv_cfg = _kv_tuner.tune_or_cached(
-            shape_key=(M, D),
+            shape_key=(M, D, str(Q.dtype)),
             search_space=_GEMM_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (
@@ -247,7 +247,7 @@ def run(
 
     if autotune:
         out_cfg = _out_tuner.tune_or_cached(
-            shape_key=(M, D),
+            shape_key=(M, D, str(Q.dtype)),
             search_space=_GEMM_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

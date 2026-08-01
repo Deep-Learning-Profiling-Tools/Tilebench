@@ -47,7 +47,7 @@ def run(x: torch.Tensor, state_x: torch.Tensor,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(rows, cols),
+            shape_key=(rows, cols, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (rows, (cols + cfg.chunk - 1) // cfg.chunk, 1),

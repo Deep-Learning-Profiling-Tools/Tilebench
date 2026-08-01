@@ -63,7 +63,7 @@ def run(
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch_size, num_classes),
+            shape_key=(batch_size, num_classes, str(logits.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,

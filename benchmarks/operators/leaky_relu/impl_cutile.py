@@ -34,7 +34,7 @@ def run(input: torch.Tensor, N: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(N, cfg.tile), 1, 1),

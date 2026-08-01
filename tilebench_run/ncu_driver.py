@@ -26,7 +26,7 @@ NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
 CATALOGUE = ROOT / "tilebench_run" / "ncu_catalogue.json"
 NCU_DIR = ROOT / "tilebench_run" / "ncu"
-LOG_PATH = NCU_DIR / "sweep_log.json"
+LOG_PATH = Path(os.environ.get("NCU_SWEEP_LOG", NCU_DIR / "sweep_log.json"))
 FAIL_PATH = NCU_DIR / "sweep_failures.md"
 
 KERNEL_REGEX_BY_BACKEND_DEFAULT = ".*"
@@ -126,9 +126,12 @@ def main() -> None:
             if r.get("names"):
                 kernel_names_map[key] = r["names"]
 
+    ops_filter = {o.strip() for o in os.environ.get("NCU_OPS", "").split(",") if o.strip()}
     pairs = []
     for c in catalogue:
         op = c["op"]
+        if ops_filter and op not in ops_filter:
+            continue
         for dt in c["dtypes"]:
             params = c["default_params_per_dtype"][dt]
             winner = c["autotune_winner_per_dtype"].get(dt)
