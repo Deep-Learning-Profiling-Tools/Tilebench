@@ -128,7 +128,7 @@ def run(input: torch.Tensor, weight: torch.Tensor, stride: int = 1, padding: int
 
     result = conv2d_kernel(input_flat, *w_taps, Hp, in_channels, out_channels,
                             out_H, out_W, stride)
-    return result.reshape(out_channels, out_H, out_W).reshape(-1)
+    return result.reshape(1, out_channels, out_H, out_W)
 
 
 def get_last_config() -> dict | None:
