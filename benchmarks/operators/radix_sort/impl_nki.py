@@ -1,35 +1,3 @@
-"""NKI radix_sort.
-
-impl_torch.py's reference is just `torch.sort` on non-negative int32 (exact,
-atol=0) -- the "radix" framing describes the Triton/cuTile kernels' 32-pass
-counting-sort strategy, not a contract this file must literally replicate.
-A genuine 32-pass hierarchical radix sort (count -> block prefix ->
-block-of-blocks prefix -> scatter, per config.yaml) is a large multi-kernel
-pipeline; given the correctness-first scope here, this instead reuses
-bitonic_sort's compare-exchange network (see
-benchmarks/operators/bitonic_sort/impl_nki.py, including its fat-tile
-"local"/"strided" stage tilings and the reasoning behind them) specialized
-for exact int32.
-
-Values are carried through the sort as two 16-bit halves (high, low) rather
-than as one 32-bit word: the comparison has to be done in float32 (integer
-tensor-tensor comparisons are rejected by this frontend -- "operand0 must be
-float32, got i32") and 32-bit values above 2^24 are not exactly representable
-there, while each half is always < 65536 and therefore always exact. The
-original 32-bit value is only reassembled (high*65536 + low, plain int64
-host-side arithmetic) after the sort completes.
-
-SPAN_CAP is the tiling knob (see bitonic_sort): at the top of the configured
-sweep, N = 20M / M = 2^25, the whole sort compiles to ~2.85M instructions,
-inside the compiler's 5M budget but not by a wide margin -- raising SPAN_CAP
-halves that, if the extra SBUF per tile (this kernel keeps both planes plus
-their float32 compare temporaries live) still fits.
-
-The two halves are stored as two back-to-back *planes* of one flat (2M, 1)
-int32 buffer -- [0, M) high, [M, 2M) low -- rather than interleaved as (M, 2),
-so that each plane is contiguous and every stage's DMA stays a plain strided
-read of consecutive elements.
-"""
 import torch
 
 try:
@@ -37,19 +5,15 @@ try:
     import nki.isa as nisa
     import nki.language as nl
     PMAX = nl.tile_size.pmax
+    SPAN_CAP = 4096
 except ImportError:
     nki = None
 
-# Largest per-partition contiguous span, in elements, that a stage tile may
-# cover. Half of bitonic_sort's cap because every stage here keeps two planes
-# (high/low) live at once.
-SPAN_CAP = 4096
 
 
 if nki is not None:
     @nki.jit
     def radix_local_kernel(src, dst, M, k, log2k, j, span, P, n_blocks):
-        """Compare-exchange for stages with 2*j <= span (partner in-partition)."""
         two_j = 2 * j
         C = span // two_j
         pat = [[span, P], [1, span]]
@@ -66,9 +30,6 @@ if nki is not None:
             lo_l = tile_l[:, :, 0:j]
             up_l = tile_l[:, :, j:two_j]
 
-            # Lexicographic (high, low) compare, done in float32: both halves
-            # are < 65536 and so exactly representable, unlike a full 32-bit
-            # value would be.
             lo_hf = nl.add(lo_h, 0.0, dtype=nl.float32)
             up_hf = nl.add(up_h, 0.0, dtype=nl.float32)
             lo_lf = nl.add(lo_l, 0.0, dtype=nl.float32)
@@ -77,7 +38,6 @@ if nki is not None:
                                 nl.less_equal(lo_lf, up_lf),
                                 nl.less(lo_hf, up_hf))
 
-            # idx[p, c, f] = index of the *lower* element of this pair.
             idx = nl.ndarray((P, C, j), dtype=nl.int32, buffer=nl.sbuf)
             nisa.iota(dst=idx, pattern=[[two_j, C], [1, j]], offset=base,
                       channel_multiplier=span)
@@ -102,7 +62,6 @@ if nki is not None:
     @nki.jit
     def radix_stride_kernel(src, dst, M, k, log2k, j, W, P, part_stride,
                             n_outer, outer_stride, n_inner, inner_stride):
-        """Compare-exchange for stages with 2*j > span (partner out-of-partition)."""
         pat = [[part_stride, P], [1, W]]
 
         for a in nl.affine_range(n_outer):
@@ -156,21 +115,14 @@ def _next_pow2(n: int) -> int:
 
 
 def _plan(M: int, j: int):
-    """Tile geometry for one compare-exchange stage of an M-element buffer.
-
-    See bitonic_sort/impl_nki.py for the derivation. Returns
-    ``("local", span, P, n_blocks)`` or
-    ``("stride", W, P, part_stride, n_outer, outer_stride, n_inner, inner_stride)``.
-    M, j and SPAN_CAP are all powers of two, so every division below is exact.
-    """
     if 2 * j <= SPAN_CAP:
         span = min(SPAN_CAP, max(2 * j, M // PMAX))
         P = min(PMAX, M // span)
         return ("local", span, P, M // (P * span))
 
     W = SPAN_CAP
-    p_across_runs = min(PMAX, M // (2 * j))   # partition stride = 2j
-    p_within_run = min(PMAX, j // W)          # partition stride = W
+    p_across_runs = min(PMAX, M // (2 * j))  
+    p_within_run = min(PMAX, j // W)          
     if p_across_runs >= p_within_run:
         P = p_across_runs
         return ("stride", W, P, 2 * j, M // (2 * j * P), P * 2 * j, j // W, W)
@@ -188,11 +140,8 @@ def _radix_sort_1d(data: torch.Tensor) -> torch.Tensor:
     high = (data_i64 >> 16) & 0xFFFF
     low = data_i64 & 0xFFFF
 
-    PAD_HIGH, PAD_LOW = 0xFFFF, 0xFFFF  # 2^31-1 non-negative inputs always sort before this
-    # One flat (2M, 1) buffer holding the two planes back to back rather than a
-    # (2, M) tensor: a 2-row tensor gives XLA a layout choice for the custom
-    # call's operands and the Neuron compiler then wedges in InsertIOTransposes
-    # (observed: >25 min in that single pass, no progress, for M = 2^20).
+    PAD_HIGH, PAD_LOW = 0xFFFF, 0xFFFF  
+    
     work_a = torch.empty((2 * M, 1), dtype=torch.int32, device=data.device)
     work_a[:M, 0] = PAD_HIGH
     work_a[M:, 0] = PAD_LOW

@@ -11,8 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def dequantize_rowwise_kernel(x_input, state_x_input):
-        # x_input: (rows, cols) int8. state_x_input: (rows, 1) fp32.
-        # out[r, c] = state_x[r] * x[r, c] / 127
         free_tile_size = 8192
         rows, cols = x_input.shape
 
@@ -52,12 +50,6 @@ def run(x: torch.Tensor, state_x: torch.Tensor, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     rows = x.shape[0]
     state_x_2d = state_x.reshape(-1, 1)
-    # state_x_2d is a tiny (rows, 1) allocation -- a tail block's masked
-    # partition read can compute an address past the actual buffer end and
-    # trip the compiler's static bounds check (unlike wide tensors, where the
-    # same out-of-range read still lands inside the allocation). Pad rows to
-    # a PMAX multiple so every access pattern the kernel emits stays in
-    # bounds; the mask still discards the padding when producing the output.
     padded_rows = ((rows + PMAX - 1) // PMAX) * PMAX
     if padded_rows > rows:
         state_x_2d = torch.nn.functional.pad(state_x_2d, (0, 0, 0, padded_rows - rows))

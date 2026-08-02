@@ -1,14 +1,3 @@
-"""NKI destindex: out[dest_loc[i], :] = kv[i, :] (scatter/index_copy_).
-
-Uses the "new" NKI frontend (`import nki`, not `neuronxcc.nki`) because the
-dynamic per-row destination address needs `.ap(vector_offset=..., indirect_dim=0)`,
-which is only exposed on that frontend's tensor handles (probed directly:
-`neuronxcc.nki`'s HBM tensor refs have no `.ap()`). Both frontends compile
-and run correctly on this SDK/hardware -- this file just needs the one with
-indirect/scatter DMA support. Pattern mirrors the vendor `scatter_add`
-reference kernel (neuronxcc/nki/_pre_prod_kernels/experimental/misc/klir_scatter_add.py),
-minus the add (destindex overwrites, it doesn't accumulate).
-"""
 import torch
 
 try:

@@ -1,21 +1,3 @@
-"""NKI int8 (2-bit packed B) matmul.
-
-nc_matmul on trn2 does not support int8 stationary/moving operands (only
-float8_e4m3/e5m2, bfloat16, float16, tfloat32, float32 -- confirmed by
-probing the compiler directly). A is bounded to [-64, 64] and unpacked B
-values to {-1, 0, 1, 2}, so each product is bounded by 128 and the K-summed
-accumulator by 128 * K -- at most ~2.6M for the largest configured K
-(20480), safely inside fp32's 24-bit exact-integer range (8,388,608). The
-Tensor Engine accumulates in fp32 regardless of input dtype, so running the
-unpacked operands through the existing fp32 tiled matmul
-(matmul_fp32_fp16_fp8) and rounding the result to int32 reproduces the
-integer reference bit-for-bit rather than approximately.
-
-B's 2-bit unpacking (byte -> 4 fields -> {-1,0,1,2}) is elementwise,
-data-layout work, not part of the M*N*K contraction impl_torch.py's
-flops_expr measures -- it's done with plain tensor ops (mirroring
-impl_torch.py exactly) rather than a bespoke bit-twiddling NKI kernel.
-"""
 import torch
 
 from benchmarks.operators.matmul_fp32_fp16_fp8.impl_nki import (
@@ -35,7 +17,7 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         mask = 3 << (2 * i)
         b_val = ((b.to(torch.int32) & mask) >> (2 * i)).to(torch.int8) - 1
         parts.append(b_val)
-    b_unpacked = torch.cat(parts, dim=0)  # (K, N) int8
+    b_unpacked = torch.cat(parts, dim=0) 
 
     a_fp32 = a_int8.to(torch.float32)
     b_fp32 = b_unpacked.to(torch.float32)

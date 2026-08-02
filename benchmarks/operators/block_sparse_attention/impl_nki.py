@@ -1,17 +1,3 @@
-"""NKI block-sparse attention.
-
-Reuses flash_attention/impl_nki.py's tiled causal-attention structure
-(same 128x128-block QK^T / P@V via nc_transpose+nc_matmul, two-pass
-softmax with no cross-iteration accumulator rescale -- see that file's
-docstring for why). The CSR block-sparse layout plus the causal triangle are
-decoded into one dense (seq_len, seq_len) 0/1 mask on the host, exactly
-mirroring impl_torch.py's own mask construction (it also builds a dense
-mask from the CSR layout before running dense attention -- this isn't a
-shortcut relative to the reference, it's the same approach). The mask is
-zero-padded up to a whole number of 128-blocks, so the kernel needs no
-separate in-bounds check: an out-of-range query/key position is already
-invalid in the padded mask.
-"""
 import math
 import torch
 

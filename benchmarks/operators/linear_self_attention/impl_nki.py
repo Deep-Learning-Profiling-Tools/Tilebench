@@ -1,26 +1,3 @@
-"""NKI linear self-attention.
-
-  phi(x) = x>0 ? x+1 : exp(x)
-  S = phi(K)^T @ V             (D, D)
-  Z = sum_m phi(K[m, :])       (D,)
-  O = (phi(Q) @ S) / (phi(Q) @ Z + eps)
-
-V is augmented with an extra all-ones column (V_aug = [V | 1], shape
-(M, D+1)) so S and Z fall out of ONE matmul: S_aug = phi(K)^T @ V_aug has
-S in its first D columns and Z in the last. Two Tensor-Engine matmuls
-(nc_matmul, same convention as matmul_fp32_fp16_fp8/impl_nki.py):
-  Stage A: S_aug = phi(K)^T @ V_aug, contraction over M (tiled by 128,
-           phi(K)'s M rows are already on partitions -- no transpose).
-  Stage B: O_aug = phi(Q) @ S_aug, contraction over D (tiled by 128,
-           phi(Q) needs a transpose per D-tile to get D onto partitions,
-           same as matmul_fp32_fp16_fp8's A-transpose step).
-Every partial tile (M not a multiple of 128, D < 128) is handled by
-explicitly zeroing the invalid rows/columns of the SBUF operand tile before
-it feeds nc_matmul, rather than masking the store -- so every stage always
-writes full 128-row blocks and no HBM buffer is ever partially
-uninitialized (uninitialized bytes multiplied by an intended-zero operand
-could still propagate NaN).
-"""
 import torch
 
 try:

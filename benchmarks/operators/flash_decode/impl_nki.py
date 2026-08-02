@@ -11,10 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def flash_decode_kernel(mid_o_t, mid_o_lse, valid_blocks):
-        # mid_o_t: (head_dim, num_blocks) for one (batch, head) slice --
-        # already transposed on the host so head_dim (<=128) sits on
-        # partitions. mid_o_lse: (1, num_blocks). valid_blocks: (1, 1)
-        # scalar (this batch's ceil(seqlen / block_seq), computed on host).
         head_dim, num_blocks = mid_o_t.shape
         NEG_INF = -3.0e38
 
@@ -64,7 +60,7 @@ def run(mid_o: torch.Tensor, mid_o_lse: torch.Tensor, b_seqlen: torch.Tensor,
     batch, heads, num_blocks, head_dim = mid_o.shape
     valid_blocks_count = ((b_seqlen + block_seq - 1) // block_seq).to(torch.float32).reshape(batch, 1, 1)
 
-    mid_o_t = mid_o.permute(0, 1, 3, 2).contiguous()  # (B, H, head_dim, num_blocks)
+    mid_o_t = mid_o.permute(0, 1, 3, 2).contiguous() 
     lse_2d = mid_o_lse.reshape(batch, heads, 1, num_blocks)
 
     out = torch.empty(batch, heads, head_dim, dtype=mid_o.dtype, device=mid_o.device)

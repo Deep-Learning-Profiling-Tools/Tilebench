@@ -11,12 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def moe_topk_kernel(logits):
-        # k is fixed at 2 by config. nisa.max8/nc_find_index8 (same ops
-        # argmax/impl_nki.py uses) give the row's top-8 values/indices in
-        # descending order in one shot -- take the first two. Reference
-        # ordering is ascending (2nd-largest first, then largest), so
-        # column 0 <- 2nd max, column 1 <- max; softmax is computed with the
-        # (always-larger) max as the numerically-stable subtraction anchor.
         M, E = logits.shape
         num_blocks = (M + (PMAX - 1)) // PMAX
 

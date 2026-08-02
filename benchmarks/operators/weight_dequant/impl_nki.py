@@ -11,10 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def weight_dequant_kernel(X, S, TILE_SIZE):
-        # Y[i, j] = X[i, j] * S[i // TILE_SIZE, j // TILE_SIZE]
-        # Requires TILE_SIZE % PMAX == 0 so every PMAX-row block maps to a
-        # single S row, and iterates the free dim in TILE_SIZE-wide chunks so
-        # every chunk maps to a single S column (checked in run()).
         M, N = X.shape
 
         num_row_blocks = (M + (PMAX - 1)) // PMAX

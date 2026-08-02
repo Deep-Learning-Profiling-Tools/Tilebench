@@ -11,9 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def max_pool2d_kernel(padded_input, H_out, W_out, kernel_size, stride):
-        # padded_input: (NC, Hp, Wp), zero-padding already replaced with -inf
-        # on the host (max-pool's implicit pad value), so a plain max over the
-        # kernel_size^2 shifted reads needs no extra boundary masking.
         NC, Hp, Wp = padded_input.shape
         num_blocks = (NC + (PMAX - 1)) // PMAX
         NEG_INF = -3.0e38
@@ -30,8 +27,7 @@ if nki is not None:
                 for kw in range(kernel_size):
                     row_idx = grid.x * stride + kh
                     col_idx = grid.y * stride + kw
-                    # stride != 1 in a non-leading free dim isn't a legal
-                    # nl.load access pattern -- nisa.dma_copy handles it.
+                    
                     tile = nl.ndarray((PMAX, H_out, W_out), dtype=nl.float32, buffer=nl.sbuf)
                     nisa.dma_copy(dst=tile, src=padded_input[offset + grid.p, row_idx, col_idx],
                                   mask=mask_p)

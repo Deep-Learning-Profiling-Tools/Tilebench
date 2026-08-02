@@ -1,16 +1,3 @@
-"""NKI Stream-K matmul target.
-
-Stream-K is a Triton/cuTile *scheduling* trick for balancing K-iterations
-across SMs when total_tiles doesn't divide the SM count evenly -- it changes
-which core does which work, not the numerical result (impl_torch.py is plain
-torch.matmul). NKI has no persistent-kernel/SM-count concept to schedule
-over, so this reuses the existing, already-verified tiled Tensor-Engine
-matmul from matmul_fp32_fp16_fp8 (nc_matmul + PSUM K-accumulation, sharded
-across the two physical NeuronCores). Non-tile-multiple M/N/K (e.g.
-N=11008 isn't a multiple of TILE_N=512) are handled by zero-padding on the
-host and cropping the result -- the same tail strategy matrix_transpose and
-vector_add use.
-"""
 import torch
 
 from benchmarks.operators.matmul_fp32_fp16_fp8.impl_nki import (

@@ -12,13 +12,6 @@ if nki is not None:
     @nki.jit
     def conv3d_kernel(input_3d, kernel_flat, out_depth, out_rows, out_cols,
                        kernel_depth, kernel_rows, kernel_cols):
-        # input_3d: (input_depth, input_rows, input_cols), valid (no padding)
-        # convolution. Output rows sit on the partition dim (PMAX per block);
-        # (out_depth, out_cols) is a 2D free shape. Each of the
-        # kernel_depth*kernel_rows*kernel_cols taps (kd, kh, kw) is one
-        # shifted (PMAX, out_depth, out_cols) load + scalar-broadcast
-        # multiply-add; kernel_flat is (kernel_depth*kernel_rows*kernel_cols, 1)
-        # so each tap's weight is a plain compile-time-constant row index.
         num_blocks = (out_rows + (PMAX - 1)) // PMAX
         w_idx1 = nl.arange(1)[None, :, None]
         w_idx2 = nl.arange(1)[None, None, :]
@@ -61,9 +54,6 @@ def run(input: torch.Tensor, kernel: torch.Tensor, input_depth: int, input_rows:
     out_rows = input_rows - kernel_rows + 1
     out_cols = input_cols - kernel_cols + 1
 
-    # Kernel produces (out_rows, out_depth, out_cols) (rows on the partition
-    # dim); permute to the reference's (out_depth, out_rows, out_cols) order
-    # before flattening.
     result = conv3d_kernel(x, kernel_flat, out_depth, out_rows, out_cols,
                             kernel_depth, kernel_rows, kernel_cols)
     return result.permute(1, 0, 2).reshape(-1)

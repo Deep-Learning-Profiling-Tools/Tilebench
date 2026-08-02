@@ -11,11 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def jacobi_kernel(padded_input, rows, cols):
-        # padded_input: (rows+2, cols+2), padded_input[r+1, c+1] == input[r, c].
-        # Row/col shifts read straight from HBM with the padded offset instead
-        # of clamping indices, so no access ever goes negative; boundary
-        # output cells select the (unshifted) center value, which equals the
-        # original input exactly thanks to the padding.
         num_blocks = (rows + (PMAX - 1)) // PMAX
 
         hbm_result = nl.ndarray((rows, cols), dtype=padded_input.dtype, buffer=nl.hbm)

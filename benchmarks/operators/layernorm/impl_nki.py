@@ -11,16 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def layernorm_kernel(a_input, weight_input, bias_input, eps):
-        # a_input: (rows, cols). weight_input, bias_input: (1, cols) -- broadcast
-        # across rows (partition-dim broadcast via nl.broadcast_to).
-        #
-        # Mirrors the Triton reference (_layernorm_kernel): a tiled two-pass
-        # LayerNorm. Pass 1 accumulates sum(x) and sum(x^2) per row in fp32
-        # accumulators, then mean = E[x], var = E[x^2] - mean^2,
-        # rstd = 1/sqrt(var + eps). Pass 2 re-loads x and writes
-        # (x - mean) * rstd * weight + bias. Partitions are tiled by PMAX, the free
-        # (column) dimension by free_tile_size (kept modest so the live fp32
-        # intermediates fit in SBUF).
         free_tile_size = 2048
 
         num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
@@ -43,11 +33,8 @@ if nki is not None:
                 mask_f = free_dim_index < (n_cols - free_offset)
                 mask = mask_p & mask_f
 
-                # Upcast to fp32 on load (static_cast rejects bf16 tiles at trace time).
                 a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask, dtype=nl.float32)
 
-                # Zero out masked (out-of-range) elements before reducing; 0 is the
-                # neutral element for both the sum and the sum-of-squares.
                 zero_tile = nl.zeros(a_tile.shape, dtype=nl.float32, buffer=nl.sbuf)
                 a_safe = nl.where(mask, a_tile, zero_tile)
 
@@ -55,15 +42,9 @@ if nki is not None:
                 sq_tile = nl.multiply(a_safe, a_safe)
                 sum_x2[...] = nl.add(sum_x2, nl.sum(sq_tile, axis=1, keepdims=True))
 
-            # mean, var, and rstd = 1 / sqrt(var + eps), all shape (PMAX, 1).
             mean = nl.divide(sum_x, float(n_cols))
             var = nl.subtract(nl.divide(sum_x2, float(n_cols)), nl.multiply(mean, mean))
 
-            # Hardware sqrt/divide/rsqrt are only ~1e-5 relative-accurate, which
-            # blows the fp32 qualification tolerance (rtol 1.3e-6). Seed with the
-            # fast rsqrt and refine with two Newton-Raphson steps
-            # (y <- y * (1.5 - 0.5 * val * y^2), quadratic convergence). rstd is then
-            # accurate to ~fp32 rounding, and pass 2 uses only multiplies/adds.
             val = nl.add(var, eps, dtype=nl.float32)
             half_val = nl.multiply(val, 0.5)
             rstd0 = nl.rsqrt(val)
@@ -72,7 +53,6 @@ if nki is not None:
             corr2 = nl.subtract(1.5, nl.multiply(half_val, nl.multiply(rstd1, rstd1)))
             rstd = nl.multiply(rstd1, corr2)
 
-            # Pass 2: re-load x, write (x - mean) * rstd * weight + bias.
             for j in range(num_free_blocks):
                 free_offset = j * free_tile_size
                 free_dim_index = nl.arange(free_tile_size)[None, :]
@@ -81,14 +61,12 @@ if nki is not None:
 
                 a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask, dtype=nl.float32)
 
-                # weight/bias are per-column (1, free); replicate across partitions.
                 w_partition_index = nl.arange(1)[:, None]
                 w_tile = nl.load(weight_input[w_partition_index, free_offset + free_dim_index], mask=mask_f, dtype=nl.float32)
                 b_tile = nl.load(bias_input[w_partition_index, free_offset + free_dim_index], mask=mask_f, dtype=nl.float32)
                 w_broadcast = nl.broadcast_to(w_tile, shape=(PMAX, free_tile_size))
                 b_broadcast = nl.broadcast_to(b_tile, shape=(PMAX, free_tile_size))
 
-                # (x - mean) and * rstd use the implicit (PMAX,1) free-dim broadcast.
                 centered = nl.subtract(a_tile, mean)
                 normalized = nl.multiply(centered, rstd)
                 scaled = nl.multiply(normalized, w_broadcast)
@@ -101,12 +79,10 @@ if nki is not None:
 
 def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    """x: (batch, M, K) or 2D. weight, bias: 1D tensors (K,)."""
+        
     if x.dtype == torch.int8:
         raise NotImplementedError("layernorm NKI: int8 not supported")
 
-    # Flatten leading dims to 2D (rows, cols), like the Triton reference, then
-    # restore the original shape.
     orig_shape = x.shape
     x_2d = x.reshape(-1, x.shape[-1])
     if not x_2d.is_contiguous():

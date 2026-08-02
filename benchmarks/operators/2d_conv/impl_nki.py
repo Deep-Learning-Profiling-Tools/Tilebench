@@ -1,15 +1,3 @@
-"""NKI Conv2d (groups=1) via implicit GEMM on the Tensor Engine.
-
-case_defaults fixes in_channels == out_channels == 128 == PMAX, so each of
-the kernel_size^2 taps is exactly one nc_matmul: stationary = weight[:,:,kh,kw]
-(in_channels x out_channels, K=in_channels on partitions), moving = the
-(kh,kw)-shifted input row (in_channels x out_W). Accumulating over the 9
-taps into one PSUM tile per output row mirrors the K-block accumulation in
-matmul_fp32_fp16_fp8. kernel_size is fixed at 3 by config -- the kernel
-takes the 9 per-tap weight slices as separate arguments (sliced on the host,
-where kh/kw are plain Python ints) rather than indexing a 4D weight tensor
-inside the kernel.
-"""
 import torch
 
 try:
@@ -24,9 +12,6 @@ if nki is not None:
     @nki.jit
     def conv2d_kernel(input_flat, w0, w1, w2, w3, w4, w5, w6, w7, w8,
                        Hp, in_channels, out_channels, out_H, out_W, stride):
-        # input_flat: (in_channels * Hp, Wp) -- channel and (padded) row
-        # dims flattened so a per-tap row lookup is a single affine index:
-        # channel c, row r -> flat row c * Hp + r.
         w_taps = (w0, w1, w2, w3, w4, w5, w6, w7, w8)
         ic_idx = nl.arange(in_channels)[:, None]
         oc_idx_stat = nl.arange(in_channels)[:, None]
@@ -38,15 +23,6 @@ if nki is not None:
         for oh in nl.affine_range(out_H):
             psum_row = nl.zeros((out_channels, out_W), dtype=nl.float32, buffer=nl.psum)
 
-            # Manually unrolled 3x3 tap loop: a plain Python `for kh/kw in
-            # range(3):` loop reusing one `moving`/`row_sel` variable across
-            # iterations was found (empirically, via temp/probe_2dconv_debug*)
-            # to silently drop all but one tap's contribution once both the
-            # row (kh) AND column (kw) index vary across >=2 values each --
-            # a scheduling bug in how the compiler tracks per-iteration SBUF
-            # tile lifetimes for a reused buffer inside nested plain loops.
-            # Fully unrolled, uniquely-named tiles sidestep it (verified
-            # correct in isolation).
             row0 = ic_idx * Hp + (oh * stride + 0)
             row1 = ic_idx * Hp + (oh * stride + 1)
             row2 = ic_idx * Hp + (oh * stride + 2)
@@ -121,7 +97,6 @@ def run(input: torch.Tensor, weight: torch.Tensor, stride: int = 1, padding: int
     Wp = W + 2 * padding
     input_flat = padded.reshape(in_channels * Hp, Wp)
 
-    # (in_channels, out_channels) per tap, K=in_channels on partitions.
     weight_permuted = weight.permute(1, 0, 2, 3).contiguous()
     w_taps = [weight_permuted[:, :, kh, kw].contiguous()
               for kh in range(3) for kw in range(3)]

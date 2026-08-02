@@ -12,15 +12,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def batch_norm_kernel(a_input, gamma_input, beta_input, eps):
-        # a_input: (N, C). gamma/beta: (1, C).
-        # BatchNorm reduces over the batch dim N, which sits on the *partition*
-        # axis here (unlike LayerNorm's free-axis reduction) -- nl reductions
-        # only work along the free axis, so per-channel sums are instead
-        # produced with the Tensor Engine: ones[K,1].T @ x[K,TILE_C] sums the K
-        # (<=128) rows on the partition axis into a (1, TILE_C) row, accumulated
-        # in PSUM across all N tiles. Pass 2 then broadcasts the resulting
-        # (1, TILE_C) mean/rstd/gamma/beta rows across partitions (as in
-        # LayerNorm) and normalizes.
         N, C = a_input.shape
 
         num_n_blocks = (N + (PMAX - 1)) // PMAX

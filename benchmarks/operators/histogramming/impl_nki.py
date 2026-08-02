@@ -1,17 +1,3 @@
-"""NKI histogramming via one-hot compare + reduce.
-
-A true concurrent scatter-add (bin[value[i]] += 1) needs atomic
-read-modify-write for colliding indices within a tile, which pigeonhole
-guarantees here (num_bins as low as 64 vs. 128 elements/tile). The only
-scatter primitive available (`nisa.dma_compute` with `vector_offset`)
-requires `unique_indices=True` -- "non-unique indices not yet supported"
-per its docstring -- so it cannot express this safely. Instead: put a block
-of bin indices on the partition dim, broadcast each chunk of input values
-across those partitions, and reduce `sum(value_chunk == bin_iota)` over the
-free (element) dim -- the same one-hot-mask-and-reduce idiom used for the
-target-class lookup in cross_entropy/impl_nki.py, just reduction instead of
-selection.
-"""
 import torch
 
 try:

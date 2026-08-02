@@ -11,11 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def gaussian_blur_kernel(padded_input, kernel, rows, cols, kernel_rows, kernel_cols):
-        # padded_input: (rows + 2*pr, cols + 2*pc), zero-padded so
-        # padded_input[r + pr, c + pc] == input[r, c]. For each of the
-        # kernel_rows row-taps, one row-shifted (PMAX, cols+2*pc)-wide tile is
-        # loaded once and every column-tap reuses it via a static free-dim
-        # slice -- kernel_rows loads total, not kernel_rows*kernel_cols.
         num_blocks = (rows + (PMAX - 1)) // PMAX
 
         hbm_result = nl.ndarray((rows, cols), dtype=padded_input.dtype, buffer=nl.hbm)

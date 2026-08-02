@@ -11,17 +11,6 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def conv1d_kernel(input_1d, kernel_1d, output_size, kernel_size, F):
-        # output[o] = sum_k kernel[k] * input[o + k]. Output positions are
-        # assigned to (partition, free) as o = p*F + f -- each of the PMAX
-        # partitions owns one contiguous chunk of F output positions, tiled
-        # along the free dim in chunk_size pieces (vector_add's layout).
-        # This replaces an earlier one-output-row-per-partition design that
-        # needed ceil(output_size/PMAX) partition-blocks -- ~7800 for the
-        # smallest configured case (output_size ~= 1e6) -- which blew the
-        # compiler's 5M-instruction budget (NCC_EBVF030) well before reaching
-        # the *largest* configured case. Folding most of the size into the
-        # free dimension instead of the block count keeps the instruction
-        # count in the thousands regardless of output_size.
         chunk_size = 8192
         num_chunks = (F + chunk_size - 1) // chunk_size
 
@@ -57,9 +46,6 @@ def run(input: torch.Tensor, kernel: torch.Tensor, input_size: int, kernel_size:
     input_2d = input.reshape(-1, 1)
     kernel_2d = kernel.reshape(-1, 1)
 
-    # input_1d[p*F + f + k] is read for p up to PMAX-1, f up to F-1 (padded
-    # chunk tail included), k up to kernel_size-1 -- pad so that read always
-    # lands inside the allocation regardless of the tail mask.
     padded_size = PMAX * F + kernel_size - 1
     if padded_size > input_size:
         input_2d = torch.nn.functional.pad(input_2d, (0, 0, 0, padded_size - input_size))
