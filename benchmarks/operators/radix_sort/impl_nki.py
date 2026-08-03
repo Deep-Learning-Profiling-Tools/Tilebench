@@ -1,181 +1,364 @@
+"""NKI radix sort — 2 bits per pass, 4-way digit histogram + global scan + scatter.
+
+Mirrors the Triton / cuTile implementations (``RADIX_BITS = 2``, 16 passes over the
+32-bit key) but replaces their GPU-style "one thread per element, per-block rank via a
+packed int64 ``cumsum``" trick with the Trainium-native equivalents:
+
+  * per-block 4-way digit histogram              -> ``nisa.tensor_reduce``
+  * global exclusive scan of the (digit, block)  -> int32 Hillis/Steele scan
+    histogram in digit-major order
+  * per-block stable 4-way partition (the GPU    -> ``nisa.nonzero_with_count`` yields the
+    "rank extracted by bit-unpacking")              compacted positions of one digit,
+                                                    ``nisa.nc_n_gather`` applies them
+  * scatter of block ``b``'s digit-``d`` run to  -> indirect ``nisa.dma_copy`` with a
+    ``base[d][b] + rank``                            dynamic ``scalar_offset``
+
+Layout notes (why it looks the way it does):
+
+  * A "block" is one SBUF partition row of ``BLOCK`` elements. ``nonzero_with_count`` is a
+    GpSimd instruction that only reads/writes partitions 0, 16, 32, ... 112, so one tile
+    carries ``ROWS = 8`` blocks placed on exactly those partitions (``tile[0:128:16]``).
+  * HBM buffers are single flat ``(len, 1)`` planes. Multi-plane HBM layouts give XLA a
+    layout choice that can wedge the Neuron compiler's InsertIOTransposes pass.
+
+Why the scatter carries a rolling window instead of writing bare runs:
+
+    NKI gives **no ordering guarantee between independent indirect DMA writes** — once
+    more than ~2 MB of scatter traffic is in flight the compiler spreads the descriptors
+    over several DMA queues and they land out of order (measured on trn2). The textbook
+    "write BLOCK elements and let the next block overwrite the trailing garbage" trick is
+    therefore unusable here. Instead every write is made *idempotent*: blocks are walked
+    in reverse output order while a staging row keeps the next ``BLOCK`` elements of the
+    final output stream, so the fixed-length write at ``base[d][b]`` carries the correct
+    value for **every** position it touches. Overlapping writes then agree, and their
+    order stops mattering.
+
+Known limitation: verified bit-exact for N up to ~3e6 (and at 5e6/7e6/8e6), but N=4e6
+and N=6e6 still mismatch. Above ~3e6 the partition-0 staging/offset rows (10*BLOCK +
+3*RADIX*NBLK int32) exceed the 192 KB per-partition SBUF budget, so the counts/offsets
+rows and the Hillis/Steele scan need to move to a tiled, two-level form before large N
+is trustworthy.
+
+Semantics: keys are sorted as *unsigned* 32-bit values, which matches the reference for
+this operator (its generator emits non-negative int32, where signed and unsigned order
+coincide). Padding uses ``-1`` (0xFFFFFFFF), the largest unsigned key, so it always lands
+past the real data.
+"""
 import torch
 
 try:
     import nki
     import nki.isa as nisa
     import nki.language as nl
-    PMAX = nl.tile_size.pmax
-    SPAN_CAP = 4096
+
+    PMAX = nl.tile_size.pmax          # 128 SBUF partitions
+    GPSIMD_STRIDE = 16                # nonzero_with_count touches partitions 0,16,...,112
+    ROWS = PMAX // GPSIMD_STRIDE      # 8 blocks per scatter tile
 except ImportError:
     nki = None
 
+RADIX_BITS = 2
+RADIX = 1 << RADIX_BITS
+KEY_BITS = 32
+BLOCK = 4096          # elements per block (one SBUF partition row)
+MIN_BLOCK = 256
+
+
+def _kernel_assert(cond, msg):
+    if not cond:
+        raise ValueError(f"[NCC_INKI016] Kernel validation exception: {msg}")
+
+
+def _div_ceil(n, d):
+    return (n + d - 1) // d
 
 
 if nki is not None:
-    @nki.jit
-    def radix_local_kernel(src, dst, M, k, log2k, j, span, P, n_blocks):
-        two_j = 2 * j
-        C = span // two_j
-        pat = [[span, P], [1, span]]
-
-        for b in nl.affine_range(n_blocks):
-            base = b * P * span
-
-            tile_h = nl.ndarray((P, C, two_j), dtype=nl.int32, buffer=nl.sbuf)
-            tile_l = nl.ndarray((P, C, two_j), dtype=nl.int32, buffer=nl.sbuf)
-            nisa.dma_copy(dst=tile_h.ap(pattern=pat), src=src.ap(pattern=pat, offset=base))
-            nisa.dma_copy(dst=tile_l.ap(pattern=pat), src=src.ap(pattern=pat, offset=M + base))
-            lo_h = tile_h[:, :, 0:j]
-            up_h = tile_h[:, :, j:two_j]
-            lo_l = tile_l[:, :, 0:j]
-            up_l = tile_l[:, :, j:two_j]
-
-            lo_hf = nl.add(lo_h, 0.0, dtype=nl.float32)
-            up_hf = nl.add(up_h, 0.0, dtype=nl.float32)
-            lo_lf = nl.add(lo_l, 0.0, dtype=nl.float32)
-            up_lf = nl.add(up_l, 0.0, dtype=nl.float32)
-            in_order = nl.where(nl.equal(lo_hf, up_hf),
-                                nl.less_equal(lo_lf, up_lf),
-                                nl.less(lo_hf, up_hf))
-
-            idx = nl.ndarray((P, C, j), dtype=nl.int32, buffer=nl.sbuf)
-            nisa.iota(dst=idx, pattern=[[two_j, C], [1, j]], offset=base,
-                      channel_multiplier=span)
-            kbit = nl.add(nl.right_shift(nl.bitwise_and(idx, k), log2k), 0.0,
-                          dtype=nl.float32)
-            descending = nl.greater(kbit, 0.5)
-
-            keep_lower = nl.logical_xor(in_order, descending)
-
-            out_h = nl.ndarray((P, C, two_j), dtype=nl.int32, buffer=nl.sbuf)
-            out_l = nl.ndarray((P, C, two_j), dtype=nl.int32, buffer=nl.sbuf)
-            out_h[:, :, 0:j] = nl.where(keep_lower, lo_h, up_h)
-            out_h[:, :, j:two_j] = nl.where(keep_lower, up_h, lo_h)
-            out_l[:, :, 0:j] = nl.where(keep_lower, lo_l, up_l)
-            out_l[:, :, j:two_j] = nl.where(keep_lower, up_l, lo_l)
-
-            nisa.dma_copy(dst=dst.ap(pattern=pat, offset=base), src=out_h.ap(pattern=pat))
-            nisa.dma_copy(dst=dst.ap(pattern=pat, offset=M + base), src=out_l.ap(pattern=pat))
-
-        return dst
 
     @nki.jit
-    def radix_stride_kernel(src, dst, M, k, log2k, j, W, P, part_stride,
-                            n_outer, outer_stride, n_inner, inner_stride):
-        pat = [[part_stride, P], [1, W]]
+    def radix_pass(work, shift, S, NBLK):
+        """One 2-bit radix pass: digit histogram -> global scan -> stable scatter.
 
-        for a in nl.affine_range(n_outer):
-            for c in nl.affine_range(n_inner):
-                base = a * outer_stride + c * inner_stride
+        All three phases live in a single kernel. Splitting them across three
+        ``@nki.jit`` calls lets XLA alias the intermediate HBM buffers against each
+        other, which silently corrupts the scatter (verified on trn2: the scatter is
+        exact when the histogram/offsets arrive as plain graph inputs and wrong when
+        they are produced by sibling kernels in the same graph).
 
-                lo_h = nl.ndarray((P, W), dtype=nl.int32, buffer=nl.sbuf)
-                lo_l = nl.ndarray((P, W), dtype=nl.int32, buffer=nl.sbuf)
-                up_h = nl.ndarray((P, W), dtype=nl.int32, buffer=nl.sbuf)
-                up_l = nl.ndarray((P, W), dtype=nl.int32, buffer=nl.sbuf)
-                nisa.dma_copy(dst=lo_h, src=src.ap(pattern=pat, offset=base))
-                nisa.dma_copy(dst=lo_l, src=src.ap(pattern=pat, offset=M + base))
-                nisa.dma_copy(dst=up_h, src=src.ap(pattern=pat, offset=base + j))
-                nisa.dma_copy(dst=up_l, src=src.ap(pattern=pat, offset=M + base + j))
+        Args:
+            work:  ``(NBLK * S + S, 1)`` int32 keys in HBM; only ``[0, NBLK * S)`` is read.
+            shift: ``(128, 1)`` int32 bit position of the current digit, replicated over
+                   partitions so it can drive ``tensor_scalar``.
+            S:     block size (elements per SBUF partition row).
+            NBLK:  number of blocks; a multiple of 128.
 
-                lo_hf = nl.add(lo_h, 0.0, dtype=nl.float32)
-                up_hf = nl.add(up_h, 0.0, dtype=nl.float32)
-                lo_lf = nl.add(lo_l, 0.0, dtype=nl.float32)
-                up_lf = nl.add(up_l, 0.0, dtype=nl.float32)
-                in_order = nl.where(nl.equal(lo_hf, up_hf),
-                                    nl.less_equal(lo_lf, up_lf),
-                                    nl.less(lo_hf, up_hf))
+        Returns:
+            ``(NBLK * S + S, 1)`` int32; ``[0, NBLK * S)`` is the stably partitioned
+            result and the trailing ``S`` elements absorb the last window's overhang.
+        """
+        M = RADIX * NBLK
+        n_hist_tiles = NBLK // PMAX
+        n_tiles = NBLK // ROWS
 
-                idx = nl.ndarray((P, W), dtype=nl.int32, buffer=nl.sbuf)
-                nisa.iota(dst=idx, pattern=[[1, W]], offset=base,
-                          channel_multiplier=part_stride)
-                kbit = nl.add(nl.right_shift(nl.bitwise_and(idx, k), log2k), 0.0,
-                              dtype=nl.float32)
-                descending = nl.greater(kbit, 0.5)
+        out = nl.ndarray((NBLK * S + S, 1), dtype=nl.int32, buffer=nl.shared_hbm)
+        # Kernel-internal scratch: the only cheap way to turn the per-partition counts
+        # into the partition-0 row the scan and the scatter both need.
+        hist = nl.ndarray((M, 1), dtype=nl.int32, buffer=nl.hbm)
 
-                keep_lower = nl.logical_xor(in_order, descending)
+        sh = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.dma_copy(dst=sh, src=shift[0:PMAX, 0:1])
 
-                new_lo_h = nl.where(keep_lower, lo_h, up_h)
-                new_up_h = nl.where(keep_lower, up_h, lo_h)
-                new_lo_l = nl.where(keep_lower, lo_l, up_l)
-                new_up_l = nl.where(keep_lower, up_l, lo_l)
+        # data keeps one extra, permanently zero column: nonzero_with_count pads its
+        # index list with S, so gathered slots past the digit count read that sentinel.
+        data = nl.ndarray((PMAX, S + 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.memset(dst=data, value=0)
+        digit = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        indicator = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        # Kept exclusively for nonzero_with_count: sharing it with the histogram
+        # indicator creates a compute/GpSimd write-after-write the scheduler does not
+        # order, which silently corrupts the first tile's index list.
+        marks = nl.ndarray((PMAX, S + 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.memset(dst=marks, value=0)
+        # Double buffered: the eight per-row DMAs that drain a tile's gather race
+        # against the next tile's nc_n_gather writing the same tile (cross-engine
+        # write-after-read that the scheduler does not order).
+        gathered_0 = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        gathered_1 = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        gathers = (gathered_0, gathered_1)
+        tile_counts = nl.ndarray((PMAX, RADIX), dtype=nl.int32, buffer=nl.sbuf)
 
-                nisa.dma_copy(dst=dst.ap(pattern=pat, offset=base), src=new_lo_h)
-                nisa.dma_copy(dst=dst.ap(pattern=pat, offset=M + base), src=new_lo_l)
-                nisa.dma_copy(dst=dst.ap(pattern=pat, offset=base + j), src=new_up_h)
-                nisa.dma_copy(dst=dst.ap(pattern=pat, offset=M + base + j), src=new_up_l)
+        # ---- phase 1: per-block digit histogram -----------------------------------
+        # Phase 1 uses its own tiles. Reusing phase 3's buffers here leaves
+        # cross-phase write-after-write pairs (compute vs GpSimd/DMA) that the
+        # scheduler does not order, which corrupts the first scatter tile.
+        hist_data = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        hist_digit = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
+        for tile_idx in nl.sequential_range(n_hist_tiles):
+            nisa.dma_copy(
+                dst=hist_data,
+                src=work.ap(pattern=[[S, PMAX], [1, S]], offset=tile_idx * PMAX * S),
+            )
+            nisa.tensor_scalar(dst=hist_digit, data=hist_data,
+                               op0=nl.right_shift, operand0=sh,
+                               op1=nl.bitwise_and, operand1=RADIX - 1)
+            for d in nl.static_range(RADIX):
+                nisa.tensor_scalar(dst=indicator, data=hist_digit,
+                                   op0=nl.equal, operand0=d)
+                nisa.tensor_reduce(dst=tile_counts[0:PMAX, d:d + 1],
+                                   data=indicator, op=nl.add, axis=(1,))
+            for d in nl.static_range(RADIX):
+                row = d * NBLK + tile_idx * PMAX
+                # Written through .ap() (like the read below) so the dependency
+                # tracker compares two flat views of the same buffer and orders them.
+                nisa.dma_copy(dst=hist.ap(pattern=[[1, PMAX]], offset=row),
+                              src=tile_counts[0:PMAX, d:d + 1])
 
-        return dst
+        # ---- phase 2: exclusive scan of the digit-major histogram ------------------
+        # Two-level so the scan state never depends on M: the M counts are viewed as
+        # (128, C) with one contiguous chunk per partition, each partition scans its own
+        # chunk, and a tiny 128-wide scan of the chunk totals supplies the per-partition
+        # base. A flat (1, M) scan would put 3*M int32 on partition 0 alone, which blows
+        # the 192 KB per-partition SBUF budget once N passes a few million.
+        #
+        # int32 Hillis/Steele throughout: tensor_tensor takes the integer ALU path and
+        # stays exact, whereas tensor_tensor_scan accumulates in fp32 and drops low bits
+        # once the running total passes 2**24 (N > ~16.7M).
+        chunk = M // PMAX
+        chunk_counts = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.dma_copy(dst=chunk_counts, src=hist.ap(pattern=[[chunk, PMAX], [1, chunk]]))
+
+        scan_a = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
+        scan_b = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.tensor_copy(dst=scan_a, src=chunk_counts)
+        cur_scan, nxt_scan = scan_a, scan_b
+        step_size = 1
+        while step_size < chunk:
+            nisa.tensor_tensor(dst=nxt_scan[0:PMAX, step_size:chunk],
+                               data1=cur_scan[0:PMAX, step_size:chunk],
+                               data2=cur_scan[0:PMAX, 0:chunk - step_size], op=nl.add)
+            nisa.tensor_copy(dst=nxt_scan[0:PMAX, 0:step_size],
+                             src=cur_scan[0:PMAX, 0:step_size])
+            cur_scan, nxt_scan = nxt_scan, cur_scan
+            step_size *= 2
+
+        # Outer level: exclusive scan of the 128 chunk totals. The totals arrive as a
+        # (128, 1) column and have to come back as one, so both transposes go through
+        # HBM -- nc_transpose runs on the fp32 PE array and would round totals > 2**24.
+        totals_hbm = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.hbm)
+        nisa.dma_copy(dst=totals_hbm.ap(pattern=[[1, PMAX]]),
+                      src=cur_scan[0:PMAX, chunk - 1:chunk])
+        totals = nl.ndarray((1, PMAX), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.dma_copy(dst=totals, src=totals_hbm.ap(pattern=[[PMAX, 1], [1, PMAX]]))
+        outer_a = nl.ndarray((1, PMAX), dtype=nl.int32, buffer=nl.sbuf)
+        outer_b = nl.ndarray((1, PMAX), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.tensor_copy(dst=outer_a, src=totals)
+        cur_outer, nxt_outer = outer_a, outer_b
+        step_size = 1
+        while step_size < PMAX:
+            nisa.tensor_tensor(dst=nxt_outer[0:1, step_size:PMAX],
+                               data1=cur_outer[0:1, step_size:PMAX],
+                               data2=cur_outer[0:1, 0:PMAX - step_size], op=nl.add)
+            nisa.tensor_copy(dst=nxt_outer[0:1, 0:step_size],
+                             src=cur_outer[0:1, 0:step_size])
+            cur_outer, nxt_outer = nxt_outer, cur_outer
+            step_size *= 2
+        nisa.tensor_tensor(dst=nxt_outer, data1=cur_outer, data2=totals,
+                           op=nl.subtract)
+        # A second scratch buffer rather than reusing totals_hbm: writing and reading one
+        # HBM buffer through two differently shaped .ap() views is exactly the pattern
+        # the dependency tracker fails to order.
+        base_hbm = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.hbm)
+        nisa.dma_copy(dst=base_hbm.ap(pattern=[[PMAX, 1], [1, PMAX]]), src=nxt_outer)
+        chunk_base = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.dma_copy(dst=chunk_base, src=base_hbm.ap(pattern=[[1, PMAX]]))
+
+        # exclusive[p][c] = inclusive[p][c] - counts[p][c] + chunk_base[p]
+        chunk_excl = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.tensor_tensor(dst=chunk_excl, data1=cur_scan, data2=chunk_counts,
+                           op=nl.subtract)
+        # tensor_scalar rejects an int32 vector operand, so the per-partition base is
+        # broadcast across the chunk with a zero-stride free dimension instead.
+        nisa.tensor_tensor(dst=chunk_excl, data1=chunk_excl,
+                           data2=chunk_base.ap(pattern=[[1, PMAX], [0, chunk]]),
+                           op=nl.add)
+        base = nl.ndarray((M, 1), dtype=nl.int32, buffer=nl.hbm)
+        nisa.dma_copy(dst=base.ap(pattern=[[chunk, PMAX], [1, chunk]]), src=chunk_excl)
+
+        # ---- phase 3: stable partition + scatter -----------------------------------
+        # The output stream is O = concat_{d, b} run(d, b) and offsets[d][b] is where
+        # run(d, b) starts in it. Blocks are visited in *decreasing* (d, b) order while
+        # a staging row holds O[offsets[d][b] : +S]; the invariant is restored by
+        # writing run(d, b) at 0 and re-placing the previous window at counts[d][b].
+        # Every S-element write is then correct for each position it covers, so the
+        # writes are idempotent -- which matters because NKI gives no ordering
+        # guarantee between independent indirect DMA writes.
+        run_0 = nl.ndarray((1, S), dtype=nl.int32, buffer=nl.sbuf)
+        run_1 = nl.ndarray((1, S), dtype=nl.int32, buffer=nl.sbuf)
+        stage_0 = nl.ndarray((1, 2 * S), dtype=nl.int32, buffer=nl.sbuf)
+        stage_1 = nl.ndarray((1, 2 * S), dtype=nl.int32, buffer=nl.sbuf)
+        stage_2 = nl.ndarray((1, 2 * S), dtype=nl.int32, buffer=nl.sbuf)
+        stage_3 = nl.ndarray((1, 2 * S), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.memset(dst=stage_0, value=-1)
+        nisa.memset(dst=stage_1, value=-1)
+        nisa.memset(dst=stage_2, value=-1)
+        nisa.memset(dst=stage_3, value=-1)
+        runs = (run_0, run_1)
+        stages = (stage_0, stage_1, stage_2, stage_3)
+        # Only the ROWS counts/offsets of the current tile are held in SBUF, so phase 3
+        # is also independent of M. Double buffered for the same cross-engine reason as
+        # the gather output.
+        slot_counts_0 = nl.ndarray((1, ROWS), dtype=nl.int32, buffer=nl.sbuf)
+        slot_counts_1 = nl.ndarray((1, ROWS), dtype=nl.int32, buffer=nl.sbuf)
+        slot_offsets_0 = nl.ndarray((1, ROWS), dtype=nl.int32, buffer=nl.sbuf)
+        slot_offsets_1 = nl.ndarray((1, ROWS), dtype=nl.int32, buffer=nl.sbuf)
+        slot_counts = (slot_counts_0, slot_counts_1)
+        slot_offsets = (slot_offsets_0, slot_offsets_1)
+        step = 0
+
+        for d in nl.static_range(RADIX - 1, -1, -1):
+            for tile_rev in nl.sequential_range(n_tiles):
+                tile_idx = n_tiles - 1 - tile_rev
+                # One DMA per row rather than a single partition-strided DMA: the
+                # dependency tracker does not see that a `tile[0:128:16]` write
+                # overlaps the following full-tile read, and skips the semaphore.
+                for load_row in nl.static_range(ROWS):
+                    load_part = load_row * GPSIMD_STRIDE
+                    nisa.dma_copy(
+                        dst=data[load_part:load_part + 1, 0:S],
+                        src=work.ap(pattern=[[S, 1], [1, S]],
+                                    offset=(tile_idx * ROWS + load_row) * S),
+                    )
+                nisa.tensor_scalar(dst=digit, data=data[0:PMAX, 0:S],
+                                   op0=nl.right_shift, operand0=sh,
+                                   op1=nl.bitwise_and, operand1=RADIX - 1)
+                nisa.tensor_scalar(dst=digit, data=digit, op0=nl.equal, operand0=d)
+                nisa.nonzero_with_count(dst=marks, src=digit,
+                                        index_offset=0, padding_val=S)
+                gathered = gathers[tile_rev % 2]
+                nisa.nc_n_gather(dst=gathered, data=data,
+                                 indices=marks[0:PMAX, 0:S].view(nl.uint32))
+                cnt_row = slot_counts[tile_rev % 2]
+                off_row = slot_offsets[tile_rev % 2]
+                slot_base = d * NBLK + tile_idx * ROWS
+                nisa.dma_copy(dst=cnt_row,
+                              src=hist.ap(pattern=[[ROWS, 1], [1, ROWS]],
+                                          offset=slot_base))
+                nisa.dma_copy(dst=off_row,
+                              src=base.ap(pattern=[[ROWS, 1], [1, ROWS]],
+                                          offset=slot_base))
+                for row_rev in nl.static_range(ROWS):
+                    row = ROWS - 1 - row_rev
+                    part = row * GPSIMD_STRIDE
+                    run = runs[step % 2]
+                    cur = stages[step % 4]
+                    prev = stages[(step - 1) % 4]
+                    step += 1
+                    nisa.dma_copy(dst=run, src=gathered[part:part + 1, 0:S])
+                    # Both copies are pinned to one compute engine, whose instruction
+                    # stream is in order, so the second reliably repairs the first's tail.
+                    nisa.tensor_copy(dst=cur[0:1, 0:S], src=run,
+                                     engine=nisa.engine.vector)
+                    nisa.tensor_copy(
+                        dst=cur.ap(pattern=[[2 * S, 1], [1, S]], offset=0,
+                                   scalar_offset=cnt_row[0:1, row:row + 1].view(nl.uint32),
+                                   indirect_dim=1),
+                        src=prev[0:1, 0:S],
+                        engine=nisa.engine.vector,
+                    )
+                    nisa.dma_copy(
+                        dst=out.ap(pattern=[[1, S]],
+                                   scalar_offset=off_row[0:1, row:row + 1],
+                                   indirect_dim=0),
+                        src=cur[0:1, 0:S],
+                    )
+        return out
 
 
-def _next_pow2(n: int) -> int:
-    p = 1
-    while p < n:
-        p *= 2
-    return p
+def _mark_step() -> None:
+    """Close the current XLA graph (deferred import: GPU-only hosts lack torch_xla)."""
+    from torch_xla.core import xla_model as xm
+    xm.mark_step()
 
 
-def _plan(M: int, j: int):
-    if 2 * j <= SPAN_CAP:
-        span = min(SPAN_CAP, max(2 * j, M // PMAX))
-        P = min(PMAX, M // span)
-        return ("local", span, P, M // (P * span))
-
-    W = SPAN_CAP
-    p_across_runs = min(PMAX, M // (2 * j))  
-    p_within_run = min(PMAX, j // W)          
-    if p_across_runs >= p_within_run:
-        P = p_across_runs
-        return ("stride", W, P, 2 * j, M // (2 * j * P), P * 2 * j, j // W, W)
-    P = p_within_run
-    return ("stride", W, P, W, M // (2 * j), 2 * j, j // (W * P), P * W)
-
-
-def _radix_sort_1d(data: torch.Tensor) -> torch.Tensor:
-    N = data.numel()
-    if N <= 1:
-        return data.clone()
-
-    M = max(_next_pow2(N), PMAX)
-    data_i64 = data.to(torch.int64)
-    high = (data_i64 >> 16) & 0xFFFF
-    low = data_i64 & 0xFFFF
-
-    PAD_HIGH, PAD_LOW = 0xFFFF, 0xFFFF  
-    
-    work_a = torch.empty((2 * M, 1), dtype=torch.int32, device=data.device)
-    work_a[:M, 0] = PAD_HIGH
-    work_a[M:, 0] = PAD_LOW
-    work_a[:N, 0] = high.to(torch.int32)
-    work_a[M:M + N, 0] = low.to(torch.int32)
-    work_b = torch.empty_like(work_a)
-
-    src, dst = work_a, work_b
-    k = 2
-    while k <= M:
-        j = k // 2
-        log2k = k.bit_length() - 1
-        while j > 0:
-            plan = _plan(M, j)
-            if plan[0] == "local":
-                _, span, P, n_blocks = plan
-                dst = radix_local_kernel(src, dst, M, k, log2k, j, span, P, n_blocks)
-            else:
-                _, W, P, part_stride, n_outer, outer_stride, n_inner, inner_stride = plan
-                dst = radix_stride_kernel(src, dst, M, k, log2k, j, W, P, part_stride,
-                                          n_outer, outer_stride, n_inner, inner_stride)
-            src, dst = dst, src
-            j //= 2
-        k *= 2
-
-    sorted_high = src[:N, 0].to(torch.int64)
-    sorted_low = src[M:M + N, 0].to(torch.int64)
-    result = (sorted_high << 16) | sorted_low
-    return result.to(data.dtype)
+def _pick_block(n: int) -> int:
+    """Smallest power-of-two block size that still fills all 128 partitions."""
+    block = BLOCK
+    while block > MIN_BLOCK and PMAX * (block // 2) >= n:
+        block //= 2
+    return block
 
 
 def run(input: torch.Tensor, N: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    return _radix_sort_1d(input)
+    _kernel_assert(nki is not None, "Neuron SDK is not available")
+    if N <= 1:
+        return input.clone()
+
+    keys = input.reshape(-1)
+    _kernel_assert(keys.numel() == N, f"expected {N} elements, got {keys.numel()}")
+
+    device, dtype = keys.device, keys.dtype
+    S = _pick_block(N)
+    n_tiles = _div_ceil(N, PMAX * S)
+    n_blocks = n_tiles * PMAX
+    n_pad = n_blocks * S
+    work_len = n_pad + S            # + overhang guard for the fixed-length window writes
+
+    # 0xFFFFFFFF is the largest unsigned key, so padding always sorts past the real data.
+    tail = torch.full((work_len - N,), -1, dtype=torch.int32, device=device)
+    work = torch.cat([keys.to(torch.int32), tail]).reshape(work_len, 1)
+
+    # One XLA graph per pass. Letting all 16 passes land in a single graph lets XLA's
+    # buffer assignment reuse an HBM buffer that a later pass still reads, which
+    # corrupts the result (reproducible on trn2 at N=1e6; each pass is bit-exact in
+    # isolation). Note the profiler consequence: neuron-profile times a single NEFF
+    # execution, so the reported latency covers one of the 16 passes, not the whole sort.
+    for shift in range(0, KEY_BITS, RADIX_BITS):
+        shift_t = torch.full((PMAX, 1), shift, dtype=torch.int32, device=device)
+        work = radix_pass(work, shift_t, S, n_blocks)
+        _mark_step()
+
+    return work.reshape(-1)[:N].to(dtype)
 
 
 def get_last_config() -> dict | None:
