@@ -5,14 +5,13 @@ try:
     import neuronxcc.nki.language as nl
     import neuronxcc.nki.isa as nisa
     PMAX = nl.tile_size.pmax
+    free_tile_size = 16384
 except ImportError:
     nki = None
 
 if nki is not None:
     @nki.jit
     def argmax_kernel(a_input):
-        free_tile_size = 16384
-
         num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
         num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
 
@@ -54,10 +53,6 @@ if nki is not None:
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("argmax NKI: int8 not supported")
-    if x.dim() != 2:
-        raise NotImplementedError("argmax NKI: expects a 2D input (rows, cols)")
-    if dim != 1:
-        raise NotImplementedError("argmax NKI: only dim=1 (row-wise) is supported")
 
     result = argmax_kernel(x)
     return result.reshape(-1).to(torch.int64)
