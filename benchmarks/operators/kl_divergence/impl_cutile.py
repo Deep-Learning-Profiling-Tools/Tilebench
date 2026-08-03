@@ -1,14 +1,3 @@
-"""cuTile KL divergence forward (mirrors impl_triton.py).
-
-Convention (PyTorch F.kl_div with log_target=False):
-    log_y_pred  is log-probabilities (log_softmax output)
-    y_true      is plain probabilities (softmax output)
-    loss[b] = sum_s y_true[b,s] * (log(y_true[b,s]) - log_y_pred[b,s])
-
-Each CTA handles one row, with an inner tile loop iterating TILE-sized
-chunks across the cols axis. TILE is a real autotune knob (decoupled
-from cols), so cols=16384 doesn't blow up SMEM/registers.
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
@@ -20,11 +9,7 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-# Cartesian product, mirrors impl_triton.py.
-# Triton sweeps (BLOCK_SIZE, num_warps); cuTile sweeps (tile, occupancy)
-# with nw * occ ~= 64 (Triton's nw in [2, 4, 8] pairs with occ in [32, 16, 8]).
-# Excluded cfgs that hang cuTile codegen indefinitely on B200 / cuTile 1.3.0
-# (observed via per-cfg 60s probe). Pattern: small tile + occupancy >= 16.
+
 _HANG_CFGS = {(512, 16), (512, 32), (1024, 16)}
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 _SEARCH_SPACE = [
@@ -37,7 +22,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
+def kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
     bid = ct.bid(0)
 
     acc = ct.full((1, TILE), 0.0, dtype=ct.float32)
@@ -56,17 +41,15 @@ def _kl_divergence_kernel(log_y_pred, y_true, loss, n_cols, TILE: ConstInt):
         log_pred_f32 = ct.astype(log_pred_tile, ct.float32)
         y_true_f32 = ct.astype(y_true_tile, ct.float32)
 
-        # OOB lanes load as 0 (padding_mode=ZERO). For y_true==0 we want
-        # loss=0 by KL convention -- guard log explicitly so log(0)*0
-        # doesn't go through NaN.
+
         safe_log = ct.where(y_true_f32 > 0.0, ct.log(y_true_f32), 0.0)
         acc = acc + y_true_f32 * (safe_log - log_pred_f32)
 
-    row_sum = ct.sum(acc, axis=1)  # (1,)
+    row_sum = ct.sum(acc, axis=1)
     ct.store(loss, index=(bid,), tile=row_sum)
 
 
-_tuner = CutileAutotuner(_kl_divergence_kernel)
+_tuner = CutileAutotuner(kl_divergence_kernel)
 
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
@@ -78,7 +61,7 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(rows, cols),
+            shape_key=(rows, cols, str(log_y_pred.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (rows, 1, 1),
