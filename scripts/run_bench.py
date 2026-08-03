@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 from core.engine import run_benchmark_suite
 
@@ -23,6 +24,8 @@ def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dic
 
 
 def main():
+    os.environ["NEURON_RT_NUM_CORES"] = "1"
+
     parser = argparse.ArgumentParser(description="Run TileBench benchmarks")
     parser.add_argument("--operator", type=str, default="vector_add",
                         help="Operator to benchmark")
