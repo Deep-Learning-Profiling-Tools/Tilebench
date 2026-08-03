@@ -9,6 +9,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 
 | op | dtype | Triton (µs) | cuTile (µs) | Triton:cuTile |
 |---|---|---:|---:|---:|
+| leaky_relu | fp16 | 26.8 | 27.2 | 1.02× |
+| leaky_relu | bf16 | 26.4 | 26.7 | 1.01× |
+| leaky_relu | fp32 | 55.8 | 56.1 | 1.01× |
 | 2d_max_pooling | fp16 | 196.9 | 286.2 | 1.45× |
 | 2d_max_pooling | bf16 | 199.5 | 286.2 | 1.43× |
 | 2d_max_pooling | fp32 | 218.5 | 297.9 | 1.36× |
@@ -31,9 +34,6 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | layernorm | fp16 | 20.0 | 35.3 | 1.76× |
 | layernorm | bf16 | 20.8 | 37.2 | 1.79× |
 | layernorm | fp32 | 32.7 | 33.6 | 1.03× |
-| leaky_relu | fp16 | 26.9 | 27.1 | 1.01× |
-| leaky_relu | bf16 | 32.0 | 27.0 | 0.84× |
-| leaky_relu | fp32 | 56.7 | 56.2 | 0.99× |
 | matrix_copy | fp16 | 17.8 | 18.4 | 1.03× |
 | matrix_copy | bf16 | 18.0 | 18.3 | 1.02× |
 | matrix_copy | fp32 | 29.4 | 27.9 | 0.95× |
