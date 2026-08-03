@@ -131,9 +131,6 @@ def _total_time_ms(summary_json_text: str) -> float:
     """
     data = json.loads(summary_json_text)
     
-    #rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
-    #if isinstance(rows, dict):
-        #rows = [rows]
     if isinstance(data, dict) and not any(k in data for k in ["total_time", "summary", "rows"]):
         rows = [v for v in data.values() if isinstance(v, dict)]
     else:
