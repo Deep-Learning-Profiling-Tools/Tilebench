@@ -182,18 +182,24 @@ def main():
     mode_suffix = "autotune" if args.autotune else "default"
     csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+    # Direct cuTile/Triton latency ratio (>1 means cuTile slower), emitted
+    # whenever both backends ran so the committed 8-column CSVs are
+    # reproducible by this script alone.
+    ratio = "triton" in active and "cutile" in active
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
             ["params", "dtype", "torch_ms"]
             + [f"{b}_ms" for b in active]
             + [f"speedup_{b}" for b in active]
+            + (["triton_vs_cutile"] if ratio else [])
         )
         for r in timing_results:
             writer.writerow(
                 [_fmt_params(r), r["dtype"], f"{r['torch_ms']:.4f}"]
                 + [f"{r[f'{b}_ms']:.4f}" for b in active]
                 + [f"{r[f'speedup_{b}']:.2f}" for b in active]
+                + ([f"{r['cutile_ms'] / r['triton_ms']:.4f}"] if ratio else [])
             )
     print(f"Summary CSV     → {csv_path}")
 

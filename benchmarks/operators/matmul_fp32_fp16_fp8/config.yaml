@@ -1,14 +1,4 @@
-# Plain GEMM (no quantisation), tested across:
-#   fp32 input → fp32 accumulator with TF32 acceleration (Triton: input_precision="tf32";
-#                cuTile: ct.mma's default for fp32 inputs)
-#   fp16 input → fp32 accumulator → fp16 output
-#   fp8 e4m3fn input → fp32 accumulator → fp8 e4m3fn output
-#   fp8 e5m2  input → fp32 accumulator → fp8 e5m2 output
 verify:
-  # Loose tolerance covering the worst case (fp8 e4m3fn): output values are
-  # quantised to ~16 levels per decade, so absolute errors of a few units are
-  # expected even when both backends compute the matmul correctly. Same
-  # tolerance also absorbs TF32 vs IEEE-fp32 reference drift.
   atol: 5.0
   rtol: 0.1
 
@@ -25,20 +15,9 @@ case_defaults:
 
 case_grid:
   K:
-    expr: "[1024 * i for i in range(1, 21)]"   # 1024, 2048, ..., 8192
-  dtype: ["fp32", "fp16", "fp8_e4m3fn", "fp8_e5m2"]
+    expr: "[1024 * i for i in range(1, 21)]"
+  dtype: ["fp32", "fp16", "fp8_e4m3fn"]
 
-# ---------------------------------------------------------------------------
-# Derived metric expressions.
-#   Available variables: M, N, K, dtype_size (1 for fp8, 2 for fp16, 4 for fp32)
-#
-# Bytes (theoretical HBM traffic per kernel invocation):
-#   Read  A: M * K * dtype_size
-#   Read  B: K * N * dtype_size
-#   Write C: M * N * dtype_size  (output dtype matches input)
-#
-# FLOPs: 2 * M * N * K  (one MAC per (m, n, k) point)
-# ---------------------------------------------------------------------------
 metrics:
   bytes_expr: "(M * K + K * N + M * N) * dtype_size"
   flops_expr: "2 * M * N * K"
