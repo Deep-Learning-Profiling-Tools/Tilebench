@@ -29,8 +29,7 @@ if nki is not None:
                     col_idx = grid.y * stride + kw
                     
                     tile = nl.ndarray((PMAX, H_out, W_out), dtype=nl.float32, buffer=nl.sbuf)
-                    nisa.dma_copy(dst=tile, src=padded_input[offset + grid.p, row_idx, col_idx],
-                                  mask=mask_p)
+                    nisa.dma_copy(dst=tile, src=padded_input[offset + grid.p, row_idx, col_idx], mask=mask_p)
                     running_max[...] = nl.maximum(running_max, tile)
 
             result_tile = nl.add(running_max, 0.0, dtype=padded_input.dtype)
@@ -42,7 +41,9 @@ if nki is not None:
 def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
         kernel_size: int, stride: int, padding: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+
     x = input.view(N * C, H, W)
+    
     H_out = (H + 2 * padding - kernel_size) // stride + 1
     W_out = (W + 2 * padding - kernel_size) // stride + 1
 
