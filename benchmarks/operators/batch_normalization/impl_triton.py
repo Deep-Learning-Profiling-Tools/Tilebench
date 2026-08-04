@@ -2,36 +2,46 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK": 256, "num_warps": 4}
+_DEFAULT_CONFIG = {"ROWS": 16, "num_warps": 8}
+
+
+_STEP = 8
+_K1_BLOCK_N = 64
 
 
 @triton.jit
-def _compute_block_sums_kernel(
+def compute_block_sums_kernel(
     input_ptr,
     block_sum_ptr,
     block_sq_sum_ptr,
     N,
-    C,
+    C: tl.constexpr,
+    C_P2: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    STEP: tl.constexpr,
 ):
     block_id = tl.program_id(0)
-    channel_id = tl.program_id(1)
+    cols = tl.arange(0, C_P2)
+    col_mask = cols < C
 
-    row_offsets = block_id * BLOCK_N + tl.arange(0, BLOCK_N)
-    mask = row_offsets < N
+    acc_sum = tl.zeros([C_P2], dtype=tl.float32)
+    acc_sq = tl.zeros([C_P2], dtype=tl.float32)
 
-    x = tl.load(input_ptr + row_offsets * C + channel_id, mask=mask, other=0.0).to(tl.float32)
+    row0 = block_id * BLOCK_N
+    for r in tl.static_range(0, BLOCK_N, STEP):
+        rows = row0 + r + tl.arange(0, STEP)
+        mask = rows < N
+        x = tl.load(input_ptr + rows[:, None] * C + cols[None, :],
+                    mask=mask[:, None] & col_mask[None, :], other=0.0).to(tl.float32)
+        acc_sum += tl.sum(x, axis=0)
+        acc_sq += tl.sum(x * x, axis=0)
 
-    local_sum = tl.sum(x, axis=0)
-    local_sq_sum = tl.sum(x * x, axis=0)
-
-    out_idx = block_id * C + channel_id
-    tl.store(block_sum_ptr + out_idx, local_sum)
-    tl.store(block_sq_sum_ptr + out_idx, local_sq_sum)
+    tl.store(block_sum_ptr + block_id * C + cols, acc_sum, mask=col_mask)
+    tl.store(block_sq_sum_ptr + block_id * C + cols, acc_sq, mask=col_mask)
 
 
 @triton.jit
-def _compute_mean_invstd_kernel(
+def compute_mean_invstd_kernel(
     block_sum_ptr,
     block_sq_sum_ptr,
     mean_ptr,
@@ -62,85 +72,88 @@ def _compute_mean_invstd_kernel(
 
 
 @triton.jit
-def _apply_batch_norm_kernel(
+def apply_batch_norm_kernel(
     input_ptr,
     gamma_ptr,
     beta_ptr,
     output_ptr,
     mean_ptr,
     inv_std_ptr,
-    total_elements,
-    C,
-    BLOCK: tl.constexpr,
+    N,
+    C: tl.constexpr,
+    C_P2: tl.constexpr,
+    ROWS: tl.constexpr,
+    STEP: tl.constexpr,
 ):
-    pid = tl.program_id(0)
+    block_id = tl.program_id(0)
+    cols = tl.arange(0, C_P2)
+    col_mask = cols < C
 
-    offsets = pid * BLOCK + tl.arange(0, BLOCK)
-    mask = offsets < total_elements
+    mean = tl.load(mean_ptr + cols, mask=col_mask, other=0.0)
+    inv_std = tl.load(inv_std_ptr + cols, mask=col_mask, other=0.0)
+    gamma = tl.load(gamma_ptr + cols, mask=col_mask, other=0.0).to(tl.float32)
+    beta = tl.load(beta_ptr + cols, mask=col_mask, other=0.0).to(tl.float32)
+    scale = inv_std * gamma
+    shift = beta - mean * scale
 
-    channel_id = offsets % C
-
-    x = tl.load(input_ptr + offsets, mask=mask).to(tl.float32)
-    mean = tl.load(mean_ptr + channel_id, mask=mask)
-    inv_std = tl.load(inv_std_ptr + channel_id, mask=mask)
-    gamma = tl.load(gamma_ptr + channel_id, mask=mask).to(tl.float32)
-    beta = tl.load(beta_ptr + channel_id, mask=mask).to(tl.float32)
-
-    y = (x - mean) * inv_std * gamma + beta
-    tl.store(output_ptr + offsets, y, mask=mask)
+    row0 = block_id * ROWS
+    for r in tl.static_range(0, ROWS, STEP):
+        rows = row0 + r + tl.arange(0, STEP)
+        mask = rows < N
+        ptrs = rows[:, None] * C + cols[None, :]
+        x = tl.load(input_ptr + ptrs, mask=mask[:, None] & col_mask[None, :], other=0.0).to(tl.float32)
+        y = x * scale[None, :] + shift[None, :]
+        tl.store(output_ptr + ptrs, y, mask=mask[:, None] & col_mask[None, :])
 
 
-# Only the apply kernel is autotuned (dominates total work for large N*C).
-# Block sums and mean/invstd kernels use fixed defaults.
 _apply_batch_norm_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK": bs}, num_warps=nw)
-        for bs in [256, 512, 1024, 2048]
+        triton.Config({"ROWS": rows}, num_warps=nw)
+        for rows in [8, 16, 32, 64]
         for nw in [4, 8]
     ],
-    key=["total_elements"],
-)(_apply_batch_norm_kernel)
+    key=["N"],
+)(apply_batch_norm_kernel)
 
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         N: int, C: int, eps: float,
         block_size: int = 1024, autotune: bool = False, **kwargs):
     output = torch.empty_like(input)
-    BLOCK_N = 1024
-    NUM_BLOCKS = triton.cdiv(N, BLOCK_N)
+    NUM_BLOCKS = triton.cdiv(N, _K1_BLOCK_N)
 
     block_sum = torch.empty((NUM_BLOCKS, C), device=input.device, dtype=torch.float32)
     block_sq_sum = torch.empty((NUM_BLOCKS, C), device=input.device, dtype=torch.float32)
     mean = torch.empty((C,), device=input.device, dtype=torch.float32)
     inv_std = torch.empty((C,), device=input.device, dtype=torch.float32)
 
-    # Kernel 1: per-(block, channel) partial sums.
-    _compute_block_sums_kernel[(NUM_BLOCKS, C)](
-        input, block_sum, block_sq_sum, N, C, BLOCK_N=BLOCK_N,
+
+    compute_block_sums_kernel[(NUM_BLOCKS,)](
+        input, block_sum, block_sq_sum, N, C=C, C_P2=triton.next_power_of_2(C),
+        BLOCK_N=_K1_BLOCK_N, STEP=_STEP,
+        num_warps=4,
     )
 
-    # Kernel 2: finish reduction per channel, compute mean/inv_std.
+
     BLOCK_B = triton.next_power_of_2(NUM_BLOCKS)
-    _compute_mean_invstd_kernel[(C,)](
+    compute_mean_invstd_kernel[(C,)](
         block_sum, block_sq_sum, mean, inv_std,
         N, C, NUM_BLOCKS, BLOCK_B=BLOCK_B, eps=eps,
     )
 
-    # Kernel 3: apply normalization element-wise.
-    total_elements = N * C
+
     if autotune:
-        grid = lambda meta: (triton.cdiv(total_elements, meta["BLOCK"]),)
+        grid = lambda meta: (triton.cdiv(N, meta["ROWS"]),)
         _apply_batch_norm_kernel_autotuned[grid](
             input, gamma, beta, output, mean, inv_std,
-            total_elements, C,
+            N, C=C, C_P2=triton.next_power_of_2(C), STEP=_STEP,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        grid = (triton.cdiv(total_elements, cfg["BLOCK"]),)
-        _apply_batch_norm_kernel[grid](
+        grid = (triton.cdiv(N, cfg["ROWS"]),)
+        apply_batch_norm_kernel[grid](
             input, gamma, beta, output, mean, inv_std,
-            total_elements, C,
-            BLOCK=cfg["BLOCK"],
+            N, C=C, C_P2=triton.next_power_of_2(C), ROWS=cfg["ROWS"], STEP=_STEP,
             num_warps=cfg["num_warps"],
         )
 
@@ -152,6 +165,6 @@ def get_last_config() -> dict | None:
     if cfg is None:
         return None
     return {
-        "BLOCK": cfg.kwargs["BLOCK"],
+        "ROWS": cfg.kwargs["ROWS"],
         "num_warps": cfg.num_warps,
     }

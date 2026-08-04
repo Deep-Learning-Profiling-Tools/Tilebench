@@ -1,35 +1,35 @@
 # NCU Comparison: rope
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'batch_size': 1, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480}` | `{'ROPE_GROUP_SIZE': 8, 'num_warps': 2, 'num_stages': 2}` | `{'group_size': 16, 'occupancy': 8}` |
-| fp32 | `{'batch_size': 1, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480}` | `{'ROPE_GROUP_SIZE': 4, 'num_warps': 2, 'num_stages': 3}` | `{'group_size': 16, 'occupancy': 8}` |
+| fp16 | `{'batch_size': 1, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480}` | `{'ROPE_GROUP_SIZE': 16, 'num_warps': 4, 'num_stages': 2}` | `{'group_size': 16, 'occupancy': 16}` |
+| fp32 | `{'batch_size': 1, 'n_heads': 32, 'head_dim': 128, 'seq_len': 20480}` | `{'ROPE_GROUP_SIZE': 16, 'num_warps': 4, 'num_stages': 2}` | `{'group_size': 16, 'occupancy': 16}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 90.78 us | 40.82 % | 40.82 % | 28.05 % | 21.70 % | 25.87 % | 3.13 Tbyte/s | 64 | 20 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp16 | cutile | 201.73 us | 33.84 % | 18.48 % | 34.73 % | 11.51 % | 73.44 % | 1.42 Tbyte/s | 128 | 29 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | triton | 131.81 us | 62.47 % | 62.47 % | 35.84 % | 31.74 % | 22.49 % | 4.79 Tbyte/s | 64 | 24 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp32 | cutile | 212.38 us | 38.84 % | 38.84 % | 33.72 % | 19.39 % | 58.81 % | 2.98 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | triton | 49.38 us | 75.92 % | 75.92 % | 47.41 % | 39.47 % | 24.18 % | 5.82 Tbyte/s | 128 | 27 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp16 | cutile | 52.48 us | 71.26 % | 71.26 % | 50.00 % | 36.99 % | 72.28 % | 5.46 Tbyte/s | 128 | 28 register/thread | 1.16 Kbyte/block | 0 byte/block | 16 block / 28 block |
+| fp32 | triton | 101.66 us | 81.45 % | 81.45 % | 43.00 % | 39.54 % | 16.10 % | 6.25 Tbyte/s | 128 | 40 register/thread | 0 byte/block | 0 byte/block | 12 block / 32 block |
+| fp32 | cutile | 106.27 us | 79.19 % | 79.19 % | 50.94 % | 41.09 % | 40.57 % | 6.07 Tbyte/s | 128 | 32 register/thread | 1.29 Kbyte/block | 0 byte/block | 16 block / 42 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **2.22× faster** (90.8 µs vs 201.7 µs).
-- **fp32**: Triton is **1.61× faster** (131.8 µs vs 212.4 µs).
+- **fp16**: Triton is **1.06× faster** (49.4 µs vs 52.5 µs).
+- **fp32**: Triton is **1.05× faster** (101.7 µs vs 106.3 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp16 / cutile** — Compute is more heavily utilized than Memory
-- **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp32 / triton** — Memory is more heavily utilized than Compute
+- **fp16 / cutile** — Compute and Memory are well-balanced
+- **fp16 / triton** — Memory is more heavily utilized than Compute
+- **fp32 / cutile** — Memory is more heavily utilized than Compute
+- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
 
 ## Reports
 

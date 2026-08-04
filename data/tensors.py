@@ -3,6 +3,13 @@ import math
 import torch
 from itertools import product
 
+# Device for generated input tensors. Use CUDA when an NVIDIA GPU is present
+# (the B200 target); otherwise fall back to CPU so the framework still runs on
+# non-CUDA hosts (e.g. AWS Trainium, where the NKI backend moves inputs to the
+# XLA device). This keeps input generation from hard-failing with
+# "Found no NVIDIA driver" on Trainium and removes the cuda/NKI device mismatch.
+DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def _normalize_sequence(values, name):
     # Support expr syntax: {"expr": "..."} evaluates a Python expression.
@@ -48,7 +55,7 @@ CASE_PRESETS = {
     "vector_scale": _vector_scale_cases,
 }
 
-def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_vector_add_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE):
     if dtype == torch.int8:
         # Values in [-32, 32] so that x + y stays within int8 range [-128, 127].
         x = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
@@ -59,7 +66,7 @@ def generate_vector_add_inputs(n, dtype=torch.float32, device='cuda'):
     return (x, y)
 
 
-def generate_mul2_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_mul2_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE):
     if dtype == torch.int8:
         # Values in [-32, 32] so that ×2 stays within int8 range [-128, 127].
         x = torch.randint(-32, 33, (n,), device=device).to(torch.int8)
@@ -68,7 +75,7 @@ def generate_mul2_inputs(n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
-def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_relu_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE):
     if dtype == torch.int8:
         x = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
     else:
@@ -77,7 +84,7 @@ def generate_relu_inputs(n, dtype=torch.float32, device='cuda'):
 
 
 def generate_batched_matmul_inputs(BATCH, M, N=None, K=None,
-                                    dtype=torch.float32, device='cuda', **kwargs):
+                                    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     if N is None:
         N = M
     if K is None:
@@ -88,30 +95,30 @@ def generate_batched_matmul_inputs(BATCH, M, N=None, K=None,
 
 
 def generate_batch_normalization_inputs(N, C, eps=1.0e-5,
-                                         dtype=torch.float32, device='cuda', **kwargs):
+                                         dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     input = torch.randn(N, C, dtype=dtype, device=device)
     gamma = torch.randn(C, dtype=dtype, device=device)
     beta = torch.randn(C, dtype=dtype, device=device)
     return (input, gamma, beta, N, C, eps)
-def generate_leaky_relu_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+def generate_leaky_relu_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
-def generate_bitonic_sort_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+def generate_bitonic_sort_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     data = torch.randn(n, dtype=dtype, device=device)
     return (data, n)
 
 
-def generate_sigmoid_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+def generate_sigmoid_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
 
 
-def generate_radix_sort_inputs(n, dtype=torch.int32, device='cuda', **kwargs):
+def generate_radix_sort_inputs(n, dtype=torch.int32, device=DEFAULT_DEVICE, **kwargs):
     # Non-negative int32 so unsigned-vs-signed sort order coincide (bit 31 always 0).
     data = torch.randint(0, 2**31, (n,), dtype=torch.int64, device=device).to(dtype)
     return (data, n)
 def generate_jacobi_stencil_2d_inputs(rows, cols=None,
-                                       dtype=torch.float32, device='cuda', **kwargs):
+                                       dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     if cols is None:
         cols = rows
     input = torch.randn(rows, cols, dtype=dtype, device=device)
@@ -126,7 +133,7 @@ def generate_destindex_inputs(
     kv_nope_head_dim,
     kv_rope_head_dim,
     dtype=torch.float16,
-    device='cuda',
+    device=DEFAULT_DEVICE,
 ):
     total_tokens = batch_size * seq_len
 
@@ -137,13 +144,17 @@ def generate_destindex_inputs(
 
     kv_nope  = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     kv_rope  = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
-    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64).to(torch.int32)
+    # int64 permutation: index_copy_ requires long indices, so all three
+    # backends consume the same dtype (no torch-only conversion pass).
+    # randperm guarantees unique, in-range destinations — concurrent
+    # scatter writes never collide.
+    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64)
     o_nope   = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     o_rope   = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
 
 
-def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda', **kwargs):
+def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     # y_pred: log-probabilities (output of log_softmax over the cols axis)
     # y_true: probabilities     (output of softmax     over the cols axis)
     logits_pred = torch.randn(rows, cols, dtype=dtype, device=device)
@@ -153,7 +164,7 @@ def generate_kl_divergence_inputs(rows, cols, dtype=torch.float32, device='cuda'
     return (y_pred, y_true)
 
 
-def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kwargs):
+def generate_fused_activation_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     # Fused element-wise activation: silu(x * gate + bias)
     x    = torch.randn(n, dtype=dtype, device=device)
     gate = torch.randn(n, dtype=dtype, device=device)
@@ -161,11 +172,11 @@ def generate_fused_activation_inputs(n, dtype=torch.float32, device='cuda', **kw
     return (x, gate, bias)
 
 
-def generate_quantize_global_inputs(n, dtype=torch.float32, device='cuda'):
+def generate_quantize_global_inputs(n, dtype=torch.float32, device=DEFAULT_DEVICE):
     return (torch.randn(n, dtype=torch.float32, device=device),)
 
 
-def generate_dequantize_rowwise_inputs(rows, cols, device='cuda', **kwargs):
+def generate_dequantize_rowwise_inputs(rows, cols, device=DEFAULT_DEVICE, **kwargs):
     # bitsandbytes-style rowwise dequant: int8 input + per-row absmax (fp32)
     # output[r, c] = state_x[r] * x[r, c] / 127  (fp16 output)
     x = torch.randint(-128, 127, (rows, cols), dtype=torch.int8, device=device)
@@ -173,19 +184,19 @@ def generate_dequantize_rowwise_inputs(rows, cols, device='cuda', **kwargs):
     return (x, state_x)
 
 
-def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device='cuda'):
+def generate_dropout_inputs(n, p=0.5, dtype=torch.float32, device=DEFAULT_DEVICE):
     x = torch.randn(n, dtype=dtype, device=device)
     x_keep = torch.bernoulli(torch.full((n,), 1 - p, device=device)).to(dtype)
     return (x, x_keep, p)
 
 
-def generate_swiglu_inputs(M, N, dtype=torch.float32, device='cuda'):
+def generate_swiglu_inputs(M, N, dtype=torch.float32, device=DEFAULT_DEVICE):
     x = torch.randn(M, N, dtype=dtype, device=device)
     y = torch.randn(M, N, dtype=dtype, device=device)
     return (x, y)
 
 
-def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device='cuda'):
+def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device=DEFAULT_DEVICE):
     if dtype == torch.int8:
         x = torch.randint(-64, 65, (m, n), device=device).to(torch.int8)
     else:
@@ -193,13 +204,13 @@ def generate_matrix_transpose_inputs(m, n, dtype=torch.float32, device='cuda'):
     return (x,)
 
 
-def generate_rmsnorm_inputs(batch, M, K, dtype=torch.float32, device='cuda'):
+def generate_rmsnorm_inputs(batch, M, K, dtype=torch.float32, device=DEFAULT_DEVICE):
     x     = torch.randn(batch, M, K, dtype=dtype, device=device)
     rms_w = torch.randn(K, dtype=dtype, device=device)
     return (x, rms_w)
 
 
-def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.float32, device='cuda', **kwargs):
+def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
 
     q = torch.randn(batch_size, seq_len, n_heads, head_dim, dtype=dtype, device=device)
 
@@ -210,12 +221,14 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
     return (q, cos, sin)
 
 
-def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device='cuda', **kwargs):
-    logits = torch.randn(M, E, dtype=dtype, device=device)
+def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
+    grid = torch.linspace(-3.0, 3.0, steps=E, device=device).to(dtype)
+    rank = torch.randn(M, E, device=device).argsort(dim=-1)
+    logits = grid[rank]
     return (logits, M, E, k)
 
 
-def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device='cuda', **kwargs):
+def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     if shape is None:
         if n_rows is not None and n_cols is not None:
             shape = (n_rows, n_cols)
@@ -227,7 +240,7 @@ def generate_softmax_inputs(n_rows=None, n_cols=None, shape=None, dtype=torch.fl
     return (x,)
 
 
-def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device='cuda', **kwargs):
+def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=torch.float16, device=DEFAULT_DEVICE, **kwargs):
 
     q = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
     k = torch.randn(batch_size, n_heads, seq_len, head_dim, dtype=dtype, device=device)
@@ -236,7 +249,7 @@ def generate_flash_attn_inputs(batch_size, n_heads, seq_len, head_dim, dtype=tor
     return (q.contiguous(), k.contiguous(), v.contiguous())
 
 
-def generate_flash_decode_stage2_inputs(batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device='cuda', **kwargs):
+def generate_flash_decode_stage2_inputs(batch=2, heads=8, seq_len=4096, head_dim=128, block_seq=128, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     num_blocks = (seq_len + block_seq - 1) // block_seq
 
     b_seqlen = torch.full((batch,), seq_len, dtype=torch.int32, device=device)
@@ -251,7 +264,7 @@ def generate_flash_decode_stage2_inputs(batch=2, heads=8, seq_len=4096, head_dim
 
 def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
                                            BLOCK_M=64, BLOCK_N=64, BLOCK_D=64, NUM_D_BLOCKS=None,
-                                           dtype=torch.float16, device='cuda', **kwargs):
+                                           dtype=torch.float16, device=DEFAULT_DEVICE, **kwargs):
     """
     Generate inputs for block sparse attention.
     Creates a simple "Local Window + Causal" sparse CSR layout.
@@ -312,19 +325,19 @@ def generate_block_sparse_attention_inputs(B=2, H=8, M=1024, D=64, H_kv=2,
             num_layout, softmax_scale, H, H_kv, M,
             BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)
 
-def generate_reverse_array_inputs(n, dtype, device='cuda', **kwargs):
+def generate_reverse_array_inputs(n, dtype, device=DEFAULT_DEVICE, **kwargs):
     if dtype == torch.int8:
         x = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
     else:
         x = torch.randn(n, dtype=dtype, device=device)
     return (x, n)
-def generate_matrix_copy_inputs(N, dtype=torch.float32, device='cuda', **kwargs):
+def generate_matrix_copy_inputs(N, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     if dtype == torch.int8:
         A = torch.randint(-64, 65, (N, N), device=device).to(torch.int8)
     else:
         A = torch.randn(N, N, dtype=dtype, device=device)
     return (A, N)
-def generate_interleave_inputs(n, dtype, device='cuda', **kwargs):
+def generate_interleave_inputs(n, dtype, device=DEFAULT_DEVICE, **kwargs):
     if dtype == torch.int8:
         a = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
         b = torch.randint(-64, 65, (n,), device=device).to(torch.int8)
@@ -334,24 +347,37 @@ def generate_interleave_inputs(n, dtype, device='cuda', **kwargs):
     return (a, b, n)
 
 
-def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
-                            kernel_depth=3, kernel_rows=3, kernel_cols=3,
-                            dtype=torch.float32, device='cuda', **kwargs):
-    if input_cols is None:
-        input_cols = input_rows
-    input_vol = torch.randn(input_depth * input_rows * input_cols, dtype=dtype, device=device)
-    kernel = torch.randn(kernel_depth * kernel_rows * kernel_cols, dtype=dtype, device=device)
-    return (input_vol, kernel, input_depth, input_rows, input_cols,
-            kernel_depth, kernel_rows, kernel_cols)
+def generate_3d_conv_inputs(
+    batch, in_channels, out_channels, D, H,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
+):
+    W = H  # square spatial dims
+    input  = torch.randn(batch, in_channels, D, H, W, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups,
+        kernel_size, kernel_size, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
 
 
-def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device='cuda', **kwargs):
-    inp = torch.randn(input_size, dtype=dtype, device=device)
-    kern = torch.randn(kernel_size, dtype=dtype, device=device)
-    return (inp, kern, input_size, kernel_size)
+def generate_1d_conv_inputs(
+    batch, in_channels, out_channels, L,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
+):
+    input  = torch.randn(batch, in_channels, L, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
-                                  dtype=torch.float32, device='cuda', **kwargs):
+                                  dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     if input_cols is None:
         input_cols = input_rows
     input_img = torch.randn(input_rows * input_cols, dtype=dtype, device=device)
@@ -361,34 +387,34 @@ def generate_gaussian_blur_inputs(input_rows, input_cols=None,
     return (input_img, kernel, input_rows, input_cols, kernel_rows, kernel_cols)
 
 
-def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device='cuda', **kwargs):
+def generate_cross_entropy_inputs(batch_size, num_classes, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     logits = torch.randn(batch_size, num_classes, dtype=dtype, device=device)
     targets = torch.randint(0, num_classes, (batch_size,), device=device)
     return (logits, targets)
 
 
-def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, device='cuda', **kwargs):
+def generate_quantized_gemm_inputs(m, n, k, scale=1.0, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     # Input tensors are always int8 regardless of dtype; output is fp32.
     a_q = torch.randint(-64, 65, (m, k), device=device).to(torch.int8)
     b_q = torch.randint(-64, 65, (k, n), device=device).to(torch.int8)
     return (a_q, b_q, scale)
 
 
-def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device='cuda', **kwargs):
+def generate_layernorm_inputs(batch, M, K, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x      = torch.randn(batch, M, K, dtype=dtype, device=device)
     weight = torch.randn(K, dtype=dtype, device=device)
     bias   = torch.randn(K, dtype=dtype, device=device)
     return (x, weight, bias)
 
 
-def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device='cuda', **kwargs):
+def generate_streamk_matmul_inputs(m, n, k, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     a = torch.randn(m, k, dtype=dtype, device=device)
     b = torch.randn(k, n, dtype=dtype, device=device)
     return (a, b)
 
 
 def generate_matmul_fp32_fp16_fp8_inputs(M, N, K, dtype=torch.float32,
-                                         device='cuda', **kwargs):
+                                         device=DEFAULT_DEVICE, **kwargs):
     """Inputs for plain GEMM tested across fp32 / fp16 / fp8 e4m3fn / fp8 e5m2.
 
     Inputs are scaled by `1/sqrt(K)` so the matmul output stays O(1) regardless
@@ -410,7 +436,7 @@ def generate_matmul_fp32_fp16_fp8_inputs(M, N, K, dtype=torch.float32,
     return (a, b)
 
 
-def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwargs):
+def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device=DEFAULT_DEVICE, **kwargs):
     """Inputs for matmul_int8: A is int8 (M, K), B is uint8 (K_b=K/4, N) packed
     with 4 ternary-ish 2-bit fields per byte. dtype kwarg is ignored — A is
     always int8 and B is always uint8 by construction.
@@ -422,17 +448,17 @@ def generate_matmul_int8_inputs(M, N, K, dtype=torch.int8, device='cuda', **kwar
     return (a, b)
 
 
-def generate_mean_reduction_inputs(M, N, dtype=torch.float32, device='cuda', **kwargs):
+def generate_mean_reduction_inputs(M, N, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x = torch.randn(M, N, dtype=dtype, device=device)
     return (x, 1)  # always row-wise (dim=1)
 
 
-def generate_argmax_inputs(M, N, dtype=torch.float32, device='cuda', **kwargs):
+def generate_argmax_inputs(M, N, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x = torch.randn(M, N, dtype=dtype, device=device)
     return (x, 1)  # always row-wise (dim=1)
 
 
-def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='cuda', **kwargs):
+def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
     x = torch.randn(batch, M, K, dtype=dtype, device=device)
     return (x, eps)
 
@@ -440,7 +466,7 @@ def generate_l2_norm_inputs(batch, M, K, eps=1e-6, dtype=torch.float32, device='
 def generate_2d_conv_inputs(
     batch, in_channels, out_channels, H,
     kernel_size=3, stride=1, padding=1, groups=1,
-    dtype=torch.float32, device='cuda', **kwargs,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
 ):
     W = H  # square spatial dims
     input  = torch.randn(batch, in_channels, H, W, dtype=dtype, device=device)
@@ -455,7 +481,7 @@ def generate_2d_conv_inputs(
 def generate_2d_max_pooling_inputs(
     N, C, H, W=None,
     kernel_size=3, stride=2, padding=1,
-    dtype=torch.float32, device='cuda', **kwargs,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
 ):
     if W is None:
         W = H  # square spatial dims
@@ -463,7 +489,7 @@ def generate_2d_max_pooling_inputs(
     return (input_flat, N, C, H, W, kernel_size, stride, padding)
 
 
-def generate_weight_dequant_inputs(M, TILE_SIZE, dtype, N=None, device='cuda', **kwargs):
+def generate_weight_dequant_inputs(M, TILE_SIZE, dtype, N=None, device=DEFAULT_DEVICE, **kwargs):
     if N is None:
         N = M
     X = torch.randn(M, N, dtype=dtype, device=device)
@@ -475,7 +501,7 @@ def generate_linear_self_attention_inputs(
     M,
     D,
     dtype=torch.float32,
-    device='cuda',
+    device=DEFAULT_DEVICE,
     eps=1e-6,
     **kwargs,
 ):
@@ -494,7 +520,7 @@ def generate_top_k_selection_inputs(
     N,
     k,
     dtype=torch.float32,
-    device='cuda',
+    device=DEFAULT_DEVICE,
     **kwargs,
 ):
     if isinstance(dtype, str):
@@ -509,7 +535,7 @@ def generate_histogramming_inputs(
     N,
     num_bins,
     dtype=torch.int32,
-    device='cuda',
+    device=DEFAULT_DEVICE,
     **kwargs,
 ):
     if isinstance(dtype, str):
@@ -694,16 +720,33 @@ def infer_problem_size(operator_name, params):
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
     if operator_name == "1d_conv":
-        return int(params.get("input_size", 1))
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        L            = int(params.get("L", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_L        = (L + 2 * padding - kernel_size) // stride + 1
+        return 2 * batch * out_channels * out_L * (in_channels // groups) * kernel_size
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N
     if operator_name == "3d_conv":
-        return (
-            int(params.get("input_depth", 1))
-            * int(params.get("input_rows", 1))
-            * int(params.get("input_cols", params.get("input_rows", 1)))
-        )
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        D            = int(params.get("D", 1))
+        H            = int(params.get("H", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_D        = (D + 2 * padding - kernel_size) // stride + 1
+        out_H        = (H + 2 * padding - kernel_size) // stride + 1
+        return (2 * batch * out_channels * out_D * out_H * out_H
+                * (in_channels // groups) * kernel_size ** 3)
     if operator_name == "2d_max_pooling":
         N = int(params.get("N", 1))
         C = int(params.get("C", 1))

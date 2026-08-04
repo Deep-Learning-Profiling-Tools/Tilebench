@@ -2,69 +2,75 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"BLOCK_DMODEL": 64, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
+
+_out_cache = torch.utils.weak.WeakTensorKeyDictionary()
+
+
+def _cached_out(o: torch.Tensor) -> torch.Tensor:
+    out = _out_cache.get(o)
+    if out is None:
+        out = o.clone()
+        _out_cache[o] = out
+    return out
 
 
 @triton.jit
-def _copy_by_dest_kernel(
+def copy_by_dest_kernel(
     kv_ptr,
     dest_ptr,
     out_ptr,
-    stride_kv_bs,
-    stride_kv_h,
-    stride_kv_d,
-    stride_o_bs,
-    stride_o_h,
-    stride_o_d,
-    head_dim,
-    BLOCK_DMODEL: tl.constexpr,
+    total,
+    head_num: tl.constexpr,
+    head_dim: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
 ):
-    token_id = tl.program_id(0)
-    head_id = tl.program_id(1)
-    dest_index = tl.load(dest_ptr + token_id).to(tl.int32)
+    pid = tl.program_id(0)
+    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offs < total
 
-    base_kv  = kv_ptr  + token_id * stride_kv_bs + head_id * stride_kv_h
-    base_out = out_ptr + dest_index * stride_o_bs + head_id * stride_o_h
+    d = offs % head_dim
+    tmp = offs // head_dim
+    head = tmp % head_num
+    token = tmp // head_num
 
-    offs_d = tl.arange(0, BLOCK_DMODEL)
-    for d_start in tl.range(0, head_dim, BLOCK_DMODEL):
-        cur_offs = d_start + offs_d
-        mask_d   = cur_offs < head_dim
-        v = tl.load(base_kv  + cur_offs * stride_kv_d, mask=mask_d, other=0.0)
-        tl.store(base_out + cur_offs * stride_o_d, v, mask=mask_d)
+
+    dest = tl.load(dest_ptr + token, mask=mask, other=0).to(tl.int32)
+    dst_off = (dest * head_num + head) * head_dim + d
+
+    v = tl.load(kv_ptr + offs, mask=mask)
+    tl.store(out_ptr + dst_off, v, mask=mask)
 
 
 _copy_by_dest_kernel_autotuned = triton.autotune(
     configs=[
-        triton.Config({"BLOCK_DMODEL": bd}, num_warps=nw, num_stages=ns)
-        for bd in [32, 64, 128]
-        for nw in [1, 2, 4]
-        for ns in [1, 2]
+        triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
+        for bs in [256, 512, 1024]
+        for nw in [2, 4, 8]
     ],
-    key=["head_dim"],
-)(_copy_by_dest_kernel)
+    key=["total"],
+)(copy_by_dest_kernel)
 
 
-def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor, autotune: bool):
+def _launch_copy(kv: torch.Tensor, dest_loc: torch.Tensor, out: torch.Tensor,
+                 autotune: bool):
+    assert kv.is_contiguous() and out.is_contiguous()
     seq_len, head_num, head_dim = kv.shape
-    grid = (seq_len, head_num)
+    total = kv.numel()
     if autotune:
+        grid = lambda meta: (triton.cdiv(total, meta["BLOCK_SIZE"]),)
         _copy_by_dest_kernel_autotuned[grid](
-            kv, dest_loc, out,
-            kv.stride(0), kv.stride(1), kv.stride(2),
-            out.stride(0), out.stride(1), out.stride(2),
-            head_dim,
+            kv, dest_loc, out, total,
+            head_num=head_num, head_dim=head_dim,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _copy_by_dest_kernel[grid](
-            kv, dest_loc, out,
-            kv.stride(0), kv.stride(1), kv.stride(2),
-            out.stride(0), out.stride(1), out.stride(2),
-            head_dim,
-            BLOCK_DMODEL=cfg["BLOCK_DMODEL"],
+        grid = (triton.cdiv(total, cfg["BLOCK_SIZE"]),)
+        copy_by_dest_kernel[grid](
+            kv, dest_loc, out, total,
+            head_num=head_num, head_dim=head_dim,
+            BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
         )
 
 
@@ -76,19 +82,18 @@ def run(
     o_rope: torch.Tensor,
     autotune: bool = False,
 ):
-    out_nope = o_nope.clone()
-    out_rope = o_rope.clone()
+    out_nope = _cached_out(o_nope)
+    out_rope = _cached_out(o_rope)
     _launch_copy(kv_nope, dest_loc, out_nope, autotune)
     _launch_copy(kv_rope, dest_loc, out_rope, autotune)
     return out_nope, out_rope
 
 
 def get_last_config() -> dict | None:
-    cfg = _copy_by_dest_kernel_autotuned.best_config
+    cfg = getattr(_copy_by_dest_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
     return {
-        "BLOCK_DMODEL": cfg.kwargs["BLOCK_DMODEL"],
+        "BLOCK_SIZE": cfg.kwargs["BLOCK_SIZE"],
         "num_warps": cfg.num_warps,
-        "num_stages": cfg.num_stages,
     }
