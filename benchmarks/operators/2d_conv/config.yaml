@@ -1,7 +1,3 @@
-# Conv2d forward pass: implicit GEMM via im2col.
-# Conv is K*K*C_in multiply-adds per output element (1152 for 3x3 + C_in=128),
-# so accumulation order + TF32 tensor-core paths inflate error beyond per-dtype
-# defaults. Override with loose atol/rtol to match the GEMM convention.
 verify:
   atol: 1e-1
   rtol: 1e-2
@@ -13,9 +9,6 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep spatial dimension H (= W) across 20 points with other dims fixed.
-# out_H = out_W = (H + 2*padding - kernel_size) // stride + 1
-#               = H  (for padding=1, kernel_size=3, stride=1)
 case_defaults:
   batch: 1
   in_channels: 128
@@ -27,19 +20,9 @@ case_defaults:
 
 case_grid:
   H:
-    expr: "[16 * i for i in range(1, 21)]"   # 16, 32, ..., 320 (20 points)
+    expr: "[16 * i for i in range(1, 21)]"
   dtype: ["fp16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   out_H = out_W = (H + 2*padding - kernel_size) // stride + 1
-#
-# FLOPs: 2 * batch * out_channels * out_H * out_W * (in_channels // groups) * kernel_size^2
-# Bytes:
-#   Read  input:  batch * in_channels * H * H * dtype_size
-#   Read  weight: out_channels * (in_channels // groups) * kernel_size^2 * dtype_size
-#   Write output: batch * out_channels * out_H * out_W * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
     2 * batch * out_channels
