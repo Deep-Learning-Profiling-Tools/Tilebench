@@ -129,7 +129,7 @@ def _total_time_ms(summary_json_text: str) -> float:
     The summary may be a dict or a list of per-NeuronCore rows; take the max
     total_time across rows and convert seconds -> ms.
     """
-    data = json.loads(summary_json_text)  
+    data = json.loads(summary_json_text)
     rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
     if isinstance(rows, dict):
         rows = [rows]
