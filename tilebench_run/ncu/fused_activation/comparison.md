@@ -1,7 +1,7 @@
 # NCU Comparison: fused_activation
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
@@ -13,12 +13,12 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 47.30 us | 85.35 % | 85.35 % | 29.35 % | 46.29 % | 21.45 % | 6.54 Tbyte/s | 64 | 35 register/thread | 0 byte/block | 0 byte/block | 24 block / 32 block |
-| fp32 | cutile | 47.97 us | 84.60 % | 84.60 % | 30.54 % | 45.60 % | 54.15 % | 6.48 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | triton | 47.90 us | 84.14 % | 84.14 % | 29.05 % | 45.80 % | 21.48 % | 6.45 Tbyte/s | 64 | 35 register/thread | 0 byte/block | 0 byte/block | 24 block / 32 block |
+| fp32 | cutile | 47.42 us | 85.43 % | 85.43 % | 30.85 % | 46.24 % | 53.91 % | 6.55 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **1.01× faster** (47.3 µs vs 48.0 µs).
+- **fp32**: cuTile is **1.01× faster** (47.4 µs vs 47.9 µs).
 
 ## NCU's own bottleneck verdict
 
