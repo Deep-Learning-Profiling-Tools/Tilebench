@@ -2,156 +2,144 @@ import torch
 import triton
 import triton.language as tl
 
-_DEFAULT_CONFIG = {"num_warps": 2}
+_DEFAULT_CONFIG = {"num_warps": 4}
 _BLOCK_SIZE = 1024
-_BLOCK_BB = 128  # prefix-sum kernel for the second-layer buffer (hardcoded in LeetGPU)
+_RADIX_BITS = 2
+_RADIX = 1 << _RADIX_BITS
+_FIELD_BITS = 16
+_FIELD_MASK = (1 << _FIELD_BITS) - 1
 
 
 @triton.jit
-def _count_ones_in_block(input, block_sum, N, bit, BLOCK_SIZE: tl.constexpr):
-    program_id = tl.program_id(axis=0)
-    offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+def radix_histogram_kernel(input, hist, N, K, shift,
+                           BLOCK_SIZE: tl.constexpr, RADIX: tl.constexpr,
+                           FIELD_BITS: tl.constexpr, FIELD_MASK: tl.constexpr):
+    input = input.to(tl.pointer_type(tl.uint32))
+    pid = tl.program_id(axis=0)
+    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < N
 
     block = tl.load(input + offset, mask=mask, other=0)
-
-    bit_mask = ((block >> bit) & 1).to(tl.int32)
-    tl.store(block_sum + program_id, tl.sum(bit_mask))
+    digit = ((block >> shift) & (RADIX - 1)).to(tl.int32)
 
 
-@triton.jit
-def _count_ones_per_block_blocks(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
-    program_id = tl.program_id(axis=0)
-    offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offset < K
+    packed = tl.where(mask, 1, 0).to(tl.int64) << (digit * FIELD_BITS)
+    total = tl.sum(packed)
 
-    block_of_blocks = tl.load(first_layer_sum + offset, mask=mask, other=0)
-    tl.store(block_block_sum + program_id, tl.sum(block_of_blocks))
+
+    counts = ((total >> (tl.arange(0, RADIX) * FIELD_BITS)) & FIELD_MASK).to(tl.int32)
+    tl.store(hist + tl.arange(0, RADIX) * K + pid, counts)
 
 
 @triton.jit
-def _compute_prefix_sums_per_block_of_blocks(block_block_sum, global_ones, L, BLOCK_SIZE: tl.constexpr):
-    # Grid of 1 process
-    offset = tl.arange(0, BLOCK_SIZE)
+def radix_sum_chunks_kernel(src, dst, M, BLOCK_SIZE: tl.constexpr):
+    pid = tl.program_id(axis=0)
+    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offset < M
+
+    vals = tl.load(src + offset, mask=mask, other=0)
+    tl.store(dst + pid, tl.sum(vals))
+
+
+@triton.jit
+def radix_scan_chunk_sums_kernel(sums, L, BLOCK_BB: tl.constexpr):
+
+    offset = tl.arange(0, BLOCK_BB)
     mask = offset < L
 
-    block_block_sums = tl.load(block_block_sum + offset, mask=mask, other=0)
-
-    tl.store(block_block_sum + offset, tl.cumsum(block_block_sums) - block_block_sums, mask=mask)
-    tl.store(global_ones, tl.sum(block_block_sums))
+    vals = tl.load(sums + offset, mask=mask, other=0)
+    tl.store(sums + offset, tl.cumsum(vals) - vals, mask=mask)
 
 
 @triton.jit
-def _compute_prefix_sums_per_block(first_layer_sum, block_block_sum, K, BLOCK_SIZE: tl.constexpr):
-    program_id = tl.program_id(axis=0)
-    offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offset < K
+def radix_scan_chunks_kernel(src, chunk_offsets, M, BLOCK_SIZE: tl.constexpr):
+    pid = tl.program_id(axis=0)
+    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offset < M
 
-    sum_in_blocks = tl.load(first_layer_sum + offset, mask=mask, other=0)
-    prefix_sum_for_blocks = tl.load(block_block_sum + program_id)
-
-    tl.store(
-        first_layer_sum + offset,
-        tl.cumsum(sum_in_blocks) - sum_in_blocks + prefix_sum_for_blocks,
-        mask=mask,
-    )
+    vals = tl.load(src + offset, mask=mask, other=0)
+    base = tl.load(chunk_offsets + pid)
+    tl.store(src + offset, tl.cumsum(vals) - vals + base, mask=mask)
 
 
 @triton.jit
-def _radix_sort_kernel(input, output, first_layer_sum, global_ones, bit, N, BLOCK_SIZE: tl.constexpr):
+def radix_scatter_kernel(input, output, hist, N, K, shift,
+                         BLOCK_SIZE: tl.constexpr, RADIX: tl.constexpr,
+                         FIELD_BITS: tl.constexpr, FIELD_MASK: tl.constexpr):
     input = input.to(tl.pointer_type(tl.uint32))
     output = output.to(tl.pointer_type(tl.uint32))
-
-    program_id = tl.program_id(axis=0)
-    offset = program_id * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    pid = tl.program_id(axis=0)
+    offset = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offset < N
 
-    ones_before = tl.load(first_layer_sum + program_id)
-    zeros_before = program_id * BLOCK_SIZE - ones_before
-
     block = tl.load(input + offset, mask=mask, other=0)
-    mask_bits = ((block >> bit) & 1).to(tl.int32)
-
-    ones_in_block = tl.cumsum(mask_bits)
-    ones_rank = ones_in_block - mask_bits
-
-    zeros_in_block = tl.cumsum(1 - mask_bits)
-    zeros_rank = zeros_in_block - (1 - mask_bits)
-
-    global_zeros = N - tl.load(global_ones)
-
-    offset_values = tl.where(
-        mask_bits == 0,
-        zeros_before.to(tl.int32) + zeros_rank.to(tl.int32),
-        global_zeros.to(tl.int32) + ones_before.to(tl.int32) + ones_rank.to(tl.int32),
-    )
-
-    tl.store(output + offset_values, block, mask=mask)
+    digit = ((block >> shift) & (RADIX - 1)).to(tl.int32)
 
 
-# Autotune the scatter kernel (dominant cost). BLOCK_SIZE is fixed at _BLOCK_SIZE
-# because other kernels share the same block layout; only num_warps / num_stages vary.
-_radix_sort_kernel_autotuned = triton.autotune(
+    packed = tl.where(mask, 1, 0).to(tl.int64) << (digit * FIELD_BITS)
+    excl = tl.cumsum(packed) - packed
+    rank = ((excl >> (digit * FIELD_BITS)) & FIELD_MASK).to(tl.int32)
+
+    base = tl.load(hist + digit * K + pid, mask=mask, other=0)
+    tl.store(output + base + rank, block, mask=mask)
+
+
+_radix_scatter_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw)
         for nw in [2, 4, 8]
     ],
     key=["N"],
-)(_radix_sort_kernel)
+    warmup=1,
+    rep=3,
+)(radix_scatter_kernel)
 
 
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """
-    32-pass 1-bit radix sort matching the LeetGPU algorithm:
-      for each bit in 0..31:
-        1. per-block count of bit=1
-        2. block-of-blocks count + hierarchical prefix sum
-        3. per-block prefix sum
-        4. scatter to final (zeros first, ones after)
-    """
     if N <= 1:
         return input.clone()
 
-    # Clone input so we don't mutate the caller's tensor; output is the other buffer.
     work = input.clone()
     output = torch.empty_like(input)
 
-    grid = (triton.cdiv(N, _BLOCK_SIZE),)
-    grid_second = (triton.cdiv(grid[0], _BLOCK_SIZE),)
-    grid_third = (1,)
+    K = triton.cdiv(N, _BLOCK_SIZE)
+    M = _RADIX * K
+    G2 = triton.cdiv(M, _BLOCK_SIZE)
+    BB = max(1024, triton.next_power_of_2(G2))
 
-    first_layer = torch.empty((grid[0],), dtype=torch.int32, device=input.device)
-    second_layer = torch.empty((grid_second[0],), dtype=torch.int32, device=input.device)
-    global_ones = torch.empty((), dtype=torch.int32, device=input.device)
+    hist = torch.empty((M,), dtype=torch.int32, device=input.device)
+    chunk_sums = torch.empty((G2,), dtype=torch.int32, device=input.device)
 
     cfg = _DEFAULT_CONFIG
 
-    for bit in range(32):
-        _count_ones_in_block[grid](work, first_layer, N, bit, _BLOCK_SIZE)
-        _count_ones_per_block_blocks[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
-        _compute_prefix_sums_per_block_of_blocks[grid_third](
-            second_layer, global_ones, grid_second[0], _BLOCK_BB,
-        )
-        _compute_prefix_sums_per_block[grid_second](first_layer, second_layer, grid[0], _BLOCK_SIZE)
+    for shift in range(0, 32, _RADIX_BITS):
+        radix_histogram_kernel[(K,)](work, hist, N, K, shift,
+                                     _BLOCK_SIZE, _RADIX, _FIELD_BITS, _FIELD_MASK)
+        radix_sum_chunks_kernel[(G2,)](hist, chunk_sums, M, _BLOCK_SIZE)
+        radix_scan_chunk_sums_kernel[(1,)](chunk_sums, G2, BB)
+        radix_scan_chunks_kernel[(G2,)](hist, chunk_sums, M, _BLOCK_SIZE)
 
         if autotune:
-            _radix_sort_kernel_autotuned[grid](
-                work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
+            _radix_scatter_kernel_autotuned[(K,)](
+                work, output, hist, N, K, shift,
+                _BLOCK_SIZE, _RADIX, _FIELD_BITS, _FIELD_MASK,
             )
         else:
-            _radix_sort_kernel[grid](
-                work, output, first_layer, global_ones, bit, N, _BLOCK_SIZE,
+            radix_scatter_kernel[(K,)](
+                work, output, hist, N, K, shift,
+                _BLOCK_SIZE, _RADIX, _FIELD_BITS, _FIELD_MASK,
                 num_warps=cfg["num_warps"],
             )
 
-        work.copy_(output)
 
-    return output
+        work, output = output, work
+
+    return work
 
 
 def get_last_config() -> dict | None:
-    cfg = getattr(_radix_sort_kernel_autotuned, "best_config", None)
+    cfg = getattr(_radix_scatter_kernel_autotuned, "best_config", None)
     if cfg is None:
         return None
     return {"num_warps": cfg.num_warps}

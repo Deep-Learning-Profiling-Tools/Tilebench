@@ -144,7 +144,11 @@ def generate_destindex_inputs(
 
     kv_nope  = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     kv_rope  = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
-    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64).to(torch.int32)
+    # int64 permutation: index_copy_ requires long indices, so all three
+    # backends consume the same dtype (no torch-only conversion pass).
+    # randperm guarantees unique, in-range destinations — concurrent
+    # scatter writes never collide.
+    dest_loc = torch.randperm(total_tokens, device=device, dtype=torch.int64)
     o_nope   = _rand_tensor((total_tokens, kv_nope_head_num, kv_nope_head_dim))
     o_rope   = _rand_tensor((total_tokens, kv_rope_head_num, kv_rope_head_dim))
     return (kv_nope, kv_rope, dest_loc, o_nope, o_rope)
@@ -341,21 +345,34 @@ def generate_interleave_inputs(n, dtype, device=DEFAULT_DEVICE, **kwargs):
     return (a, b, n)
 
 
-def generate_3d_conv_inputs(input_depth, input_rows, input_cols=None,
-                            kernel_depth=3, kernel_rows=3, kernel_cols=3,
-                            dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
-    if input_cols is None:
-        input_cols = input_rows
-    input_vol = torch.randn(input_depth * input_rows * input_cols, dtype=dtype, device=device)
-    kernel = torch.randn(kernel_depth * kernel_rows * kernel_cols, dtype=dtype, device=device)
-    return (input_vol, kernel, input_depth, input_rows, input_cols,
-            kernel_depth, kernel_rows, kernel_cols)
+def generate_3d_conv_inputs(
+    batch, in_channels, out_channels, D, H,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
+):
+    W = H  # square spatial dims
+    input  = torch.randn(batch, in_channels, D, H, W, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups,
+        kernel_size, kernel_size, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
 
 
-def generate_1d_conv_inputs(input_size, kernel_size=127, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
-    inp = torch.randn(input_size, dtype=dtype, device=device)
-    kern = torch.randn(kernel_size, dtype=dtype, device=device)
-    return (inp, kern, input_size, kernel_size)
+def generate_1d_conv_inputs(
+    batch, in_channels, out_channels, L,
+    kernel_size=3, stride=1, padding=1, groups=1,
+    dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs,
+):
+    input  = torch.randn(batch, in_channels, L, dtype=dtype, device=device)
+    weight = torch.randn(
+        out_channels, in_channels // groups, kernel_size,
+        dtype=dtype, device=device,
+    )
+    # scalar params are passed through to run() as kwargs by the engine
+    return (input, weight, stride, padding, groups)
 def generate_gaussian_blur_inputs(input_rows, input_cols=None,
                                   kernel_rows=3, kernel_cols=3,
                                   dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
@@ -701,16 +718,33 @@ def infer_problem_size(operator_name, params):
         out_H        = (H + 2 * padding - kernel_size) // stride + 1
         return 2 * batch * out_channels * out_H * out_H * (in_channels // groups) * kernel_size ** 2
     if operator_name == "1d_conv":
-        return int(params.get("input_size", 1))
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        L            = int(params.get("L", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_L        = (L + 2 * padding - kernel_size) // stride + 1
+        return 2 * batch * out_channels * out_L * (in_channels // groups) * kernel_size
     if operator_name == "matrix_copy":
         N = int(params.get("N", 1))
         return N * N
     if operator_name == "3d_conv":
-        return (
-            int(params.get("input_depth", 1))
-            * int(params.get("input_rows", 1))
-            * int(params.get("input_cols", params.get("input_rows", 1)))
-        )
+        batch        = int(params.get("batch", 1))
+        in_channels  = int(params.get("in_channels", 1))
+        out_channels = int(params.get("out_channels", 1))
+        D            = int(params.get("D", 1))
+        H            = int(params.get("H", 1))
+        kernel_size  = int(params.get("kernel_size", 3))
+        stride       = int(params.get("stride", 1))
+        padding      = int(params.get("padding", 1))
+        groups       = int(params.get("groups", 1))
+        out_D        = (D + 2 * padding - kernel_size) // stride + 1
+        out_H        = (H + 2 * padding - kernel_size) // stride + 1
+        return (2 * batch * out_channels * out_D * out_H * out_H
+                * (in_channels // groups) * kernel_size ** 3)
     if operator_name == "2d_max_pooling":
         N = int(params.get("N", 1))
         C = int(params.get("C", 1))
