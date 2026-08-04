@@ -222,7 +222,9 @@ def generate_rope_inputs(batch_size, seq_len, n_heads, head_dim, dtype=torch.flo
 
 
 def generate_moe_topk_gating_inputs(M, E, k, dtype=torch.float32, device=DEFAULT_DEVICE, **kwargs):
-    logits = torch.randn(M, E, dtype=dtype, device=device)
+    grid = torch.linspace(-3.0, 3.0, steps=E, device=device).to(dtype)
+    rank = torch.randn(M, E, device=device).argsort(dim=-1)
+    logits = grid[rank]
     return (logits, M, E, k)
 
 

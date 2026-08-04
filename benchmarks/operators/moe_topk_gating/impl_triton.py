@@ -19,7 +19,7 @@ def moe_topk_gating_kernel(
     offsets_le = tl.arange(0, BLOCK_SIZE_E)
     mask_le = offsets_le < E
 
-    logits = tl.load(logits_ptr + pid * E + offsets_le, mask=mask_le, other=float("-inf"))
+    logits = tl.load(logits_ptr + pid * E + offsets_le, mask=mask_le, other=float("-inf")).to(tl.float32)
 
     offsets_k = tl.arange(0, BLOCK_SIZE_K)
     mask_k = offsets_k < K
@@ -31,8 +31,8 @@ def moe_topk_gating_kernel(
         curr_max_val = tl.max(logits, axis=-1)
         curr_max_idx = tl.argmax(logits, axis=-1)
 
-        topk_vals = tl.where(offsets_k == (K - 1 - i), curr_max_val, topk_vals)
-        topk_idxs = tl.where(offsets_k == (K - 1 - i), curr_max_idx, topk_idxs)
+        topk_vals = tl.where(offsets_k == i, curr_max_val, topk_vals)
+        topk_idxs = tl.where(offsets_k == i, curr_max_idx, topk_idxs)
 
         logits = tl.where(offsets_le == curr_max_idx, float("-inf"), logits)
 
@@ -40,7 +40,7 @@ def moe_topk_gating_kernel(
     topk_vals = tl.exp(topk_vals - mx)
     topk_vals = topk_vals / tl.sum(topk_vals, axis=-1)
 
-    tl.store(topk_w_ptr + pid * K + offsets_k, topk_vals, mask=mask_k)
+    tl.store(topk_w_ptr + pid * K + offsets_k, topk_vals.to(topk_w_ptr.dtype.element_ty), mask=mask_k)
     tl.store(topk_idx_ptr + pid * K + offsets_k, topk_idxs, mask=mask_k)
 
 
