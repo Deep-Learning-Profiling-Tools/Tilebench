@@ -1,36 +1,53 @@
 """NKI batched matmul: BATCH independent (M,K)@(K,N) matmuls.
 
+Self-contained: does not import from matmul_fp32_fp16_fp8/impl_nki.py, but the
+tiling/PSUM-accumulation approach mirrors it (same TILE_M/K/N, same
+_pick_tiles_in_block, same NUM_CORES M-block splitting).
+
 Structured like Triton's bmm_kernel (impl_triton.py): BATCH is folded into a
-single kernel launch (an outer nl.affine_range over BATCH, wrapping the same
-M-block / PSUM-accumulation tiling as the verified single matmul in
-matmul_fp32_fp16_fp8/impl_nki.py) instead of dispatching one kernel per batch
-element from Python. Runs on a single NeuronCore (nl.nc(1)) since run_bench.py
-pins NEURON_RT_NUM_CORES=1 anyway -- unlike the single-matmul kernel, there is
-no multi-core M-block splitting here. affine_range (not sequential_range) is
-used for the batch loop because batches are data-independent, so the compiler
-is free to pipeline/interleave them the same way Triton's grid lets NeuronCores
-interleave (m_block, n_block, batch) program instances.
+single kernel launch (an outer nl.affine_range over BATCH, wrapping the
+per-core M-block / PSUM-accumulation tiling) instead of dispatching one
+kernel per batch element from Python. affine_range (not sequential_range) is
+used for the batch loop because batches are data-independent, so the
+compiler is free to pipeline/interleave them the same way Triton's grid lets
+NeuronCores interleave (m_block, n_block, batch) program instances.
+NEURON_RT_NUM_CORES=1 (set by run_bench.py) only restricts the profiler's
+device visibility, not nl.nc()'s compile-time SPMD core count, so nl.nc(2)
+gets real multi-core parallelism here.
 
 Note: unlike matmul_fp32_fp16_fp8's kernel, this does not implement the fp8
 DOUBLE_ROW perf mode -- fp8 batched matmul is correct but not tuned for it.
 """
-import torch
+import os
 
-from benchmarks.operators.matmul_fp32_fp16_fp8.impl_nki import (
-    TILE_M, TILE_K, TILE_N, _pick_tiles_in_block,
-)
+import torch
 
 try:
     import neuronxcc.nki as nki
     import neuronxcc.nki.language as nl
     import neuronxcc.nki.isa as nisa
+
+    TILE_M = 128
+    TILE_K = 128
+    TILE_N = 512
 except ImportError:
     nki = None
+
+NUM_CORES = int(os.environ.get("NKI_MATMUL_NUM_CORES", "2"))
+
+
+def _pick_tiles_in_block(dim: int, tile: int, preferred: int) -> int:
+    """Largest t <= preferred with (tile * t) dividing dim. Falls back to 1."""
+    for t in range(preferred, 0, -1):
+        if dim % (tile * t) == 0:
+            return t
+    return 1
 
 
 if nki is not None:
     @nki.jit
-    def batched_matmul_kernel(lhs, rhs, TILES_IN_BLOCK_M, TILES_IN_BLOCK_N, TILES_IN_BLOCK_K):
+    def batched_matmul_kernel(lhs, rhs, TILES_IN_BLOCK_M, TILES_IN_BLOCK_N, TILES_IN_BLOCK_K,
+                               NUM_CORES=1):
 
         BATCH, M, K = lhs.shape
         _, K_rhs, N = rhs.shape
@@ -48,10 +65,15 @@ if nki is not None:
         NUM_BLOCK_N = N // BLOCK_N
         NUM_BLOCK_K = K // BLOCK_K
 
+        assert NUM_BLOCK_M % NUM_CORES == 0, "M blocks must divide across cores"
+        BLOCKS_PER_CORE = NUM_BLOCK_M // NUM_CORES
+
         result = nl.ndarray((BATCH, M, N), dtype=lhs.dtype, buffer=nl.shared_hbm)
 
+        core = nl.program_id(0)
         for b in nl.affine_range(BATCH):
-            for m in nl.affine_range(NUM_BLOCK_M):
+            for mi in nl.affine_range(BLOCKS_PER_CORE):
+                m = core * BLOCKS_PER_CORE + mi
 
                 result_tiles = nl.zeros((TILES_IN_BLOCK_M, nl.par_dim(TILE_M), N), dtype=nl.float32, buffer=nl.sbuf)
 
@@ -116,7 +138,9 @@ def run(A: torch.Tensor, B: torch.Tensor,
     tib_n = _pick_tiles_in_block(Np, TILE_N, 2)
     tib_k = _pick_tiles_in_block(Kp, TILE_K, 8)
 
-    out = batched_matmul_kernel[nl.nc(1)](A3, B3, tib_m, tib_n, tib_k)
+    num_cores = NUM_CORES if (Mp // (TILE_M * tib_m)) % NUM_CORES == 0 else 1
+
+    out = batched_matmul_kernel[nl.nc(num_cores)](A3, B3, tib_m, tib_n, tib_k, num_cores)
     return out[:, :M, :N].reshape(-1)
 
 

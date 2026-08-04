@@ -11,11 +11,12 @@ try:
     TILE_M = 128
     TILE_K = 128
     TILE_N = 512
+
+    NUM_CORES = int(os.environ.get("NKI_MATMUL_NUM_CORES", "2"))
     
 except ImportError:
     nki = None
 
-NUM_CORES = int(os.environ.get("NKI_MATMUL_NUM_CORES", "2"))
 
 if nki is not None:
     @nki.jit
