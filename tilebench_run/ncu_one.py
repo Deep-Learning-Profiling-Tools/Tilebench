@@ -25,6 +25,8 @@ import sys
 import time
 from pathlib import Path
 
+import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
+
 ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
 NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
@@ -34,7 +36,8 @@ OUT_DIR = ROOT / "tilebench_run" / "ncu"
 
 
 def run_one(op: str, backend: str, dtype: str, params: dict,
-            cfg: dict | None, n_kernels: int) -> int:
+            cfg: dict | None, n_kernels: int,
+            kernel_names: list[str] | None = None) -> int:
     out_path = OUT_DIR / op / f"{backend}_{dtype}.ncu-rep"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -45,12 +48,28 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     if cfg is not None:
         env["NCU_CFG_JSON"] = json.dumps(cfg)
     env["PYTHONPATH"] = str(ROOT)
-    skip, count = 3 * n_kernels, n_kernels
+    rgx = ks.kernel_regex(kernel_names)
+    if rgx:
+        m = ks.real_kernel_count(kernel_names) or n_kernels
+        skip, count = 3 * m, m
+    else:
+        print(f"  WARNING {op}/{backend}/{dtype}: no kernel names known — falling "
+              f"back to FRAGILE launch-order capture (skip {3*n_kernels}, "
+              f"count {n_kernels}); cannot validate which kernel was profiled.")
+        skip, count = 3 * n_kernels, n_kernels
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
         # See ncu_driver.py for the rationale; profile only inside the
         # harness's cudaProfilerStart/Stop region (skips generator launches).
         "--profile-from-start", "off",
+    ]
+    # Prefer selecting the op's compute kernel(s) by NAME (robust against
+    # variable input-gen / auxiliary launch counts). With --kernel-name, ncu's
+    # launch counter counts only matched kernels, so --launch-skip 3N
+    # --launch-count N still lands on the measured (4th) call.
+    if rgx:
+        cmd += ["--kernel-name", f"regex:{rgx}"]
+    cmd += [
         "--launch-skip", str(skip), "--launch-count", str(count),
         "--force-overwrite",
         "-o", str(out_path).removesuffix(".ncu-rep"),
@@ -58,8 +77,25 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     ]
     print(f"→ {op}/{backend}/{dtype}  N={n_kernels}  cfg={cfg}")
     t0 = time.time()
-    rc = subprocess.run(cmd, env=env, cwd=str(ROOT)).returncode
+    r = subprocess.run(cmd, env=env, cwd=str(ROOT), capture_output=True, text=True)
     dt = time.time() - t0
+    if r.stdout:
+        print(r.stdout, end="")
+    if r.stderr:
+        print(r.stderr, end="")
+    rc = r.returncode
+    # Hardening: confirm NCU profiled ONLY the op's own compute kernel(s) — not an
+    # aux/wrong kernel a fragile launch-order capture might have grabbed. NCU writes
+    # its `==PROF== Profiling "<name>"` progress lines to stdout.
+    captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
+    if rgx:
+        ok, unexpected = ks.validate_capture(captured, kernel_names)
+        if not ok:
+            rc = rc or 3
+            print(f"  KERNEL-NAME VALIDATION FAILED: captured={captured} "
+                  f"unexpected={unexpected} expected={ks.kernel_stems(kernel_names)}")
+        else:
+            print(f"  validated: captured {captured} ⊆ {ks.kernel_stems(kernel_names)}")
     print(f"  rc={rc}, {dt:.1f}s, out={out_path}")
     return rc
 
@@ -78,11 +114,14 @@ def main() -> None:
     if op_entry is None:
         sys.exit(f"error: op {args.op!r} not in catalogue")
 
-    kc = {}
+    kc, kcn = {}, {}
     if KERNEL_COUNTS.exists():
         for r in json.loads(KERNEL_COUNTS.read_text()):
+            key = (r["op"], r["dtype"], r["backend"])
             if r.get("count") is not None:
-                kc[(r["op"], r["dtype"], r["backend"])] = r["count"]
+                kc[key] = r["count"]
+            if r.get("names"):
+                kcn[key] = r["names"]
 
     dtypes = [args.dtype] if args.dtype else op_entry["dtypes"]
     backends = ["triton", "cutile"] if args.backend == "both" else [args.backend]
@@ -98,7 +137,8 @@ def main() -> None:
         for be in backends:
             cfg = winner.get(be)
             n = kc.get((args.op, dt, be), 1)
-            rc_total |= run_one(args.op, be, dt, dict(params), cfg, n)
+            names = kcn.get((args.op, dt, be))
+            rc_total |= run_one(args.op, be, dt, dict(params), cfg, n, names)
     sys.exit(rc_total)
 
 

@@ -1,36 +1,36 @@
 # NCU Comparison: matrix_transpose
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
 | fp16 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 64, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 4}` |
-| bf16 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 64, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 4}` |
-| fp32 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 64, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 4}` |
-| int8 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 128, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 4}` |
+| bf16 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 64, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 32}` |
+| fp32 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 64, 'num_warps': 8}` | `{'tile': 64, 'occupancy': 32}` |
+| int8 | `{'m': 4096, 'n': 20480}` | `{'BLOCK_TILE': 128, 'num_warps': 8}` | `{'tile': 128, 'occupancy': 8}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 50.18 us | 73.16 % | 73.16 % | 49.93 % | 37.66 % | 24.36 % | 5.61 Tbyte/s | 256 | 26 register/thread | 0 byte/block | 8.19 Kbyte/block | 8 block / 14 block |
-| fp16 | cutile | 50.02 us | 73.03 % | 73.03 % | 61.79 % | 37.65 % | 27.37 % | 5.60 Tbyte/s | 128 | 111 register/thread | 32.78 Kbyte/block | 0 byte/block | 4 block / 4 block |
-| bf16 | triton | 50.91 us | 72.11 % | 72.11 % | 49.62 % | 37.02 % | 24.31 % | 5.53 Tbyte/s | 256 | 26 register/thread | 0 byte/block | 8.19 Kbyte/block | 8 block / 14 block |
-| bf16 | cutile | 50.56 us | 72.25 % | 72.25 % | 60.83 % | 37.28 % | 27.45 % | 5.54 Tbyte/s | 128 | 111 register/thread | 32.78 Kbyte/block | 0 byte/block | 4 block / 4 block |
-| fp32 | triton | 98.66 us | 81.44 % | 81.44 % | 48.30 % | 39.37 % | 23.64 % | 6.25 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 16.38 Kbyte/block | 8 block / 9 block |
-| fp32 | cutile | 102.34 us | 78.46 % | 78.46 % | 44.53 % | 37.95 % | 17.98 % | 6.02 Tbyte/s | 128 | 160 register/thread | 65.55 Kbyte/block | 0 byte/block | 3 block / 3 block |
-| int8 | triton | 29.06 us | 65.66 % | 53.46 % | 77.82 % | 31.67 % | 49.28 % | 4.09 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 16.38 Kbyte/block | 8 block / 9 block |
-| int8 | cutile | 34.27 us | 52.09 % | 46.39 % | 60.62 % | 26.79 % | 46.57 % | 3.55 Tbyte/s | 128 | 113 register/thread | 16.40 Kbyte/block | 0 byte/block | 4 block / 7 block |
+| fp16 | triton | 50.46 us | 72.72 % | 72.72 % | 50.13 % | 37.37 % | 24.52 % | 5.58 Tbyte/s | 256 | 26 register/thread | 0 byte/block | 8.19 Kbyte/block | 8 block / 14 block |
+| fp16 | cutile | 50.14 us | 72.87 % | 72.87 % | 60.92 % | 37.55 % | 27.70 % | 5.59 Tbyte/s | 128 | 111 register/thread | 32.78 Kbyte/block | 0 byte/block | 4 block / 4 block |
+| bf16 | triton | 50.14 us | 73.28 % | 73.28 % | 50.10 % | 37.66 % | 24.07 % | 5.62 Tbyte/s | 256 | 26 register/thread | 0 byte/block | 8.19 Kbyte/block | 8 block / 14 block |
+| bf16 | cutile | 50.62 us | 72.12 % | 72.12 % | 61.40 % | 37.22 % | 26.26 % | 5.53 Tbyte/s | 128 | 111 register/thread | 32.78 Kbyte/block | 0 byte/block | 4 block / 4 block |
+| fp32 | triton | 99.07 us | 81.11 % | 81.11 % | 48.18 % | 39.18 % | 23.85 % | 6.22 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 16.38 Kbyte/block | 8 block / 9 block |
+| fp32 | cutile | 99.94 us | 80.37 % | 80.37 % | 48.09 % | 38.87 % | 23.04 % | 6.16 Tbyte/s | 128 | 55 register/thread | 16.40 Kbyte/block | 0 byte/block | 9 block / 9 block |
+| int8 | triton | 28.90 us | 65.16 % | 53.65 % | 77.12 % | 31.84 % | 48.94 % | 4.11 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 16.38 Kbyte/block | 8 block / 9 block |
+| int8 | cutile | 27.68 us | 64.82 % | 55.22 % | 77.31 % | 33.29 % | 56.62 % | 4.23 Tbyte/s | 128 | 64 register/thread | 16.40 Kbyte/block | 0 byte/block | 8 block / 9 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.00× faster** (50.0 µs vs 50.2 µs).
-- **bf16**: cuTile is **1.01× faster** (50.6 µs vs 50.9 µs).
-- **fp32**: Triton is **1.04× faster** (98.7 µs vs 102.3 µs).
-- **int8**: Triton is **1.18× faster** (29.1 µs vs 34.3 µs).
+- **fp16**: cuTile is **1.01× faster** (50.1 µs vs 50.5 µs).
+- **bf16**: Triton is **1.01× faster** (50.1 µs vs 50.6 µs).
+- **fp32**: Triton is **1.01× faster** (99.1 µs vs 99.9 µs).
+- **int8**: cuTile is **1.04× faster** (27.7 µs vs 28.9 µs).
 
 ## NCU's own bottleneck verdict
 
@@ -38,9 +38,9 @@
 - **bf16 / triton** — Memory is more heavily utilized than Compute
 - **fp16 / cutile** — Memory is more heavily utilized than Compute
 - **fp16 / triton** — Memory is more heavily utilized than Compute
-- **fp32 / cutile** — Memory is more heavily utilized than Compute
+- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
 - **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing DRAM in the Memory Workload Analysis section.
-- **int8 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **int8 / cutile** — Compute and Memory are well-balanced
 - **int8 / triton** — Memory is more heavily utilized than Compute
 
 ## Reports
