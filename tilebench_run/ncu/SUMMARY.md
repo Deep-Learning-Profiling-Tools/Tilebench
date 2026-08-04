@@ -9,6 +9,12 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 
 | op | dtype | Triton (µs) | cuTile (µs) | Triton:cuTile |
 |---|---|---:|---:|---:|
+| leaky_relu | fp16 | 26.8 | 27.2 | 1.02× |
+| leaky_relu | bf16 | 26.4 | 26.7 | 1.01× |
+| leaky_relu | fp32 | 55.8 | 56.1 | 1.01× |
+| dropout | fp16 | 18.3 | 18.6 | 1.02× |
+| dropout | bf16 | 18.1 | 19.1 | 1.06× |
+| dropout | fp32 | 34.9 | 34.5 | 0.99× |
 | 2d_max_pooling | fp16 | 196.9 | 286.2 | 1.45× |
 | 2d_max_pooling | bf16 | 199.5 | 286.2 | 1.43× |
 | 2d_max_pooling | fp32 | 218.5 | 297.9 | 1.36× |
@@ -18,11 +24,13 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | argmax | fp32 | 41.1 | 31.6 | 0.77× |
 | bitonic_sort | fp16 | 8116.7 | 8107.6 | 1.00× |
 | bitonic_sort | fp32 | 9277.0 | 9114.4 | 0.98× |
-| cross_entropy | fp16 | 9.9 | 15.0 | 1.53× |
-| cross_entropy | fp32 | 10.5 | 13.9 | 1.33× |
+| cross_entropy | fp16 | 9.8 | 14.4 | 1.46× |
+| cross_entropy | fp32 | 10.1 | 13.9 | 1.38× |
 | dropout | fp16 | 18.2 | 19.1 | 1.05× |
 | dropout | bf16 | 18.5 | 18.9 | 1.02× |
 | dropout | fp32 | 34.4 | 34.5 | 1.00× |
+| cross_entropy | fp16 | 9.9 | 15.0 | 1.53× |
+| cross_entropy | fp32 | 10.5 | 13.9 | 1.33× |
 | gaussian_blur | fp16 | 1030.0 | 1510.0 | 1.47× |
 | gaussian_blur | fp32 | 1280.0 | 1290.0 | 1.01× |
 | jacobi_stencil_2d | fp16 | 155.6 | 134.9 | 0.87× |
@@ -31,9 +39,6 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | layernorm | fp16 | 20.0 | 35.3 | 1.76× |
 | layernorm | bf16 | 20.8 | 37.2 | 1.79× |
 | layernorm | fp32 | 32.7 | 33.6 | 1.03× |
-| leaky_relu | fp16 | 26.9 | 27.1 | 1.01× |
-| leaky_relu | bf16 | 32.0 | 27.0 | 0.84× |
-| leaky_relu | fp32 | 56.7 | 56.2 | 0.99× |
 | matrix_copy | fp16 | 17.8 | 18.4 | 1.03× |
 | matrix_copy | bf16 | 18.0 | 18.3 | 1.02× |
 | matrix_copy | fp32 | 29.4 | 27.9 | 0.95× |
@@ -45,9 +50,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | mean_reduction | fp16 | 16.7 | 19.7 | 1.18× |
 | mean_reduction | bf16 | 16.7 | 19.6 | 1.17× |
 | mean_reduction | fp32 | 29.9 | 30.2 | 1.01× |
-| moe_topk_gating | fp16 | 15.0 | 29.1 | 1.94× |
-| moe_topk_gating | bf16 | 14.6 | 29.1 | 2.00× |
-| moe_topk_gating | fp32 | 14.6 | 29.1 | 1.99× |
+| moe_topk_gating | fp16 | 14.8 | 29.6 | 2.00× |
+| moe_topk_gating | bf16 | 14.8 | 29.3 | 1.98× |
+| moe_topk_gating | fp32 | 14.9 | 29.7 | 1.99× |
 | mul2 | fp16 | 14.7 | 15.7 | 1.07× |
 | mul2 | bf16 | 13.5 | 15.4 | 1.13× |
 | mul2 | fp32 | 22.4 | 22.7 | 1.01× |
