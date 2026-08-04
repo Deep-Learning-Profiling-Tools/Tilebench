@@ -12,6 +12,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | leaky_relu | fp16 | 26.8 | 27.2 | 1.02× |
 | leaky_relu | bf16 | 26.4 | 26.7 | 1.01× |
 | leaky_relu | fp32 | 55.8 | 56.1 | 1.01× |
+| dropout | fp16 | 18.3 | 18.6 | 1.02× |
+| dropout | bf16 | 18.1 | 19.1 | 1.06× |
+| dropout | fp32 | 34.9 | 34.5 | 0.99× |
 | 2d_max_pooling | fp16 | 196.9 | 286.2 | 1.45× |
 | 2d_max_pooling | bf16 | 199.5 | 286.2 | 1.43× |
 | 2d_max_pooling | fp32 | 218.5 | 297.9 | 1.36× |
@@ -23,9 +26,6 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | bitonic_sort | fp32 | 9277.0 | 9114.4 | 0.98× |
 | cross_entropy | fp16 | 9.9 | 15.0 | 1.53× |
 | cross_entropy | fp32 | 10.5 | 13.9 | 1.33× |
-| dropout | fp16 | 18.2 | 19.1 | 1.05× |
-| dropout | bf16 | 18.5 | 18.9 | 1.02× |
-| dropout | fp32 | 34.4 | 34.5 | 1.00× |
 | gaussian_blur | fp16 | 1030.0 | 1510.0 | 1.47× |
 | gaussian_blur | fp32 | 1280.0 | 1290.0 | 1.01× |
 | jacobi_stencil_2d | fp16 | 155.6 | 134.9 | 0.87× |
