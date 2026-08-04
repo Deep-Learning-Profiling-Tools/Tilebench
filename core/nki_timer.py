@@ -129,17 +129,10 @@ def _total_time_ms(summary_json_text: str) -> float:
     The summary may be a dict or a list of per-NeuronCore rows; take the max
     total_time across rows and convert seconds -> ms.
     """
-    data = json.loads(summary_json_text)
-    
-    #rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
-    #if isinstance(rows, dict):
-        #rows = [rows]
-    if isinstance(data, dict) and not any(k in data for k in ["total_time", "summary", "rows"]):
-        rows = [v for v in data.values() if isinstance(v, dict)]
-    else:
-        rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
-        if isinstance(rows, dict):
-            rows = [rows]
+    data = json.loads(summary_json_text)  
+    rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
+    if isinstance(rows, dict):
+        rows = [rows]
             
     times = [float(r["total_time"]) for r in rows if isinstance(r, dict) and "total_time" in r]
     if not times:
