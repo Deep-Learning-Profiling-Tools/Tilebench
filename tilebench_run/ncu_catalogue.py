@@ -166,14 +166,29 @@ def collect_op(op_name: str) -> dict:
 
 def main():
     skip = {"_template", "__pycache__"}
-    ops = sorted([
+    all_ops = sorted([
         p.name for p in OPS_DIR.iterdir()
         if p.is_dir() and p.name not in skip and (p / "config.yaml").exists()
     ])
-    catalogue = [collect_op(op) for op in ops]
     out = ROOT / "tilebench_run" / "ncu_catalogue.json"
-    out.write_text(json.dumps(catalogue, indent=2, default=str))
-    print(f"wrote {out}  ({len(catalogue)} ops)")
+
+    requested = sys.argv[1:]
+    if requested:
+        unknown = [op for op in requested if op not in all_ops]
+        if unknown:
+            raise SystemExit(f"unknown ops: {unknown}")
+        existing = json.loads(out.read_text()) if out.exists() else []
+        by_op = {c["op"]: c for c in existing}
+        for op in requested:
+            by_op[op] = collect_op(op)
+        catalogue = [by_op[op] for op in sorted(by_op)]
+        out.write_text(json.dumps(catalogue, indent=2, default=str))
+        print(f"wrote {out}  (updated {len(requested)} of {len(catalogue)} ops: {requested})")
+        catalogue = [by_op[op] for op in requested]
+    else:
+        catalogue = [collect_op(op) for op in all_ops]
+        out.write_text(json.dumps(catalogue, indent=2, default=str))
+        print(f"wrote {out}  ({len(catalogue)} ops)")
     no_log = [c["op"] for c in catalogue if not c.get("has_autotune_log")]
     if no_log:
         print(f"ops without autotune log: {no_log}")
