@@ -23,9 +23,10 @@ def cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: Co
         logits, index=(bid, 0), shape=(1, BLOCK_CLASSES),
         padding_mode=ct.PaddingMode.NEG_INF,
     )
+    logits_f32 = ct.astype(logits_tile, ct.float32)
 
-    row_max = ct.max(logits_tile, axis=1)
-    shifted = logits_tile - ct.reshape(row_max, (1, 1))
+    row_max = ct.max(logits_f32, axis=1)
+    shifted = logits_f32 - ct.reshape(row_max, (1, 1))
     row_sum = ct.sum(ct.exp(shifted), axis=1)
 
     target_cls = ct.load(targets, index=(bid,), shape=())
@@ -34,10 +35,11 @@ def cross_entropy_kernel(logits, targets, output, num_classes, BLOCK_CLASSES: Co
     target_ok = (target_cls >= 0) & (target_cls < num_classes)
     safe_target = ct.where(target_ok, target_cls, 0)
     target_logit_raw = ct.gather(logits, (bid, safe_target), check_bounds=False)
-    target_logit = ct.where(target_ok, target_logit_raw, -float("inf"))
+    target_logit = ct.astype(target_logit_raw, ct.float32)
+    target_logit = ct.where(target_ok, target_logit, -float("inf"))
 
     loss = -(target_logit - row_max - ct.log(row_sum))
-    ct.store(output, index=(bid,), tile=loss)
+    ct.store(output, index=(bid,), tile=ct.astype(loss, output.dtype))
 
 
 _tuner = CutileAutotuner(cross_entropy_kernel)
