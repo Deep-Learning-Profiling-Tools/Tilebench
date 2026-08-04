@@ -45,9 +45,9 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | mean_reduction | fp16 | 16.7 | 19.7 | 1.18× |
 | mean_reduction | bf16 | 16.7 | 19.6 | 1.17× |
 | mean_reduction | fp32 | 29.9 | 30.2 | 1.01× |
-| moe_topk_gating | fp16 | 15.0 | 29.1 | 1.94× |
-| moe_topk_gating | bf16 | 14.6 | 29.1 | 2.00× |
-| moe_topk_gating | fp32 | 14.6 | 29.1 | 1.99× |
+| moe_topk_gating | fp16 | 14.8 | 29.6 | 2.00× |
+| moe_topk_gating | bf16 | 14.8 | 29.3 | 1.98× |
+| moe_topk_gating | fp32 | 14.9 | 29.7 | 1.99× |
 | mul2 | fp16 | 14.7 | 15.7 | 1.07× |
 | mul2 | bf16 | 13.5 | 15.4 | 1.13× |
 | mul2 | fp32 | 22.4 | 22.7 | 1.01× |
