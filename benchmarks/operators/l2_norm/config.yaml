@@ -1,6 +1,3 @@
-# L2 normalization: y = x / ||x||_2  (per-row)
-# One CTA per row; no weight or bias.
-
 benchmark:
   warmup: 20
   repeat: 100
@@ -15,14 +12,9 @@ case_defaults:
 
 case_grid:
   K:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
+    expr: "[512 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Metrics
-#   FLOPs: K muls (x²) + K adds (sum) + K muls (x * rstd) ≈ 3K per row
-#   Bytes: read x + write y = 2 * rows * K * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "3 * batch * M * K"
   bytes_expr: "2 * batch * M * K * dtype_size"
