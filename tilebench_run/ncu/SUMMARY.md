@@ -18,8 +18,8 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | argmax | fp32 | 41.1 | 31.6 | 0.77× |
 | bitonic_sort | fp16 | 8116.7 | 8107.6 | 1.00× |
 | bitonic_sort | fp32 | 9277.0 | 9114.4 | 0.98× |
-| cross_entropy | fp16 | 9.9 | 15.0 | 1.53× |
-| cross_entropy | fp32 | 10.5 | 13.9 | 1.33× |
+| cross_entropy | fp16 | 9.8 | 14.4 | 1.46× |
+| cross_entropy | fp32 | 10.1 | 13.9 | 1.38× |
 | dropout | fp16 | 18.2 | 19.1 | 1.05× |
 | dropout | bf16 | 18.5 | 18.9 | 1.02× |
 | dropout | fp32 | 34.4 | 34.5 | 1.00× |
