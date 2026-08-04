@@ -19,15 +19,14 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _transpose_kernel(x, output, TILE: ConstInt):
+def transpose_kernel(x, output, TILE: ConstInt):
     bid_m = ct.bid(0)
     bid_n = ct.bid(1)
     x_tile = ct.load(x, index=(bid_m, bid_n), shape=(TILE, TILE))
     ct.store(output, index=(bid_n, bid_m), tile=ct.transpose(x_tile))
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_transpose_kernel)
+_tuner = CutileAutotuner(transpose_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
@@ -37,7 +36,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(m, n),
+            shape_key=(m, n, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((m + cfg.tile - 1) // cfg.tile, (n + cfg.tile - 1) // cfg.tile, 1),

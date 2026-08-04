@@ -26,7 +26,6 @@ _SEARCH_SPACE = [
 ]
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(matrix_copy_kernel)
 
 
@@ -41,7 +40,7 @@ def run(A: torch.Tensor, N: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(A.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),
