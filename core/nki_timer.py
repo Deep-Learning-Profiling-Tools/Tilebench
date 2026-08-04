@@ -132,7 +132,7 @@ def _total_time_ms(summary_json_text: str) -> float:
     data = json.loads(summary_json_text)
     rows = data if isinstance(data, list) else data.get("summary", data.get("rows", [data]))
     if isinstance(rows, dict):
-        rows = [rows]     
+        rows = [rows]
     times = [float(r["total_time"]) for r in rows if isinstance(r, dict) and "total_time" in r]
     if not times:
         raise RuntimeError(f"no 'total_time' in neuron-profile summary-json: {summary_json_text[:300]}")
