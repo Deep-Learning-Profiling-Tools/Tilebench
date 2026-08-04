@@ -1,5 +1,6 @@
 import torch
+import torch.nn.functional as F
 
 
 def run(input: torch.Tensor, N: int, **kwargs):
-    return torch.where(input > 0, input, 0.01 * input)
+    return F.leaky_relu(input, negative_slope=0.01)
