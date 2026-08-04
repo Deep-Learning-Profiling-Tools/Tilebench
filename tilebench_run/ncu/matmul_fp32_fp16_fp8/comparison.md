@@ -1,59 +1,67 @@
 # NCU Comparison: matmul_fp32_fp16_fp8
 
 **Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input (`M=N=4096, K=20480`).
+
+**Operator state:** Triton uses **host-side TMA** (`TensorDescriptor` + autotune
+`pre_hook`, tutorial-09 pattern; non-persistent, grouped swizzle, TF32 for fp32,
+fp32 accumulate) — TMA parity with cuTile, whose codegen uses TMA implicitly.
+`fp8_e5m2` was dropped from the operator (torch/cuBLASLt reject e5m2×e5m2, so no
+torch-native baseline exists). torch baseline: TF32 for fp32, `torch._scaled_mm`
+(real fp8 Tensor-Core GEMM) for fp8_e4m3fn.
 
 ## Test cases (sweep-max per dtype)
 
-| dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
-|---|---|---|---|
-| fp32 | `{'M': 4096, 'N': 4096, 'K': 20480}` | `{'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 256, 'tn': 256, 'tk': 64, 'group_size_m': 8, 'occupancy': 4}` |
-| fp16 | `{'M': 4096, 'N': 4096, 'K': 20480}` | `{'BLOCK_SIZE_M': 256, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 256, 'tn': 256, 'tk': 64, 'group_size_m': 8, 'occupancy': 8}` |
-| fp8_e4m3fn | `{'M': 4096, 'N': 4096, 'K': 20480}` | `{'BLOCK_SIZE_M': 256, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 256, 'tn': 256, 'tk': 128, 'group_size_m': 8, 'occupancy': 8}` |
-| fp8_e5m2 | `{'M': 4096, 'N': 4096, 'K': 20480}` | `{'BLOCK_SIZE_M': 256, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 8, 'num_warps': 8, 'num_stages': 3}` | `{'tm': 256, 'tn': 256, 'tk': 128, 'group_size_m': 8, 'occupancy': 4}` |
+| dtype | autotune cfg (Triton) | autotune cfg (cuTile) |
+|---|---|---|
+| fp32 | `{BM:128, BN:128, BK:32, GS:8, warps:4, stages:3}` | `{tm:256, tn:256, tk:64, gs:8, occupancy:4}` |
+| fp16 | `{BM:256, BN:256, BK:64, GS:8, warps:4, stages:3}` | `{tm:256, tn:256, tk:64, gs:8, occupancy:8}` |
+| fp8_e4m3fn | `{BM:256, BN:256, BK:128, GS:8, warps:4, stages:3}` | `{tm:256, tn:256, tk:128, gs:8, occupancy:8}` |
 
 ## Headline (per dtype, both backends)
 
-| dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 6010.00 us | 92.35 % | 4.93 % | 93.62 % | 13.57 % | 11.61 % | 378.60 Gbyte/s | 256 | 170 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
-| fp32 | cutile | 872.03 us | 41.19 % | 17.56 % | 72.33 % | 32.38 % | 80.71 % | 1.35 Tbyte/s | 256 | 255 register/thread | 229.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| fp16 | triton | 561.76 us | 31.23 % | 13.66 % | 56.50 % | 25.81 % | 66.05 % | 1.05 Tbyte/s | 256 | 199 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
-| fp16 | cutile | 467.17 us | 40.93 % | 16.42 % | 72.88 % | 24.57 % | 79.92 % | 1.26 Tbyte/s | 256 | 255 register/thread | 229.60 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| fp8_e4m3fn | triton | 276.58 us | 30.54 % | 13.87 % | 54.87 % | 21.32 % | 64.82 % | 1.06 Tbyte/s | 256 | 192 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
-| fp8_e4m3fn | cutile | 223.20 us | 40.25 % | 17.21 % | 71.88 % | 26.71 % | 78.67 % | 1.32 Tbyte/s | 256 | 255 register/thread | 229.54 Kbyte/block | 0 byte/block | 1 block / 1 block |
-| fp8_e5m2 | triton | 283.90 us | 30.32 % | 13.55 % | 54.90 % | 22.24 % | 64.35 % | 1.04 Tbyte/s | 256 | 192 register/thread | 0 byte/block | 196.62 Kbyte/block | 1 block / 1 block |
-| fp8_e5m2 | cutile | 234.08 us | 40.05 % | 16.38 % | 71.85 % | 25.92 % | 78.26 % | 1.26 Tbyte/s | 256 | 255 register/thread | 229.54 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| dtype | Backend | Duration | Tensor pipe % | Occupancy % | vs pre-TMA Triton |
+|---|---|---|---|---|---|
+| fp32 | triton | 1.33 ms | 60.0 | 12.0 | was 6.13 ms / 10.2% tensor |
+| fp32 | cutile | 870 µs | 96.6 | 10.9 | |
+| fp16 | triton | 518 µs | 85.7 | 6.3 | was 672 µs / 63.5% |
+| fp16 | cutile | 467 µs | 97.2 | 10.9 | |
+| fp8_e4m3fn | triton | 257 µs | 82.1 | 6.2 | was 576 µs / 34.0% |
+| fp8_e4m3fn | cutile | 221 µs | 95.6 | 10.9 | |
 
-## Key findings (auto-derived)
+## Key findings
 
-- **fp32**: cuTile is **6.89× faster** (872.0 µs vs 6010.0 µs).
-- **fp16**: cuTile is **1.20× faster** (467.2 µs vs 561.8 µs).
-- **fp8_e4m3fn**: cuTile is **1.24× faster** (223.2 µs vs 276.6 µs).
-- **fp8_e5m2**: cuTile is **1.21× faster** (234.1 µs vs 283.9 µs).
+- **cuTile/Triton gap is now 1.1–1.5×** (fp32 1.53×, fp16 1.11×, fp8 1.17×) —
+  down from 6.25× / 1.30× / 2.49× before the Triton TMA rewrite.
+- **The fp32 anomaly is resolved.** The old pointer+smem-pipelined kernel
+  collapsed at fp32: 4-byte tiles → 98 KB smem + 123 regs → 25% occupancy →
+  0.15 eligible warps/scheduler → tensor pipe 90% idle (10.2%). With TMA the
+  hardware copy engine hides latency **without occupancy**: occupancy actually
+  *dropped* to 6–12% while the tensor pipe rose to 60–86% — the same design
+  point cuTile has always operated at (≈11% occupancy, 95–97% tensor).
+- Both backends issue identical TF32/HMMA UTCMMA work (tcgen05); the remaining
+  gap is codegen quality: cuTile keeps the tensor pipe ~97% fed, Triton 60–86%.
+  fp32 is the widest because Triton's smem budget only admits a 128×128×32 tile
+  (4-byte elements), while cuTile runs 256×256×64.
 
-## NCU's own bottleneck verdict
+## Implementation notes forced by TMA (see impl_triton.py)
 
-- **fp16 / cutile** — Compute is more heavily utilized than Memory
-- **fp16 / triton** — Compute is more heavily utilized than Memory
-- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
-- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **fp8_e4m3fn / cutile** — Compute is more heavily utilized than Memory
-- **fp8_e4m3fn / triton** — Compute is more heavily utilized than Memory
-- **fp8_e5m2 / cutile** — Compute is more heavily utilized than Memory
-- **fp8_e5m2 / triton** — Compute is more heavily utilized than Memory
+- **B is consumed transposed (N, K)** and cached per input tensor: a
+  `[BLOCK_K, BLOCK_N]` box on row-major (K, N) B has a 256–512 B inner dim,
+  past the 128 B TMA-swizzle fast path, and regressed fp16/fp8.
+- **`DT_ID` constexpr in the autotune key**: `TensorDescriptor` args are not
+  `torch.Tensor`s, so the autotuner stops folding dtypes into its cache key —
+  without it, every dtype inherited the first dtype's winner.
+- **fp32-viable configs added** (`128×128`, `bk=64/ns2`, `bk=32/ns3-4`): with
+  TMA store staging, every original ns=3 config exceeds B200's 227 KB smem at
+  4-byte elements and the autotuner crashed on OutOfResources.
 
 ## Reports
 
-- `cutile_fp16.ncu-rep`
-- `cutile_fp32.ncu-rep`
-- `cutile_fp8_e4m3fn.ncu-rep`
-- `cutile_fp8_e5m2.ncu-rep`
-- `triton_fp16.ncu-rep`
-- `triton_fp32.ncu-rep`
-- `triton_fp8_e4m3fn.ncu-rep`
-- `triton_fp8_e5m2.ncu-rep`
+- `triton_fp32.ncu-rep`, `triton_fp16.ncu-rep`, `triton_fp8_e4m3fn.ncu-rep`
+- `cutile_fp32.ncu-rep`, `cutile_fp16.ncu-rep`, `cutile_fp8_e4m3fn.ncu-rep`
 
 ## Notes
 
-Bottleneck verdicts above come from NCU's own SOLBottleneck rule (headline `OPT` recommendation). For per-section detail, open the .ncu-rep in `ncu-ui` or run `ncu --import <file> --page details | less`.
+Open a `.ncu-rep` in `ncu-ui` or `ncu --import <file> --page details` for
+per-section detail.

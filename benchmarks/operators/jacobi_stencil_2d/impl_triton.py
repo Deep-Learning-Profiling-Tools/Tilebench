@@ -10,7 +10,7 @@ _DEFAULT_CONFIG = {
 
 
 @triton.jit
-def _jacobi_stencil_kernel(
+def jacobi_stencil_kernel(
     input,
     output,
     rows,
@@ -65,7 +65,7 @@ _jacobi_stencil_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["rows", "cols"],
-)(_jacobi_stencil_kernel)
+)(jacobi_stencil_kernel)
 
 
 def run(input: torch.Tensor, rows: int, cols: int,
@@ -88,7 +88,7 @@ def run(input: torch.Tensor, rows: int, cols: int,
             triton.cdiv(rows, cfg["BLOCK_SIZE_R"]),
             triton.cdiv(cols, cfg["BLOCK_SIZE_C"]),
         )
-        _jacobi_stencil_kernel[grid](
+        jacobi_stencil_kernel[grid](
             input, output, rows, cols,
             input.stride(0), input.stride(1),
             output.stride(0), output.stride(1),
