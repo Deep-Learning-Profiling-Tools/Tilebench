@@ -36,7 +36,7 @@ def dropout_kernel(x, x_keep, output, dtype, p: float, BLOCK_SIZE: int = 1024, t
         T.copy(x[start : start + BLOCK_SIZE], x_reg)
         T.copy(x_keep[start : start + BLOCK_SIZE], x_keep_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            output_reg[local_idx] = T.if_then_else(
+            output_reg[local_idx] = T.Select(
                 x_keep_reg[local_idx] != zero,
                 x_reg[local_idx] * scale_value,
                 zero,
