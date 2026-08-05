@@ -23,12 +23,15 @@ def add_kernel(x, y, output, dtype, BLOCK_SIZE: int =  1024, threads: int = 128 
     output: T.Tensor((n_elements, ), dtype)
 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
+        start = pid * BLOCK_SIZE
+        x_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        y_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        out_reg = T.alloc_fragment((BLOCK_SIZE, ), dtype)
+        T.copy(x[start], x_reg)
+        T.copy(y[start], y_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[idx] = x[idx] + y[idx]
-
-
+            out_reg[local_idx] = x_reg[local_idx] + y_reg[local_idx]
+        T.copy(out_reg, output[start])
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     dtype = str(x.dtype).removeprefix("torch.")
