@@ -27,13 +27,21 @@ def dropout_kernel(x, x_keep, output, dtype, p: float, BLOCK_SIZE: int = 1024, t
     # compute division before parallel as less expensive
     scale = 1.0 / (1.0 - p)
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads=threads) as pid:
+        start = pid * BLOCK_SIZE
+        x_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
+        x_keep_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
+        output_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
+        zero = T.cast(0, dtype)
+        scale_value = T.cast(scale, dtype)
+        T.copy(x[start : start + BLOCK_SIZE], x_reg)
+        T.copy(x_keep[start : start + BLOCK_SIZE], x_keep_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                if x_keep[idx] != 0:
-                    output[idx] = x[idx] * scale
-                else:
-                    output[idx] = 0
+            output_reg[local_idx] = T.if_then_else(
+                x_keep_reg[local_idx] != zero,
+                x_reg[local_idx] * scale_value,
+                zero,
+            )
+        T.copy(output_reg, output[start : start + BLOCK_SIZE])
 
 
 def run(x: torch.Tensor, x_keep: torch.Tensor, p: float, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
