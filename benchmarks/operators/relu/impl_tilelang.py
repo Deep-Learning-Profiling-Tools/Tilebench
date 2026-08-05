@@ -27,11 +27,10 @@ def relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
         start = pid * BLOCK_SIZE 
         x_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
         output_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
-        zero = T.cast(0, dtype)
         T.copy(x[start : start + BLOCK_SIZE], x_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
             value = x_reg[local_idx]
-            output_reg[local_idx] = T.Select(value >= zero, value, zero)
+            output_reg[local_idx] = T.Select(value >= 0, value, 0)
         T.copy(output_reg, output[start : start + BLOCK_SIZE])
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
