@@ -24,11 +24,15 @@ def relu_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     output: T.Tensor((n_elements, ), dtype)
 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
+        start = pid * BLOCK_SIZE 
+        x_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
+        output_reg = T.alloc_fragment((BLOCK_SIZE,), dtype)
+        zero = T.cast(0, dtype)
+        T.copy(x[start : start + BLOCK_SIZE], x_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                if x[idx] < 0: output[idx] = 0
-                else: output[idx] = x[idx]
+            value = x_reg[local_idx]
+            output_reg[local_idx] = T.Select(value >= zero, value, zero)
+        T.copy(output_reg, output[start : start + BLOCK_SIZE])
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     dtype = str(x.dtype).removeprefix("torch.")
