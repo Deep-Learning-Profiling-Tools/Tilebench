@@ -33,15 +33,16 @@ def l2_norm_fwd_kernel(X, Y, dtype, eps,
 
     # need to use BLOCK_SIZE
     with T.Kernel(M, threads=threads) as row:
-        X_local = T.alloc_fragment((1, N), accum_dtype)
-        X_sq_local = T.alloc_fragment((1, N), accum_dtype)
+        X_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
+        X_sq_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
         row_sum = T.alloc_fragment((1,), accum_dtype)
         inv_norm = T.alloc_fragment((1,), accum_dtype)
         #could also use T.copy here instead of parallel, but then 
         #we will need to use T.Parallel anyway for the squaured calc
-        for i, j in T.Parallel(1, N):
-            X_local[i, j] = T.Cast(accum_dtype, X[row, j])
-            X_sq_local[i, j] = X_local[i, j] * X_local[i, j]
+        for off in T.serial(0, N, BLOCK_N):
+            for i, j in T.Parallel(1, BLOCK_N):
+                X_local[i, j] = T.Cast(accum_dtype, X[row, off + j])
+                X_sq_local[i, j] = X_local[i, j] * X_local[i, j]
             
         T.reduce_sum(X_sq_local, row_sum, dim=1)
         inv_norm[0] = T.rsqrt(row_sum[0] + T.Cast(accum_dtype, eps))
