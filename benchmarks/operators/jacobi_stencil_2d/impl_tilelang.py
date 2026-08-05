@@ -39,29 +39,21 @@ def jacobi_stencil_kernel(input, output, dtype,
         start_r = pid_r * BLOCK_SIZE_R 
         start_c = pid_c * BLOCK_SIZE_C
         T.copy(input[start_r, start_c], local_tile_out)
-        if pid_r == 0 or pid_c == 0 or start_r + BLOCK_SIZE_R >= M or start_c + BLOCK_SIZE_C >= N:
-            for i, j in T.Parallel(BLOCK_SIZE_R, BLOCK_SIZE_C):
-                gb_r = i + start_r 
-                gb_c = j + start_c
-                if gb_r >= 1 and gb_c >= 1 and gb_r < M - 1 and gb_c < N - 1:
-                    local_tile_out[i, j] = 0.25 * (
-                        input[gb_r + 1, gb_c] +
-                        input[gb_r - 1, gb_c] +
-                        input[gb_r, gb_c + 1] +
-                        input[gb_r, gb_c - 1]
-                    )
-        else:
-            T.copy(input[start_r - 1, start_c], top_tile)
-            T.copy(input[start_r + 1, start_c], bottom_tile)
-            T.copy(input[start_r, start_c - 1], left_tile)
-            T.copy(input[start_r, start_c + 1], right_tile)
-            for i, j in T.Parallel(BLOCK_SIZE_R, BLOCK_SIZE_C):
-                local_tile_out[i, j] = 0.25 * (
-                    bottom_tile[i, j] +
-                    top_tile[i, j] + 
-                    right_tile[i, j] + 
-                    left_tile[i, j]
-                )
+        T.copy(input[start_r - 1, start_c], top_tile)
+        T.copy(input[start_r + 1, start_c], bottom_tile)
+        T.copy(input[start_r, start_c - 1], left_tile)
+        T.copy(input[start_r, start_c + 1], right_tile)
+        for i, j in T.Parallel(BLOCK_SIZE_R, BLOCK_SIZE_C):
+            gb_r = i + start_r 
+            gb_c = j + start_c
+            is_inner = gb_r >= 1 and gb_c >= 1 and gb_r < M - 1 and gb_c < N - 1
+            avg = T.cast(0.25, dtype) * (
+                bottom_tile[i, j] +
+                top_tile[i, j] +
+                right_tile[i, j] +
+                left_tile[i, j]
+            )
+            local_tile_out[i, j] = T.Select(is_inner, avg, local_tile_out[i, j])
         T.copy(local_tile_out, output[start_r, start_c])
         
 def run(input: torch.Tensor, rows: int, cols: int,

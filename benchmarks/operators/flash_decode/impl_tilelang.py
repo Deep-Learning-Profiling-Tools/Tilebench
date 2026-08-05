@@ -12,7 +12,7 @@ _last_autotune_config: dict = {}
 def flash_decode_stage2_configs():
     return [
         dict(threads=nt)
-        for nt in [64, 128, 256]
+        for nt in [32, 64, 128]
     ]
 
 

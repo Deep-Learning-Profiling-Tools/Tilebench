@@ -21,9 +21,10 @@ def streamk_configs():
     # num_stages=3 is racy in the fp32 first-wave split-tile path on B200.
     # The 128x256 TMEM fragment is not mapped correctly across two warpgroups.
     return [
-        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=32, GROUP_M=8, threads=nt, num_stages=4)
-        for bm in [128]
+        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=bk, GROUP_M=8, threads=nt, num_stages=4)
+        for bm in [64, 128]
         for bn in [128, 256]
+        for bk in [32, 64]
         for nt in [128, 256]
         if not (bn == 256 and nt == 256)
     ]

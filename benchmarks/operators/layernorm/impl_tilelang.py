@@ -32,36 +32,43 @@ def layernorm_kernel(X, weight, bias, Y, dtype, eps,
     Y: T.Tensor((M, N), dtype)
 
     accum_dtype = "float"
-    # need to change this so it uses BLOCK_N
     with T.Kernel(M, threads=threads) as row:
-        X_local = T.alloc_fragment((1, N), accum_dtype)
-        X_sq_local = T.alloc_fragment((1, N), accum_dtype)
+        sum_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
+        sumsq_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
 
         sum_row = T.alloc_fragment((1,), accum_dtype)
         sumsq_row = T.alloc_fragment((1,), accum_dtype)
         mean_row = T.alloc_fragment((1,), accum_dtype)
         rstd_row = T.alloc_fragment((1,), accum_dtype)
 
-        # could use T.copy as well
-        for i, j in T.Parallel(1, N):
-            X_local[i, j] = T.Cast(accum_dtype, X[row, j])
-            X_sq_local[i, j] = X_local[i, j] * X_local[i, j]
-        T.reduce_sum(X_local, sum_row, dim=1)
-        T.reduce_sum(X_sq_local, sumsq_row, dim=1)
+        T.fill(sum_local, 0.0)
+        T.fill(sumsq_local, 0.0)
 
-        inv_N = T.float32(1.0) / T.Cast(accum_dtype, N)
-        mean_row[0] = sum_row[0] * inv_N
-        variance = sumsq_row[0] * inv_N - mean_row[0] * mean_row[0]
+        for off in T.serial(0, N, BLOCK_N):
+            for i, j in T.Parallel(1, BLOCK_N):
+                col = off + j
+                x_val = T.Cast(accum_dtype, X[row, col])
+                sum_local[i, j] += x_val
+                sumsq_local[i, j] += x_val * x_val
+
+        T.reduce_sum(sum_local, sum_row, dim=1)
+        T.reduce_sum(sumsq_local, sumsq_row, dim=1)
+
+        mean_row[0] = sum_row[0] / N
+        variance = sumsq_row[0] / N - mean_row[0] * mean_row[0]
         rstd_row[0] = T.rsqrt(variance + T.Cast(accum_dtype, eps))
 
-        for i, j in T.Parallel(1, N):
-            norm = (X_local[i, j] - mean_row[i]) * rstd_row[i]
-            Y[row, j] = T.Cast(
-                dtype,
-                norm
-                * T.Cast(accum_dtype, weight[j])
-                + T.Cast(accum_dtype, bias[j]),
-            )
+        for off in T.serial(0, N, BLOCK_N):
+            for i, j in T.Parallel(1, BLOCK_N):
+                col = off + j
+                x_val = T.Cast(accum_dtype, X[row, col])
+                norm = (x_val - mean_row[i]) * rstd_row[i]
+                Y[row, col] = T.Cast(
+                    dtype,
+                    norm
+                    * T.Cast(accum_dtype, weight[col])
+                    + T.Cast(accum_dtype, bias[col]),
+                )
 
 
 def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,

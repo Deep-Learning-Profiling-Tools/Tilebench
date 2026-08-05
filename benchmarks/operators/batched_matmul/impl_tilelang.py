@@ -16,14 +16,17 @@ _last_autotune_config: dict = {}
 
 
 def bmm_configs():
-    block_m = [32, 128]
+    block_m = [32, 64, 128]
     block_n = [32, 64, 128]
     block_k = [32, 64]
     group_size_m = [1, 8]
     threads = [128, 256]
     num_stages = [2, 3, 4]
 
-    def runtime_timeout_prone(bm, bn, bk):
+    def fits_triton_smem_budget(bm, bn, bk, ns):
+        return (bm * bk + bn * bk) * 4 * ns + bm * bn * 4 <= 220_000
+
+    def runtime_timeout_prone(bm, bn, bk, gs, nt, ns):
         # Leave compile-time failures to TileLang's autotuner. Only prune
         # shapes observed to benchmark-timeout / poison the CUDA context at
         # BATCH=32, M=N=K=352.
@@ -32,6 +35,8 @@ def bmm_configs():
         if bm == 32 and bk == 64 and bn in (64, 128):
             return True
         if bm == 128 and bn in (32, 64):
+            return True
+        if bm == 64 and bn == 64:
             return True
         return False
 
@@ -50,13 +55,14 @@ def bmm_configs():
         for gs in group_size_m
         for nt in threads
         for ns in num_stages
-        if not runtime_timeout_prone(bm, bn, bk)
+        if fits_triton_smem_budget(bm, bn, bk, ns)
+        if not runtime_timeout_prone(bm, bn, bk, gs, nt, ns)
     ]
 
 
 @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit(
-    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: False},
 )
 def bmm_kernel(
     A,

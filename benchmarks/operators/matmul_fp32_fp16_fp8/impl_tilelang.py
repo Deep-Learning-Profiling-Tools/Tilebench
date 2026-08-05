@@ -44,7 +44,7 @@ def matmul_configs():
 
 @tilelang.autotune(configs=matmul_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit(
-    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: False},
 )
 
 def matmul_kernel(
