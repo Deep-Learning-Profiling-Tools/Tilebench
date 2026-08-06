@@ -33,11 +33,40 @@ Why the scatter carries a rolling window instead of writing bare runs:
     value for **every** position it touches. Overlapping writes then agree, and their
     order stops mattering.
 
-Known limitation: verified bit-exact for N up to ~3e6 (and at 5e6/7e6/8e6), but N=4e6
-and N=6e6 still mismatch. Above ~3e6 the partition-0 staging/offset rows (10*BLOCK +
-3*RADIX*NBLK int32) exceed the 192 KB per-partition SBUF budget, so the counts/offsets
-rows and the Hillis/Steele scan need to move to a tiled, two-level form before large N
-is trustworthy.
+Why the block size is capped by the SBUF budget, not by DMA efficiency:
+
+    An earlier note here blamed the large-N mismatches (N=4e6, N=6e6) on the phase-2
+    scan state growing with M = RADIX * NBLK. That was wrong -- phase 2 has been
+    two-level since, and dumping ``hist`` and ``base`` at N=4e6 shows every count and
+    every global offset exact. What actually overflows is the *fixed* set of S-wide
+    SBUF rows phase 3 keeps live (see ``PHASE3_ROWS`` below): at S=4096 that set is
+    ~240 KB per partition against a 192 KB budget, of which the backend also reserves
+    16 KB for dynamic-DMA (DGE) scratch -- and the staging copy and the scatter are
+    both dynamic-offset transfers, so that scratch is not optional.
+
+    Overflowing the budget is **not** a compile error. neuronx-cc accepts the kernel
+    (it still compiles at S=16384, i.e. ~960 KB of rows) and silently spills; the
+    dynamic-offset copies into the staging row then work against a stale copy of it.
+    The symptom is a staging row that turns to zero part way through, which makes a
+    whole tile's runs be written short and leaves zero-filled gaps in the output --
+    deterministic, data-independent, and it moves to a different tile whenever the
+    schedule changes. Measured: S=4096 corrupts one tile at N=4e6 (7148 elements) and
+    is clean at N<=3e6, S=16384 corrupts 89% of the output even at N=1e6, S=2048 is
+    clean at N=4e6/6e6. Capping ``BLOCK`` so the rows fit is therefore necessary; it
+    costs 2x the phase-3 instruction count but nothing in asymptotic work.
+
+    Capping ``BLOCK`` is not *sufficient*, though: it bounds the S-wide rows but says
+    nothing about phase 2, whose (128, C) scan buffers (``C = RADIX*NBLK/128``) grow
+    with N regardless of S. Those stayed small enough to ignore through N=8e6, the
+    largest size tested when the note above was written, but the same silent-spill
+    failure reappears from that side at N=2e7 (isolated to a single ``radix_pass`` call,
+    not a cross-pass effect -- confirmed by feeding it fresh random data directly rather
+    than another pass's output): 2 whole 8-block tiles come back all-zero, same
+    schedule-dependent signature as the S-side failure above. Phase 2 is now a blocked
+    scan over fixed ``CHUNK_TILE``-wide sub-tiles (two passes over the histogram: one to
+    accumulate each partition's total, one to re-derive the local prefix once that total
+    feeds the outer 128-way scan) instead of one shot over the full ``C``-wide chunk, so
+    its SBUF footprint no longer depends on N either.
 
 Semantics: keys are sorted as *unsigned* 32-bit values, which matches the reference for
 this operator (its generator emits non-negative int32, where signed and unsigned order
@@ -60,8 +89,36 @@ except ImportError:
 RADIX_BITS = 2
 RADIX = 1 << RADIX_BITS
 KEY_BITS = 32
-BLOCK = 4096          # elements per block (one SBUF partition row)
 MIN_BLOCK = 256
+
+# ---- block size cap ---------------------------------------------------------------
+# ``radix_pass`` keeps this many S-wide int32 rows live in SBUF at the same time:
+#   phase 1 / shared : data (S+1), marks (S+1), digit, indicator, hist_data,
+#                      hist_digit, gathered_0, gathered_1                    ->  8
+#   phase 3          : run_0, run_1                                          ->  2
+#                      stage_0..stage_3, 2*S wide each                       ->  8
+# An SBUF tile is charged against every partition's byte budget even when it is only
+# one partition tall (the free-dimension offset is the same on all partitions), so the
+# staging rows cost just as much as the (128, S) tiles and the cap is on S alone.
+SBUF_PARTITION_BYTES = 192 * 1024   # trn2: 24 MB SBUF / 128 partitions
+DGE_SCRATCH_BYTES = 16 * 1024       # backend's --dynamic-dma-scratch-size-per-partition
+PHASE3_ROWS = 18
+# Landing exactly at the byte budget isn't safe: the overflow is a silent spill, not a
+# compile error, and which tile it corrupts depends on how the scheduler happens to
+# interleave that run's instructions -- not a clean function of bytes-over-budget.
+# Measured (S=2048, sitting at ~85% of the byte budget by the naive row count):
+# CHUNK_TILE=128 corrupted 16 runs, CHUNK_TILE=32 (strictly *less* SBUF than the 128
+# case by the same row count) corrupted a *different* 16 runs across two digits instead
+# of one -- shrinking the byte count didn't shrink the corruption, because the real
+# constraint is schedule interleaving, which a byte-counting model can't see. SAFETY
+# leaves real headroom instead of chasing that noise with finer-grained row accounting.
+SAFETY = 2
+_MAX_BLOCK = (SBUF_PARTITION_BYTES - DGE_SCRATCH_BYTES) // (PHASE3_ROWS * 4 * SAFETY)
+BLOCK = 1 << (_MAX_BLOCK.bit_length() - 1)   # 1024 elements per block (one SBUF row)
+
+# Phase 2's blocked scan (see ``radix_pass``) keeps every buffer this many columns wide
+# regardless of N, so it never contends with the ``BLOCK`` budget above.
+CHUNK_TILE = 128
 
 
 def _kernel_assert(cond, msg):
@@ -154,39 +211,51 @@ if nki is not None:
                               src=tile_counts[0:PMAX, d:d + 1])
 
         # ---- phase 2: exclusive scan of the digit-major histogram ------------------
-        # Two-level so the scan state never depends on M: the M counts are viewed as
-        # (128, C) with one contiguous chunk per partition, each partition scans its own
-        # chunk, and a tiny 128-wide scan of the chunk totals supplies the per-partition
-        # base. A flat (1, M) scan would put 3*M int32 on partition 0 alone, which blows
-        # the 192 KB per-partition SBUF budget once N passes a few million.
+        # Three-level so *neither* the inner-scan state nor the outer-scan state depends
+        # on M: the M counts are viewed as (128, C) with one contiguous chunk per
+        # partition, but C itself is walked CHUNK_TILE columns at a time (a blocked scan,
+        # the same "fixed buffer width, loop count grows with N" shape phase 1's
+        # histogram loop already uses). A flat (1, M) scan would put 3*M int32 on
+        # partition 0 alone, and even the once-two-level version above -- (PMAX, C) inner
+        # buffers -- still put 4*C int32 on every partition; both blow the 192 KB
+        # per-partition SBUF budget once N is large enough (measured: correct through
+        # N=8e6, silently drops whole runs by N=2e7 -- same "accepts and spills" failure
+        # phase 3's ``PHASE3_ROWS`` cap exists to avoid, just triggered from the M side
+        # instead of the S side). Blocking the inner scan by CHUNK_TILE keeps every
+        # phase-2 buffer's width fixed regardless of N.
         #
         # int32 Hillis/Steele throughout: tensor_tensor takes the integer ALU path and
         # stays exact, whereas tensor_tensor_scan accumulates in fp32 and drops low bits
         # once the running total passes 2**24 (N > ~16.7M).
         chunk = M // PMAX
-        chunk_counts = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
-        nisa.dma_copy(dst=chunk_counts, src=hist.ap(pattern=[[chunk, PMAX], [1, chunk]]))
+        n_ctiles = _div_ceil(chunk, CHUNK_TILE)
 
-        scan_a = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
-        scan_b = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
-        nisa.tensor_copy(dst=scan_a, src=chunk_counts)
-        cur_scan, nxt_scan = scan_a, scan_b
-        step_size = 1
-        while step_size < chunk:
-            nisa.tensor_tensor(dst=nxt_scan[0:PMAX, step_size:chunk],
-                               data1=cur_scan[0:PMAX, step_size:chunk],
-                               data2=cur_scan[0:PMAX, 0:chunk - step_size], op=nl.add)
-            nisa.tensor_copy(dst=nxt_scan[0:PMAX, 0:step_size],
-                             src=cur_scan[0:PMAX, 0:step_size])
-            cur_scan, nxt_scan = nxt_scan, cur_scan
-            step_size *= 2
+        sub_counts = nl.ndarray((PMAX, CHUNK_TILE), dtype=nl.int32, buffer=nl.sbuf)
+        sub_a = nl.ndarray((PMAX, CHUNK_TILE), dtype=nl.int32, buffer=nl.sbuf)
+        sub_b = nl.ndarray((PMAX, CHUNK_TILE), dtype=nl.int32, buffer=nl.sbuf)
+        sub_excl = nl.ndarray((PMAX, CHUNK_TILE), dtype=nl.int32, buffer=nl.sbuf)
+        sub_sum = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.sbuf)
+        carry = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.memset(dst=carry, value=0)
 
-        # Outer level: exclusive scan of the 128 chunk totals. The totals arrive as a
-        # (128, 1) column and have to come back as one, so both transposes go through
-        # HBM -- nc_transpose runs on the fp32 PE array and would round totals > 2**24.
+        # Pass A: sum every sub-tile into `carry`, so it ends up holding each
+        # partition's full chunk total (only the sum is needed here -- the per-element
+        # prefix is recomputed from scratch in pass B once the outer base is known).
+        for ct in nl.sequential_range(n_ctiles):
+            w = min(CHUNK_TILE, chunk - ct * CHUNK_TILE)
+            nisa.dma_copy(dst=sub_counts[0:PMAX, 0:w],
+                          src=hist.ap(pattern=[[chunk, PMAX], [1, w]],
+                                      offset=ct * CHUNK_TILE))
+            nisa.tensor_reduce(dst=sub_sum, data=sub_counts[0:PMAX, 0:w],
+                               op=nl.add, axis=(1,))
+            nisa.tensor_tensor(dst=carry, data1=carry, data2=sub_sum, op=nl.add)
+
+        # Outer level: exclusive scan of the 128 per-partition totals. The totals arrive
+        # as a (128, 1) column and have to come back as one, so both transposes go
+        # through HBM -- nc_transpose runs on the fp32 PE array and would round totals
+        # > 2**24.
         totals_hbm = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.hbm)
-        nisa.dma_copy(dst=totals_hbm.ap(pattern=[[1, PMAX]]),
-                      src=cur_scan[0:PMAX, chunk - 1:chunk])
+        nisa.dma_copy(dst=totals_hbm.ap(pattern=[[1, PMAX]]), src=carry)
         totals = nl.ndarray((1, PMAX), dtype=nl.int32, buffer=nl.sbuf)
         nisa.dma_copy(dst=totals, src=totals_hbm.ap(pattern=[[PMAX, 1], [1, PMAX]]))
         outer_a = nl.ndarray((1, PMAX), dtype=nl.int32, buffer=nl.sbuf)
@@ -212,17 +281,44 @@ if nki is not None:
         chunk_base = nl.ndarray((PMAX, 1), dtype=nl.int32, buffer=nl.sbuf)
         nisa.dma_copy(dst=chunk_base, src=base_hbm.ap(pattern=[[1, PMAX]]))
 
-        # exclusive[p][c] = inclusive[p][c] - counts[p][c] + chunk_base[p]
-        chunk_excl = nl.ndarray((PMAX, chunk), dtype=nl.int32, buffer=nl.sbuf)
-        nisa.tensor_tensor(dst=chunk_excl, data1=cur_scan, data2=chunk_counts,
-                           op=nl.subtract)
-        # tensor_scalar rejects an int32 vector operand, so the per-partition base is
-        # broadcast across the chunk with a zero-stride free dimension instead.
-        nisa.tensor_tensor(dst=chunk_excl, data1=chunk_excl,
-                           data2=chunk_base.ap(pattern=[[1, PMAX], [0, chunk]]),
-                           op=nl.add)
         base = nl.ndarray((M, 1), dtype=nl.int32, buffer=nl.hbm)
-        nisa.dma_copy(dst=base.ap(pattern=[[chunk, PMAX], [1, chunk]]), src=chunk_excl)
+
+        # Pass B: re-read each sub-tile, scan it locally, and offset by `carry` (the
+        # running total of every earlier sub-tile in this partition) plus `chunk_base`
+        # (the outer, cross-partition base) to get the true chunk-wide exclusive prefix.
+        nisa.memset(dst=carry, value=0)
+        for ct in nl.sequential_range(n_ctiles):
+            w = min(CHUNK_TILE, chunk - ct * CHUNK_TILE)
+            nisa.dma_copy(dst=sub_counts[0:PMAX, 0:w],
+                          src=hist.ap(pattern=[[chunk, PMAX], [1, w]],
+                                      offset=ct * CHUNK_TILE))
+            nisa.tensor_copy(dst=sub_a[0:PMAX, 0:w], src=sub_counts[0:PMAX, 0:w])
+            cur_scan, nxt_scan = sub_a, sub_b
+            step_size = 1
+            while step_size < w:
+                nisa.tensor_tensor(dst=nxt_scan[0:PMAX, step_size:w],
+                                   data1=cur_scan[0:PMAX, step_size:w],
+                                   data2=cur_scan[0:PMAX, 0:w - step_size], op=nl.add)
+                nisa.tensor_copy(dst=nxt_scan[0:PMAX, 0:step_size],
+                                 src=cur_scan[0:PMAX, 0:step_size])
+                cur_scan, nxt_scan = nxt_scan, cur_scan
+                step_size *= 2
+
+            # exclusive[p][i] = inclusive[p][i] - counts[p][i] + carry[p] + chunk_base[p]
+            nisa.tensor_tensor(dst=sub_excl[0:PMAX, 0:w], data1=cur_scan[0:PMAX, 0:w],
+                               data2=sub_counts[0:PMAX, 0:w], op=nl.subtract)
+            # tensor_scalar rejects an int32 vector operand, so the per-partition base
+            # is broadcast across the sub-tile with a zero-stride free dimension instead.
+            nisa.tensor_tensor(dst=sub_excl[0:PMAX, 0:w], data1=sub_excl[0:PMAX, 0:w],
+                               data2=carry.ap(pattern=[[1, PMAX], [0, w]]), op=nl.add)
+            nisa.tensor_tensor(dst=sub_excl[0:PMAX, 0:w], data1=sub_excl[0:PMAX, 0:w],
+                               data2=chunk_base.ap(pattern=[[1, PMAX], [0, w]]), op=nl.add)
+            nisa.dma_copy(dst=base.ap(pattern=[[chunk, PMAX], [1, w]],
+                                      offset=ct * CHUNK_TILE),
+                          src=sub_excl[0:PMAX, 0:w])
+
+            nisa.tensor_tensor(dst=carry, data1=carry, data2=cur_scan[0:PMAX, w - 1:w],
+                               op=nl.add)
 
         # ---- phase 3: stable partition + scatter -----------------------------------
         # The output stream is O = concat_{d, b} run(d, b) and offsets[d][b] is where

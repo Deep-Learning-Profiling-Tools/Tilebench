@@ -40,12 +40,12 @@ if nki is not None:
             w1 = nl.divide(e1st, denom)
 
             w_tile = nl.ndarray((PMAX, 2), dtype=logits.dtype, buffer=nl.sbuf)
-            w_tile[:, 0:1] = nl.add(w0, 0.0, dtype=logits.dtype)
-            w_tile[:, 1:2] = nl.add(w1, 0.0, dtype=logits.dtype)
+            w_tile[:, 0:1] = nl.add(w1, 0.0, dtype=logits.dtype)
+            w_tile[:, 1:2] = nl.add(w0, 0.0, dtype=logits.dtype)
 
             idx_tile = nl.ndarray((PMAX, 2), dtype=nl.int32, buffer=nl.sbuf)
-            idx_tile[:, 0:1] = idx2
-            idx_tile[:, 1:2] = idx1
+            idx_tile[:, 0:1] = idx1
+            idx_tile[:, 1:2] = idx2
 
             out_free = nl.arange(2)[None, :]
             nl.store(hbm_weights[offset + partition_index, out_free], value=w_tile, mask=mask_p)

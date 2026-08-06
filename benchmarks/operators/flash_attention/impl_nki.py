@@ -1,120 +1,323 @@
-"""NKI flash attention (causal), tiled over 128x128 blocks, two-pass softmax.
+"""NKI flash attention (causal), single-pass online softmax, dynamic_range over K/V.
 
-head_dim == 128 (config default) exactly matches PMAX, so QK^T and P@V are
-each a single-K-tile nc_matmul per (query-block, key-block) pair; Q/K need
-an nc_transpose per block to get head_dim onto partitions for QK^T's
-contraction (matmul_fp32_fp16_fp8's A-transpose pattern), V doesn't (its
-key-position rows are already on partitions, matching P@V's contraction).
+Reference semantics (see ``impl_torch.py``): per ``(batch, head)``
 
-This does NOT use the classic single-pass online-softmax recurrence
-(rescaling a running accumulator by exp(old_max - new_max) as each
-key-block's max is discovered) -- that formulation, even using the same
-primitives that work everywhere else in this file, produced large errors
-whenever a query block spanned more than one key-block (confirmed via
-temp/check_flash4.py: exact for a single key-block, wrong starting at the
-second, independent of which primitive -- sequential_range vs plain range,
-NEG_INF magnitude, or scratch-tile reuse -- was varied to isolate it).
-Root cause not pinned down further given time constraints; sidestepped by
-recomputing each key-block's QK^T twice -- once in a max-only pass, once in
-a sum/output pass after the row max is already final -- so both
-accumulators are plain sums (`acc[...] = nl.add(acc, ...)`), the same
-pattern already proven correct in layernorm/kl_divergence/gaussian_blur,
-with no cross-iteration rescale anywhere.
+    scores = (Q @ K^T) * scale [+ causal_mask]
+    out    = softmax(scores) @ V
+
+Query rows are processed 128 at a time (one ``qi`` tile). For each ``qi`` the kernel
+makes a **single** pass over the key/value blocks it can attend to, accumulating the
+softmax online (the standard flash-attention recurrence):
+
+    m <- max(m, rowmax(s))                      running max
+    c <- exp(m_old - m_new)                     rescale factor
+    l <- l * c + rowsum(exp(s - m))             running denominator
+    o <- o * c + exp(s - m)^T-matmul-V          running output
+
+The previous version here used a two-pass recurrence-free formulation (recompute every
+key-block's QK^T twice: once for the row max, once for sum+PV) because an earlier
+attempt at the single-pass recurrence produced large errors whenever a query block
+spanned more than one key-block, for reasons that attempt didn't pin down. That symptom
+turned out to be specific to *this* kernel's old primitive usage, not a hardware
+limitation of the recurrence itself: ``block_sparse_attention``'s NKI kernel uses the
+identical single-pass recurrence (see its docstring) and is hardware-verified exact,
+including cases with 80 key-blocks per query row. This file ports that proven
+implementation, dropping the parts specific to block-sparse's CSR mask -- pure causal
+attention needs no mask tensor at all:
+
+* Key blocks strictly below the diagonal (``kj < qi``) are always **fully** attended
+  -- no masking, since every query row in block ``qi`` has global position
+  ``>= q_offset > k_offset + PMAX - 1 >=`` every key position in block ``kj``. These run
+  inside ``nl.dynamic_range`` for O(num_blocks) instruction count instead of O(num_blocks^2).
+* The diagonal block (``kj == qi``) is the only one needing an actual triangular mask,
+  and (for non-causal, or the very last kv block when ``seq_len`` isn't a multiple of
+  128) the last kv block may be narrower than 128 columns -- both stay outside the
+  dynamic loop, handled by a plain Python tail exactly like block_sparse_attention's.
+* ``nl.dynamic_range`` cannot nest and requires the kernel's launch degree to match the
+  LNC the XLA module is compiled for -- see ``_lnc_degree`` and
+  ``flash_attention_kernel[_lnc_degree()]`` below (``[NCC_IXGM002]`` otherwise).
+
+Known limitation -- compiler crash at very long sequences:
+
+    The ``nl.dynamic_range`` no-nesting rule above means the outer ``qi`` loop stays a
+    plain Python ``range``, fully unrolled at compile time (block_sparse_attention hits
+    the identical constraint). Correctness is hardware-verified at ``seq_len=1024``
+    (num_q_blocks=8): exact against the torch reference, no rescaling errors. At
+    ``seq_len=20480`` (num_q_blocks=160 -- double block_sparse_attention's largest
+    verified case of 80), ``neuronx-cc`` does not report a clean instruction-count error
+    the way it did for block_sparse_attention's pre-fix O(num_blocks^2) version; it
+    instead runs for ~2h43m of active compute and then dies with ``Fatal Python error:
+    Segmentation fault``. Two rounds of reducing the per-``qi``-iteration instruction
+    count (hoisting the causal-mask construction out of the loop, then replacing a
+    functional ``nl.where`` select with the additive-bias ``tensor_tensor`` technique
+    block_sparse_attention uses) made no measurable difference to the compile time or
+    the crash, which points to the cost being dominated by the sheer number of
+    independent ``nl.dynamic_range`` regions in one compiled program (160 of them, one
+    per unrolled ``qi``) rather than by what any single region contains. Not further
+    root-caused or bisected for a safe-size threshold given the cost of each attempt
+    (each is a multi-hour, unpredictable-length compile). Triton's and cuTile's
+    implementations of this operator do not share this failure mode: both dispatch one
+    query-block-sized kernel per grid cell via real hardware grid scheduling (GPU
+    SMs), so their compiled program is a single small kernel body regardless of
+    ``seq_len`` -- NKI has no equivalent per-query-block grid-dispatch mechanism at
+    this level, which is *why* the outer loop has to be unrolled here at all.
 """
+import os
+import re
+
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
-    PMAX = nl.tile_size.pmax
+    import nki
+    import nki.isa as nisa
+    import nki.language as nl
+    PMAX = nl.tile_size.pmax          # 128 partitions
 except ImportError:
     nki = None
+    PMAX = 128
+
+# Deliberately finite, not -inf: a row masked everywhere then yields
+# exp(NEG_INF - NEG_INF) = 1 instead of NaN. Never happens for causal attention (every
+# row attends at least to itself) but kept for the non-causal empty-tail edge case.
+NEG_INF = -3.0e38
+
+# Fewer key blocks than this and the on-device loop is not worth its overhead, so
+# they are unrolled at compile time instead.
+MIN_DYNAMIC_ITERS = 3
+
+
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel must be launched with.
+
+    The kernel contains on-device control flow (``nl.dynamic_range``), which the
+    backend only lowers correctly when the NKI launch degree matches the LNC the XLA
+    module is compiled for -- launching an LNC=1 kernel into an LNC=2 module fails with
+    ``[NCC_IXGM002] ... core 1 has 1 basic blocks``. trn2/trn3 default to LNC=2 unless
+    the compiler/runtime env says otherwise.
+    """
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
+    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
+
+
+def div_ceil(numerator: int, denominator: int) -> int:
+    return (numerator + denominator - 1) // denominator
+
 
 if nki is not None:
+
+    def _attend_block(K, V, buf, cfg, q_offset, q_size, k_offset, k_size,
+                      apply_causal_mask, k_off_sb=None):
+        """Fold one key/value block into the running softmax state.
+
+        ``apply_causal_mask`` is a compile-time Python bool: True only for the diagonal
+        block, where a genuine triangular mask is needed. Every other visited block is
+        fully valid by construction (see module docstring), so the mask machinery
+        block_sparse_attention needs (a whole HBM mask tensor) doesn't exist here --
+        just an on-device iota comparison, and only for the one block that needs it.
+        """
+        head_dim = cfg["head_dim"]
+        k_tile, v_tile = buf["k_tile"], buf["v_tile"]
+
+        if k_off_sb is not None:
+            nisa.dma_copy(
+                dst=k_tile[0:k_size, 0:head_dim],
+                src=K.ap(pattern=[[head_dim, k_size], [1, head_dim]],
+                         scalar_offset=k_off_sb, indirect_dim=0),
+            )
+            nisa.dma_copy(
+                dst=v_tile[0:k_size, 0:head_dim],
+                src=V.ap(pattern=[[head_dim, k_size], [1, head_dim]],
+                         scalar_offset=k_off_sb, indirect_dim=0),
+            )
+        else:
+            nisa.dma_copy(dst=k_tile[0:k_size, 0:head_dim],
+                          src=K[k_offset:k_offset + k_size, 0:head_dim])
+            nisa.dma_copy(dst=v_tile[0:k_size, 0:head_dim],
+                          src=V[k_offset:k_offset + k_size, 0:head_dim])
+
+        kt_psum = nl.ndarray((head_dim, k_size), dtype=cfg["dtype"], buffer=nl.psum)
+        nisa.nc_transpose(dst=kt_psum, data=k_tile[0:k_size, 0:head_dim])
+        kt_sb = buf["kt_sb"]
+        nisa.tensor_copy(dst=kt_sb[0:head_dim, 0:k_size], src=kt_psum)
+
+        s_psum = nl.ndarray((q_size, k_size), dtype=nl.float32, buffer=nl.psum)
+        nisa.nc_matmul(dst=s_psum,
+                       stationary=buf["qt_sb"][0:head_dim, 0:q_size],
+                       moving=kt_sb[0:head_dim, 0:k_size])
+        s_sb = buf["s_sb"]
+
+        if apply_causal_mask:
+            # q_offset == k_offset always at the diagonal block (kj == qi), so the
+            # local row >= col triangle -- and the additive {0, NEG_INF} bias derived
+            # from it -- is identical for every diagonal block regardless of q_offset
+            # (q_size == k_size too, since both equal min(PMAX, seq_len - offset) at
+            # the same offset). `causal_bias` is precomputed once in
+            # `flash_attention_kernel`, the same additive-bias technique
+            # block_sparse_attention uses (rather than a functional `nl.where` select,
+            # which is called once per diagonal block either way and empirically
+            # compiles far slower here -- switching to a plain `tensor_tensor` add cut
+            # what had become a multi-hour, still-climbing compile at seq_len=20480
+            # down to the same order as block_sparse_attention's largest case).
+            nisa.tensor_tensor(dst=s_sb[0:q_size, 0:k_size], data1=s_psum,
+                               data2=buf["causal_bias"][0:q_size, 0:k_size], op=nl.add)
+        else:
+            nisa.tensor_copy(dst=s_sb[0:q_size, 0:k_size], src=s_psum)
+
+        # ---- online softmax update -------------------------------------
+        m_prev, m_new = buf["m_prev"], buf["m_new"]
+        neg_m, corr = buf["neg_m"], buf["corr"]
+        row_sum, l_acc, o_acc = buf["row_sum"], buf["l_acc"], buf["o_acc"]
+
+        nisa.tensor_reduce(dst=m_new[0:q_size, 0:1], data=s_sb[0:q_size, 0:k_size],
+                           op=nl.maximum, axis=(1,))
+        nisa.tensor_tensor(dst=m_new[0:q_size, 0:1], data1=m_new[0:q_size, 0:1],
+                           data2=m_prev[0:q_size, 0:1], op=nl.maximum)
+        nisa.tensor_scalar(dst=neg_m[0:q_size, 0:1], data=m_new[0:q_size, 0:1],
+                           op0=nl.multiply, operand0=-1.0)
+        # corr = exp(m_old - m_new): 0 on the first block (m_old = NEG_INF), so the
+        # zero-initialised accumulators stay zero.
+        nisa.activation(dst=corr[0:q_size, 0:1], data=m_prev[0:q_size, 0:1],
+                        op=nl.exp, bias=neg_m[0:q_size, 0:1])
+        nisa.tensor_copy(dst=m_prev[0:q_size, 0:1], src=m_new[0:q_size, 0:1])
+
+        p = buf["p"]
+        nisa.activation(dst=p[0:q_size, 0:k_size], data=s_sb[0:q_size, 0:k_size],
+                        op=nl.exp, bias=neg_m[0:q_size, 0:1])
+        nisa.tensor_reduce(dst=row_sum[0:q_size, 0:1], data=p[0:q_size, 0:k_size],
+                           op=nl.add, axis=(1,))
+        nisa.scalar_tensor_tensor(dst=l_acc[0:q_size, 0:1], data=l_acc[0:q_size, 0:1],
+                                  op0=nl.multiply, operand0=corr[0:q_size, 0:1],
+                                  op1=nl.add, operand1=row_sum[0:q_size, 0:1])
+
+        pt_psum = nl.ndarray((k_size, q_size), dtype=cfg["dtype"], buffer=nl.psum)
+        nisa.nc_transpose(dst=pt_psum, data=p[0:q_size, 0:k_size])
+        pt_sb = buf["pt_sb"]
+        nisa.tensor_copy(dst=pt_sb[0:k_size, 0:q_size], src=pt_psum)
+
+        pv_psum = nl.ndarray((q_size, head_dim), dtype=nl.float32, buffer=nl.psum)
+        nisa.nc_matmul(dst=pv_psum, stationary=pt_sb[0:k_size, 0:q_size],
+                       moving=v_tile[0:k_size, 0:head_dim])
+        nisa.scalar_tensor_tensor(dst=o_acc[0:q_size, 0:head_dim],
+                                  data=o_acc[0:q_size, 0:head_dim],
+                                  op0=nl.multiply, operand0=corr[0:q_size, 0:1],
+                                  op1=nl.add, operand1=pv_psum)
+
     @nki.jit
     def flash_attention_kernel(Q, K, V, causal, scale):
+        """Single (batch, head) slice of flash attention.
+
+        Args:
+            Q, K, V: (seq_len, head_dim)
+            causal:  compile-time bool
+            scale:   softmax scale (compile-time constant)
+
+        Returns:
+            (seq_len, head_dim) attention output.
+        """
         seq_len, head_dim = Q.shape
-        num_blocks = (seq_len + PMAX - 1) // PMAX
-        NEG_INF = -3.0e38
+        assert head_dim <= PMAX
 
-        out = nl.ndarray((seq_len, head_dim), dtype=Q.dtype, buffer=nl.hbm)
+        num_q_blocks = div_ceil(seq_len, PMAX)
+        num_kv_blocks = num_q_blocks
 
-        for qi in range(num_blocks):
+        cfg = {"head_dim": head_dim, "dtype": Q.dtype}
+
+        out = nl.ndarray((seq_len, head_dim), dtype=Q.dtype, buffer=nl.shared_hbm)
+
+        buf = {
+            "q_tile": nl.ndarray((PMAX, head_dim), dtype=Q.dtype, buffer=nl.sbuf),
+            "qt_sb": nl.ndarray((head_dim, PMAX), dtype=Q.dtype, buffer=nl.sbuf),
+            "k_tile": nl.ndarray((PMAX, head_dim), dtype=Q.dtype, buffer=nl.sbuf),
+            "kt_sb": nl.ndarray((head_dim, PMAX), dtype=Q.dtype, buffer=nl.sbuf),
+            "v_tile": nl.ndarray((PMAX, head_dim), dtype=Q.dtype, buffer=nl.sbuf),
+            "s_sb": nl.ndarray((PMAX, PMAX), dtype=nl.float32, buffer=nl.sbuf),
+            "p": nl.ndarray((PMAX, PMAX), dtype=Q.dtype, buffer=nl.sbuf),
+            "pt_sb": nl.ndarray((PMAX, PMAX), dtype=Q.dtype, buffer=nl.sbuf),
+            "m_prev": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "m_new": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "neg_m": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "corr": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "row_sum": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "l_acc": nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf),
+            "o_acc": nl.ndarray((PMAX, head_dim), dtype=nl.float32, buffer=nl.sbuf),
+            "res": nl.ndarray((PMAX, head_dim), dtype=Q.dtype, buffer=nl.sbuf),
+        }
+        if causal:
+            buf["causal_bias"] = nl.ndarray((PMAX, PMAX), dtype=nl.float32, buffer=nl.sbuf)
+
+        # The diagonal-block causal mask -- and the additive {0, NEG_INF} bias derived
+        # from it -- is the same (PMAX, PMAX) local row >= col triangle for every qi
+        # (see `_attend_block`), so it's built once here instead of once per unrolled
+        # qi iteration. `causal` is a compile-time bool, so this whole block (and the
+        # buffer above) are simply absent from the non-causal trace.
+        if causal:
+            q_local = nl.ndarray((PMAX, PMAX), dtype=nl.int32, buffer=nl.sbuf)
+            nisa.iota(dst=q_local, pattern=[[0, PMAX]], offset=0, channel_multiplier=1)
+            k_local = nl.ndarray((PMAX, PMAX), dtype=nl.int32, buffer=nl.sbuf)
+            nisa.iota(dst=k_local, pattern=[[1, PMAX]], offset=0, channel_multiplier=0)
+            local_ok = nl.greater_equal(q_local, k_local)
+            # {0, 1} -> {0, NEG_INF}, the same additive-bias technique
+            # block_sparse_attention uses for its mask.
+            nisa.tensor_copy(dst=buf["causal_bias"], src=local_ok)
+            nisa.tensor_scalar(dst=buf["causal_bias"], data=buf["causal_bias"],
+                               op0=nl.subtract, operand0=1.0,
+                               op1=nl.multiply, operand1=-NEG_INF)
+
+        for qi in range(num_q_blocks):
             q_offset = qi * PMAX
-            q_partition = nl.arange(PMAX)[:, None]
-            free_index = nl.arange(head_dim)[None, :]
-            mask_q = q_partition < (seq_len - q_offset)
+            q_size = min(PMAX, seq_len - q_offset)
 
-            q_raw = nl.load(Q[q_offset + q_partition, free_index], mask=mask_q, dtype=nl.float32)
-            zero_hd = nl.zeros(q_raw.shape, dtype=nl.float32, buffer=nl.sbuf)
-            q_tile = nl.where(mask_q, q_raw, zero_hd)
+            nisa.dma_copy(dst=buf["q_tile"][0:q_size, 0:head_dim],
+                          src=Q[q_offset:q_offset + q_size, 0:head_dim])
+            qt_psum = nl.ndarray((head_dim, q_size), dtype=Q.dtype, buffer=nl.psum)
+            nisa.nc_transpose(dst=qt_psum, data=buf["q_tile"][0:q_size, 0:head_dim])
+            nisa.tensor_scalar(dst=buf["qt_sb"][0:head_dim, 0:q_size], data=qt_psum,
+                               op0=nl.multiply, operand0=scale)
 
-            kj_limit = (qi + 1) if causal else num_blocks
+            nisa.memset(dst=buf["m_prev"][0:q_size, 0:1], value=NEG_INF)
+            nisa.memset(dst=buf["l_acc"][0:q_size, 0:1], value=0.0)
+            nisa.memset(dst=buf["o_acc"][0:q_size, 0:head_dim], value=0.0)
 
-            def _scores(kj):
-                q_t = nisa.nc_transpose(q_tile)
+            # Every block up to and including qi (causal) or every block (non-causal).
+            # The diagonal block for causal, or the last (possibly partial) kv block
+            # for non-causal, is kept out of the dynamic loop -- see module docstring.
+            n_kj = (qi + 1) if causal else num_kv_blocks
+            n_full = n_kj if (not causal and seq_len % PMAX == 0) or causal else n_kj - 1
+            # Under causal, the diagonal block always needs the triangular mask, so it
+            # never joins the "fully valid" dynamic loop regardless of size.
+            if causal:
+                n_full -= 1
+            n_dynamic = n_full if n_full >= MIN_DYNAMIC_ITERS else 0
+
+            if n_dynamic > 0:
+                k_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
+                nisa.memset(dst=k_off_sb, value=0)
+                for _ in nl.dynamic_range(n_dynamic):
+                    _attend_block(K, V, buf, cfg, q_offset, q_size,
+                                  0, PMAX, apply_causal_mask=False, k_off_sb=k_off_sb)
+                    nisa.tensor_scalar(dst=k_off_sb, data=k_off_sb,
+                                       op0=nl.add, operand0=PMAX)
+
+            for kj in range(n_dynamic, n_kj):
                 k_offset = kj * PMAX
-                k_partition = nl.arange(PMAX)[:, None]
-                mask_k = k_partition < (seq_len - k_offset)
-                zero_k = nl.zeros((PMAX, head_dim), dtype=nl.float32, buffer=nl.sbuf)
-                k_raw = nl.load(K[k_offset + k_partition, free_index], mask=mask_k, dtype=nl.float32)
-                k_tile = nl.where(mask_k, k_raw, zero_k)
-                k_t = nisa.nc_transpose(k_tile)
+                k_size = min(PMAX, seq_len - k_offset)
+                is_diag = causal and kj == qi
+                _attend_block(K, V, buf, cfg, q_offset, q_size,
+                              k_offset, k_size, apply_causal_mask=is_diag)
 
-                scores_psum = nisa.nc_matmul(q_t, k_t)
-                scores = nl.multiply(nl.copy(scores_psum, dtype=nl.float32), scale)
-
-                grid = nl.mgrid[0:PMAX, 0:PMAX]
-                row_iota = nisa.iota(expr=grid.p, dtype=nl.int32)
-                col_iota = nisa.iota(expr=grid.x, dtype=nl.int32)
-                key_col_valid = col_iota < (seq_len - k_offset)
-                # One uniform global-position comparison instead of a
-                # kj==qi-branching local one: for kj<qi every (row,col) in
-                # the block trivially satisfies it (q_offset > k_offset+127
-                # >= k_offset+col), and for kj==qi it reduces to the usual
-                # local row>=col triangle. A python-level `if causal and
-                # kj==qi: ... else: ...` choosing between two *different*
-                # tensor expressions per kj iteration produced wrong results
-                # for reasons not fully root-caused given time constraints
-                # (confirmed via temp/check_flash_noncausal.py: identical
-                # kernel with the branch never active, i.e. always taking
-                # the same path, is exact) -- this single always-the-same
-                # expression sidesteps it.
-                q_pos = nl.add(row_iota, q_offset)
-                k_pos = nl.add(col_iota, k_offset)
-                causal_ok = nl.greater_equal(q_pos, k_pos)
-                valid = (key_col_valid & causal_ok) if causal else key_col_valid
-
-                neg_tile = nl.full(scores.shape, NEG_INF, dtype=nl.float32, buffer=nl.sbuf)
-                return nl.where(valid, scores, neg_tile), mask_k, k_offset, k_partition
-
-            # Pass 1: row max across all key-blocks (no accumulator rescale).
-            running_max = nl.full((PMAX, 1), NEG_INF, dtype=nl.float32, buffer=nl.sbuf)
-            for kj in range(kj_limit):
-                scores_masked, _, _, _ = _scores(kj)
-                block_max = nl.max(scores_masked, axis=1, keepdims=True)
-                running_max[...] = nl.maximum(running_max, block_max)
-
-            # Pass 2: exp-sum and weighted-V-sum using the now-final max.
-            running_sum = nl.zeros((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf)
-            out_acc = nl.zeros((PMAX, head_dim), dtype=nl.float32, buffer=nl.sbuf)
-            for kj in range(kj_limit):
-                scores_masked, mask_k, k_offset, k_partition = _scores(kj)
-                p = nl.exp(nl.subtract(scores_masked, running_max))
-                running_sum[...] = nl.add(running_sum, nl.sum(p, axis=1, keepdims=True))
-
-                zero_v = nl.zeros((PMAX, head_dim), dtype=nl.float32, buffer=nl.sbuf)
-                v_raw = nl.load(V[k_offset + k_partition, free_index], mask=mask_k, dtype=nl.float32)
-                v_tile = nl.where(mask_k, v_raw, zero_v)
-
-                p_t = nisa.nc_transpose(p)
-                pv_psum = nisa.nc_matmul(p_t, v_tile)
-                out_acc[...] = nl.add(out_acc, nl.copy(pv_psum, dtype=nl.float32))
-
-            final_out = nl.divide(out_acc, running_sum)
-            final_cast = nl.add(final_out, 0.0, dtype=Q.dtype)
-            nl.store(out[q_offset + q_partition, free_index], value=final_cast, mask=mask_q)
+            nisa.reciprocal(dst=buf["corr"][0:q_size, 0:1],
+                            data=buf["l_acc"][0:q_size, 0:1])
+            nisa.tensor_scalar(dst=buf["res"][0:q_size, 0:head_dim],
+                               data=buf["o_acc"][0:q_size, 0:head_dim],
+                               op0=nl.multiply, operand0=buf["corr"][0:q_size, 0:1])
+            nisa.dma_copy(dst=out[q_offset:q_offset + q_size, 0:head_dim],
+                          src=buf["res"][0:q_size, 0:head_dim])
 
         return out
 
@@ -126,8 +329,9 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True,
     out = torch.empty_like(q)
     for b in range(batch):
         for h in range(n_heads):
-            res = flash_attention_kernel(q[b, h].contiguous(), k[b, h].contiguous(),
-                                          v[b, h].contiguous(), causal, scale)
+            res = flash_attention_kernel[_lnc_degree()](
+                q[b, h].contiguous(), k[b, h].contiguous(),
+                v[b, h].contiguous(), causal, scale)
             out[b, h] = res
     return out
 

@@ -20,6 +20,7 @@ if nki is not None:
         num_blocks = (n_rows + (PMAX - 1)) // PMAX
         hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
 
+        _cap = 2048 if a_input.dtype == nl.float32 else FREE_CAP
         if n_cols <= _cap:
             for i in range(num_blocks):
                 offset = i * PMAX
