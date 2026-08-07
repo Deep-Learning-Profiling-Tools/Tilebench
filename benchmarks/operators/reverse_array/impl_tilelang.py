@@ -26,8 +26,7 @@ def reverse_array_kernel(input, output, dtype, BLOCK_SIZE: int = 1024, threads: 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[idx] = input[n_elements - 1 - idx]
+            output[idx] = input[n_elements - 1 - idx]
                 
 def run(input: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     dtype = str(input.dtype).removeprefix("torch.")
