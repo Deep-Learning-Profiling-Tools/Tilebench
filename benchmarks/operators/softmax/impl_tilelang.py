@@ -16,13 +16,6 @@ def softmax_config():
         for nt in threads
     ]
 
-# could we allocate to registers?
-# answer : for finding e ^ (x - max value) <- yes
-# but for finding max? yes similar to accumatlor behavior
-# so can only use allocate fragment which lowers # of global reads/writes
-# need to use NCU to see if residency is affected greatly
-
-
 @tilelang.autotune(configs=softmax_config(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
@@ -30,7 +23,6 @@ def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 12
     N = T.const("N")
     x: T.Tensor((M, N), dtype)
     y: T.Tensor((M, N), dtype)
-    #first pass need to find max + denom
     with T.Kernel(M, threads=threads) as row:
         X_local = T.alloc_fragment((BLOCK_SIZE, ), "float32")
         Y_local = T.alloc_fragment((BLOCK_SIZE, ), dtype)
@@ -43,10 +35,8 @@ def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 12
         l[0] = 0.0
         running_max[0] = -T.infinity("float32")
         past_max[0] = -T.infinity("float32")
-        # need to split M into BLOCK_SIZE
         for start in T.serial(0, N, BLOCK_SIZE):
             end = T.min(start + BLOCK_SIZE, N)
-            #could also use T.parallel instead of .fill and .copy
             
             T.fill(X_local, -T.infinity("float32"))
             T.fill(x_exp_local, 0.0)
