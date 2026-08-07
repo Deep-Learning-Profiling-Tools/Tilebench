@@ -27,12 +27,18 @@ def fused_activation_kernel(x, gate, bias, output, in_dtype, out_dtype, BLOCK_SI
     output: T.Tensor((n_elements,), out_dtype)
 
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads=threads) as pid:
+        start = pid * BLOCK_SIZE
+        x_reg = T.alloc_fragment((BLOCK_SIZE,), "float32")
+        gate_reg = T.alloc_fragment((BLOCK_SIZE,), "float32")
+        bias_reg = T.alloc_fragment((BLOCK_SIZE,), "float32")
+        output_reg = T.alloc_fragment((BLOCK_SIZE,), "float32")
+        T.copy(x[start : start + BLOCK_SIZE], x_reg)
+        T.copy(gate[start : start + BLOCK_SIZE], gate_reg)
+        T.copy(bias[start : start + BLOCK_SIZE], bias_reg)
         for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                #triton converts to fp32 so just copy that
-                z = T.cast(x[idx], "float32") * T.cast(gate[idx], "float32") + T.cast(bias[idx], "float32")
-                output[idx] = z * T.sigmoid(z)
+            z = x_reg[local_idx] * gate_reg[local_idx] + bias_reg[local_idx]
+            output_reg[local_idx] = z * T.sigmoid(z)
+        T.copy(output_reg, output[start : start + BLOCK_SIZE])
 
 
 def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor, autotune: bool = False, **kwargs) -> torch.Tensor:
