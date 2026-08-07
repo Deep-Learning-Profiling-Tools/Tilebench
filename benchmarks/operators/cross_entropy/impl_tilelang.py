@@ -16,7 +16,6 @@ def cross_entropy_config():
 @tilelang.jit
 def cross_entropy_kernel(logits, targets, output, dtype,
                          BLOCK_CLASSES : int = 1208, threads : int = 256):
-    #not sure why it uses BLOCK_CLASSES naming 
     M = T.dynamic("M")
     N = T.const("N")
     logits : T.Tensor((M, N), dtype)
@@ -35,7 +34,6 @@ def cross_entropy_kernel(logits, targets, output, dtype,
         for i in T.Parallel(BLOCK_CLASSES):
             exp_shifted[i] = T.exp(local_logits[i] - row_max[0])
         T.reduce_sum(exp_shifted, row_sum, dim = 0, clear = True)
-        #targets[row] is the index to use?
         target_lw = T.Cast("int32", targets[row])
         loss[0] = T.log(row_sum[0]) + row_max[0] - logits[row, target_lw]
         T.copy(loss, output[row])
@@ -52,7 +50,7 @@ def run(
     batch_size, num_classes = logits.shape
     output = torch.empty((batch_size,), device=logits.device, dtype=logits.dtype)
     grid = (batch_size,)
-    block_classes = 1 << (num_classes - 1).bit_length()
+    block_classes = tilelang.math.next_power_of_2(num_classes)
 
     if autotune:
         with set_autotune_inputs(logits, targets, output):
