@@ -2,7 +2,7 @@ import torch
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 2048, "threads": 128}
 _last_autotune_config: dict = {}
 def quantize_global_configs():
     BLOCK_SIZE = [2048, 4096, 8192, 16384]
@@ -26,8 +26,7 @@ def quantize_global_kernel(x, output, in_dtype, out_dtype, BLOCK_SIZE: int = 204
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[idx] = T.cast(x[idx], "float16")
+            output[idx] = T.cast(x[idx], "float16")
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
     in_dtype = str(x.dtype).removeprefix("torch.")
