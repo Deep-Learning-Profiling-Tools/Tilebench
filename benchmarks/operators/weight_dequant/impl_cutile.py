@@ -54,7 +54,7 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(M, N, TILE_SIZE),
+            shape_key=(M, N, TILE_SIZE, str(X.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),

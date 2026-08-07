@@ -66,7 +66,7 @@ def run(input, kernel, input_rows, input_cols,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(total_elements, kernel_rows, kernel_cols),
+            shape_key=(total_elements, kernel_rows, kernel_cols, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (

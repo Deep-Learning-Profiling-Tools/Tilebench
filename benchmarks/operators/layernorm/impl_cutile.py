@@ -90,7 +90,7 @@ def run(
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch_M, K),
+            shape_key=(batch_M, K, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,

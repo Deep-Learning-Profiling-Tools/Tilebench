@@ -61,7 +61,7 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(rows, cols),
+            shape_key=(rows, cols, str(log_y_pred.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (rows, 1, 1),

@@ -82,7 +82,7 @@ def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
             for cfg in _SEARCH_SPACE_BASE
         ]
         cfg = _tuner.tune_or_cached(
-            shape_key=(n_rows, n_cols),
+            shape_key=(n_rows, n_cols, str(x.dtype)),
             search_space=search_space,
             stream=stream,
             grid_fn=lambda cfg: grid,

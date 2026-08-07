@@ -64,7 +64,7 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(M, N),
+            shape_key=(M, N, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,

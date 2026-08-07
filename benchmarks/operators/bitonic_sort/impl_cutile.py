@@ -81,7 +81,7 @@ def run(data: torch.Tensor, N: int,
 
         k0, j0 = 2, 1
         cfg = _tuner.tune_or_cached(
-            shape_key=(M,),
+            shape_key=(M, str(data.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(M, cfg.tile), 1, 1),
