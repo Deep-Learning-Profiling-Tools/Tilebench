@@ -41,7 +41,7 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
     path = Path(csv_path)
     if not path.exists():
         raise SystemExit(
-            f"--merge-csv: {csv_path} does not exist — run the full "
+            f"csv merge: {csv_path} does not exist — run the full "
             f"torch/triton/cutile benchmark first to create the frozen CSV"
         )
     with path.open(newline="") as f:
@@ -55,7 +55,7 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
     unmatched = [k for k in keys if k not in index]
     if unmatched:
         raise SystemExit(
-            f"--merge-csv: {len(unmatched)} case(s) have no matching row in "
+            f"csv merge: {len(unmatched)} case(s) have no matching row in "
             f"{csv_path} (case grids diverged?), e.g. {unmatched[:5]} — "
             f"refusing to merge"
         )
@@ -135,13 +135,6 @@ def main():
                         help="Comma-separated tile-language backends to run: "
                              "triton, cutile, tilelang, nki (or 'all'). torch "
                              "always runs as the speedup baseline. Default: all.")
-    parser.add_argument("--merge-csv", action="store_true",
-                        help="Merge this run into the existing summary CSV instead "
-                             "of overwriting it. Only valid with --tile-language "
-                             "tilelang and/or nki: frozen torch/triton/cutile "
-                             "columns are preserved; tilelang_ms is re-based per "
-                             "case by torch_frozen/torch_new; nki adds "
-                             "torch_nki_ms/nki_ms/speedup_nki unscaled.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
@@ -171,15 +164,6 @@ def main():
 
     # Active tile-language backends in canonical column order (drives all output).
     active = [b for b in _TILE_LANGUAGES if b in enabled_backends]
-
-    if args.merge_csv:
-        mergeable = {"tilelang", "nki"}
-        if not enabled_backends or not enabled_backends <= mergeable:
-            parser.error(
-                "--merge-csv only supports --tile-language tilelang and/or nki "
-                "(the frozen torch/triton/cutile columns are read, not re-run); "
-                f"got: {', '.join(sorted(enabled_backends)) or '(none)'}"
-            )
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -276,9 +260,19 @@ def main():
     mode_suffix = "autotune" if args.autotune else "default"
     csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
-    if args.merge_csv:
+
+    # tilelang/nki runs never overwrite the frozen torch/triton/cutile CSV:
+    # when only those backends ran and the summary CSV already exists, the
+    # results are MERGED into it in place (see _merge_into_csv for the
+    # per-case tilelang re-basing and the nki torch_nki_ms column). The
+    # plain writer below only ever runs for triton/cutile sweeps or when
+    # no summary CSV exists yet.
+    if active and set(active) <= {"tilelang", "nki"} and Path(csv_path).exists():
         _merge_into_csv(csv_path, timing_results, active, _fmt_params)
         return
+    if active and set(active) <= {"tilelang", "nki"}:
+        print(f"Note: {csv_path} does not exist yet — writing a fresh "
+              f"torch+{'/'.join(active)} CSV (nothing to merge into)")
     # Direct cuTile/Triton latency ratio (>1 means cuTile slower), emitted
     # whenever both backends ran so the committed 8-column CSVs are
     # reproducible by this script alone.
