@@ -139,6 +139,44 @@ def _total_time_ms(summary_json_text: str) -> float:
     return max(times) * 1e3  # seconds -> ms
 
 
+def bench_xla_wallclock(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
+    """Host wall-clock timing of ``fn(*inputs)`` on the XLA (Neuron) device.
+
+    Used for the torch-on-Neuron reference column (``torch_nki_ms``): native
+    torch ops lower through torch_xla to a fused Neuron graph, which
+    neuron-profile's NEFF auto-discovery cannot reliably isolate, so the
+    reference is timed as a wall-clock median around ``mark_step`` /
+    ``wait_device_ops`` instead. This INCLUDES graph-dispatch/host overhead —
+    when validating on trn2, sanity-check comparability against the
+    neuron-profile numbers ``bench_nki`` reports for the NKI kernels.
+    # VERIFY ON TRN2
+    """
+    import time as _time
+
+    xm = _xm()
+    kwargs = kwargs or {}
+
+    def _once() -> float:
+        t0 = _time.perf_counter()
+        out = fn(*inputs, **kwargs)
+        xm.mark_step()
+        xm.wait_device_ops()
+        del out
+        return (_time.perf_counter() - t0) * 1e3
+
+    for _ in range(warmup):
+        _once()
+    samples = sorted(_once() for _ in range(repeat))
+    median_ms = samples[len(samples) // 2]
+    return {
+        "mean": median_ms,
+        "p10": samples[int(len(samples) * 0.10)],
+        "p90": samples[int(len(samples) * 0.90)],
+        "repeat": repeat,
+        "method": "xla_wallclock",
+    }
+
+
 def bench_nki(fn, inputs, kwargs=None, *, warmup=10, repeat=100):
     """Time ``fn(*inputs, **kwargs)`` on the Neuron device via neuron-profile.
 
