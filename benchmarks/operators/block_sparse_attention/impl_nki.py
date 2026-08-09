@@ -75,10 +75,10 @@ Two NKI details this kernel is built around (inherited from the ``1d_conv`` /
 """
 
 import math
-import os
-import re
 
 import torch
+
+from core.nki_timer import lnc_degree as _lnc_degree
 
 try:
     import nki
@@ -97,25 +97,6 @@ NEG_INF = -3.0e38
 # Fewer key blocks than this and the on-device loop is not worth its overhead,
 # so they are unrolled at compile time instead.
 MIN_DYNAMIC_ITERS = 3
-
-
-def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel must be launched with.
-
-    The kernel contains on-device control flow (``nl.dynamic_range``), which the
-    backend only lowers correctly when the NKI launch degree matches the LNC the
-    XLA module is compiled for -- launching an LNC=1 kernel into an LNC=2 module
-    fails with ``[NCC_IXGM002] ... core 1 has 1 basic blocks``.  trn2/trn3
-    default to LNC=2 unless the compiler/runtime env says otherwise.
-    """
-    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
-    if explicit.strip().isdigit():
-        return int(explicit.strip())
-    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
-    if match:
-        return int(match.group(1))
-    target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
-    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
 
 
 def div_ceil(numerator: int, denominator: int) -> int:
@@ -367,7 +348,8 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
         layout_csr_row_stride_h, layout_csr_col_stride_h,
         num_layout, softmax_scale, num_heads, num_kv_heads,
         total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS,
-        block_size: int = None, autotune: bool = False, **kwargs):
+        block_size: int = None, autotune: bool = False,
+        lnc_degree: int | None = None, **kwargs):
     B, H, M, D = Q.shape
     _, H_kv, N, _ = K.shape
     head_groups = H // H_kv
@@ -391,11 +373,12 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
     del dense_mask
     mask_padded = mask_padded.to(Q.device)
 
+    degree = lnc_degree if lnc_degree is not None else _lnc_degree()
     out = torch.empty(B, H, M, D, dtype=Q.dtype, device=Q.device)
     for b in range(B):
         for h in range(H):
             kv_h = h // head_groups
-            res = block_sparse_kernel[_lnc_degree()](
+            res = block_sparse_kernel[degree](
                 Q[b, h].contiguous(), K[b, kv_h].contiguous(),
                 V[b, kv_h].contiguous(), mask_padded[h], softmax_scale)
             out[b, h] = res

@@ -42,6 +42,7 @@ Refs: AWS Neuron docs — "Profile a NKI Kernel" and "Neuron Profile User Guide"
 import glob
 import json
 import os
+import re
 import subprocess
 import tempfile
 
@@ -63,6 +64,26 @@ NEURON_PROFILE_BIN = os.environ.get("NEURON_PROFILE_BIN", "neuron-profile")
 NEFF_PATH_ENV = "NKI_NEFF_PATH"
 # Directories the Neuron compiler may drop the NEFF into (relative to CWD).  # VERIFY ON TRN2
 _NEFF_SEARCH_DIRS = (".", "compiler_workdir", "./neuronxcc-*", os.environ.get("NEURON_CC_FLAGS_CACHE_DIR", ""))
+
+
+def lnc_degree() -> int:
+    """Logical-NeuronCore degree an on-device-control-flow NKI kernel must launch with.
+
+    Kernels using ``nl.dynamic_range`` only lower correctly when launched with the LNC
+    degree matching the LNC the XLA module was compiled for -- launching an LNC=1 kernel
+    into an LNC=2 module fails with ``[NCC_IXGM002] ... N basic blocks``. Call sites use
+    it as ``kernel[lnc_degree()](...)``. Consulted in priority order: an explicit
+    NEURON_LOGICAL_NC_CONFIG, a --lnc=N in NEURON_CC_FLAGS, or the
+    NEURON_PLATFORM_TARGET_OVERRIDE platform selector (trn2/trn3 default to LNC=2).
+    """
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
+    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
 
 
 def _xm():

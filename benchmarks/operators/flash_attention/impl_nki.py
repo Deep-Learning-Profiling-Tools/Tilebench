@@ -62,10 +62,9 @@ Known limitation -- compiler crash at very long sequences:
     ``seq_len`` -- NKI has no equivalent per-query-block grid-dispatch mechanism at
     this level, which is *why* the outer loop has to be unrolled here at all.
 """
-import os
-import re
-
 import torch
+
+from core.nki_timer import lnc_degree as _lnc_degree
 
 try:
     import nki
@@ -84,25 +83,6 @@ NEG_INF = -3.0e38
 # Fewer key blocks than this and the on-device loop is not worth its overhead, so
 # they are unrolled at compile time instead.
 MIN_DYNAMIC_ITERS = 3
-
-
-def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel must be launched with.
-
-    The kernel contains on-device control flow (``nl.dynamic_range``), which the
-    backend only lowers correctly when the NKI launch degree matches the LNC the XLA
-    module is compiled for -- launching an LNC=1 kernel into an LNC=2 module fails with
-    ``[NCC_IXGM002] ... core 1 has 1 basic blocks``. trn2/trn3 default to LNC=2 unless
-    the compiler/runtime env says otherwise.
-    """
-    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
-    if explicit.strip().isdigit():
-        return int(explicit.strip())
-    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
-    if match:
-        return int(match.group(1))
-    target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
-    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
 
 
 def div_ceil(numerator: int, denominator: int) -> int:
@@ -323,13 +303,15 @@ if nki is not None:
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True,
-        block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+        block_size: int = 1024, autotune: bool = False,
+        lnc_degree: int | None = None, **kwargs) -> torch.Tensor:
     batch, n_heads, seq_len, head_dim = q.shape
     scale = 1.0 / (head_dim ** 0.5)
+    degree = lnc_degree if lnc_degree is not None else _lnc_degree()
     out = torch.empty_like(q)
     for b in range(batch):
         for h in range(n_heads):
-            res = flash_attention_kernel[_lnc_degree()](
+            res = flash_attention_kernel[degree](
                 q[b, h].contiguous(), k[b, h].contiguous(),
                 v[b, h].contiguous(), causal, scale)
             out[b, h] = res

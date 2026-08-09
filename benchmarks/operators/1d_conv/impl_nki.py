@@ -49,10 +49,9 @@ body, so a large count would explode the instruction count (the benchmarked
 config is batch=1, groups=1).
 """
 
-import os
-import re
-
 import torch
+
+from core.nki_timer import lnc_degree as _lnc_degree
 
 try:
     import nki
@@ -86,25 +85,6 @@ MIN_DYNAMIC_GROUPS = 4
 
 MAX_STATIC_BATCH = 8
 MAX_STATIC_GROUPS = 4
-
-
-def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel must be launched with.
-
-    The kernel contains on-device control flow (``nl.dynamic_range``), which the
-    backend only lowers correctly when the NKI launch degree matches the LNC the
-    XLA module is compiled for -- launching an LNC=1 kernel into an LNC=2 module
-    fails with ``[NCC_IXGM002] ... core 1 has 1 basic blocks``. trn2/trn3
-    default to LNC=2 unless the compiler/runtime env says otherwise.
-    """
-    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
-    if explicit.strip().isdigit():
-        return int(explicit.strip())
-    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
-    if match:
-        return int(match.group(1))
-    target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
-    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
 
 
 def div_ceil(numerator: int, denominator: int) -> int:
@@ -436,7 +416,8 @@ if nki is not None:
 
 def run(input: torch.Tensor, weight: torch.Tensor,
         stride: int = 1, padding: int = 1, groups: int = 1,
-        block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+        block_size: int = 1024, autotune: bool = False,
+        lnc_degree: int | None = None, **kwargs) -> torch.Tensor:
     kernel_assert(input.dim() == 3, "input must be (batch, in_channels, in_L)")
     kernel_assert(weight.dim() == 3, "weight must be (out_channels, in_channels/groups, kL)")
 
@@ -464,8 +445,9 @@ def run(input: torch.Tensor, weight: torch.Tensor,
     l_block, blocks_in_flight = _choose_tiling(
         input.element_size(), n_ic_tiles, stride, kL, out_L)
 
-    return conv1d_kernel[_lnc_degree()](input, weight, stride, padding, groups,
-                                        l_block, blocks_in_flight)
+    degree = lnc_degree if lnc_degree is not None else _lnc_degree()
+    return conv1d_kernel[degree](input, weight, stride, padding, groups,
+                                 l_block, blocks_in_flight)
 
 
 def get_last_config() -> dict | None:

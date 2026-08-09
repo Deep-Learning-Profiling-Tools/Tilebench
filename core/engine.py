@@ -126,13 +126,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             proton_file_label=label,
         )
 
-    def _run_kwargs(fn, block_size):
+    def _run_kwargs(fn, block_size, extra=None):
         sig = inspect.signature(fn).parameters
         kw = {}
         if "block_size" in sig:
             kw["block_size"] = block_size
         if "autotune" in sig:
             kw["autotune"] = autotune
+        if extra:
+            kw.update({k: v for k, v in extra.items() if k in sig})
         return kw
 
     for case_idx, case in enumerate(cases):
@@ -286,9 +288,9 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         else:
             try:
                 # Deferred import: GPU-only machines have no torch_xla installed.
-                from core.nki_timer import bench_nki, to_cpu, to_xla_device
+                from core.nki_timer import bench_nki, to_cpu, to_xla_device, lnc_degree
 
-                nki_kw = _run_kwargs(impl_nki.run, block_size)
+                nki_kw = _run_kwargs(impl_nki.run, block_size, extra={"lnc_degree": lnc_degree()})
                 nki_inputs = to_xla_device(inputs)
                 nki_output = impl_nki.run(*nki_inputs, **nki_kw)
                 # ref_output lives on the GPU/CPU, NKI output on the XLA device —
