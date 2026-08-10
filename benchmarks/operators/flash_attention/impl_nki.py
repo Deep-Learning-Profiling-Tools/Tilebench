@@ -46,7 +46,6 @@ def div_ceil(numerator: int, denominator: int) -> int:
 
 
 if nki is not None:
-
     def _attend_block(K, V, buf, cfg, q_offset, q_size, k_offset, k_size,
                       apply_causal_mask, k_off_sb=None):
         """Fold one key/value block into the running softmax state.
@@ -63,19 +62,15 @@ if nki is not None:
         if k_off_sb is not None:
             nisa.dma_copy(
                 dst=k_tile[0:k_size, 0:head_dim],
-                src=K.ap(pattern=[[head_dim, k_size], [1, head_dim]],
-                         scalar_offset=k_off_sb, indirect_dim=0),
+                src=K.ap(pattern=[[head_dim, k_size], [1, head_dim]], scalar_offset=k_off_sb, indirect_dim=0),
             )
             nisa.dma_copy(
                 dst=v_tile[0:k_size, 0:head_dim],
-                src=V.ap(pattern=[[head_dim, k_size], [1, head_dim]],
-                         scalar_offset=k_off_sb, indirect_dim=0),
+                src=V.ap(pattern=[[head_dim, k_size], [1, head_dim]], scalar_offset=k_off_sb, indirect_dim=0),
             )
         else:
-            nisa.dma_copy(dst=k_tile[0:k_size, 0:head_dim],
-                          src=K[k_offset:k_offset + k_size, 0:head_dim])
-            nisa.dma_copy(dst=v_tile[0:k_size, 0:head_dim],
-                          src=V[k_offset:k_offset + k_size, 0:head_dim])
+            nisa.dma_copy(dst=k_tile[0:k_size, 0:head_dim], src=K[k_offset:k_offset + k_size, 0:head_dim])
+            nisa.dma_copy(dst=v_tile[0:k_size, 0:head_dim], src=V[k_offset:k_offset + k_size, 0:head_dim])
 
         kt_psum = nl.ndarray((head_dim, k_size), dtype=cfg["dtype"], buffer=nl.psum)
         nisa.nc_transpose(dst=kt_psum, data=k_tile[0:k_size, 0:head_dim])
@@ -83,23 +78,10 @@ if nki is not None:
         nisa.tensor_copy(dst=kt_sb[0:head_dim, 0:k_size], src=kt_psum)
 
         s_psum = nl.ndarray((q_size, k_size), dtype=nl.float32, buffer=nl.psum)
-        nisa.nc_matmul(dst=s_psum,
-                       stationary=buf["qt_sb"][0:head_dim, 0:q_size],
-                       moving=kt_sb[0:head_dim, 0:k_size])
+        nisa.nc_matmul(dst=s_psum, stationary=buf["qt_sb"][0:head_dim, 0:q_size], moving=kt_sb[0:head_dim, 0:k_size])
         s_sb = buf["s_sb"]
 
         if apply_causal_mask:
-            # q_offset == k_offset always at the diagonal block (kj == qi), so the
-            # local row >= col triangle -- and the additive {0, NEG_INF} bias derived
-            # from it -- is identical for every diagonal block regardless of q_offset
-            # (q_size == k_size too, since both equal min(PMAX, seq_len - offset) at
-            # the same offset). `causal_bias` is precomputed once in
-            # `flash_attention_kernel`, the same additive-bias technique
-            # block_sparse_attention uses (rather than a functional `nl.where` select,
-            # which is called once per diagonal block either way and empirically
-            # compiles far slower here -- switching to a plain `tensor_tensor` add cut
-            # what had become a multi-hour, still-climbing compile at seq_len=20480
-            # down to the same order as block_sparse_attention's largest case).
             nisa.tensor_tensor(dst=s_sb[0:q_size, 0:k_size], data1=s_psum,
                                data2=buf["causal_bias"][0:q_size, 0:k_size], op=nl.add)
         else:
@@ -110,26 +92,17 @@ if nki is not None:
         neg_m, corr = buf["neg_m"], buf["corr"]
         row_sum, l_acc, o_acc = buf["row_sum"], buf["l_acc"], buf["o_acc"]
 
-        nisa.tensor_reduce(dst=m_new[0:q_size, 0:1], data=s_sb[0:q_size, 0:k_size],
-                           op=nl.maximum, axis=(1,))
-        nisa.tensor_tensor(dst=m_new[0:q_size, 0:1], data1=m_new[0:q_size, 0:1],
-                           data2=m_prev[0:q_size, 0:1], op=nl.maximum)
-        nisa.tensor_scalar(dst=neg_m[0:q_size, 0:1], data=m_new[0:q_size, 0:1],
-                           op0=nl.multiply, operand0=-1.0)
-        # corr = exp(m_old - m_new): 0 on the first block (m_old = NEG_INF), so the
-        # zero-initialised accumulators stay zero.
-        nisa.activation(dst=corr[0:q_size, 0:1], data=m_prev[0:q_size, 0:1],
-                        op=nl.exp, bias=neg_m[0:q_size, 0:1])
+        nisa.tensor_reduce(dst=m_new[0:q_size, 0:1], data=s_sb[0:q_size, 0:k_size], op=nl.maximum, axis=(1,))
+        nisa.tensor_tensor(dst=m_new[0:q_size, 0:1], data1=m_new[0:q_size, 0:1], data2=m_prev[0:q_size, 0:1], op=nl.maximum)
+        nisa.tensor_scalar(dst=neg_m[0:q_size, 0:1], data=m_new[0:q_size, 0:1], op0=nl.multiply, operand0=-1.0)
+        
+        nisa.activation(dst=corr[0:q_size, 0:1], data=m_prev[0:q_size, 0:1], op=nl.exp, bias=neg_m[0:q_size, 0:1])
         nisa.tensor_copy(dst=m_prev[0:q_size, 0:1], src=m_new[0:q_size, 0:1])
 
         p = buf["p"]
-        nisa.activation(dst=p[0:q_size, 0:k_size], data=s_sb[0:q_size, 0:k_size],
-                        op=nl.exp, bias=neg_m[0:q_size, 0:1])
-        nisa.tensor_reduce(dst=row_sum[0:q_size, 0:1], data=p[0:q_size, 0:k_size],
-                           op=nl.add, axis=(1,))
-        nisa.scalar_tensor_tensor(dst=l_acc[0:q_size, 0:1], data=l_acc[0:q_size, 0:1],
-                                  op0=nl.multiply, operand0=corr[0:q_size, 0:1],
-                                  op1=nl.add, operand1=row_sum[0:q_size, 0:1])
+        nisa.activation(dst=p[0:q_size, 0:k_size], data=s_sb[0:q_size, 0:k_size], op=nl.exp, bias=neg_m[0:q_size, 0:1])
+        nisa.tensor_reduce(dst=row_sum[0:q_size, 0:1], data=p[0:q_size, 0:k_size], op=nl.add, axis=(1,))
+        nisa.scalar_tensor_tensor(dst=l_acc[0:q_size, 0:1], data=l_acc[0:q_size, 0:1], op0=nl.multiply, operand0=corr[0:q_size, 0:1], op1=nl.add, operand1=row_sum[0:q_size, 0:1])
 
         pt_psum = nl.ndarray((k_size, q_size), dtype=cfg["dtype"], buffer=nl.psum)
         nisa.nc_transpose(dst=pt_psum, data=p[0:q_size, 0:k_size])
@@ -137,25 +110,11 @@ if nki is not None:
         nisa.tensor_copy(dst=pt_sb[0:k_size, 0:q_size], src=pt_psum)
 
         pv_psum = nl.ndarray((q_size, head_dim), dtype=nl.float32, buffer=nl.psum)
-        nisa.nc_matmul(dst=pv_psum, stationary=pt_sb[0:k_size, 0:q_size],
-                       moving=v_tile[0:k_size, 0:head_dim])
-        nisa.scalar_tensor_tensor(dst=o_acc[0:q_size, 0:head_dim],
-                                  data=o_acc[0:q_size, 0:head_dim],
-                                  op0=nl.multiply, operand0=corr[0:q_size, 0:1],
-                                  op1=nl.add, operand1=pv_psum)
+        nisa.nc_matmul(dst=pv_psum, stationary=pt_sb[0:k_size, 0:q_size], moving=v_tile[0:k_size, 0:head_dim])
+        nisa.scalar_tensor_tensor(dst=o_acc[0:q_size, 0:head_dim], data=o_acc[0:q_size, 0:head_dim], op0=nl.multiply, operand0=corr[0:q_size, 0:1], op1=nl.add, operand1=pv_psum)
 
     @nki.jit
     def flash_attention_kernel(Q, K, V, causal, scale):
-        """Single (batch, head) slice of flash attention.
-
-        Args:
-            Q, K, V: (seq_len, head_dim)
-            causal:  compile-time bool
-            scale:   softmax scale (compile-time constant)
-
-        Returns:
-            (seq_len, head_dim) attention output.
-        """
         seq_len, head_dim = Q.shape
         assert head_dim <= PMAX
 
@@ -201,20 +160,16 @@ if nki is not None:
             # {0, 1} -> {0, NEG_INF}, the same additive-bias technique
             # block_sparse_attention uses for its mask.
             nisa.tensor_copy(dst=buf["causal_bias"], src=local_ok)
-            nisa.tensor_scalar(dst=buf["causal_bias"], data=buf["causal_bias"],
-                               op0=nl.subtract, operand0=1.0,
-                               op1=nl.multiply, operand1=-NEG_INF)
+            nisa.tensor_scalar(dst=buf["causal_bias"], data=buf["causal_bias"], op0=nl.subtract, operand0=1.0, op1=nl.multiply, operand1=-NEG_INF)
 
         for qi in range(num_q_blocks):
             q_offset = qi * PMAX
             q_size = min(PMAX, seq_len - q_offset)
 
-            nisa.dma_copy(dst=buf["q_tile"][0:q_size, 0:head_dim],
-                          src=Q[q_offset:q_offset + q_size, 0:head_dim])
+            nisa.dma_copy(dst=buf["q_tile"][0:q_size, 0:head_dim], src=Q[q_offset:q_offset + q_size, 0:head_dim])
             qt_psum = nl.ndarray((head_dim, q_size), dtype=Q.dtype, buffer=nl.psum)
             nisa.nc_transpose(dst=qt_psum, data=buf["q_tile"][0:q_size, 0:head_dim])
-            nisa.tensor_scalar(dst=buf["qt_sb"][0:head_dim, 0:q_size], data=qt_psum,
-                               op0=nl.multiply, operand0=scale)
+            nisa.tensor_scalar(dst=buf["qt_sb"][0:head_dim, 0:q_size], data=qt_psum, op0=nl.multiply, operand0=scale)
 
             nisa.memset(dst=buf["m_prev"][0:q_size, 0:1], value=NEG_INF)
             nisa.memset(dst=buf["l_acc"][0:q_size, 0:1], value=0.0)
@@ -235,34 +190,29 @@ if nki is not None:
                 k_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
                 nisa.memset(dst=k_off_sb, value=0)
                 for _ in nl.dynamic_range(n_dynamic):
-                    _attend_block(K, V, buf, cfg, q_offset, q_size,
-                                  0, PMAX, apply_causal_mask=False, k_off_sb=k_off_sb)
-                    nisa.tensor_scalar(dst=k_off_sb, data=k_off_sb,
-                                       op0=nl.add, operand0=PMAX)
+                    _attend_block(K, V, buf, cfg, q_offset, q_size, 0, PMAX, apply_causal_mask=False, k_off_sb=k_off_sb)
+                    nisa.tensor_scalar(dst=k_off_sb, data=k_off_sb, op0=nl.add, operand0=PMAX)
 
             for kj in range(n_dynamic, n_kj):
                 k_offset = kj * PMAX
                 k_size = min(PMAX, seq_len - k_offset)
                 is_diag = causal and kj == qi
-                _attend_block(K, V, buf, cfg, q_offset, q_size,
-                              k_offset, k_size, apply_causal_mask=is_diag)
+                _attend_block(K, V, buf, cfg, q_offset, q_size, k_offset, k_size, apply_causal_mask=is_diag)
 
-            nisa.reciprocal(dst=buf["corr"][0:q_size, 0:1],
-                            data=buf["l_acc"][0:q_size, 0:1])
-            nisa.tensor_scalar(dst=buf["res"][0:q_size, 0:head_dim],
-                               data=buf["o_acc"][0:q_size, 0:head_dim],
-                               op0=nl.multiply, operand0=buf["corr"][0:q_size, 0:1])
-            nisa.dma_copy(dst=out[q_offset:q_offset + q_size, 0:head_dim],
-                          src=buf["res"][0:q_size, 0:head_dim])
+            nisa.reciprocal(dst=buf["corr"][0:q_size, 0:1], data=buf["l_acc"][0:q_size, 0:1])
+            nisa.tensor_scalar(dst=buf["res"][0:q_size, 0:head_dim], data=buf["o_acc"][0:q_size, 0:head_dim], op0=nl.multiply, operand0=buf["corr"][0:q_size, 0:1])
+            nisa.dma_copy(dst=out[q_offset:q_offset + q_size, 0:head_dim], src=buf["res"][0:q_size, 0:head_dim])
 
         return out
 
 
 def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    
     batch, n_heads, seq_len, head_dim = q.shape
     scale = 1.0 / (head_dim ** 0.5)
     out = torch.empty_like(q)
+    
     for b in range(batch):
         for h in range(n_heads):
             res = flash_attention_kernel[_lnc_degree()](
