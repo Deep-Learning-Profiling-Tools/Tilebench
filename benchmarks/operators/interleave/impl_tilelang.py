@@ -34,7 +34,7 @@ def interleave_kernel(A, B, output, dtype, BLOCK_SIZE: int = 1024, threads: int 
         T.copy(B[start], B_reg)
         for out_local_idx in T.Parallel(2 * BLOCK_SIZE):
             in_local_idx = out_local_idx // 2
-            output_reg[out_local_idx] = T.if_then_else(
+            output_reg[out_local_idx] = T.Select(
                 out_local_idx % 2 == 0,
                 A_reg[in_local_idx],
                 B_reg[in_local_idx],
