@@ -29,37 +29,6 @@ def conv2d_configs():
         for ns in [2, 3, 4]
     ]
 
-
-# what is the algo?
-# input is shape [batch, in_channels, h_in, w_in]
-# weight is shape [out_channels, in_channels, h_k, w_k]
-# output is shape [batch, out_channels, h_o, w_o]
-
-# we want to utilize tensor cores -> need to do GEMM
-# batch = # of samples
-# per sample we have in_channels layers of 2d plane of h_in by w_in
-# then we do the operation on per channel then sum up
-# so all the in_channels contribute to one element
-# and then we do that for # of out_channels
-# resulting in output shape of [batch, out_channels, h_o, w_o]
-
-# now how do we use GEMM here?
-
-# well lets start from dot product
-# flatten last 3 dim on input and weight for sliding window basically
-# dot producting those vectors give the scalar we need
-# but we need to do this out_channel times
-# so imagine row is the values of input (A)
-# then in B (given A @ B) each col needs to be the kernel weights
-# so # of cols needs to be out_channels
-# so shape of B should be [in_channels x h_k x w_k, out_channels]
-# so shape of A should be [h_o x w_o, in_channels x h_k x w_k]
-# so then A @ B gives us shape [h_o x w_o, out_channels]
-# so pretty easy to covnert each row represents an element in therid,
-# and each col in the row js repesents for that out_channels so easy reshape
-# then just do this process independenlty per batch i believe
-
-
 @tilelang.autotune(configs=conv2d_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit(
     pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
