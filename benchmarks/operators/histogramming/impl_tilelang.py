@@ -5,12 +5,12 @@ from tilelang.autotuner import set_autotune_inputs
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE": 1024,
+    "partial_BLOCK_SIZE": 1024,
+    "partial_threads": 128,
+    "reduce_BLOCK_ROWS": 64,
+    "reduce_BLOCK_BINS": 256,
+    "reduce_threads": 128,
     "NUM_PARTIAL": 256,
-    "BLOCK_ROWS": 64,
-    "BLOCK_BINS": 256,
-    "threads_partial": 128,
-    "threads_reduce": 128,
 }
 _last_autotune_config: dict = {}
 
@@ -29,6 +29,7 @@ def histogram_reduce_configs():
         for br in [64, 128]
         for bb in [64, 128]
         for nt in [128, 256]
+        if br * bb <= 256 * 128
     ]
 
 
@@ -47,10 +48,9 @@ def histogram_partial_kernel(x, partial, BLOCK_SIZE: int = 1024, threads: int = 
         for chunk_idx in T.serial(pid, T.ceildiv(N, BLOCK_SIZE), num_partials):
             for local_idx in T.Parallel(BLOCK_SIZE):
                 idx = chunk_idx * BLOCK_SIZE + local_idx
-                if idx < N:
-                    val = x[idx]
-                    if (val >= 0) and (val < num_bins):
-                        T.atomic_add(smem[val], 1)
+                val = x[idx]
+                if idx < N and (val >= 0) and (val < num_bins):
+                    T.atomic_add(smem[val], 1)
 
         T.copy(smem, partial[pid, :])
 
@@ -93,7 +93,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     assert num_bins >= 1
 
     cfg = _DEFAULT_CONFIG
-    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["BLOCK_SIZE"]
+    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["partial_BLOCK_SIZE"]
 
     input = input.contiguous()
     histogram = torch.empty((num_bins,), device=input.device, dtype=torch.int32)
@@ -126,13 +126,13 @@ def run(input: torch.Tensor, N: int, num_bins: int,
         histogram_partial_kernel(
             input, partial,
             BLOCK_SIZE=BLOCK_SIZE,
-            threads=cfg["threads_partial"],
+            threads=cfg["partial_threads"],
         )
         histogram_reduce_kernel(
             partial, histogram,
-            BLOCK_ROWS=cfg["BLOCK_ROWS"],
-            BLOCK_BINS=cfg["BLOCK_BINS"],
-            threads=cfg["threads_reduce"],
+            BLOCK_ROWS=cfg["reduce_BLOCK_ROWS"],
+            BLOCK_BINS=cfg["reduce_BLOCK_BINS"],
+            threads=cfg["reduce_threads"],
         )
 
     return histogram
