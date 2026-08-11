@@ -15,6 +15,18 @@ _DEFAULT_CONFIG = {
 _last_autotune_config: dict = {}
 
 
+_HANG = frozenset({
+    (32, 64, 32, 128, 2), (32, 64, 32, 128, 3), (32, 64, 32, 128, 4),
+    (32, 64, 32, 256, 2), (32, 64, 32, 256, 3), (32, 64, 32, 256, 4),
+    (32, 64, 64, 128, 2), (32, 64, 64, 128, 4), (32, 64, 64, 256, 3),
+    (32, 64, 64, 256, 4), (32, 128, 32, 256, 3), (32, 128, 32, 256, 4),
+    (32, 128, 64, 128, 4), (32, 128, 64, 256, 4), (64, 64, 32, 128, 2),
+    (64, 64, 32, 128, 3), (64, 64, 32, 128, 4), (64, 64, 32, 256, 2),
+    (64, 64, 32, 256, 3), (64, 64, 32, 256, 4), (64, 64, 64, 128, 2),
+    (64, 64, 64, 128, 4), (64, 64, 64, 256, 2), (64, 64, 64, 256, 4),
+})
+
+
 def bmm_configs():
     block_m = [32, 64, 128]
     block_n = [32, 64, 128]
@@ -27,19 +39,7 @@ def bmm_configs():
         return (bm * bk + bn * bk) * 4 * ns + bm * bn * 4 <= 220_000
 
     def runtime_timeout_prone(bm, bn, bk, gs, nt, ns):
-        # Leave compile-time failures to TileLang's autotuner. Only prune
-        # shapes observed to benchmark-timeout / poison the CUDA context at
-        # BATCH=32, M=N=K=352. <- certain autotune configs fail, so
-        # have to prune these before autotune
-        if bm == 32 and bk == 32:
-            return True
-        if bm == 32 and bk == 64 and bn in (64, 128):
-            return True
-        if bm == 128 and bn in (32, 64):
-            return True
-        if bm == 64 and bn == 64:
-            return True
-        return False
+        return (bm, bn, bk, nt, ns) in _HANG
 
     return [
         dict(
