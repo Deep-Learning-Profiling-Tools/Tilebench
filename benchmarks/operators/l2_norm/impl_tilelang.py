@@ -29,25 +29,26 @@ def l2_norm_fwd_kernel(X, Y, dtype, eps,
     X: T.Tensor((M, N), dtype)
     Y: T.Tensor((M, N), dtype)
 
-    accum_dtype = "float"
+    accum_dtype = "float32"
 
-    # need to use BLOCK_SIZE
     with T.Kernel(M, threads=threads) as row:
-        X_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
-        X_sq_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
+        acc = T.alloc_fragment((BLOCK_N,), accum_dtype)
         row_sum = T.alloc_fragment((1,), accum_dtype)
         inv_norm = T.alloc_fragment((1,), accum_dtype)
-        #could also use T.copy here instead of parallel, but then 
-        #we will need to use T.Parallel anyway for the squaured calc
+        Y_local = T.alloc_fragment((BLOCK_N,), dtype)
+        T.fill(acc, 0.0)
         for off in T.serial(0, N, BLOCK_N):
-            for i, j in T.Parallel(1, BLOCK_N):
-                X_local[i, j] = T.Cast(accum_dtype, X[row, off + j])
-                X_sq_local[i, j] = X_local[i, j] * X_local[i, j]
+            for j in T.Parallel(BLOCK_N):
+                x_val = T.cast(X[row, off + j], accum_dtype)
+                acc[j] += x_val * x_val
             
-        T.reduce_sum(X_sq_local, row_sum, dim=1)
-        inv_norm[0] = T.rsqrt(row_sum[0] + T.Cast(accum_dtype, eps))
-        for i, j in T.Parallel(1, N):
-            Y[row, j] = T.Cast(dtype, X_local[i, j] * inv_norm[i])
+        T.reduce_sum(acc, row_sum, dim=0)
+        inv_norm[0] = T.rsqrt(row_sum[0] + T.cast(eps, accum_dtype))
+        for off in T.serial(0, N, BLOCK_N):
+            for j in T.Parallel(BLOCK_N):
+                x_val = T.cast(X[row, off + j], accum_dtype)
+                Y_local[j] = T.cast(x_val * inv_norm[0], dtype)
+            T.copy(Y_local, Y[row, off : off + BLOCK_N])
 
 
 
