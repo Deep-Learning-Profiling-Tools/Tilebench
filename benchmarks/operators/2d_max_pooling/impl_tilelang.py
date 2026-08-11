@@ -1,53 +1,65 @@
 import torch
-import tilelang 
+import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 256, "threads": 128}
+_DEFAULT_CONFIG = {"BLOCK_R": 2, "BLOCK_C": 128, "threads": 128}
 _last_autotune_config: dict = {}
+
+
 def max_pool2d_config():
-    BLOCK_SIZE = [256, 512, 1024, 2048]
-    threads = [128, 256]
     return [
-        dict(BLOCK_SIZE=bs, threads=nt)
-        for bs in BLOCK_SIZE
-        for nt in threads
+        dict(BLOCK_R=br, BLOCK_C=bc, threads=nt)
+        for br, bc in [(1, 128), (1, 256), (1, 512), (2, 128), (2, 256),
+                       (4, 128), (4, 256), (8, 64)]
+        for nt in [128, 256]
     ]
+
+
 @tilelang.autotune(configs=max_pool2d_config(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def max_pool2d_kernel(input, output, N, C, H, W, kernel_size, dtype,
                       stride, padding,
-                      BLOCK_SIZE: int = 256, 
+                      BLOCK_R: int = 2,
+                      BLOCK_C: int = 128,
                       threads: int = 128):
-    total_in = T.const("total_in")
-    total_out = T.const("total_out")
-    input: T.Tensor((total_in, ), dtype)
+    planes = N * C
     H_out = (H + 2 * padding - kernel_size) // stride + 1
     W_out = (W + 2 * padding - kernel_size) // stride + 1
-    output: T.Tensor((total_out, ), dtype)
-    
-    with T.Kernel(T.ceildiv(N * C * H_out * W_out, BLOCK_SIZE), threads=threads) as pid:
-        start = pid * BLOCK_SIZE
-        acc = T.alloc_fragment((BLOCK_SIZE,), dtype)
-        T.fill(acc, -float("inf"))
-        #local_input = T.alloc_fragment((kernel_size, kernel_size), dtype)
-        for i in T.Parallel(BLOCK_SIZE):
-            # start is an expression o
-            cur_col = (start + i) % W_out # this makes sense
-            cur_row = ((start + i) // W_out) % H_out # this gives big ass column
-            cur_c = ((start + i) // (W_out * H_out)) % C
-            cur_n = (start + i) // (W_out * H_out * C)
-            # this gives the j in [i, j] for output
-            # [i, j] in output correlates to kernel on input 
-            # with kernel center [stride * i, stride * j] on input
-            for kh in T.unroll(kernel_size):
-                for kw in T.unroll(kernel_size):
-                    ih = cur_row * stride + kh - padding
-                    iw = cur_col * stride + kw - padding
-                    if ih >= 0 and iw >= 0 and ih < H and iw < W:
-                        idx_1d = ((cur_n * C + cur_c) * H + ih) * W + iw
-                        acc[i] = T.max(acc[i], T.Cast("float32", input[idx_1d]))
-        T.copy(acc, output[start])
+    input: T.Tensor((planes, H, W), dtype)
+    output: T.Tensor((planes, H_out, W_out), dtype)
+
+    with T.Kernel(
+        planes,
+        T.ceildiv(H_out, BLOCK_R),
+        T.ceildiv(W_out, BLOCK_C),
+        threads=threads,
+    ) as (plane, pid_r, pid_c):
+        acc = T.alloc_fragment((BLOCK_R, BLOCK_C), dtype)
+        neg_inf = -T.infinity(dtype)
+        T.annotate_safe_value({input: neg_inf})
+        T.fill(acc, neg_inf)
+
+        row_start = pid_r * BLOCK_R
+        col_start = pid_c * BLOCK_C
+        for kh in T.unroll(kernel_size):
+            for kw in T.unroll(kernel_size):
+                for i, j in T.Parallel(BLOCK_R, BLOCK_C):
+                    oh = row_start + i
+                    ow = col_start + j
+                    ih = oh * stride + kh - padding
+                    iw = ow * stride + kw - padding
+                    acc[i, j] = T.max(acc[i, j], input[plane, ih, iw])
+
+        T.copy(
+            acc,
+            output[
+                plane,
+                row_start: row_start + BLOCK_R,
+                col_start: col_start + BLOCK_C,
+            ],
+        )
+
 
 def run(input, N, C, H, W, kernel_size, stride, padding,
         block_size: int = 1024, autotune: bool = False, **kwargs):
@@ -59,38 +71,33 @@ def run(input, N, C, H, W, kernel_size, stride, padding,
         return torch.empty(0, dtype=input.dtype, device=input.device)
 
     output = torch.empty(total_out, dtype=input.dtype, device=input.device)
+    input_3d = input.view(N * C, H, W)
+    output_3d = output.view(N * C, H_out, W_out)
 
     if autotune:
-        with set_autotune_inputs(input, output):
+        with set_autotune_inputs(input_3d, output_3d):
             tuned_kernel = max_pool2d_kernel.compile(
-                input, output, N=N, C=C, H=H, W=W, kernel_size=kernel_size, dtype=dtype,
-                stride=stride, padding=padding
+                input_3d, output_3d, N=N, C=C, H=H, W=W,
+                kernel_size=kernel_size, dtype=dtype,
+                stride=stride, padding=padding,
             )
             _last_autotune_config.clear()
             _last_autotune_config.update(dict(tuned_kernel.config or {}))
-            tuned_kernel(input, output)
-
+            tuned_kernel(input_3d, output_3d)
     else:
         _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         max_pool2d_kernel(
-            input, output, N=N, C=C, H=H, W=W,
+            input_3d, output_3d, N=N, C=C, H=H, W=W,
             kernel_size=kernel_size, dtype=dtype,
-            stride=stride, padding=padding, BLOCK_SIZE=cfg["BLOCK_SIZE"],
-            threads=cfg["threads"]
+            stride=stride, padding=padding,
+            BLOCK_R=cfg["BLOCK_R"],
+            BLOCK_C=cfg["BLOCK_C"],
+            threads=cfg["threads"],
         )
 
     return output
 
+
 def get_last_config() -> dict | None:
     return dict(_last_autotune_config) if _last_autotune_config else None
-
-
-            
-
-
-
-
-
-            
-
