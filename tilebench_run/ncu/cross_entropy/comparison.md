@@ -7,22 +7,22 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'num_classes': 512, 'batch_size': 10240}` | `{'num_warps': 1}` | `{'occupancy': 32}` |
-| fp32 | `{'num_classes': 512, 'batch_size': 10240}` | `{'num_warps': 1}` | `{'occupancy': 4}` |
+| fp16 | `{'num_classes': 512, 'batch_size': 10240}` | `{'num_warps': 1}` | `{'occupancy': 8}` |
+| fp32 | `{'num_classes': 512, 'batch_size': 10240}` | `{'num_warps': 1}` | `{'occupancy': 32}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 9.86 us | 14.05 % | 14.05 % | 11.55 % | 9.35 % | 20.21 % | 1.07 Tbyte/s | 32 | 26 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
-| fp16 | cutile | 15.04 us | 30.92 % | 9.19 % | 43.54 % | 6.10 % | 52.36 % | 703.05 Gbyte/s | 128 | 21 register/thread | 20 byte/block | 0 byte/block | 21 block / 28 block |
-| fp32 | triton | 10.46 us | 26.34 % | 26.34 % | 16.92 % | 17.62 % | 19.81 % | 2.01 Tbyte/s | 32 | 26 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
-| fp32 | cutile | 13.89 us | 30.31 % | 19.86 % | 42.55 % | 13.20 % | 47.51 % | 1.52 Tbyte/s | 128 | 21 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
+| fp16 | triton | 9.82 us | 14.07 % | 14.07 % | 11.99 % | 9.38 % | 20.50 % | 1.08 Tbyte/s | 32 | 26 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
+| fp16 | cutile | 14.37 us | 27.07 % | 9.63 % | 40.54 % | 6.40 % | 47.11 % | 735.89 Gbyte/s | 128 | 21 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
+| fp32 | triton | 10.08 us | 27.33 % | 27.33 % | 17.46 % | 18.33 % | 19.09 % | 2.09 Tbyte/s | 32 | 26 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
+| fp32 | cutile | 13.86 us | 32.30 % | 19.86 % | 44.21 % | 13.19 % | 50.86 % | 1.52 Tbyte/s | 128 | 24 register/thread | 28 byte/block | 0 byte/block | 21 block / 28 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.53× faster** (9.9 µs vs 15.0 µs).
-- **fp32**: Triton is **1.33× faster** (10.5 µs vs 13.9 µs).
+- **fp16**: Triton is **1.46× faster** (9.8 µs vs 14.4 µs).
+- **fp32**: Triton is **1.38× faster** (10.1 µs vs 13.9 µs).
 
 ## NCU's own bottleneck verdict
 
