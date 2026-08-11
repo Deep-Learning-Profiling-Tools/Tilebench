@@ -11,7 +11,7 @@ _last_autotune_config: dict = {}
 def flash_attention_configs():
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt, num_stages=ns)
-        for bm in [128]
+        for bm in [64, 128]
         for bn in [32, 64, 128]
         for nt in [64, 128, 256]
         for ns in [2, 3, 4]
@@ -53,13 +53,10 @@ def flash_attention_kernel(
             v_shared = T.alloc_shared((BLOCK_N, dim), dtype)
 
             scores = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            scores_tc = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
             scores_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
-            scores_bridge = T.alloc_shared((BLOCK_M, BLOCK_N), accum_dtype)
             scores_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
             acc_o = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
             pv = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
-            pv_shared = T.alloc_shared((BLOCK_M, dim), accum_dtype)
             pv_tmem = T.alloc_tmem((BLOCK_M, dim), accum_dtype)
             qk_mbar = T.alloc_barrier(1)
             pv_mbar = T.alloc_barrier(1)
@@ -90,15 +87,12 @@ def flash_attention_kernel(
                     mbar=qk_mbar,
                     clear_accum=True,
                 )
-                T.sync_threads()
-                T.copy(scores_tmem, scores_tc)
-                T.copy(scores_tc, scores_bridge)
-                T.sync_threads()
+                T.copy(scores_tmem, scores)
                 if is_causal:
                     for i, j in T.Parallel(BLOCK_M, BLOCK_N):
                         scores[i, j] = T.if_then_else(
                             pid_m * BLOCK_M + i >= k_tile * BLOCK_N + j,
-                            scores_bridge[i, j],
+                            scores[i, j],
                             -T.infinity(accum_dtype),
                         )
                 else:
@@ -106,7 +100,7 @@ def flash_attention_kernel(
                         scores[i, j] = T.if_then_else(
                             k_tile * BLOCK_N + j >= seq_len,
                             -T.infinity(accum_dtype),
-                            scores_bridge[i, j],
+                            scores[i, j],
                         )
 
                 T.copy(scores_max, scores_max_prev)
@@ -129,12 +123,9 @@ def flash_attention_kernel(
 
                 T.copy(V[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], v_shared)
                 T.gemm(scores_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
-                T.sync_threads()
                 T.copy(pv_tmem, pv)
-                T.copy(pv, pv_shared)
-                T.sync_threads()
                 for i, j in T.Parallel(BLOCK_M, dim):
-                    acc_o[i, j] += pv_shared[i, j]
+                    acc_o[i, j] += pv[i, j]
 
             for i, j in T.Parallel(BLOCK_M, dim):
                 acc_o[i, j] /= logsum[i]
