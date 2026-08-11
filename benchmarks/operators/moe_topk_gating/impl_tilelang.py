@@ -26,7 +26,6 @@ def moe_topk_gating_kernel(logits, topk_w, topk_idx, dtype, BLOCK_SIZE_E: int, B
     with T.Kernel(M, threads=threads) as pid:
         logits_reg = T.alloc_fragment((BLOCK_SIZE_E,), "float32")
         topk_vals = T.alloc_fragment((BLOCK_SIZE_K,), "float32")
-        topk_vals_out = T.alloc_fragment((BLOCK_SIZE_K,), dtype)
         topk_idxs = T.alloc_fragment((BLOCK_SIZE_K,), "int32")
         src_idx = T.alloc_fragment((BLOCK_SIZE_E,), "int32")
         curr_max_val = T.alloc_fragment((1,), "float32")
@@ -42,14 +41,14 @@ def moe_topk_gating_kernel(logits, topk_w, topk_idx, dtype, BLOCK_SIZE_E: int, B
             T.reduce_max(logits_reg, curr_max_val, dim=0, clear=True)
             T.fill(src_idx, E)
             for j in T.Parallel(BLOCK_SIZE_E):
-                src_idx[j] = T.if_then_else(logits_reg[j] == curr_max_val[0], j, E)
+                src_idx[j] = T.Select(logits_reg[j] == curr_max_val[0], j, E)
             T.reduce_min(src_idx, curr_max_idx, dim=0, clear=True)
 
             for j in T.Parallel(BLOCK_SIZE_K):
-                topk_vals[j] = T.if_then_else(j == K - 1 - i, curr_max_val[0], topk_vals[j])
-                topk_idxs[j] = T.if_then_else(j == K - 1 - i, curr_max_idx[0], topk_idxs[j])
+                topk_vals[j] = T.Select(j == i, curr_max_val[0], topk_vals[j])
+                topk_idxs[j] = T.Select(j == i, curr_max_idx[0], topk_idxs[j])
             for j in T.Parallel(BLOCK_SIZE_E):
-                logits_reg[j] = T.if_then_else(j == curr_max_idx[0], -T.infinity("float32"), logits_reg[j])
+                logits_reg[j] = T.Select(j == curr_max_idx[0], -T.infinity("float32"), logits_reg[j])
 
         T.reduce_max(topk_vals, mx, dim=0, clear=True)
         for i in T.Parallel(BLOCK_SIZE_K):
@@ -57,9 +56,8 @@ def moe_topk_gating_kernel(logits, topk_w, topk_idx, dtype, BLOCK_SIZE_E: int, B
         T.reduce_sum(topk_vals, rs, dim=0, clear=True)
         for i in T.Parallel(BLOCK_SIZE_K):
             topk_vals[i] = topk_vals[i] / rs[0]
-            topk_vals_out[i] = T.Cast(dtype, topk_vals[i])
+            topk_w[pid, i] = T.cast(topk_vals[i], dtype)
 
-        T.copy(topk_vals_out, topk_w[pid: pid + 1, 0:K])
         T.copy(topk_idxs, topk_idx[pid: pid + 1, 0:K])
 
 
