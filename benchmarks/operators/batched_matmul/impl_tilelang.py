@@ -5,35 +5,41 @@ from tilelang.autotuner import set_autotune_inputs
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE_M": 64,
-    "BLOCK_SIZE_N": 64,
+    "BLOCK_SIZE_M": 128,
+    "BLOCK_SIZE_N": 128,
     "BLOCK_SIZE_K": 32,
     "GROUPSIZE": 8,
     "threads": 128,
-    "num_stages": 2,
+    "num_stages": 4,
 }
 _last_autotune_config: dict = {}
 
 
+_HANG = frozenset({
+    (32, 64, 32, 128, 2), (32, 64, 32, 128, 3), (32, 64, 32, 128, 4),
+    (32, 64, 32, 256, 2), (32, 64, 32, 256, 3), (32, 64, 32, 256, 4),
+    (32, 64, 64, 128, 2), (32, 64, 64, 128, 4), (32, 64, 64, 256, 3),
+    (32, 64, 64, 256, 4), (32, 128, 32, 256, 3), (32, 128, 32, 256, 4),
+    (32, 128, 64, 128, 4), (32, 128, 64, 256, 4), (64, 64, 32, 128, 2),
+    (64, 64, 32, 128, 3), (64, 64, 32, 128, 4), (64, 64, 32, 256, 2),
+    (64, 64, 32, 256, 3), (64, 64, 32, 256, 4), (64, 64, 64, 128, 2),
+    (64, 64, 64, 128, 4), (64, 64, 64, 256, 2), (64, 64, 64, 256, 4),
+})
+
+
 def bmm_configs():
-    block_m = [32, 128]
+    block_m = [32, 64, 128]
     block_n = [32, 64, 128]
     block_k = [32, 64]
     group_size_m = [1, 8]
     threads = [128, 256]
     num_stages = [2, 3, 4]
+    # from Triton implementation
+    def fits_triton_smem_budget(bm, bn, bk, ns):
+        return (bm * bk + bn * bk) * 4 * ns + bm * bn * 4 <= 220_000
 
-    def runtime_timeout_prone(bm, bn, bk):
-        # Leave compile-time failures to TileLang's autotuner. Only prune
-        # shapes observed to benchmark-timeout / poison the CUDA context at
-        # BATCH=32, M=N=K=352.
-        if bm == 32 and bk == 32:
-            return True
-        if bm == 32 and bk == 64 and bn in (64, 128):
-            return True
-        if bm == 128 and bn in (32, 64):
-            return True
-        return False
+    def runtime_timeout_prone(bm, bn, bk, gs, nt, ns):
+        return (bm, bn, bk, nt, ns) in _HANG
 
     return [
         dict(
@@ -50,7 +56,8 @@ def bmm_configs():
         for gs in group_size_m
         for nt in threads
         for ns in num_stages
-        if not runtime_timeout_prone(bm, bn, bk)
+        if fits_triton_smem_budget(bm, bn, bk, ns)
+        if not runtime_timeout_prone(bm, bn, bk, gs, nt, ns)
     ]
 
 
