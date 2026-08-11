@@ -70,7 +70,11 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
             if "memcpy" in name.lower() or "memset" in name.lower():
                 continue
             kernels.append(name)
-    return {"count": len(kernels), "names": kernels[:10]}
+    # Full list, no truncation: ncu_one/ncu_driver derive --launch-skip and
+    # --launch-count from the number of non-aux names, so a truncated list
+    # makes >10-kernel pipelines (radix_sort 160, top_k 210) capture only a
+    # fragment of the call and report a bogus pipeline Duration.
+    return {"count": len(kernels), "names": kernels}
 
 
 def main() -> None:

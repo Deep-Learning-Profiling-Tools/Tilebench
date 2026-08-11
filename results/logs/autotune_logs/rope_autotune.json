@@ -9,13 +9,13 @@
         "problem_size": 4194304,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
-            "num_stages": 3
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
-            "group_size": 4,
-            "occupancy": 4
+            "group_size": 16,
+            "occupancy": 16
         }
     },
     {
@@ -28,69 +28,50 @@
         "problem_size": 4194304,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 3
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 8,
+            "occupancy": 8
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 2048
+        },
+        "problem_size": 8388608,
+        "dtype": "fp16",
+        "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 2
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 16,
+            "occupancy": 16
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 2048
+        },
+        "problem_size": 8388608,
+        "dtype": "fp32",
+        "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 3
         },
         "cutile_autotune_cfg": {
-            "group_size": 4,
-            "occupancy": 4
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 2048
-        },
-        "problem_size": 8388608,
-        "dtype": "fp16",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 4,
-            "occupancy": 4
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 2048
-        },
-        "problem_size": 8388608,
-        "dtype": "fp32",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 4,
-            "occupancy": 4
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 3072
-        },
-        "problem_size": 12582912,
-        "dtype": "fp16",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 4,
+            "group_size": 16,
             "occupancy": 8
         }
     },
@@ -102,14 +83,33 @@
             "seq_len": 3072
         },
         "problem_size": 12582912,
-        "dtype": "fp32",
+        "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
-            "group_size": 4,
+            "group_size": 16,
+            "occupancy": 32
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 3072
+        },
+        "problem_size": 12582912,
+        "dtype": "fp32",
+        "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 8,
+            "num_warps": 2,
+            "num_stages": 2
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 8,
             "occupancy": 8
         }
     },
@@ -123,13 +123,13 @@
         "problem_size": 16777216,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 16
+            "occupancy": 32
         }
     },
     {
@@ -141,25 +141,6 @@
         },
         "problem_size": 16777216,
         "dtype": "fp32",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 16,
-            "occupancy": 16
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 5120
-        },
-        "problem_size": 20971520,
-        "dtype": "fp16",
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 8,
             "num_warps": 2,
@@ -178,11 +159,30 @@
             "seq_len": 5120
         },
         "problem_size": 20971520,
+        "dtype": "fp16",
+        "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 3
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 16,
+            "occupancy": 4
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 5120
+        },
+        "problem_size": 20971520,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 2
+            "ROPE_GROUP_SIZE": 8,
+            "num_warps": 4,
+            "num_stages": 3
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
@@ -199,13 +199,13 @@
         "problem_size": 25165824,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 4
         }
     },
     {
@@ -218,7 +218,7 @@
         "problem_size": 25165824,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
+            "ROPE_GROUP_SIZE": 8,
             "num_warps": 2,
             "num_stages": 2
         },
@@ -237,13 +237,13 @@
         "problem_size": 29360128,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -258,10 +258,10 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 4,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
-            "group_size": 16,
+            "group_size": 8,
             "occupancy": 4
         }
     },
@@ -275,7 +275,7 @@
         "problem_size": 33554432,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
@@ -296,7 +296,7 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 4,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
@@ -313,13 +313,13 @@
         "problem_size": 37748736,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 32
         }
     },
     {
@@ -351,13 +351,13 @@
         "problem_size": 41943040,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 32
         }
     },
     {
@@ -372,7 +372,7 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 4,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
@@ -391,11 +391,11 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 8,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 16
         }
     },
     {
@@ -410,11 +410,11 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 4,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 4
         }
     },
     {
@@ -427,8 +427,8 @@
         "problem_size": 50331648,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
             "num_stages": 3
         },
         "cutile_autotune_cfg": {
@@ -446,8 +446,8 @@
         "problem_size": 50331648,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 8,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
@@ -465,13 +465,13 @@
         "problem_size": 54525952,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 16
         }
     },
     {
@@ -490,7 +490,7 @@
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 8
+            "occupancy": 4
         }
     },
     {
@@ -522,6 +522,25 @@
         "problem_size": 58720256,
         "dtype": "fp32",
         "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 8,
+            "num_stages": 2
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 16,
+            "occupancy": 4
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 15360
+        },
+        "problem_size": 62914560,
+        "dtype": "fp16",
+        "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 8,
             "num_warps": 2,
             "num_stages": 3
@@ -539,6 +558,25 @@
             "seq_len": 15360
         },
         "problem_size": 62914560,
+        "dtype": "fp32",
+        "triton_autotune_cfg": {
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 8,
+            "num_stages": 2
+        },
+        "cutile_autotune_cfg": {
+            "group_size": 16,
+            "occupancy": 8
+        }
+    },
+    {
+        "params": {
+            "batch_size": 1,
+            "n_heads": 32,
+            "head_dim": 128,
+            "seq_len": 16384
+        },
+        "problem_size": 67108864,
         "dtype": "fp16",
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 8,
@@ -547,45 +585,7 @@
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 15360
-        },
-        "problem_size": 62914560,
-        "dtype": "fp32",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 16,
-            "occupancy": 4
-        }
-    },
-    {
-        "params": {
-            "batch_size": 1,
-            "n_heads": 32,
-            "head_dim": 128,
-            "seq_len": 16384
-        },
-        "problem_size": 67108864,
-        "dtype": "fp16",
-        "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
-            "num_stages": 2
-        },
-        "cutile_autotune_cfg": {
-            "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -598,7 +598,7 @@
         "problem_size": 67108864,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
+            "ROPE_GROUP_SIZE": 16,
             "num_warps": 2,
             "num_stages": 2
         },
@@ -619,11 +619,11 @@
         "triton_autotune_cfg": {
             "ROPE_GROUP_SIZE": 8,
             "num_warps": 2,
-            "num_stages": 3
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -636,13 +636,13 @@
         "problem_size": 71303168,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -655,13 +655,13 @@
         "problem_size": 75497472,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
             "num_stages": 3
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 16
         }
     },
     {
@@ -674,13 +674,13 @@
         "problem_size": 75497472,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 8,
             "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -693,13 +693,13 @@
         "problem_size": 79691776,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
             "num_stages": 3
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -712,13 +712,13 @@
         "problem_size": 79691776,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 3
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
-            "occupancy": 4
+            "occupancy": 8
         }
     },
     {
@@ -731,9 +731,9 @@
         "problem_size": 83886080,
         "dtype": "fp16",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 8,
-            "num_warps": 2,
-            "num_stages": 2
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 3
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
@@ -750,9 +750,9 @@
         "problem_size": 83886080,
         "dtype": "fp32",
         "triton_autotune_cfg": {
-            "ROPE_GROUP_SIZE": 4,
-            "num_warps": 2,
-            "num_stages": 3
+            "ROPE_GROUP_SIZE": 16,
+            "num_warps": 4,
+            "num_stages": 2
         },
         "cutile_autotune_cfg": {
             "group_size": 16,
