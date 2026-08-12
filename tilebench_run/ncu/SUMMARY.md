@@ -75,8 +75,8 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | weight_dequant | fp16 | 62.0 | 187.4 | 3.03× |
 | weight_dequant | bf16 | 62.9 | 187.5 | 2.98× |
 | weight_dequant | fp32 | 118.3 | 194.6 | 1.65× |
-| 1d_conv | fp16 | 531.2 | 597.8 | 1.13× |
-| 1d_conv | fp32 | 627.8 | 451.2 | 0.72× |
+| 1d_conv | fp16 | 2520.0 | 4510.0 | 1.79× |
+| 1d_conv | fp32 | 3080.0 | 5320.0 | 1.73× |
 | 2d_conv | fp16 | 556.1 | 797.6 | 1.43× |
 | 2d_conv | fp32 | 1860.0 | 5390.0 | 2.90× |
 | batch_normalization | fp16 | 113.6 | 140.1 | 1.23× |
@@ -103,7 +103,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | l2_norm | fp16 | 17.2 | 18.5 | 1.07× |
 | l2_norm | bf16 | 17.2 | 18.1 | 1.05× |
 | l2_norm | fp32 | 30.3 | 42.5 | 1.40× |
-| linear_self_attention | fp32 | 4890.0 | 19570.0 | 4.00× |
+| linear_self_attention | fp32 | 415.4 | 2269.6 | 5.46× |
 | matmul_fp32_fp16_fp8 | fp32 | 6010.0 | 872.0 | 0.15× |
 | matmul_fp32_fp16_fp8 | fp16 | 561.8 | 467.2 | 0.83× |
 | matmul_fp32_fp16_fp8 | fp8_e4m3fn | 276.6 | 223.2 | 0.81× |
