@@ -85,7 +85,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | batched_matmul | fp16 | 29.7 | 30.1 | 1.01× |
 | batched_matmul | bf16 | 28.9 | 29.8 | 1.03× |
 | batched_matmul | fp32 | 118.2 | 18980.0 | 160.60× |
-| block_sparse_attention | fp16 | 76.7 | 280.5 | 3.65× |
+| block_sparse_attention | fp16 | 69.6 | 221.7 | 3.19× |
 | dequantize_rowwise | fp32 | 19.2 | 21.2 | 1.10× |
 | destindex | fp16 | 16.6 | 16.3 | 0.98× |
 | destindex | bf16 | 16.6 | 16.4 | 0.99× |
