@@ -1,44 +1,56 @@
 import torch
 import triton
 import triton.language as tl
+from triton.tools.tensor_descriptor import TensorDescriptor
 
 
-# Per-dtype default config (used when autotune=False).
 _DEFAULT_CONFIGS = {
     torch.float32: {
         "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 32,
-        "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
+        "GROUP_SIZE_M": 8, "num_warps": 4, "num_stages": 3,
     },
     torch.float16: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
+        "BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
+        "GROUP_SIZE_M": 8, "num_warps": 4, "num_stages": 3,
     },
     torch.float8_e4m3fn: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
-    },
-    torch.float8_e5m2: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "num_warps": 8, "num_stages": 3,
+        "BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8, "num_warps": 4, "num_stages": 3,
     },
 }
 
 
+def _tma_set_block_size_hook(nargs):
+    BLOCK_M = nargs["BLOCK_SIZE_M"]
+    BLOCK_N = nargs["BLOCK_SIZE_N"]
+    BLOCK_K = nargs["BLOCK_SIZE_K"]
+    nargs["a_desc"].block_shape = [BLOCK_M, BLOCK_K]
+    nargs["b_desc"].block_shape = [BLOCK_N, BLOCK_K]
+    nargs["c_desc"].block_shape = [BLOCK_M, BLOCK_N]
+
+
+_bt_cache: dict = {}
+
+
+def _b_transposed(b: torch.Tensor) -> torch.Tensor:
+    key = (b.data_ptr(), b.shape, b.dtype)
+    if key not in _bt_cache:
+        _bt_cache[key] = b.t().contiguous()
+    return _bt_cache[key]
+
+
 @triton.jit
 def matmul_kernel(
-    a_ptr, b_ptr, c_ptr,
+    a_desc, b_desc, c_desc,
     M, N, K,
-    stride_am, stride_ak,
-    stride_bk, stride_bn,
-    stride_cm, stride_cn,
+
+
+    DT_ID: tl.constexpr,
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
 ):
-    """Generic GEMM with grouped scheduling. fp32 accumulator; output dtype is
-    inferred from c_ptr — fp32, fp16, fp8 e4m3fn, and fp8 e5m2 are all handled
-    in the epilogue."""
     pid = tl.program_id(axis=0)
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
     num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
@@ -49,50 +61,24 @@ def matmul_kernel(
     pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
     pid_n = (pid % num_pid_in_group) // group_size_m
 
-    start_m = pid_m * BLOCK_SIZE_M
-    start_n = pid_n * BLOCK_SIZE_N
-
-    offs_am = start_m + tl.arange(0, BLOCK_SIZE_M)
-    offs_bn = start_n + tl.arange(0, BLOCK_SIZE_N)
-    offs_am = tl.where(offs_am < M, offs_am, 0)
-    offs_bn = tl.where(offs_bn < N, offs_bn, 0)
-    offs_am = tl.max_contiguous(tl.multiple_of(offs_am, BLOCK_SIZE_M), BLOCK_SIZE_M)
-    offs_bn = tl.max_contiguous(tl.multiple_of(offs_bn, BLOCK_SIZE_N), BLOCK_SIZE_N)
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-
-    a_ptrs = a_ptr + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+    offs_am = pid_m * BLOCK_SIZE_M
+    offs_bn = pid_n * BLOCK_SIZE_N
 
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
 
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
-        # input_precision="tf32" enables TF32 acceleration when inputs are fp32;
-        # ignored for fp16 / fp8 inputs, so this is safe to set unconditionally.
-        accumulator = tl.dot(a, b, accumulator)
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    # Cast accumulator to the output dtype.
-    if c_ptr.dtype.element_ty == tl.float8e4nv:
-        c = accumulator.to(tl.float8e4nv)
-    elif c_ptr.dtype.element_ty == tl.float8e5:
-        c = accumulator.to(tl.float8e5)
-    elif c_ptr.dtype.element_ty == tl.float32:
-        c = accumulator
-    else:
-        c = accumulator.to(tl.float16)
-
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = c_ptr + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
+    for k in tl.range(tl.cdiv(K, BLOCK_SIZE_K)):
 
 
-# Single autotune wrapper covering all dtypes. Triton recompiles per-dtype
-# automatically (c_ptr.dtype.element_ty changes the epilogue path).
+        a = a_desc.load([offs_am, k * BLOCK_SIZE_K])
+        b = b_desc.load([offs_bn, k * BLOCK_SIZE_K])
+
+
+        accumulator = tl.dot(a, b.T, accumulator, input_precision="tf32")
+
+
+    c_desc.store([offs_am, offs_bn], accumulator.to(c_desc.dtype))
+
+
 matmul_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config(
@@ -104,56 +90,74 @@ matmul_kernel_autotuned = triton.autotune(
             },
             num_warps=nw,
             num_stages=ns,
+            pre_hook=_tma_set_block_size_hook,
         )
-        # Shrunk from 216 cfgs to 16 to match cuTile-side shrink (impl_cutile.py).
+
         for bm in [128, 256]
         for bn in [128, 256]
         for bk in [64, 128]
         for gs in [8]
         for nw in [4, 8]
         for ns in [3]
+    ] + [
+
+
+        triton.Config(
+            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": bk,
+             "GROUP_SIZE_M": 8},
+            num_warps=nw,
+            num_stages=ns,
+            pre_hook=_tma_set_block_size_hook,
+        )
+        for bk, ns in [(64, 2), (32, 3), (32, 4)]
+        for nw in [4, 8]
     ],
-    key=["M", "N", "K"],
+    key=["M", "N", "K", "DT_ID"],
+    warmup=1,
+    rep=3,
 )(matmul_kernel)
+
+
+_DT_IDS = {torch.float32: 0, torch.float16: 1, torch.float8_e4m3fn: 2}
 
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False) -> torch.Tensor:
-    """Triton matmul. Output dtype matches input dtype (fp32 / fp16 / fp8)."""
     assert a.shape[1] == b.shape[0], "Incompatible dimensions"
     assert a.dtype == b.dtype, "Incompatible dtypes"
 
     M, K = a.shape
     _, N = b.shape
     c = torch.empty((M, N), device=a.device, dtype=a.dtype)
+    bt = _b_transposed(b)
 
     if autotune:
+
+        dummy_block = [1, 1]
+        a_desc = TensorDescriptor.from_tensor(a, dummy_block)
+        b_desc = TensorDescriptor.from_tensor(bt, dummy_block)
+        c_desc = TensorDescriptor.from_tensor(c, dummy_block)
         grid = lambda meta: (
             triton.cdiv(M, meta["BLOCK_SIZE_M"]) * triton.cdiv(N, meta["BLOCK_SIZE_N"]),
         )
-        matmul_kernel_autotuned[grid](
-            a, b, c,
-            M, N, K,
-            a.stride(0), a.stride(1),
-            b.stride(0), b.stride(1),
-            c.stride(0), c.stride(1),
-        )
+        matmul_kernel_autotuned[grid](a_desc, b_desc, c_desc, M, N, K,
+                                      DT_ID=_DT_IDS[a.dtype])
     else:
         if a.dtype not in _DEFAULT_CONFIGS:
             raise ValueError(f"No default config for dtype {a.dtype}")
         cfg = _DEFAULT_CONFIGS[a.dtype]
-        grid = (
-            triton.cdiv(M, cfg["BLOCK_SIZE_M"]) * triton.cdiv(N, cfg["BLOCK_SIZE_N"]),
-        )
+        bm, bn, bk = cfg["BLOCK_SIZE_M"], cfg["BLOCK_SIZE_N"], cfg["BLOCK_SIZE_K"]
+        a_desc = TensorDescriptor.from_tensor(a, [bm, bk])
+        b_desc = TensorDescriptor.from_tensor(bt, [bn, bk])
+        c_desc = TensorDescriptor.from_tensor(c, [bm, bn])
+        grid = (triton.cdiv(M, bm) * triton.cdiv(N, bn),)
         matmul_kernel[grid](
-            a, b, c,
+            a_desc, b_desc, c_desc,
             M, N, K,
-            a.stride(0), a.stride(1),
-            b.stride(0), b.stride(1),
-            c.stride(0), c.stride(1),
-            BLOCK_SIZE_M=cfg["BLOCK_SIZE_M"],
-            BLOCK_SIZE_N=cfg["BLOCK_SIZE_N"],
-            BLOCK_SIZE_K=cfg["BLOCK_SIZE_K"],
+            DT_ID=_DT_IDS[a.dtype],
+            BLOCK_SIZE_M=bm,
+            BLOCK_SIZE_N=bn,
+            BLOCK_SIZE_K=bk,
             GROUP_SIZE_M=cfg["GROUP_SIZE_M"],
             num_warps=cfg["num_warps"],
             num_stages=cfg["num_stages"],

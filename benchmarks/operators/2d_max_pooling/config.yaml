@@ -1,6 +1,3 @@
-# 2D Max Pooling — direct stencil with max reduction
-# Exact integer-valued max, per-dtype defaults suffice for verify.
-
 benchmark:
   warmup: 20
   repeat: 100
@@ -8,9 +5,6 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep spatial dimension H (= W) across 20 points.
-# Fixed: N=4, C=128, kernel_size=3, stride=2, padding=1
-# (matches LeetGPU performance-measured configuration N=4, kernel_size=3, stride=2)
 case_defaults:
   N: 4
   C: 128
@@ -20,18 +14,9 @@ case_defaults:
 
 case_grid:
   H:
-    expr: "[32 * i for i in range(1, 21)]"   # 32, 64, ..., 640 (20 points, W=H)
+    expr: "[32 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions  (W = H, square spatial dims)
-#   H_out = W_out = (H + 2*padding - kernel_size) // stride + 1
-#
-# FLOPs (count comparisons): N * C * H_out * W_out * kernel_size^2
-# Bytes:
-#   Read  input:  N * C * H * W * dtype_size     (physical, assuming L1/L2 caching)
-#   Write output: N * C * H_out * W_out * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: >
     N * C
