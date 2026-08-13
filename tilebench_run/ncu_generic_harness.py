@@ -94,16 +94,24 @@ def main() -> None:
         inputs = (inputs,)
     torch.cuda.synchronize()  # drain all generator launches before profiling
 
-    # Wrap warmups + final launch in cudaProfilerStart/Stop. NCU is invoked
-    # with `--profile-from-start off`, so the generator-side kernel launches
-    # (torch.randn, * scale, .to(dtype), ...) are hidden from NCU's launch
-    # counter. `--launch-skip 3N --launch-count N` then correctly indexes
-    # into the impl.run() launches only.
-    torch.cuda.profiler.start()
+    # Unified operator-level methodology: warmups (JIT/autotune caches) and a
+    # manual 256 MB L2 eviction happen OUTSIDE the profiler range, then exactly
+    # ONE complete impl.run() executes inside cudaProfilerStart/Stop. The
+    # operator starts entry-cold while intra-operator producer-consumer L2
+    # reuse is preserved (NCU runs with `--replay-mode application
+    # --cache-control none`, so it never purges caches between the operator's
+    # internal kernels). With `--profile-from-start off`, NCU's launch counter
+    # sees only the measured run below, so the driver selects kernels with
+    # `--launch-skip 0 --launch-count <matched-launches-per-run>`.
     for _ in range(3):
         out = impl.run(*inputs)
         torch.cuda.synchronize()
 
+    _l2_evict = torch.empty(256 * 1024 * 1024 // 4, device="cuda", dtype=torch.float32)
+    _l2_evict.fill_(1.0)
+    torch.cuda.synchronize()
+
+    torch.cuda.profiler.start()
     out = impl.run(*inputs)
     torch.cuda.synchronize()
     torch.cuda.profiler.stop()

@@ -40,7 +40,16 @@ def _build_profile_base(kind: str, output_dir: str | None, label: str | None = N
 _l2_flush_buf: torch.Tensor | None = None
 
 
-def _flush_l2_cache(flush_mb: int = 64) -> None:
+def _flush_l2_cache(flush_mb: int = 256) -> None:
+    """Evict L2 at the operator boundary (never between an operator's kernels).
+
+    256 MB is measured, not assumed: on B200 (L2 = 126.5 MB) a sweep of
+    64/128/256/512 MB showed 64 MB leaves operator inputs warm (flash_decode
+    26.5 -> 45.0 us, cross_entropy 7.0 -> 7.9 us when raised), while 256 MB
+    and 512 MB agree within 0.2% — past 256 MB a larger buffer no longer
+    changes the cold-entry measurement. Intra-operator producer-consumer
+    reuse is unaffected (linear_self_attention is flat across all four sizes).
+    """
     global _l2_flush_buf
     numel = max(1, flush_mb * 1024 * 1024 // 4)
     if _l2_flush_buf is None or _l2_flush_buf.numel() != numel:
