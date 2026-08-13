@@ -19,6 +19,7 @@ Usage (under ncu):
 import importlib
 import json
 import os
+import re
 import sys
 from types import SimpleNamespace
 
@@ -35,6 +36,52 @@ DTYPE_MAP = {
     "fp8_e4m3fn": getattr(torch, "float8_e4m3fn", None),
     "fp8_e5m2":   getattr(torch, "float8_e5m2", None),
 }
+
+
+_PREFIXED_CONFIG_RE = re.compile(r"^_DEFAULT_([A-Z0-9]+)_CONFIG$")
+
+
+def _inject_prefixed(impl, cfg: dict) -> dict:
+    """Route prefixed winner keys into the per-kernel config dicts run() reads.
+
+    Operators with more than one tunable kernel keep their configs in
+    per-kernel dicts named `_DEFAULT_<PREFIX>_CONFIG` (linear_self_attention:
+    `_DEFAULT_KV_CONFIG` / `_DEFAULT_OUT_CONFIG`), and the catalogue prefixes
+    their winner keys to match (`kv_BLOCK_M`, `out_num_warps`, ...). Without
+    this routing the override lands on an unused `_DEFAULT_CONFIG` attribute
+    and NCU silently profiles the DEFAULT config instead of the winner.
+
+    Mutates the target dicts in place (never rebinds them, so a `run()` that
+    captured a reference still sees the update). Returns the unconsumed keys
+    for the caller's existing single-config handling.
+    """
+    targets = {}
+    for attr in dir(impl):
+        m = _PREFIXED_CONFIG_RE.match(attr)
+        if m:
+            targets[m.group(1).lower()] = (attr, getattr(impl, attr))
+    if not targets:
+        return cfg
+
+    leftover = {}
+    for key, val in cfg.items():
+        placed = False
+        for pref, (attr, target) in targets.items():
+            if not key.lower().startswith(pref + "_"):
+                continue
+            base = key[len(pref) + 1:]
+            if isinstance(target, dict) and base in target:
+                target[base] = val
+                placed = True
+            elif isinstance(target, SimpleNamespace) and hasattr(target, base):
+                setattr(target, base, val)
+                placed = True
+            if placed:
+                print(f"  cfg: {attr}[{base}] = {val}")
+                break
+        if not placed:
+            leftover[key] = val
+    return leftover
 
 
 def main() -> None:
@@ -57,7 +104,9 @@ def main() -> None:
     impl = importlib.import_module(f"benchmarks.operators.{op}.impl_{backend}")
 
     if cfg_json:
-        cfg = json.loads(cfg_json)
+        cfg = _inject_prefixed(impl, json.loads(cfg_json))
+
+    if cfg_json and cfg:
         existing = getattr(impl, "_DEFAULT_CONFIG", None)
         configs = getattr(impl, "_DEFAULT_CONFIGS", None)  # per-dtype dict, optional
 
@@ -107,8 +156,8 @@ def main() -> None:
         out = impl.run(*inputs)
         torch.cuda.synchronize()
 
-    _l2_evict = torch.empty(256 * 1024 * 1024 // 4, device="cuda", dtype=torch.float32)
-    _l2_evict.fill_(1.0)
+    from core.timer import _flush_l2_cache
+    _flush_l2_cache()          # same auto-sized (2x device L2) eviction as Proton
     torch.cuda.synchronize()
 
     torch.cuda.profiler.start()
