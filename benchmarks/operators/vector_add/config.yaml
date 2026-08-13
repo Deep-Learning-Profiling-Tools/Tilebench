@@ -6,19 +6,12 @@ benchmark:
   autotune: false
 
 case_grid:
-  # 1M to 20M elements, step 1M
   n:
     expr: "[1024 * 1024 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32", "int8"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: n (problem size), dtype_size (bytes per element)
-# ---------------------------------------------------------------------------
 metrics:
-  # vector_add: 1 add per element (memory-bound)
   flops_expr: "n"
-  # 2 reads + 1 write per element
   bytes_expr: "n * dtype_size * 3"
 
   plots:

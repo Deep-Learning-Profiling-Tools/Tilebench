@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
-def _dropout_kernel(
+def dropout_kernel(
     x_ptr,
     x_keep_ptr,
     output_ptr,
@@ -31,7 +31,7 @@ _dropout_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
-)(_dropout_kernel)
+)(dropout_kernel)
 
 
 def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
@@ -44,7 +44,7 @@ def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
-        _dropout_kernel[grid](
+        dropout_kernel[grid](
             x, x_keep, output, n_elements, p,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],

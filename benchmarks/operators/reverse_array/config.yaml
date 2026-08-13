@@ -1,6 +1,3 @@
-# Reverse array — pure data movement (no arithmetic)
-# No verify section needed: exact element reordering, per-dtype defaults suffice.
-
 benchmark:
   warmup: 20
   repeat: 100
@@ -10,14 +7,9 @@ benchmark:
 
 case_grid:
   n:
-    expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
+    expr: "[1000000 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32", "int8"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   reverse is pure memory-bound: no meaningful FLOPs, use element count as proxy
-#   1 read + 1 write per element
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
   bytes_expr: "n * dtype_size * 2"

@@ -1,66 +1,41 @@
 # NCU Comparison: batch_normalization
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'C': 1024, 'eps': 1e-05, 'N': 20000}` | `{'BLOCK': 1024, 'num_warps': 4}` | `{'tile': 1024, 'occupancy': 16}` |
-| bf16 | `{'C': 1024, 'eps': 1e-05, 'N': 20000}` | `{'BLOCK': 1024, 'num_warps': 4}` | `{'tile': 1024, 'occupancy': 16}` |
-| fp32 | `{'C': 1024, 'eps': 1e-05, 'N': 20000}` | `{'BLOCK': 1024, 'num_warps': 4}` | `{'tile': 1024, 'occupancy': 16}` |
+| fp16 | `{'N': 20000, 'C': 1024, 'eps': 1e-05}` | `{'ROWS': 8, 'num_warps': 8}` | `{'rows': 16, 'occupancy': 8}` |
+| bf16 | `{'N': 20000, 'C': 1024, 'eps': 1e-05}` | `{'ROWS': 8, 'num_warps': 8}` | `{'rows': 16, 'occupancy': 8}` |
+| fp32 | `{'N': 20000, 'C': 1024, 'eps': 1e-05}` | `{'ROWS': 8, 'num_warps': 8}` | `{'rows': 8, 'occupancy': 4}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 113.60 us | 91.23 % | 6.13 % | 97.49 % | 64.11 % | 12.59 % | 470.12 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| fp16 | cutile | 140.10 us | 92.13 % | 6.16 % | 97.23 % | 64.46 % | 14.52 % | 472.60 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| bf16 | triton | 113.31 us | 92.52 % | 6.14 % | 97.44 % | 64.25 % | 12.77 % | 470.63 Gbyte/s | 128 | 26 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| bf16 | cutile | 139.59 us | 91.47 % | 6.15 % | 97.31 % | 64.29 % | 14.41 % | 471.26 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| fp32 | triton | 117.24 us | 92.62 % | 12.88 % | 98.42 % | 67.31 % | 11.95 % | 987.89 Gbyte/s | 128 | 25 register/thread | 0 byte/block | 16 byte/block | 16 block / 28 block |
-| fp32 | cutile | 141.50 us | 92.09 % | 12.89 % | 98.24 % | 67.42 % | 13.61 % | 988.70 Gbyte/s | 128 | 30 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-
-## Per-kernel breakdown (multi-kernel pipelines)
-
-End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
-
-| dtype | backend | k# | kernel duration | kernel name |
-|---|---|---|---|---|
-| bf16 | cutile | 1/3 | 86.98 us | `_compute_block_sums_kernel_Kt1_A1bf16_1i16t1_p16_A` |
-| bf16 | cutile | 2/3 | 5.73 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
-| bf16 | cutile | 3/3 | 46.88 us | `_apply_batch_norm_kernel_Kt1_A1bf16_1i16t1_p16_A1b` |
-| bf16 | triton | 1/3 | 87.23 us | `_compute_block_sums_kernel` |
-| bf16 | triton | 2/3 | 5.18 us | `_compute_mean_invstd_kernel` |
-| bf16 | triton | 3/3 | 20.90 us | `_apply_batch_norm_kernel` |
-| fp16 | cutile | 1/3 | 86.88 us | `_compute_block_sums_kernel_Kt1_A1f16_1i16t1_p16_A1` |
-| fp16 | cutile | 2/3 | 5.57 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
-| fp16 | cutile | 3/3 | 47.65 us | `_apply_batch_norm_kernel_Kt1_A1f16_1i16t1_p16_A1f1` |
-| fp16 | triton | 1/3 | 87.30 us | `_compute_block_sums_kernel` |
-| fp16 | triton | 2/3 | 5.15 us | `_compute_mean_invstd_kernel` |
-| fp16 | triton | 3/3 | 21.15 us | `_apply_batch_norm_kernel` |
-| fp32 | cutile | 1/3 | 86.43 us | `_compute_block_sums_kernel_Kt1_A1f32_1i16t1_p16_A1` |
-| fp32 | cutile | 2/3 | 5.50 us | `_compute_mean_invstd_kernel_Kt1_A1f32_1i16t1_p16_A` |
-| fp32 | cutile | 3/3 | 49.57 us | `_apply_batch_norm_kernel_Kt1_A1f32_1i16t1_p16_A1f3` |
-| fp32 | triton | 1/3 | 86.56 us | `_compute_block_sums_kernel` |
-| fp32 | triton | 2/3 | 5.34 us | `_compute_mean_invstd_kernel` |
-| fp32 | triton | 3/3 | 25.34 us | `_apply_batch_norm_kernel` |
+| fp16 | triton | 32.32 us | 41.72 % | 41.72 % | 60.45 % | 33.66 % | 20.34 % | 3.19 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 4.10 Kbyte/block | 5 block / 12 block |
+| fp16 | cutile | 54.69 us | 19.90 % | 19.90 % | 27.81 % | 16.37 % | 19.37 % | 1.52 Tbyte/s | 128 | 62 register/thread | 16.40 Kbyte/block | 0 byte/block | 8 block / 9 block |
+| bf16 | triton | 33.15 us | 39.20 % | 39.20 % | 56.02 % | 31.51 % | 22.64 % | 3.00 Tbyte/s | 256 | 48 register/thread | 0 byte/block | 4.10 Kbyte/block | 5 block / 12 block |
+| bf16 | cutile | 54.98 us | 19.66 % | 19.66 % | 26.24 % | 16.19 % | 19.04 % | 1.50 Tbyte/s | 128 | 62 register/thread | 16.40 Kbyte/block | 0 byte/block | 8 block / 9 block |
+| fp32 | triton | 61.00 us | 35.30 % | 35.30 % | 9.03 % | 22.90 % | 8.46 % | 2.70 Tbyte/s | 128 | 132 register/thread | 0 byte/block | 0 byte/block | 3 block / 32 block |
+| fp32 | cutile | 52.18 us | 59.74 % | 59.74 % | 51.09 % | 36.21 % | 23.31 % | 4.57 Tbyte/s | 128 | 92 register/thread | 0 byte/block | 0 byte/block | 5 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.23× faster** (113.6 µs vs 140.1 µs).
-- **bf16**: Triton is **1.23× faster** (113.3 µs vs 139.6 µs).
-- **fp32**: Triton is **1.21× faster** (117.2 µs vs 141.5 µs).
+- **fp16**: Triton is **1.69× faster** (32.3 µs vs 54.7 µs).
+- **bf16**: Triton is **1.66× faster** (33.1 µs vs 55.0 µs).
+- **fp32**: cuTile is **1.17× faster** (52.2 µs vs 61.0 µs).
 
 ## NCU's own bottleneck verdict
 
-- **bf16 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **bf16 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **fp16 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **fp16 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **fp32 / cutile** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
-- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
+- **bf16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp16 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp32 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.70 full waves across all SMs. Look at Launch Statistics for more details.
 
 ## Reports
 

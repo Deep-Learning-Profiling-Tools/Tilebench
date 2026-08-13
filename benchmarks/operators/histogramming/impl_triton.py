@@ -4,18 +4,18 @@ import triton.language as tl
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE": 1024,
+    "partial_BLOCK_SIZE": 1024,
+    "partial_num_warps": 4,
+    "reduce_BLOCK_ROWS": 64,
+    "reduce_BLOCK_BINS": 256,
+    "reduce_num_warps": 4,
+    "reduce_num_stages": 1,
     "NUM_PARTIAL": 256,
-    "BLOCK_ROWS": 64,
-    "BLOCK_BINS": 256,
-    "num_warps_partial": 4,
-    "num_warps_reduce": 4,
-    "num_stages": 1,
 }
 
 
 @triton.jit
-def _histogram_partial_kernel(
+def histogram_partial_kernel(
     input_ptr,
     partial_ptr,
     N,
@@ -43,7 +43,7 @@ def _histogram_partial_kernel(
 
 
 @triton.jit
-def _histogram_reduce_kernel(
+def histogram_reduce_kernel(
     partial_ptr,
     hist_ptr,
     num_partials,
@@ -72,22 +72,20 @@ def _histogram_reduce_kernel(
 
 _histogram_partial_kernel_autotuned = triton.autotune(
     configs=[
-        # Shrunk from 12 cfgs to 4 to match cuTile-side shrink (impl_cutile.py).
+
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw, num_stages=1)
         for bs in [1024, 2048]
         for nw in [4, 8]
     ],
     key=["N", "num_bins"],
-    # Stage 1 uses tl.atomic_add into partial_ptr — each autotune-sweep run
-    # accumulates into the same buffer. Zero it before every cfg trial so the
-    # final replay sees a clean buffer.
+    warmup=1,
+    rep=3,
+
+
     reset_to_zero=["partial_ptr"],
-)(_histogram_partial_kernel)
+)(histogram_partial_kernel)
 
 
-# Stage 2's K-loop is a true `tl.load → reduce` pipeline, so num_stages
-# sweep can give real load/compute overlap (unlike stage 1, which is
-# atomic-write-bound and pins num_stages=1).
 _histogram_reduce_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config(
@@ -95,7 +93,7 @@ _histogram_reduce_kernel_autotuned = triton.autotune(
             num_warps=nw,
             num_stages=ns,
         )
-        # Shrunk from ~135 cfgs to 8 to match cuTile-side shrink.
+
         for br in [64, 128]
         for bb in [64, 128]
         for nw in [4, 8]
@@ -103,9 +101,9 @@ _histogram_reduce_kernel_autotuned = triton.autotune(
         if br * bb <= 256 * 128
     ],
     key=["num_partials", "num_bins"],
-    warmup=3,
-    rep=10,
-)(_histogram_reduce_kernel)
+    warmup=1,
+    rep=3,
+)(histogram_reduce_kernel)
 
 
 def run(input: torch.Tensor, N: int, num_bins: int,
@@ -117,19 +115,15 @@ def run(input: torch.Tensor, N: int, num_bins: int,
     assert num_bins >= 1
 
     cfg = _DEFAULT_CONFIG
-    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["BLOCK_SIZE"]
+    BLOCK_SIZE = int(block_size) if block_size is not None else cfg["partial_BLOCK_SIZE"]
     NUM_PARTIAL = cfg["NUM_PARTIAL"]
-    BLOCK_ROWS = cfg["BLOCK_ROWS"]
-    BLOCK_BINS = cfg["BLOCK_BINS"]
+    BLOCK_ROWS = cfg["reduce_BLOCK_ROWS"]
+    BLOCK_BINS = cfg["reduce_BLOCK_BINS"]
 
     input = input.contiguous()
     histogram = torch.empty((num_bins,), device=input.device, dtype=torch.int32)
 
-    # Allocate + zero the partial buffer per call. The TileBench engine has no
-    # setup hook, so this memset gets recorded into the CUDA graph and inflates
-    # absolute latency by a few us. We accept the cost because impl_cutile.py
-    # does the exact same `torch.zeros(...)`, keeping the Triton-vs-cuTile
-    # comparison symmetric.
+
     num_partials = min(NUM_PARTIAL, triton.cdiv(N, BLOCK_SIZE))
     partial = torch.zeros((num_partials, num_bins), device=input.device, dtype=torch.int32)
 
@@ -144,20 +138,20 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             partial.stride(0), partial.stride(1),
         )
     else:
-        _histogram_partial_kernel[(num_partials,)](
+        histogram_partial_kernel[(num_partials,)](
             input, partial, N, num_bins, num_partials,
             partial.stride(0), partial.stride(1),
             BLOCK_SIZE=BLOCK_SIZE,
-            num_warps=cfg["num_warps_partial"],
-            num_stages=cfg["num_stages"],
+            num_warps=cfg["partial_num_warps"],
+            num_stages=1,
         )
-        _histogram_reduce_kernel[(triton.cdiv(num_bins, BLOCK_BINS),)](
+        histogram_reduce_kernel[(triton.cdiv(num_bins, BLOCK_BINS),)](
             partial, histogram, num_partials, num_bins,
             partial.stride(0), partial.stride(1),
             BLOCK_ROWS=BLOCK_ROWS,
             BLOCK_BINS=BLOCK_BINS,
-            num_warps=cfg["num_warps_reduce"],
-            num_stages=cfg["num_stages"],
+            num_warps=cfg["reduce_num_warps"],
+            num_stages=cfg["reduce_num_stages"],
         )
 
     return histogram
