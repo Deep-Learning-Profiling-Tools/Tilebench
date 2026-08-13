@@ -17,34 +17,24 @@ _last_autotune_config: dict = {}
 
 
 @ct.kernel
-def _leaky_relu_kernel(x_ptr, y_ptr, TILE: ConstInt):
-    """
-    Element-wise Leaky ReLU matching Triton's method:
-      y[i] = x[i] if x[i] > 0 else 0.01 * x[i]
-
-    ct.load with padding_mode=ZERO returns 0 for the last partial tile's
-    OOB positions; computing leaky_relu on 0 gives 0 (harmless); the
-    corresponding ct.store at OOB positions is silently dropped.
-    """
+def leaky_relu_kernel(x_ptr, y_ptr, TILE: ConstInt):
     bid = ct.bid(0)
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
     y_tile = ct.where(x_tile > 0, x_tile, 0.01 * x_tile)
     ct.store(y_ptr, index=(bid,), tile=y_tile)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_leaky_relu_kernel)
+_tuner = CutileAutotuner(leaky_relu_kernel)
 
 
 def run(input: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    """cuTile element-wise Leaky ReLU mirroring Triton's tl.where method."""
     output = torch.empty_like(input)
     stream = torch.cuda.current_stream()
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: (ct.cdiv(N, cfg.tile), 1, 1),

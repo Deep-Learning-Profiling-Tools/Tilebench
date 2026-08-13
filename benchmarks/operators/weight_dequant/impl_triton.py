@@ -20,8 +20,8 @@ def dequant_kernel(X, S, Y, M: tl.constexpr, N: tl.constexpr,
     s_row = row // TILE_SIZE
     s_col = col // TILE_SIZE
 
-    x = tl.load(X + offsets, mask=mask).to(tl.float32)
-    scale = tl.load(S + s_row * S_COLS + s_col, mask=mask).to(tl.float32)
+    x = tl.load(X + offsets, mask=mask)
+    scale = tl.load(S + s_row * S_COLS + s_col, mask=mask)
 
     y = x * scale
 
@@ -35,6 +35,8 @@ _dequant_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["M", "N"],
+    warmup=1,
+    rep=3,
 )(dequant_kernel)
 
 
