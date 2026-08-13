@@ -2,38 +2,18 @@ benchmark:
   warmup: 20
   repeat: 100
   use_cuda_graph: true
-  flush_l2: true       # two-pass read of x, memory-bound
+  flush_l2: true
   autotune: false
 
-# Sweep the hidden dimension K across 20 points (512 → 10240).
-# batch=1, M=2048 mimics a typical LLM prefill batch (2 k tokens).
-# n = batch * M * K = 2048 * K total elements.
 case_defaults:
   batch: 1
   M: 2048
 
 case_grid:
   K:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points)
-  # int8 is excluded: squaring int8 elements overflows the range, and
-  # RMSNorm in practice is always applied to floating-point activations.
+    expr: "[512 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: n (= batch*M*K), dtype_size (bytes per element)
-#
-# FLOPs:
-#   Pass 1: n multiplications (x*x) + n additions (sum) ≈ 2n
-#   Pass 2: n multiplications (x*rstd) + n multiplications (*rms_w) = 2n
-#   Total: ~4n  (per-row rsqrt and division are negligible)
-#
-# Bytes (two-pass kernel):
-#   Read  x      twice : 2 * n * dtype_size
-#   Read  rms_w  once  : K * dtype_size  (≪ n for large M, treated as ~0)
-#   Write out    once  : n * dtype_size
-#   Total ≈ 3 * n * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "4 * n"
   bytes_expr: "n * dtype_size * 3"

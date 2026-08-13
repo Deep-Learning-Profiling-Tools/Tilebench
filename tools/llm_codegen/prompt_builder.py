@@ -32,12 +32,7 @@ SYSTEM = (Path(__file__).resolve().parent / "system_prompt.md").read_text()
 
 
 def _output_instruction(backends: tuple[str, ...]) -> str:
-    """Build the strict output-format instruction for the requested backends.
-
-    When only one backend is active (the other is frozen), this instructs the
-    LLM to emit a single code block — the frozen backend is preserved from
-    its earlier verified iter, not regenerated.
-    """
+    """Build the strict output-format instruction for the requested backends."""
     n = len(backends)
     blocks = "\n\n".join(
         f'    ```python title="impl_{b}.py"\n    # full Python file content here\n    ```'
@@ -96,7 +91,16 @@ _BACKEND_REF_PREAMBLES = {
         "version installed in this repo (3.6.0); do NOT use APIs from later "
         "versions you may have seen in training data. When writing "
         "`impl_triton.py`, every `tl.*` / `triton.*` symbol you use must "
-        "appear in this reference."
+        "appear in this reference.\n\n"
+        "**IMPORTANT — autotune sections of this reference do NOT apply.** "
+        "The reference below was written as a general Triton programming "
+        "guide and discusses `triton.autotune` / `triton.Config` / "
+        "`_DEFAULT_CONFIG` extensively. In THIS pipeline you must NOT use "
+        "any of them — see the 'No autotune' rule in the TileBench "
+        "framework conventions above. Use the reference for kernel-body "
+        "syntax (tl.load, tl.store, tl.dot, masking, make_block_ptr, "
+        "make_tensor_descriptor, etc.); ignore everything about cfg "
+        "search / autotune wrappers."
     ),
     "cutile": (
         "The cuTile DSL is newer than Triton and likely sparse in your "
@@ -104,7 +108,15 @@ _BACKEND_REF_PREAMBLES = {
         "NOT invent attributes by analogy with Triton (e.g. `tl.range` has "
         "no `ct.range` equivalent --- use plain Python `for` loops). When "
         "writing `impl_cutile.py`, every `ct.*` symbol you use must appear "
-        "in this reference."
+        "in this reference.\n\n"
+        "**IMPORTANT — autotune sections of this reference do NOT apply.** "
+        "The reference below discusses `CutileAutotuner`, "
+        "`ct_experimental.autotune_launch`, and `ct.tune.exhaustive_search`. "
+        "In THIS pipeline you must NOT use any of them — see the 'No "
+        "autotune' rule in the TileBench framework conventions above. "
+        "Use the reference for kernel-body syntax (ct.load, ct.store, "
+        "ct.mma, ct.bid, padding_mode, etc.); ignore everything about "
+        "tuners and search spaces."
     ),
 }
 
@@ -140,8 +152,7 @@ def build_initial_prompt(
     """First-iteration prompt: framework guide + (cuTile reference if cuTile
     requested) + problem desc + config + torch impl.
 
-    `backends` is normally both ("triton", "cutile"). It can be restricted to
-    a single backend if the other one is already frozen from an earlier run.
+    `backends` is normally both ("triton", "cutile").
     """
     framework_guide = _read(_THIS_DIR / "framework_guide.md")
     op_dir = _REPO_ROOT / "benchmarks" / "operators" / op
@@ -211,7 +222,6 @@ def build_feedback_prompt(
     history: list[dict] | None = None,
     best_so_far: dict | None = None,
     backends: tuple[str, ...] = ("triton", "cutile"),
-    frozen_info: dict | None = None,
 ) -> str:
     """Build the prompt for iteration N>0 — repeats the framework guide and
     focuses on what went wrong in iter N-1, plus a regression-detection
@@ -224,12 +234,8 @@ def build_feedback_prompt(
     `best_so_far`  — per-backend dict {<b>: {iter, stop_score, impl_<b>}}
                      of the best verify-clean iter for each backend (a
                      backend key may be absent if no clean iter exists yet).
-    `backends`     — backends still being generated this iter (frozen
-                     backends are excluded — their impl is copied from the
-                     earlier iter where they froze).
-    `frozen_info`  — {<b>: {iter, stop_score}} for already-frozen backends;
-                     surfaced in the prompt so the LLM knows to focus only
-                     on `backends`.
+    `backends`     — backends to regenerate this iter (the loop always
+                     regenerates both Triton and cuTile).
     """
     framework_guide = _read(_THIS_DIR / "framework_guide.md")
     op_dir = _REPO_ROOT / "benchmarks" / "operators" / op
@@ -242,32 +248,19 @@ def build_feedback_prompt(
 
     files_to_emit = ", ".join(f"`impl_{b}.py`" for b in backends)
     intro = (
-        f"Your previous iteration ({iter_idx-1}) did not yet meet the stopping "
-        f"criterion (`stop_score` ≥ 80% on the **largest 3 cases per dtype**) "
-        f"for {', '.join(f'`{b}`' for b in backends)}. "
-        "Read the trajectory below carefully — if your last iteration **regressed** "
-        "vs the best verify-clean iter so far, you should consider going back to "
-        "that approach as your starting point and trying a different optimization. "
+        f"This is iteration {iter_idx} of the refinement loop. "
+        "Your previous iteration's results are reported below. "
+        "Read the trajectory carefully: if your last iteration regressed "
+        "vs the best verify-clean iter so far, consider going back to that "
+        "approach as your starting point and trying a different optimization. "
         f"Then re-emit {files_to_emit}."
     )
-
-    frozen_blurb = ""
-    if frozen_info:
-        frozen_lines = []
-        for b, info in frozen_info.items():
-            frozen_lines.append(
-                f"- `{b}` froze at iter {info['iter']} with stop_score="
-                f"{info.get('stop_score', 0)*100:.1f}%. Do NOT regenerate it; "
-                f"focus only on {files_to_emit}."
-            )
-        frozen_blurb = "## Frozen backends\n\n" + "\n".join(frozen_lines) + "\n"
 
     sections = [
         f"# Task: improve operator `{op}` for TileBench (iteration {iter_idx})",
         "",
         intro,
         "",
-        frozen_blurb,
         trajectory_text,
         "",
         "## Feedback from iteration " + str(iter_idx - 1),
@@ -368,6 +361,16 @@ def build_feedback_prompt(
     return "\n".join(sections)
 
 
+def _fmt_cfg(cfg: dict | None) -> str:
+    """One-line repr of a config dict, e.g. {BLOCK_M:128, num_warps:4}."""
+    if not cfg:
+        return "—"
+    parts = []
+    for k, v in cfg.items():
+        parts.append(f"{k}:{v}")
+    return "{" + ", ".join(parts) + "}"
+
+
 def _format_trajectory(
     history: list[dict],
     best_so_far: dict | None,
@@ -376,34 +379,46 @@ def _format_trajectory(
     """Render a compact per-backend iteration trajectory + best-so-far summary.
 
     `history` entries should each contain `per_backend: {triton: {stop_score,
-    verify_clean, verify_fail_count, skipped}, cutile: ...}` plus a top-level
-    `iter` and optional `iter_total_s`. `best_so_far` is keyed by backend:
-    `{triton: {iter, stop_score}, cutile: {iter, stop_score}}` (a backend
-    key may be absent if no verify-clean iter exists yet).
+    verify_clean, verify_fail_count, skipped, cfg, speedup_vs_torch}, cutile:
+    ...}` plus a top-level `iter` and optional `iter_total_s`. `best_so_far`
+    is keyed by backend: `{triton: {iter, stop_score}, cutile: {iter,
+    stop_score}}` (a backend key may be absent if no verify-clean iter
+    exists yet).
     """
     if not history:
         return ""
     lines = ["## Iteration trajectory so far", ""]
     header = ["iter"]
     for b in ("triton", "cutile"):
+        header.append(f"{b} cfg")
         header.append(f"{b} score")
+        header.append(f"{b} speedup_vs_torch")
         header.append(f"{b} verify")
     lines.append("| " + " | ".join(header) + " |")
-    lines.append("|" + "---:|" * (len(header)))
+    lines.append("|" + "---|" * (len(header)))
     for h in history:
         row = [str(h["iter"])]
         for b in ("triton", "cutile"):
             pb = h.get("per_backend", {}).get(b, {})
             if pb.get("skipped"):
-                row.append("(frozen)")
-                row.append("—")
+                row.extend(["(skipped)", "(skipped)", "—", "—"])
             else:
+                row.append(_fmt_cfg(pb.get("cfg")))
                 row.append(f"{pb.get('stop_score', 0)*100:.1f}%")
+                sp = pb.get("speedup_vs_torch")
+                row.append(f"{sp:.2f}×" if isinstance(sp, (int, float)) and sp > 0 else "—")
                 if pb.get("verify_clean"):
                     row.append("✓")
                 else:
                     row.append(f"✗{pb.get('verify_fail_count', 0)}")
         lines.append("| " + " | ".join(row) + " |")
+    lines.append("")
+    lines.append(
+        "_`cfg` is the configuration your kernel actually used, as returned "
+        "by `get_last_config()`. `speedup_vs_torch` is "
+        "`torch_latency / kernel_latency` — values >1 mean your kernel beat "
+        "the PyTorch reference; <1 means torch is still faster._"
+    )
     lines.append("")
 
     # Best-so-far + regression notes, per still-active backend.
@@ -454,15 +469,17 @@ def _format_feedback(
             lines.append("```")
             lines.append("")
 
-    # Autotune errors
-    autotune_errs = feedback.get("autotune_errors", {})
-    for backend, err in autotune_errs.items():
+    # Per-case wall-clock timeouts.
+    timeout_errs = feedback.get("case_timeout_errors", {})
+    for backend, err in timeout_errs.items():
         if err and backend in backends:
-            lines.append(f"### ⏱ `{backend}` autotune failed or exceeded 15-minute cap")
+            lines.append(f"### ⏱ `{backend}` exceeded per-case wall-clock cap")
             lines.append("```")
             lines.append(err.strip()[:3000])
             lines.append("```")
-            lines.append("→ Action: shrink your autotune search space (≤ 20 cfgs) and avoid configs that hang.")
+            lines.append("→ Action: your configuration likely produced a very slow kernel "
+                         "(too-small tile, way too many CTAs, or a bad pipeline depth). "
+                         "Pick a more aggressive tile size next iteration.")
             lines.append("")
 
     # Verify failures (only for backends still being generated)
@@ -480,8 +497,8 @@ def _format_feedback(
         score = feedback.get(f"stop_score_{b}", 0.0)
         rep = feedback.get(f"report_arith_mean_{b}", 0.0)
         lines.append(
-            f"### `{b}` performance — stop_score=**{score*100:.1f}%** "
-            f"(target ≥ 80%), report_mean={rep*100:.1f}%"
+            f"### `{b}` performance — mean roofline utilization = "
+            f"**{score*100:.1f}%** (report_mean={rep*100:.1f}%)"
         )
     lines.append("")
     rl = [r for r in feedback.get("roofline_per_combo", []) if r.get("backend") in backends]
@@ -491,9 +508,12 @@ def _format_feedback(
         for r in rl_sorted[:20]:
             pct = r.get("roofline_pct", 0.0) * 100
             bound = r.get("bound_by", "?")
+            sp = r.get("speedup_vs_torch")
+            sp_str = f"{sp:.2f}× torch" if isinstance(sp, (int, float)) and sp > 0 else "no torch baseline"
+            cfg_str = _fmt_cfg(r.get("cfg"))
             lines.append(
                 f"- `{r['backend']}` / `{r['dtype']}` / {r['params']}: "
-                f"{pct:.1f}% of roofline ({bound})"
+                f"{pct:.1f}% of roofline ({bound}), {sp_str}, cfg={cfg_str}"
             )
         if len(rl_sorted) > 20:
             lines.append(f"  ... and {len(rl_sorted) - 20} more cases.")

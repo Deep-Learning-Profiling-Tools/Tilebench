@@ -7,7 +7,7 @@ from core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
-_last_autotune_config: dict | None = None
+_last_autotune_config: dict = {}
 
 _DEFAULT_CONFIG = SimpleNamespace(tile=1024, occupancy=8)
 
@@ -26,13 +26,11 @@ _SEARCH_SPACE = [
 ]
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(matrix_copy_kernel)
 
 
 def run(A: torch.Tensor, N: int,
         block_size: int = 1024, autotune: bool = False, **kwargs):
-    global _last_autotune_config
     B = torch.empty_like(A)
     total = N * N
     stream = torch.cuda.current_stream()
@@ -42,17 +40,18 @@ def run(A: torch.Tensor, N: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(A.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),
             args_fn=lambda cfg: (A_flat, B_flat, cfg.tile),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
-        _last_autotune_config = {
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
             "tile": cfg.tile,
             "occupancy": cfg.occupancy,
-        }
+        })
     else:
         cfg = _DEFAULT_CONFIG
 
@@ -68,4 +67,4 @@ def run(A: torch.Tensor, N: int,
 
 
 def get_last_config() -> dict | None:
-    return _last_autotune_config
+    return dict(_last_autotune_config) if _last_autotune_config else None
