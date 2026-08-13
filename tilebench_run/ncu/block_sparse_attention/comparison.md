@@ -1,24 +1,24 @@
 # NCU Comparison: block_sparse_attention
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'B': 2, 'H': 8, 'H_kv': 2, 'BLOCK_M': 64, 'BLOCK_N': 64, 'BLOCK_D': 128, 'D': 128, 'M': 10240}` | `{'num_warps': 4, 'num_stages': 2}` | `{'occupancy': 16}` |
+| fp16 | `{'B': 2, 'H': 8, 'H_kv': 2, 'BLOCK_M': 64, 'BLOCK_N': 64, 'BLOCK_D': 64, 'D': 128, 'M': 10240}` | `{'num_warps': 2, 'num_stages': 2}` | `{'occupancy': 32}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 76.74 us | 19.43 % | 12.93 % | 21.23 % | 16.62 % | 34.81 % | 991.35 Gbyte/s | 128 | 178 register/thread | 0 byte/block | 81.95 Kbyte/block | 2 block / 2 block |
-| fp16 | cutile | 280.48 us | 33.72 % | 3.54 % | 35.80 % | 4.58 % | 23.12 % | 271.41 Gbyte/s | 384 | 168 register/thread | 209.74 Kbyte/block | 0 byte/block | 1 block / 1 block |
+| fp16 | triton | 69.57 us | 32.59 % | 13.62 % | 37.02 % | 18.17 % | 42.86 % | 1.04 Tbyte/s | 64 | 255 register/thread | 0 byte/block | 49.21 Kbyte/block | 4 block / 4 block |
+| fp16 | cutile | 222.02 us | 29.13 % | 4.45 % | 31.00 % | 5.80 % | 23.79 % | 341.04 Gbyte/s | 384 | 168 register/thread | 221.22 Kbyte/block | 0 byte/block | 1 block / 1 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **3.65× faster** (76.7 µs vs 280.5 µs).
+- **fp16**: Triton is **3.19× faster** (69.6 µs vs 222.0 µs).
 
 ## NCU's own bottleneck verdict
 

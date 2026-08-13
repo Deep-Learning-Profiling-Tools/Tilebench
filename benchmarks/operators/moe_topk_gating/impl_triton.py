@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"num_warps": 4}
 
 
 @triton.jit
-def _moe_topk_gating_kernel(
+def moe_topk_gating_kernel(
     logits_ptr,
     topk_w_ptr,
     topk_idx_ptr,
@@ -15,21 +15,11 @@ def _moe_topk_gating_kernel(
     BLOCK_SIZE_E: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
 ):
-    """
-    Row-wise iterative top-K + softmax.
-    Grid: (M,) — one program per row.
-    Algorithm (unchanged from the original LeetGPU kernel):
-      1. Load full row of logits with -inf padding for OOB lanes.
-      2. K iterations: find (max, argmax) of current logits tile, write them
-         into the top-K buffer at position i via tl.where(offsets_k == i, ...),
-         then clear the chosen position in logits with -inf.
-      3. Numerically stable softmax on top-K values.
-    """
     pid = tl.program_id(0)
     offsets_le = tl.arange(0, BLOCK_SIZE_E)
     mask_le = offsets_le < E
 
-    logits = tl.load(logits_ptr + pid * E + offsets_le, mask=mask_le, other=float("-inf"))
+    logits = tl.load(logits_ptr + pid * E + offsets_le, mask=mask_le, other=float("-inf")).to(tl.float32)
 
     offsets_k = tl.arange(0, BLOCK_SIZE_K)
     mask_k = offsets_k < K
@@ -41,8 +31,8 @@ def _moe_topk_gating_kernel(
         curr_max_val = tl.max(logits, axis=-1)
         curr_max_idx = tl.argmax(logits, axis=-1)
 
-        topk_vals = tl.where(offsets_k == (K - 1 - i), curr_max_val, topk_vals)
-        topk_idxs = tl.where(offsets_k == (K - 1 - i), curr_max_idx, topk_idxs)
+        topk_vals = tl.where(offsets_k == i, curr_max_val, topk_vals)
+        topk_idxs = tl.where(offsets_k == i, curr_max_idx, topk_idxs)
 
         logits = tl.where(offsets_le == curr_max_idx, float("-inf"), logits)
 
@@ -50,11 +40,10 @@ def _moe_topk_gating_kernel(
     topk_vals = tl.exp(topk_vals - mx)
     topk_vals = topk_vals / tl.sum(topk_vals, axis=-1)
 
-    tl.store(topk_w_ptr + pid * K + offsets_k, topk_vals, mask=mask_k)
+    tl.store(topk_w_ptr + pid * K + offsets_k, topk_vals.to(topk_w_ptr.dtype.element_ty), mask=mask_k)
     tl.store(topk_idx_ptr + pid * K + offsets_k, topk_idxs, mask=mask_k)
 
 
-# Only num_warps / num_stages are tunable; BLOCK_SIZE_E and BLOCK_SIZE_K are fixed by E, K.
 _moe_topk_gating_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({}, num_warps=nw)
@@ -63,7 +52,7 @@ _moe_topk_gating_kernel_autotuned = triton.autotune(
     key=["E", "K"],
     warmup=1,
     rep=3,
-)(_moe_topk_gating_kernel)
+)(moe_topk_gating_kernel)
 
 
 def run(logits: torch.Tensor, M: int, E: int, k: int,
@@ -84,7 +73,7 @@ def run(logits: torch.Tensor, M: int, E: int, k: int,
         )
     else:
         cfg = _DEFAULT_CONFIG
-        _moe_topk_gating_kernel[grid](
+        moe_topk_gating_kernel[grid](
             logits, topk_weights, topk_indices,
             E, k,
             BLOCK_SIZE_E=block_size_e,

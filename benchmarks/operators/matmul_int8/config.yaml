@@ -1,5 +1,3 @@
-# Int8 matmul with 2-bit packed B: A is int8 (M, K), B is uint8 (K/4, N) where
-# each byte stores 4 ternary-ish values in 2-bit fields. Output is int32 (M, N).
 verify:
   atol: 0.1
   rtol: 0.1
@@ -11,29 +9,15 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep K (and therefore K_b = K/4) with M, N fixed. K and K_b must be
-# divisible by 4*max(BLOCK_K) and max(TK) respectively; multiples of 1024
-# satisfy this for all configs in the search space.
 case_defaults:
   M: 2048
   N: 2048
 
 case_grid:
   K:
-    expr: "[1024 * i for i in range(1, 21)]"   # 1024, 2048, ..., 20480
+    expr: "[1024 * i for i in range(1, 21)]"
   dtype: ["int8"]
 
-# ---------------------------------------------------------------------------
-# Derived metric expressions
-#   Available variables: M, N, K, dtype_size (= 1 for int8 inputs)
-#
-# Bytes (theoretical HBM traffic per kernel invocation):
-#   Read  A: M * K           (int8, 1 byte/elem)
-#   Read  B: K_b * N = K*N/4 (uint8 packed; loaded once, unpacked 4× in regs)
-#   Write C: M * N * 4       (int32 output)
-#
-# FLOPs: 2 * M * N * K  (one MAC per (m, n, k) point)
-# ---------------------------------------------------------------------------
 metrics:
   bytes_expr: "M * K + K * N // 4 + 4 * M * N"
   flops_expr: "2 * M * N * K"

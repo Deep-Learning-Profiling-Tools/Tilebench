@@ -4,15 +4,16 @@ Input:  results/csv/<op>_default.csv  + results/csv/<op>_autotune.csv
 Output: results/aggregate/<op>.csv
 
 For each operator, the output CSV has one row per (dtype, mode) combination
-with the per-case mean of each timing column. Rows where the backend wrote
-nan (skipped / verification-failed cases) are excluded from the mean.
+with the per-case geometric mean of each timing column. Rows where the backend
+wrote nan (skipped / verification-failed cases) are excluded from the mean.
 
 Columns:
   dtype, mode, n_cases, torch_ms, triton_ms, cutile_ms,
   speedup_triton, speedup_cutile, triton_vs_cutile
 
-Speedup / ratio columns are computed from the aggregated means
-(ratio-of-means) — i.e. they're exactly torch_ms / triton_ms etc. computed
+Speedup / ratio columns are computed from the aggregated geometric means
+(ratio-of-geomeans, which equals the geometric mean of the per-case ratios)
+— i.e. they're exactly torch_ms / triton_ms etc. computed
 on the values that appear in the same row. This makes the table
 self-readable: every ratio matches the obvious division of the columns
 to its left. Per-case ratios from the source CSV are intentionally NOT
@@ -69,8 +70,10 @@ def aggregate_one_op(op: str) -> bool:
             means = {}
             for col in MEAN_COLS:
                 vals = [_parse_float(r.get(col, "")) for r in group]
-                vals = [v for v in vals if v is not None]
-                m = sum(vals) / len(vals) if vals else None
+                vals = [v for v in vals if v is not None and v > 0]
+                # Geometric mean (better for averaging latencies across different
+                # problem sizes; ratio-of-geomeans == geomean of the per-case ratios).
+                m = math.exp(sum(math.log(v) for v in vals) / len(vals)) if vals else None
                 means[col] = m
                 agg[col] = f"{m:.6g}" if m is not None else ""
             # Ratio columns are computed from the means above (ratio-of-means),
