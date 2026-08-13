@@ -19,7 +19,7 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _reverse_kernel(x_ptr, out_ptr, N, TILE: ConstInt):
+def reverse_kernel(x_ptr, out_ptr, N, TILE: ConstInt):
     bid = ct.bid(0)
     offsets = ct.arange(TILE, dtype=ct.int32) + bid * TILE
     rev_indices = N - 1 - offsets
@@ -27,8 +27,7 @@ def _reverse_kernel(x_ptr, out_ptr, N, TILE: ConstInt):
     ct.store(out_ptr, index=(bid,), tile=vals)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_reverse_kernel)
+_tuner = CutileAutotuner(reverse_kernel)
 
 
 def run(input: torch.Tensor, N: int,
@@ -38,7 +37,7 @@ def run(input: torch.Tensor, N: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(N,),
+            shape_key=(N, str(input.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((N + cfg.tile - 1) // cfg.tile, 1, 1),

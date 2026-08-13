@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -10,48 +9,47 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=8)
+
+_DEFAULT_CONFIG = SimpleNamespace(tile_size=512, occupancy=8)
 
 _SEARCH_SPACE = [
     SimpleNamespace(tile_size=ts, occupancy=occ)
     for ts in [256, 512, 1024, 2048]
-    for occ in [4, 8, 16, 32]
+    for occ in [4, 8, 16]
 ]
 
 
 @ct.kernel
-def _l2_norm_kernel(x, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
-    """One CTA normalises one row with tiled two-pass L2 norm."""
+def l2_norm_kernel(x, out, eps, N: ConstInt, TILE_SIZE: ConstInt):
     row = ct.bid(0)
     num_tiles = ct.cdiv(N, TILE_SIZE)
 
-    # Pass 1: accumulate sum(x²).
-    _sum_sq = ct.full((1, TILE_SIZE), 0.0, dtype=np.float32)
+
+    _sum_sq = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         _sum_sq = _sum_sq + xj * xj
 
     rstd = ct.rsqrt(ct.sum(_sum_sq, axis=1, keepdims=False) + eps)
 
-    # Pass 2: normalise.
+
     for j in range(0, num_tiles):
         xj = ct.astype(
             ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
                     allow_tma=False, latency=1,
                     padding_mode=ct.PaddingMode.ZERO),
-            np.float32,
+            ct.float32,
         )
         yj = ct.astype(xj * rstd, x.dtype)
         ct.store(out, index=(row, j), tile=yj, allow_tma=False, latency=1)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_l2_norm_kernel)
+_tuner = CutileAutotuner(l2_norm_kernel)
 
 
 def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -69,7 +67,7 @@ def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) ->
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(batch_M, K),
+            shape_key=(batch_M, K, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: grid,
