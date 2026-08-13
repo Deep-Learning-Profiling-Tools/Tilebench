@@ -20,8 +20,8 @@ def dequant_kernel(X, S, Y, M: tl.constexpr, N: tl.constexpr,
     s_row = row // TILE_SIZE
     s_col = col // TILE_SIZE
 
-    x = tl.load(X + offsets, mask=mask).to(tl.float32)
-    scale = tl.load(S + s_row * S_COLS + s_col, mask=mask).to(tl.float32)
+    x = tl.load(X + offsets, mask=mask)
+    scale = tl.load(S + s_row * S_COLS + s_col, mask=mask)
 
     y = x * scale
 

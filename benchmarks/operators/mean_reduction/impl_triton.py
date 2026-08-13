@@ -2,36 +2,31 @@ import torch
 import triton
 import triton.language as tl
 
-# One CTA per row (BLOCK_M=1); column tile size drives memory coalescing.
+
 _DEFAULT_CONFIG = {"BLOCK_M": 1, "BLOCK_N": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _mean_rowwise_kernel(X, Out, M, N: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
-    """
-    X:   pointer to input  [M, N] (row-major)
-    Out: pointer to output [M]
-    Each CTA handles BLOCK_M consecutive rows.
-    """
+def mean_rowwise_kernel(X, Out, M, N: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
     pid = tl.program_id(0)
-    row_ids  = pid * BLOCK_M + tl.arange(0, BLOCK_M)   # [BLOCK_M]
+    row_ids  = pid * BLOCK_M + tl.arange(0, BLOCK_M)
     row_mask = row_ids < M
 
-    X_row_ptr   = X   + row_ids[:, None] * N            # [BLOCK_M, 1] base ptrs
-    Out_row_ptr = Out + row_ids                          # [BLOCK_M]
+    X_row_ptr   = X   + row_ids[:, None] * N
+    Out_row_ptr = Out + row_ids
 
     acc = tl.zeros([BLOCK_M, BLOCK_N], dtype=tl.float32)
 
     for off in range(0, N, BLOCK_N):
-        cols     = off + tl.arange(0, BLOCK_N)[None, :] # [1, BLOCK_N]
+        cols     = off + tl.arange(0, BLOCK_N)[None, :]
         col_mask = cols < N
         mask     = row_mask[:, None] & col_mask
 
         a = tl.load(X_row_ptr + cols, mask=mask, other=0.0).to(tl.float32)
         acc += a
 
-    row_sum = tl.sum(acc, axis=1)                        # [BLOCK_M]
-    mean    = row_sum / N                                # [BLOCK_M]
+    row_sum = tl.sum(acc, axis=1)
+    mean    = row_sum / N
     tl.store(Out_row_ptr, mean, mask=row_mask)
 
 
@@ -45,7 +40,7 @@ _mean_rowwise_kernel_autotuned = triton.autotune(
     key=["M", "N"],
     warmup=1,
     rep=3,
-)(_mean_rowwise_kernel)
+)(mean_rowwise_kernel)
 
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -68,7 +63,7 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(M, cfg["BLOCK_M"]),)
-        _mean_rowwise_kernel[grid](
+        mean_rowwise_kernel[grid](
             x2d, out, M, N,
             BLOCK_M=cfg["BLOCK_M"],
             BLOCK_N=cfg["BLOCK_N"],
