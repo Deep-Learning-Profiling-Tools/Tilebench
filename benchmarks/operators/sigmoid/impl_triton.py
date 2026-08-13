@@ -6,12 +6,12 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _sigmoid_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+def sigmoid_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     mask = offsets < n_elements
 
-    # Upcast to fp32 for tl.sigmoid (requires fp32/fp64 input); tl.store auto-casts back.
+
     x = tl.load(x_ptr + offsets, mask=mask).to(tl.float32)
     y = tl.sigmoid(x)
     tl.store(y_ptr + offsets, y, mask=mask)
@@ -25,7 +25,7 @@ _sigmoid_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["n_elements"],
-)(_sigmoid_kernel)
+)(sigmoid_kernel)
 
 
 def run(X: torch.Tensor, N: int,
@@ -38,7 +38,7 @@ def run(X: torch.Tensor, N: int,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(N, cfg["BLOCK_SIZE"]),)
-        _sigmoid_kernel[grid](
+        sigmoid_kernel[grid](
             X, output, N,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
