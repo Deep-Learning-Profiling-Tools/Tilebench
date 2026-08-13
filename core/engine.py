@@ -273,10 +273,23 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         else:
             try:
                 # Deferred import: GPU-only machines have no torch_xla installed.
-                from core.nki_timer import bench_nki, to_cpu, to_xla_device
+                from core.nki_timer import bench_nki, bench_xla_wallclock, to_cpu, to_xla_device
 
                 nki_kw = _run_kwargs(impl_nki.run, block_size)
                 nki_inputs = to_xla_device(inputs)
+
+                # torch-on-Neuron reference (torch_nki): on non-CUDA hosts the
+                # Proton torch timing above was skipped (torch_ms = nan), so
+                # time impl_torch on the XLA device here. This is what the
+                # --merge-csv nki mode writes into the torch_nki_ms column.
+                if not HAS_CUDA:
+                    try:
+                        torch_stats = bench_xla_wallclock(
+                            impl_torch.run, nki_inputs, warmup=warmup, repeat=repeat
+                        )
+                        torch_ms = torch_stats["mean"]
+                    except Exception as e:
+                        print(f"  torch-on-Neuron timing FAILED: {e}")
                 nki_output = impl_nki.run(*nki_inputs, **nki_kw)
                 # ref_output lives on the GPU/CPU, NKI output on the XLA device —
                 # compare on CPU.
