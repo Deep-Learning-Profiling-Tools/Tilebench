@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import numpy as np
 import torch
 import cuda.tile as ct
 
@@ -20,16 +19,15 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _dropout_kernel(x, x_keep, output, scale, TILE: ConstInt):
+def dropout_kernel(x, x_keep, output, scale, TILE: ConstInt):
     bid = ct.bid(0)
-    x_tile      = ct.astype(ct.load(x,      index=(bid,), shape=(TILE,)), np.float32)
-    x_keep_tile = ct.astype(ct.load(x_keep, index=(bid,), shape=(TILE,)), np.float32)
+    x_tile      = ct.astype(ct.load(x,      index=(bid,), shape=(TILE,)), ct.float32)
+    x_keep_tile = ct.astype(ct.load(x_keep, index=(bid,), shape=(TILE,)), ct.float32)
     out_tile = ct.astype(x_keep_tile * x_tile * scale, x.dtype)
     ct.store(output, index=(bid,), tile=out_tile)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_dropout_kernel)
+_tuner = CutileAutotuner(dropout_kernel)
 
 
 def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
@@ -41,7 +39,7 @@ def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(n_elements,),
+            shape_key=(n_elements, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),

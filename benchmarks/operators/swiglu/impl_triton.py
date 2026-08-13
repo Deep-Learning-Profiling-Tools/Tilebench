@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4}
 
 
 @triton.jit
-def _swiglu_kernel(
+def swiglu_kernel(
     x_ptr, y_ptr, out_ptr,
     n_elements,
     BLOCK_SIZE: tl.constexpr,
@@ -26,11 +26,11 @@ def _swiglu_kernel(
 _swiglu_kernel_autotuned = triton.autotune(
     configs=[
         triton.Config({"BLOCK_SIZE": bs}, num_warps=nw)
-        for bs in [512, 1024, 2048]
+        for bs in [512, 1024, 2048, 4096, 8192, 16384]
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
-)(_swiglu_kernel)
+)(swiglu_kernel)
 
 
 def run(x: torch.Tensor, y: torch.Tensor,
@@ -47,7 +47,7 @@ def run(x: torch.Tensor, y: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
-        _swiglu_kernel[grid](
+        swiglu_kernel[grid](
             x_flat, y_flat, output, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],
