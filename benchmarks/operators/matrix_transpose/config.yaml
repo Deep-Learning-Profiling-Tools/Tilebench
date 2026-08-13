@@ -6,21 +6,15 @@ benchmark:
   autotune: false
 
 case_defaults:
-  m: 4096   # rows (fixed)
+  m: 4096
 
 case_grid:
-  # n: columns, 1024 to 20480 in 20 steps; total elements m*n = 4M to 80M
   n:
     expr: "[1024 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32", "int8"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Available variables: n (problem size = m*n), dtype_size (bytes per element)
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "0"
-  # 1 read + 1 write
   bytes_expr: "m * n * dtype_size * 2"
 
   plots:

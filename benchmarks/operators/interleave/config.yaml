@@ -1,6 +1,3 @@
-# Interleave two arrays — pure data movement (no arithmetic)
-# No verify section needed: exact element placement, per-dtype defaults suffice.
-
 benchmark:
   warmup: 20
   repeat: 100
@@ -10,14 +7,9 @@ benchmark:
 
 case_grid:
   n:
-    expr: "[1000000 * i for i in range(1, 21)]"   # 1M, 2M, ..., 20M (20 points)
+    expr: "[1000000 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32", "int8"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions
-#   Interleave is pure memory-bound: no meaningful FLOPs, use element count as proxy
-#   Read A (n) + Read B (n) + Write output (2n) = 4n elements total
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "n"
   bytes_expr: "n * dtype_size * 4"
