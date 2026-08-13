@@ -16,7 +16,7 @@ def softmax_online_kernel(
     row_ptr = input_ptr + row_idx * input_row_stride
     out_ptr = output_ptr + row_idx * output_row_stride
 
-    # Pass 1: online max + sum
+
     m = -float('inf')
     l = 0.0
     for col_start in range(0, n_cols, BLOCK_SIZE):
@@ -28,7 +28,7 @@ def softmax_online_kernel(
         l = l * tl.exp(m - m_new) + tl.sum(tl.exp(x - m_new), axis=0)
         m = m_new
 
-    # Pass 2: normalize and write back
+
     for col_start in range(0, n_cols, BLOCK_SIZE):
         offs = col_start + tl.arange(0, BLOCK_SIZE)
         mask = offs < n_cols

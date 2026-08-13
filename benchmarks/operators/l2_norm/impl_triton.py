@@ -10,16 +10,15 @@ def _l2_norm_fwd_kernel(
     X,
     Y,
     stride_x_row,
-    N,
+    N: tl.constexpr,
     eps,
     BLOCK_N: tl.constexpr,
 ):
-    """One CTA normalises one row with tiled two-pass L2 norm."""
     row = tl.program_id(0)
     X += row * stride_x_row
     Y += row * stride_x_row
 
-    # Pass 1: accumulate sum(x²).
+
     acc = tl.zeros([BLOCK_N], dtype=tl.float32)
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
@@ -27,7 +26,7 @@ def _l2_norm_fwd_kernel(
         acc += x * x
     rstd = 1 / tl.sqrt(tl.sum(acc, axis=0) + eps)
 
-    # Pass 2: normalise (re-load x).
+
     for off in range(0, N, BLOCK_N):
         cols = off + tl.arange(0, BLOCK_N)
         mask = cols < N
@@ -44,6 +43,8 @@ _l2_norm_fwd_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(_l2_norm_fwd_kernel)
 
 

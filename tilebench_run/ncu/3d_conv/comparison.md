@@ -1,44 +1,35 @@
 # NCU Comparison: 3d_conv
 
-**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0
-**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.
+**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  
+**Profile method:** `--set full --import-source on`, `--launch-skip 3 --launch-count 1`, autotune-winner cfg at sweep-max input.  
 
 ## Test cases (sweep-max per dtype)
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp16 | `{'input_depth': 64, 'kernel_depth': 3, 'kernel_rows': 3, 'kernel_cols': 3, 'input_rows': 640}` | `{'BLOCK_SIZE': 512, 'num_warps': 4}` | `{'tile': 512, 'occupancy': 8}` |
-| fp32 | `{'input_depth': 64, 'kernel_depth': 3, 'kernel_rows': 3, 'kernel_cols': 3, 'input_rows': 640}` | `{'BLOCK_SIZE': 256, 'num_warps': 4}` | `{'tile': 512, 'occupancy': 8}` |
+| fp16 | `{'batch': 1, 'in_channels': 64, 'out_channels': 64, 'D': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1, 'groups': 1, 'H': 320}` | `{'BLOCK_SIZE_BATCH_DHW': 128, 'BLOCK_SIZE_IN_FEAT': 64, 'BLOCK_SIZE_OUT_FEAT': 64, 'num_warps': 4, 'num_stages': 2}` | `{'block_bdhw': 128, 'block_in': 16, 'block_out': 64, 'occupancy': 4}` |
+| fp32 | `{'batch': 1, 'in_channels': 64, 'out_channels': 64, 'D': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1, 'groups': 1, 'H': 320}` | `{'BLOCK_SIZE_BATCH_DHW': 64, 'BLOCK_SIZE_IN_FEAT': 64, 'BLOCK_SIZE_OUT_FEAT': 64, 'num_warps': 4, 'num_stages': 2}` | `{'block_bdhw': 128, 'block_in': 16, 'block_out': 64, 'occupancy': 4}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 264.03 us | 83.73 % | 5.58 % | 85.46 % | 9.68 % | 90.66 % | 428.24 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp16 | cutile | 251.17 us | 43.41 % | 3.73 % | 44.21 % | 11.65 % | 78.00 % | 285.90 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
-| fp32 | triton | 235.84 us | 94.43 % | 9.48 % | 96.34 % | 16.82 % | 76.86 % | 727.04 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 216.51 us | 52.16 % | 10.37 % | 53.37 % | 19.59 % | 74.69 % | 795.40 Gbyte/s | 128 | 64 register/thread | 0 byte/block | 0 byte/block | 8 block / 32 block |
-
-## Per-kernel breakdown (multi-kernel pipelines)
-
-End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
-
-| dtype | backend | k# | kernel duration | kernel name |
-|---|---|---|---|---|
-| fp16 | triton | 1/2 | 242.59 us | `_conv3d_kernel` |
-| fp16 | triton | 2/2 | 21.44 us | `void at::vectorized_elementwise_kernel<8, at::floa` |
+| fp16 | triton | 13850.00 us | 18.92 % | 0.89 % | 18.98 % | 3.11 % | 67.56 % | 68.29 Gbyte/s | 128 | 255 register/thread | 0 byte/block | 49.17 Kbyte/block | 2 block / 4 block |
+| fp16 | cutile | 35670.00 us | 5.54 % | 0.36 % | 5.56 % | 2.11 % | 71.32 % | 27.52 Gbyte/s | 256 | 64 register/thread | 2.09 Kbyte/block | 0 byte/block | 4 block / 10 block |
+| fp32 | triton | 18200.00 us | 55.12 % | 2.23 % | 55.23 % | 7.57 % | 63.80 % | 171.24 Gbyte/s | 128 | 165 register/thread | 0 byte/block | 65.55 Kbyte/block | 3 block / 3 block |
+| fp32 | cutile | 33080.00 us | 5.89 % | 1.24 % | 5.90 % | 2.63 % | 76.31 % | 94.80 Gbyte/s | 256 | 64 register/thread | 4.14 Kbyte/block | 0 byte/block | 4 block / 12 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: cuTile is **1.05× faster** (251.2 µs vs 264.0 µs).
-- **fp32**: cuTile is **1.09× faster** (216.5 µs vs 235.8 µs).
+- **fp16**: Triton is **2.58× faster** (13850.0 µs vs 35670.0 µs).
+- **fp32**: Triton is **1.82× faster** (18200.0 µs vs 33080.0 µs).
 
 ## NCU's own bottleneck verdict
 
 - **fp16 / cutile** — Compute is more heavily utilized than Memory
-- **fp16 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing workloads in the Compute Workload Analysis section.
+- **fp16 / triton** — Compute is more heavily utilized than Memory
 - **fp32 / cutile** — Compute is more heavily utilized than Memory
-- **fp32 / triton** — This workload is utilizing greater than 80.0% of the available compute or memory performance of this device. To further improve performance, work will likely need to be shifted from the most utilized to another unit. Start by analyzing L1 in the Memory Workload Analysis section.
+- **fp32 / triton** — Compute and Memory are well-balanced
 
 ## Reports
 

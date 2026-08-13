@@ -1,7 +1,3 @@
-# 2D 5-point Jacobi Stencil
-# Interior: output[r, c] = 0.25 * (input[r-1, c] + input[r+1, c] + input[r, c-1] + input[r, c+1])
-# Boundary (first/last row and column): output[r, c] = input[r, c]
-
 benchmark:
   warmup: 20
   repeat: 100
@@ -9,21 +5,11 @@ benchmark:
   flush_l2: true
   autotune: false
 
-# Sweep rows (= cols for square grid) across 20 points.
-# Max rows=cols=10240 fp32 → 400 MB per tensor, exceeds B200 L2 (50 MB).
-# LeetGPU perf test uses rows=cols=8192.
 case_grid:
   rows:
-    expr: "[512 * i for i in range(1, 21)]"   # 512, 1024, ..., 10240 (20 points, cols=rows)
+    expr: "[512 * i for i in range(1, 21)]"
   dtype: ["fp16", "bf16", "fp32"]
 
-# ---------------------------------------------------------------------------
-# Derived-metric expressions (cols = rows, square grid)
-#   FLOPs (interior only): (rows-2) * (cols-2) * (3 add + 1 mul) ≈ 4 * rows * cols
-#   Bytes:
-#     Read  input:  rows * cols * dtype_size
-#     Write output: rows * cols * dtype_size
-# ---------------------------------------------------------------------------
 metrics:
   flops_expr: "4 * rows * rows"
   bytes_expr: "2 * rows * rows * dtype_size"

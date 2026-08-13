@@ -9,18 +9,72 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-def run_benchmark_suite(operator_name, benchmark_overrides=None):
+# CUDA is required for the GPU backends (torch timing via Proton, Triton,
+# cuTile, TileLang). On non-CUDA hosts (e.g. AWS Trainium) those are skipped;
+# only the torch correctness reference + the NKI backend (timed via XLA) run.
+HAS_CUDA = torch.cuda.is_available()
+
+
+def _sync():
+    """Synchronize the CUDA device when present; no-op on non-CUDA hosts."""
+    if HAS_CUDA:
+        torch.cuda.synchronize()
+
+
+def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None):
     config_path = f"benchmarks/operators/{operator_name}/config.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    # Which tile-language backends to run this invocation. torch always runs —
+    # it is the speedup baseline. None → all (backward-compatible default).
+    if enabled_backends is None:
+        enabled_backends = {"triton", "cutile", "tilelang", "nki"}
+    else:
+        enabled_backends = set(enabled_backends)
+
     impl_torch = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_torch")
-    impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
-    try:
-        impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
-    except ImportError as e:
-        print(f"  cuTile import skipped: {e}")
+
+    if "triton" in enabled_backends:
+        impl_triton = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_triton")
+    else:
+        impl_triton = None
+        print("  Triton not selected (--tile-language)")
+
+    if "cutile" in enabled_backends:
+        try:
+            impl_cutile = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_cutile")
+        except ImportError as e:
+            print(f"  cuTile import skipped: {e}")
+            impl_cutile = None
+    else:
         impl_cutile = None
+        print("  cuTile not selected (--tile-language)")
+
+    if "tilelang" in enabled_backends:
+        try:
+            impl_tilelang = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_tilelang")
+        except ImportError as e:
+            print(f"  TileLang import skipped: {e}")
+            impl_tilelang = None
+    else:
+        impl_tilelang = None
+        print("  TileLang not selected (--tile-language)")
+
+    if "nki" in enabled_backends:
+        try:
+            impl_nki = importlib.import_module(f"benchmarks.operators.{operator_name}.impl_nki")
+            # Conforming impls set a module-level `nki = None` when the Neuron SDK is
+            # missing (see NKI authoring guide §3); treat that like an absent backend.
+            if getattr(impl_nki, "nki", object()) is None:
+                print("  NKI import skipped: Neuron SDK not installed")
+                impl_nki = None
+        except ImportError as e:
+            print(f"  NKI import skipped: {e}")
+            impl_nki = None
+    else:
+        impl_nki = None
+        print("  NKI not selected (--tile-language)")
 
     generate_inputs = get_generator(operator_name)
 
@@ -96,46 +150,68 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
 
         try:
             ref_output = impl_torch.run(*inputs)
-            torch.cuda.synchronize()
+            _sync()
         except (RuntimeError, TypeError) as e:
             print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
-        # --- Torch ---
-        torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
-        torch_ms    = torch_stats["mean"]
+        # --- Torch (baseline) ---
+        # Proton-timed on CUDA; on non-CUDA hosts torch ran above only as the
+        # correctness reference (no GPU timer here), so torch_ms is nan.
+        if HAS_CUDA:
+            torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
+            torch_ms    = torch_stats["mean"]
+        else:
+            torch_stats = None
+            torch_ms    = float("nan")
 
         # --- Triton ---
-        triton_kw = _run_kwargs(impl_triton.run, block_size)
-        triton_output = impl_triton.run(*inputs, **triton_kw)
-        torch.cuda.synchronize()
-        triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
-        triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
-        if triton_cfg:
-            print(f"  Triton autotune → {triton_cfg}")
-        if not triton_ok:
-            print(f"  Triton verification FAILED: {triton_err}")
-        triton_stats = (
-            _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
-            if triton_ok else None
-        )
-        triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+        triton_cfg = None
+        if impl_triton is None or not HAS_CUDA:
+            triton_ok = False
+            triton_err = ("Triton requires CUDA (host has no NVIDIA GPU)"
+                          if impl_triton is not None else "Triton not selected (--tile-language)")
+            triton_ms = float("nan")
+            triton_stats = None
+        else:
+            try:
+                triton_kw = _run_kwargs(impl_triton.run, block_size)
+                triton_output = impl_triton.run(*inputs, **triton_kw)
+                _sync()
+                triton_ok, triton_err = verify(triton_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                triton_cfg = getattr(impl_triton, "get_last_config", lambda: None)() if autotune else None
+                if triton_cfg:
+                    print(f"  Triton autotune → {triton_cfg}")
+                if not triton_ok:
+                    print(f"  Triton verification FAILED: {triton_err}")
+                triton_stats = (
+                    _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                    if triton_ok else None
+                )
+                triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
+            except Exception as e:
+                triton_ok    = False
+                triton_err   = str(e)
+                triton_ms    = float("nan")
+                triton_stats = None
+                print(f"  Triton execution FAILED: {triton_err}")
 
         # --- cuTile ---
         cutile_cfg = None
-        if impl_cutile is None:
+        if impl_cutile is None or not HAS_CUDA:
             cutile_ok = False
-            cutile_err = "cuTile not available (import failed)"
+            cutile_err = ("cuTile requires CUDA (host has no NVIDIA GPU)"
+                          if impl_cutile is not None else "cuTile not available (import failed)")
             cutile_ms = float("nan")
             cutile_stats = None
-            print("  cuTile skipped (not installed)")
+            print(f"  cuTile skipped ({cutile_err})")
         else:
             try:
                 cutile_kw = _run_kwargs(impl_cutile.run, block_size)
                 cutile_output = impl_cutile.run(*inputs, **cutile_kw)
-                torch.cuda.synchronize()
+                _sync()
                 cutile_ok, cutile_err = verify(cutile_output, ref_output, atol=verify_atol, rtol=verify_rtol)
                 cutile_cfg = getattr(impl_cutile, "get_last_config", lambda: None)() if autotune else None
                 if cutile_cfg:
@@ -154,6 +230,87 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
                 cutile_stats = None
                 print(f"  cuTile execution FAILED: {cutile_err}")
 
+        # --- TileLang ---
+        tilelang_cfg = None
+        if impl_tilelang is None or not HAS_CUDA:
+            tilelang_ok = False
+            tilelang_err = ("TileLang requires CUDA (host has no NVIDIA GPU)"
+                            if impl_tilelang is not None else "TileLang not available (import failed)")
+            tilelang_ms = float("nan")
+            tilelang_stats = None
+            print(f"  TileLang skipped ({tilelang_err})")
+        else:
+            try:
+                tilelang_kw = _run_kwargs(impl_tilelang.run, block_size)
+                tilelang_output = impl_tilelang.run(*inputs, **tilelang_kw)
+                _sync()
+                tilelang_ok, tilelang_err = verify(tilelang_output, ref_output, atol=verify_atol, rtol=verify_rtol)
+                tilelang_cfg = getattr(impl_tilelang, "get_last_config", lambda: None)() if autotune else None
+                if tilelang_cfg:
+                    print(f"  TileLang autotune → {tilelang_cfg}")
+                if not tilelang_ok:
+                    print(f"  TileLang verification FAILED: {tilelang_err}")
+                tilelang_stats = (
+                    _bench(impl_tilelang.run, inputs, tilelang_kw, label=f"{lbl}_tilelang")
+                    if tilelang_ok else None
+                )
+                tilelang_ms = tilelang_stats["mean"] if tilelang_stats is not None else float("nan")
+            except Exception as e:
+                tilelang_ok    = False
+                tilelang_err   = str(e)
+                tilelang_ms    = float("nan")
+                tilelang_stats = None
+                print(f"  TileLang execution FAILED: {tilelang_err}")
+
+        # --- NKI (AWS Trainium; timed via XLA wall-clock, not Proton) ---
+        nki_cfg = None
+        if impl_nki is None:
+            nki_ok = False
+            nki_err = "NKI not available (no impl or Neuron SDK not installed)"
+            nki_ms = float("nan")
+            nki_stats = None
+            print("  NKI skipped (not available)")
+        else:
+            try:
+                # Deferred import: GPU-only machines have no torch_xla installed.
+                from core.nki_timer import bench_nki, bench_xla_wallclock, to_cpu, to_xla_device
+
+                nki_kw = _run_kwargs(impl_nki.run, block_size)
+                nki_inputs = to_xla_device(inputs)
+
+                # torch-on-Neuron reference (torch_nki): on non-CUDA hosts the
+                # Proton torch timing above was skipped (torch_ms = nan), so
+                # time impl_torch on the XLA device here. This is what the
+                # --merge-csv nki mode writes into the torch_nki_ms column.
+                if not HAS_CUDA:
+                    try:
+                        torch_stats = bench_xla_wallclock(
+                            impl_torch.run, nki_inputs, warmup=warmup, repeat=repeat
+                        )
+                        torch_ms = torch_stats["mean"]
+                    except Exception as e:
+                        print(f"  torch-on-Neuron timing FAILED: {e}")
+                nki_output = impl_nki.run(*nki_inputs, **nki_kw)
+                # ref_output lives on the GPU/CPU, NKI output on the XLA device —
+                # compare on CPU.
+                nki_ok, nki_err = verify(to_cpu(nki_output), to_cpu(ref_output), atol=verify_atol, rtol=verify_rtol)
+                nki_cfg = getattr(impl_nki, "get_last_config", lambda: None)() if autotune else None
+                if nki_cfg:
+                    print(f"  NKI     autotune → {nki_cfg}")
+                if not nki_ok:
+                    print(f"  NKI verification FAILED: {nki_err}")
+                nki_stats = (
+                    bench_nki(impl_nki.run, nki_inputs, nki_kw, warmup=warmup, repeat=repeat)
+                    if nki_ok else None
+                )
+                nki_ms = nki_stats["mean"] if nki_stats is not None else float("nan")
+            except Exception as e:
+                nki_ok    = False
+                nki_err   = str(e)
+                nki_ms    = float("nan")
+                nki_stats = None
+                print(f"  NKI execution FAILED: {nki_err}")
+
         results.append({
             "params":                params,
             "problem_size":          infer_problem_size(operator_name, params),
@@ -170,8 +327,20 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None):
             "cutile_ok":             cutile_ok,
             "cutile_err":            cutile_err,
             "cutile_autotune_cfg":   cutile_cfg,
+            "tilelang_ms":           tilelang_ms,
+            "tilelang_stats":        tilelang_stats or {},
+            "tilelang_ok":           tilelang_ok,
+            "tilelang_err":          tilelang_err,
+            "tilelang_autotune_cfg": tilelang_cfg,
+            "nki_ms":                nki_ms,
+            "nki_stats":             nki_stats or {},
+            "nki_ok":                nki_ok,
+            "nki_err":               nki_err,
+            "nki_autotune_cfg":      nki_cfg,
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
+            "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
+            "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
         })
 
     return results

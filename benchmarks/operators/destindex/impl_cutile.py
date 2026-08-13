@@ -1,23 +1,6 @@
-"""cuTile implementation of destindex using ct.gather + ct.scatter.
-
-Operation: out[dest_loc[token_id], head_id, :] = kv[token_id, head_id, :]
-
-ct.store() only accepts static indices, so the dynamic scatter index
-dest_loc[token_id] cannot be used with it. ct.scatter() supports integer
-tile or scalar indices (including runtime-loaded values), which is exactly
-what we need here.
-
-Algorithm (one CTA per (token, head) pair) — mirrors Triton's d-axis loop:
-  1. dest_index = ct.gather(dest_loc, token_id)                ← runtime scalar
-  2. for d_start in range(0, HEAD_DIM, BLOCK_D):
-       offsets = d_start + ct.arange(BLOCK_D)
-       kv_vals = ct.gather(kv,  (token_id,   head_id, offsets), padding_value=0.0)
-       ct.scatter(out, (dest_index, head_id, offsets), kv_vals)
-"""
 from types import SimpleNamespace
 
 import cuda.tile as ct
-import numpy as np
 import torch
 
 from core.cutile_autotune import CutileAutotuner
@@ -26,38 +9,59 @@ ConstInt = ct.Constant[int]
 
 _last_autotune_config: dict = {}
 
-_DEFAULT_CONFIG = SimpleNamespace(block_d=64, occupancy=8)
+
+_DEFAULT_CONFIG = SimpleNamespace(
+    nope_block_size=1024, nope_occupancy=4,
+    rope_block_size=512, rope_occupancy=4,
+)
 
 _SEARCH_SPACE = [
-    SimpleNamespace(block_d=bd, occupancy=occ)
-    for bd in [32, 64, 128]
-    for occ in [2, 4, 8, 16]
+    SimpleNamespace(block_size=bs, occupancy=occ)
+    for bs in [256, 512, 1024]
+    for occ in [4, 8, 16]
 ]
+
+_out_cache = torch.utils.weak.WeakTensorKeyDictionary()
+
+
+def _cached_out(o: torch.Tensor) -> torch.Tensor:
+    out = _out_cache.get(o)
+    if out is None:
+        out = o.clone()
+        _out_cache[o] = out
+    return out
 
 
 @ct.kernel
-def _copy_by_dest_kernel(kv, dest_loc, out, HEAD_DIM: ConstInt, BLOCK_D: ConstInt):
-    """One CTA copies one (token, head) slice, tiling the head dim in BLOCK_D chunks."""
-    token_id = ct.bid(0)
-    head_id  = ct.bid(1)
+def copy_by_dest_kernel(
+    kv_flat,
+    dest_loc,
+    out_flat,
+    head_num: ConstInt,
+    head_dim: ConstInt,
+    BLOCK_SIZE: ConstInt,
+):
+    pid = ct.bid(0)
+    offs = pid * BLOCK_SIZE + ct.arange(BLOCK_SIZE, dtype=ct.int32)
+    total = kv_flat.shape[0]
+    mask = offs < total
 
-    # Load the destination row index from dest_loc at runtime.
-    dest_index = ct.gather(dest_loc, token_id)
-
-    for d_start in range(0, HEAD_DIM, BLOCK_D):
-        offsets = d_start + ct.arange(BLOCK_D, dtype=np.int32)
-        # padding_value=0 (int literal) is dtype-agnostic — cuTile auto-casts it
-        # to kv.dtype, working for fp16/bf16/fp32 and int8 alike. Handles BLOCK_D
-        # > HEAD_DIM; OOB scatter writes are silently dropped by cuTile, so
-        # out-of-range lanes produce no side effect.
-        kv_vals = ct.gather(kv, (token_id, head_id, offsets), padding_value=0)
-        ct.scatter(out, (dest_index, head_id, offsets), kv_vals)
+    d = offs % head_dim
+    tmp = offs // head_dim
+    head = tmp % head_num
+    token = tmp // head_num
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-# Same kernel is launched twice (nope + rope) with different shapes, so the
-# two shape_keys share this single tuner's caches.
-_tuner = CutileAutotuner(_copy_by_dest_kernel)
+    dest = ct.astype(ct.gather(dest_loc, token, padding_value=0), ct.int32)
+    dst_off = (dest * head_num + head) * head_dim + d
+    dst_off = ct.where(mask, dst_off, -1)
+
+    v = ct.load(kv_flat, index=(pid,), shape=(BLOCK_SIZE,),
+                padding_mode=ct.PaddingMode.ZERO)
+    ct.scatter(out_flat, dst_off, v)
+
+
+_tuner = CutileAutotuner(copy_by_dest_kernel)
 
 
 def run(
@@ -68,46 +72,65 @@ def run(
     o_rope: torch.Tensor,
     autotune: bool = False,
 ):
+    out_nope = _cached_out(o_nope)
+    out_rope = _cached_out(o_rope)
 
-    out_nope = o_nope.clone()
-    out_rope = o_rope.clone()
-
-    seq_len, nope_head_num, nope_head_dim = kv_nope.shape
+    _, nope_head_num, nope_head_dim = kv_nope.shape
     _, rope_head_num, rope_head_dim = kv_rope.shape
+    kv_nope_flat = kv_nope.contiguous().view(-1)
+    kv_rope_flat = kv_rope.contiguous().view(-1)
+    out_nope_flat = out_nope.view(-1)
+    out_rope_flat = out_rope.view(-1)
+    nope_total = kv_nope_flat.numel()
+    rope_total = kv_rope_flat.numel()
 
     stream = torch.cuda.current_stream()
 
     if autotune:
         nope_cfg = _tuner.tune_or_cached(
-            shape_key=("nope", seq_len, nope_head_num, nope_head_dim),
+            shape_key=("nope", nope_total, nope_head_num, nope_head_dim,
+                       str(kv_nope.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
-            grid_fn=lambda cfg: (seq_len, nope_head_num, 1),
-            args_fn=lambda cfg: (kv_nope, dest_loc, out_nope, nope_head_dim, cfg.block_d),
+            grid_fn=lambda cfg: (ct.cdiv(nope_total, cfg.block_size), 1, 1),
+            args_fn=lambda cfg: (kv_nope_flat, dest_loc, out_nope_flat,
+                                 nope_head_num, nope_head_dim, cfg.block_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         rope_cfg = _tuner.tune_or_cached(
-            shape_key=("rope", seq_len, rope_head_num, rope_head_dim),
+            shape_key=("rope", rope_total, rope_head_num, rope_head_dim,
+                       str(kv_rope.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
-            grid_fn=lambda cfg: (seq_len, rope_head_num, 1),
-            args_fn=lambda cfg: (kv_rope, dest_loc, out_rope, rope_head_dim, cfg.block_d),
+            grid_fn=lambda cfg: (ct.cdiv(rope_total, cfg.block_size), 1, 1),
+            args_fn=lambda cfg: (kv_rope_flat, dest_loc, out_rope_flat,
+                                 rope_head_num, rope_head_dim, cfg.block_size),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
         )
         _last_autotune_config.clear()
         _last_autotune_config.update({
-            "nope": {"block_d": nope_cfg.block_d, "occupancy": nope_cfg.occupancy},
-            "rope": {"block_d": rope_cfg.block_d, "occupancy": rope_cfg.occupancy},
+            "nope_block_size": nope_cfg.block_size,
+            "nope_occupancy":  nope_cfg.occupancy,
+            "rope_block_size": rope_cfg.block_size,
+            "rope_occupancy":  rope_cfg.occupancy,
         })
     else:
-        nope_cfg = rope_cfg = _DEFAULT_CONFIG
+        nope_cfg = SimpleNamespace(block_size=_DEFAULT_CONFIG.nope_block_size,
+                                   occupancy=_DEFAULT_CONFIG.nope_occupancy)
+        rope_cfg = SimpleNamespace(block_size=_DEFAULT_CONFIG.rope_block_size,
+                                   occupancy=_DEFAULT_CONFIG.rope_occupancy)
 
-    nope_kernel = _tuner.kernel_with_hints(occupancy=nope_cfg.occupancy)
-    rope_kernel = _tuner.kernel_with_hints(occupancy=rope_cfg.occupancy)
-    ct.launch(stream, (seq_len, nope_head_num, 1), nope_kernel,
-              (kv_nope, dest_loc, out_nope, nope_head_dim, nope_cfg.block_d))
-    ct.launch(stream, (seq_len, rope_head_num, 1), rope_kernel,
-              (kv_rope, dest_loc, out_rope, rope_head_dim, rope_cfg.block_d))
+    kernel_nope = _tuner.kernel_with_hints(occupancy=nope_cfg.occupancy)
+    ct.launch(stream, (ct.cdiv(nope_total, nope_cfg.block_size), 1, 1),
+              kernel_nope,
+              (kv_nope_flat, dest_loc, out_nope_flat,
+               nope_head_num, nope_head_dim, nope_cfg.block_size))
+
+    kernel_rope = _tuner.kernel_with_hints(occupancy=rope_cfg.occupancy)
+    ct.launch(stream, (ct.cdiv(rope_total, rope_cfg.block_size), 1, 1),
+              kernel_rope,
+              (kv_rope_flat, dest_loc, out_rope_flat,
+               rope_head_num, rope_head_dim, rope_cfg.block_size))
 
     return out_nope, out_rope
 

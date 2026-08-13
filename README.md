@@ -1,12 +1,12 @@
 # TileBench
 
-A modular GPU performance benchmarking framework for comparing **NVIDIA cuTile (CUDA 13.1)**, **Triton**, and **PyTorch** kernel implementations.
+A modular GPU performance benchmarking framework for comparing **NVIDIA cuTile (CUDA 13.1)**, **Triton**, **TileLang**, and **PyTorch** kernel implementations.
 
 ## Features
 
-- **Multi-backend**: PyTorch · Triton · cuTile (CUDA 13.1 / Blackwell)
+- **Multi-backend**: PyTorch · Triton · cuTile (CUDA 13.1 / Blackwell) · TileLang (optional — skipped gracefully when `impl_tilelang.py` or the `tilelang` package is absent)
 - **Proton timing**: Mean latency via Triton Proton `data="tree"`, with optional CUDA graph replay
-- **Autotune**: `@triton.autotune` for Triton; `ct_experimental.autotune_launch` for cuTile — runs before timing, results logged separately
+- **Autotune**: `@triton.autotune` for Triton; `ct_experimental.autotune_launch` for cuTile; `@tilelang.autotune` for TileLang — runs before timing, results logged separately
 - **Correctness checks**: dtype-aware tolerance (`torch.testing.assert_close`) against PyTorch reference; unsupported dtypes skipped gracefully
 - **Flexible case generation**: `case_grid` with `expr` syntax (Python expressions), `test_cases`, or `case_preset` in `config.yaml`
 - **Derived metrics**: bandwidth (GB/s), % peak BW, TFLOPS, % peak TFLOPS, arithmetic intensity, speedup — computed via per-operator expressions in `config.yaml`
@@ -182,6 +182,7 @@ Available metrics: `latency_ms` · `bandwidth_GBs` · `pct_peak_bw` · `tflops` 
 
 - **Triton**: `@triton.autotune` with `key=["n_elements"]`. Results cached persistently in `~/.triton/cache/`; re-used across runs for the same problem size.
 - **cuTile**: `ct_experimental.autotune_launch` with in-memory cache. Re-runs on every new process invocation.
+- **TileLang**: `@tilelang.autotune` + `set_autotune_inputs`; tuning result cached in-process (repeat calls are cheap); selected config exposed via `kernel.config`.
 - Both selected configs are printed during the run and saved to `<op>_autotune.json`.
 
 ---
@@ -193,7 +194,8 @@ benchmarks/operators/<name>/
 ├── config.yaml      # case_grid, benchmark params, metrics expressions
 ├── impl_torch.py    # def run(*inputs) -> Tensor
 ├── impl_triton.py   # def run(*inputs) -> Tensor  (+get_last_config for autotune)
-└── impl_cutile.py   # def run(*inputs) -> Tensor  (+get_last_config for autotune)
+├── impl_cutile.py   # def run(*inputs) -> Tensor  (+get_last_config for autotune)
+└── impl_tilelang.py # optional — def run(*inputs) -> Tensor  (+get_last_config)
 ```
 
 Then register in `data/tensors.py`:
