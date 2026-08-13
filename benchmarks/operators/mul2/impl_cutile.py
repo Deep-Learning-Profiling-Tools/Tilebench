@@ -20,7 +20,6 @@ def mul2_kernel(x_ptr, output_ptr, TILE: ConstInt):
     ct.store(output_ptr, index=(bid,), tile=y_tile)
 
 
-# Search space for B200 (sm_100, 148 SMs, HBM3e ~8 TB/s).
 _SEARCH_SPACE = [
     SimpleNamespace(tile=t, occupancy=occ)
     for t in [512, 1024, 2048]
@@ -28,7 +27,6 @@ _SEARCH_SPACE = [
 ]
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
 _tuner = CutileAutotuner(mul2_kernel)
 
 
@@ -39,7 +37,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(n_elements,),
+            shape_key=(n_elements, str(x.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((n_elements + cfg.tile - 1) // cfg.tile, 1, 1),

@@ -2,9 +2,13 @@ import torch
 import torch.nn.functional as F
 
 
-def run(input: torch.Tensor, kernel: torch.Tensor,
-        input_size: int, kernel_size: int, **kwargs):
-    x = input.float().reshape(1, 1, -1)        # (N=1, C=1, L)
-    w = kernel.float().reshape(1, 1, -1)        # (C_out=1, C_in=1, K)
-    result = F.conv1d(x, w).reshape(-1)
-    return result.to(input.dtype)
+def run(input: torch.Tensor, weight: torch.Tensor,
+        stride: int = 1, padding: int = 1, groups: int = 1, **kwargs):
+    return F.conv1d(
+        input,
+        weight,
+        bias=None,
+        stride=stride,
+        padding=padding,
+        groups=groups,
+    )

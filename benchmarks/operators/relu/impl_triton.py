@@ -6,7 +6,7 @@ _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "num_warps": 4, "num_stages": 2}
 
 
 @triton.jit
-def _relu_kernel(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+def relu_kernel(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
@@ -23,7 +23,7 @@ _relu_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
-)(_relu_kernel)
+)(relu_kernel)
 
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
@@ -35,7 +35,7 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torc
     else:
         cfg = _DEFAULT_CONFIG
         grid = (triton.cdiv(n_elements, cfg["BLOCK_SIZE"]),)
-        _relu_kernel[grid](
+        relu_kernel[grid](
             x, output, n_elements,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             num_warps=cfg["num_warps"],

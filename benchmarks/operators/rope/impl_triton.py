@@ -4,12 +4,12 @@ import triton.language as tl
 
 next_power_of_2 = triton.next_power_of_2
 
-_DEFAULT_CONFIG = {"ROPE_GROUP_SIZE": 4, "num_warps": 4, "num_stages": 2}
+_DEFAULT_CONFIG = {"ROPE_GROUP_SIZE": 16, "num_warps": 2, "num_stages": 2}
 
 
 @triton.heuristics({"BACKWARD_PASS": lambda args: args["BACKWARD_PASS"]})
 @triton.jit
-def _rope_embedding(
+def rope_embedding(
     Q,     Q_row_stride,
     cos, cos_row_stride,
     sin, sin_row_stride,
@@ -20,37 +20,32 @@ def _rope_embedding(
     BLOCK_SIZE      : tl.constexpr,
     ROPE_GROUP_SIZE : tl.constexpr,
 ):
-    """RoPE embedding: Q * cos + rotate_half(Q) * sin (in-place on Q).
-
-    Each CTA processes ROPE_GROUP_SIZE consecutive heads of one (batch, seq)
-    row, sharing a single cos/sin tile across them.
-    """
     row_position  = tl.program_id(0)
     group_head_position = tl.program_id(1)
     col_offsets  = tl.arange(0, BLOCK_SIZE)
     half_head_dim = head_dim // 2
-    mask = col_offsets < half_head_dim
+    col_mask = col_offsets < half_head_dim
 
     sin1 = tl.load(sin + (row_position % seqlen)*sin_row_stride + col_offsets,
-                   mask=mask, other=0)
+                   mask=col_mask, other=0)
     cos1 = tl.load(cos + (row_position % seqlen)*cos_row_stride + col_offsets,
-                   mask=mask, other=0)
+                   mask=col_mask, other=0)
 
     if BACKWARD_PASS:
         sin1 = -sin1
 
-    head_start = group_head_position * ROPE_GROUP_SIZE
-    head_end = min((head_start + ROPE_GROUP_SIZE), n_heads)
+    head_offsets = group_head_position * ROPE_GROUP_SIZE + tl.arange(0, ROPE_GROUP_SIZE)
+    mask = (head_offsets[:, None] < n_heads) & col_mask[None, :]
 
-    for k in range(head_start, head_end):
-        offs_q1 = row_position * Q_row_stride + k * head_dim + col_offsets
-        offs_q2 = row_position * Q_row_stride + k * head_dim + col_offsets + half_head_dim
+    offs_q1 = row_position * Q_row_stride + head_offsets[:, None] * head_dim \
+        + col_offsets[None, :]
+    offs_q2 = offs_q1 + half_head_dim
 
-        Q1 = tl.load(Q + offs_q1, mask=mask, other=0).to(sin1.dtype)
-        Q2 = tl.load(Q + offs_q2, mask=mask, other=0).to(sin1.dtype)
+    Q1 = tl.load(Q + offs_q1, mask=mask, other=0).to(sin1.dtype)
+    Q2 = tl.load(Q + offs_q2, mask=mask, other=0).to(sin1.dtype)
 
-        tl.store(Q + offs_q1, Q1*cos1 - Q2*sin1, mask=mask)
-        tl.store(Q + offs_q2, Q2*cos1 + Q1*sin1, mask=mask)
+    tl.store(Q + offs_q1, Q1*cos1[None, :] - Q2*sin1[None, :], mask=mask)
+    tl.store(Q + offs_q2, Q2*cos1[None, :] + Q1*sin1[None, :], mask=mask)
 
 
 _rope_embedding_autotuned = triton.autotune(
@@ -62,12 +57,12 @@ _rope_embedding_autotuned = triton.autotune(
     ],
     key=["seqlen", "head_dim"],
     restore_value=["Q"],
-)(_rope_embedding)
+)(rope_embedding)
 
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
         block_size: int = None, autotune: bool = False):
-    # RoPE is in-place; clone so the caller's q stays pristine across backends.
+
     output = q.clone().contiguous()
     batch, seq_len, n_heads, head_dim = output.shape
 
@@ -89,7 +84,7 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
     else:
         cfg = _DEFAULT_CONFIG
         n_groups = triton.cdiv(n_heads, cfg["ROPE_GROUP_SIZE"])
-        _rope_embedding[(n_rows, n_groups)](
+        rope_embedding[(n_rows, n_groups)](
             output,   output.stride(1),
             cos,      cos.stride(0),
             sin,      sin.stride(0),

@@ -19,34 +19,29 @@ _SEARCH_SPACE = [
 
 
 @ct.kernel
-def _dequant_kernel(x_ptr, s_ptr, out_ptr, N, TILE_SIZE, TILE: ConstInt):
+def dequant_kernel(x_ptr, s_ptr, out_ptr, N: ConstInt, TILE_SIZE: ConstInt, TILE: ConstInt):
     bid = ct.bid(0)
     base = bid * TILE
     offsets = ct.arange(TILE, dtype=ct.int32) + base
 
-    # Load X tile (flattened 1D)
+
     x_tile = ct.load(x_ptr, index=(bid,), shape=(TILE,), padding_mode=ct.PaddingMode.ZERO)
 
-    # Compute scale indices into 2D S array
+
     row = offsets // N
     col = offsets % N
     s_row = row // TILE_SIZE
     s_col = col // TILE_SIZE
 
-    # Gather scales from 2D scale array
+
     scale_tile = ct.gather(s_ptr, (s_row, s_col), padding_value=0)
 
-    # Compute in float32, cast back to input dtype
-    x_f32 = ct.astype(x_tile, ct.float32)
-    scale_f32 = ct.astype(scale_tile, ct.float32)
-    result = x_f32 * scale_f32
-    result_cast = ct.astype(result, x_ptr.dtype)
+    result = x_tile * scale_tile
 
-    ct.store(out_ptr, index=(bid,), tile=result_cast)
+    ct.store(out_ptr, index=(bid,), tile=result)
 
 
-# Module-level: caches replace_hints per-occupancy and autotune-best per shape.
-_tuner = CutileAutotuner(_dequant_kernel)
+_tuner = CutileAutotuner(dequant_kernel)
 
 
 def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
@@ -59,7 +54,7 @@ def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
 
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(M, N, TILE_SIZE),
+            shape_key=(M, N, TILE_SIZE, str(X.dtype)),
             search_space=_SEARCH_SPACE,
             stream=stream,
             grid_fn=lambda cfg: ((total + cfg.tile - 1) // cfg.tile, 1, 1),
