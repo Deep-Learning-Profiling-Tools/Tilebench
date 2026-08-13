@@ -2,7 +2,7 @@
 
 Usage:
     PYTHONPATH=. python tools/llm_codegen/generate.py \
-        --operator vector_add --model gpt-5.5 --max-iters 10 --threshold 0.8
+        --operator vector_add --model gpt-5.5 --max-iters 10
 
 For each iteration:
   1. Build a prompt (initial vs feedback).
@@ -10,8 +10,12 @@ For each iteration:
   3. Parse out impl_triton.py + impl_cutile.py.
   4. Copy impl_torch.py + config.yaml from benchmarks/operators/<op>/.
   5. Run evaluator (subprocess; 15-min per-case autotune cap).
-  6. Save feedback.json. Check stopping condition.
-  7. If stopped: promote to benchmarks/llm_generated/<op>/<model>/final/.
+  6. Save feedback.json.
+
+The loop runs the full max_iters budget for both backends every iter;
+there is no early-stopping based on roofline / stop_score thresholds.
+After the budget is exhausted, the best verify-clean iter for each
+backend is promoted to benchmarks/llm_generated/<op>/<model>/final/.
 
 Each iteration is saved verbatim to benchmarks/llm_generated/<op>/<model>/iter_N/.
 """
@@ -30,7 +34,6 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from tools.llm_codegen.evaluator import (
     evaluate,
-    is_backend_stopping_met,
     is_backend_verify_clean,
 )
 from tools.llm_codegen.llm_client import LLMClient
@@ -52,13 +55,104 @@ def _final_dir(op: str, model: str, effort: str) -> Path:
     return _REPO_ROOT / "benchmarks" / "llm_generated" / op / model / effort / "final"
 
 
+def _trim_case_grid_to_largest(cfg_text: str) -> str:
+    """Trim each `case_grid` swept variable down to its largest single value.
+
+    The main benchmark engine sweeps ~20 sizes per op to characterise scaling,
+    but the LLM-codegen pipeline picks ONE hard-coded cfg per iter — there's
+    no per-size autotune, so the small cases just re-run the same kernel with
+    the cfg tuned for the largest case. Evaluating them adds eval time
+    without giving the LLM new information. Trimming to the largest matches
+    the NCU sweep's `default_params_per_dtype` (so LLM-codegen and NCU
+    results are directly comparable) and cuts evaluator time ~7-20x.
+
+    Handles two YAML shapes:
+
+      var:
+        expr: "[N * i for i in range(1, 21)]"     →  var: [N*20]
+      var: [a, b, c, d]                            →  var: [max(...)]
+
+    All other lines (comments, case_defaults, metrics, verify, etc.) are
+    preserved verbatim. The original `benchmarks/operators/<op>/config.yaml`
+    is NOT modified; only the copy under `benchmarks/llm_generated/...`.
+    """
+    import re
+
+    out_lines: list[str] = []
+    lines = cfg_text.splitlines(keepends=True)
+    i = 0
+    in_case_grid = False
+    case_grid_indent = -1
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.rstrip("\n")
+
+        # Track case_grid block boundaries: starts at unindented `case_grid:`,
+        # ends when we hit another top-level key.
+        if re.match(r"^case_grid:\s*$", stripped):
+            in_case_grid = True
+            case_grid_indent = 0
+            out_lines.append(line)
+            i += 1
+            continue
+        if in_case_grid:
+            # End of case_grid block: top-level key or end of file
+            if stripped and not stripped.startswith(" ") and not stripped.startswith("#"):
+                in_case_grid = False
+
+        if in_case_grid:
+            # Pattern A: explicit list  `  <var>: [a, b, c]`
+            m = re.match(r"^(\s+)(\w+):\s*\[([^\]]+)\]\s*(#.*)?$", line)
+            if m and m.group(2) != "dtype":
+                indent, var, body, comment = m.groups()
+                items = [s.strip() for s in body.split(",") if s.strip()]
+                # Try to parse as ints; if any item isn't an int, leave alone.
+                try:
+                    ints = [int(s) for s in items]
+                    largest = max(ints)
+                    comment = (" " + comment.strip()) if comment else ""
+                    out_lines.append(f"{indent}{var}: [{largest}]{comment}\n")
+                    i += 1
+                    continue
+                except ValueError:
+                    pass
+
+            # Pattern B: `  <var>:\n    expr: "[...]"`
+            m = re.match(r"^(\s+)(\w+):\s*$", line)
+            if m and m.group(2) != "dtype" and i + 1 < len(lines):
+                nxt = lines[i + 1]
+                mexpr = re.match(r"^(\s+)expr:\s*\"([^\"]+)\"\s*(#.*)?$", nxt)
+                if mexpr:
+                    indent_outer, var = m.group(1), m.group(2)
+                    _indent_inner, expr_body, comment = mexpr.groups()
+                    try:
+                        values = eval(expr_body, {"range": range})
+                        largest = max(values)
+                        comment = (" " + comment.strip()) if comment else ""
+                        out_lines.append(
+                            f"{indent_outer}{var}: [{largest}]{comment}\n"
+                        )
+                        i += 2
+                        continue
+                    except Exception:
+                        pass
+
+        out_lines.append(line)
+        i += 1
+    return "".join(out_lines)
+
+
 def _copy_framework_files(op: str, dest: Path) -> None:
     """Bring impl_torch.py and config.yaml into the iter dir so the evaluator
-    has everything it needs in one place."""
+    has everything it needs in one place. The copied config.yaml has its
+    case_grid trimmed to a single largest-case per swept variable (matches
+    the NCU sweep's default_params_per_dtype). The source file under
+    benchmarks/operators/<op>/ is left untouched."""
     src = _REPO_ROOT / "benchmarks" / "operators" / op
     dest.mkdir(parents=True, exist_ok=True)
-    for fname in ("impl_torch.py", "config.yaml"):
-        shutil.copy2(src / fname, dest / fname)
+    shutil.copy2(src / "impl_torch.py", dest / "impl_torch.py")
+    cfg_text = (src / "config.yaml").read_text()
+    (dest / "config.yaml").write_text(_trim_case_grid_to_largest(cfg_text))
 
 
 def _read_prev_impls(iter_dir: Path) -> tuple[str, str]:
@@ -76,10 +170,10 @@ def _short_feedback_summary(feedback: dict, active_backends: tuple[str, ...]) ->
     bad_compile = [b for b, e in ce.items() if e and b in active_backends]
     if bad_compile:
         parts.append(f"compile_fail={bad_compile}")
-    ae = feedback.get("autotune_errors", {})
-    bad_autotune = [b for b in ae if b in active_backends]
-    if bad_autotune:
-        parts.append(f"autotune_timeout={bad_autotune}")
+    te = feedback.get("case_timeout_errors", {})
+    bad_timeout = [b for b in te if b in active_backends]
+    if bad_timeout:
+        parts.append(f"case_timeout={bad_timeout}")
     for b in active_backends:
         score = feedback.get(f"stop_score_{b}", 0.0)
         vf = len(feedback.get(f"verify_failures_{b}", []))
@@ -96,12 +190,10 @@ def run_one_iter(
     client: LLMClient,
     prev_feedback: dict | None,
     active_backends: tuple[str, ...],
-    frozen_info: dict | None = None,
     history: list[dict] | None = None,
     best_so_far: dict | None = None,
 ) -> dict:
-    """Run one iteration: build prompt → LLM → parse → eval. Only generates
-    impl files for `active_backends`; frozen backends are skipped end-to-end.
+    """Run one iteration: build prompt → LLM → parse → eval.
 
     Returns feedback, augmented with `llm_usage` and `timing_breakdown`.
     """
@@ -126,7 +218,6 @@ def run_one_iter(
             history=history or [],
             best_so_far=best_so_far,
             backends=active_backends,
-            frozen_info=frozen_info,
         )
     prompt_path.write_text(prompt)
 
@@ -177,7 +268,7 @@ def run_one_iter(
     # ---- Copy reference + config ----
     _copy_framework_files(op, iter_dir)
 
-    # ---- Evaluate (skip frozen backends entirely) ----
+    # ---- Evaluate ----
     skip_backends = [b for b in BACKENDS if b not in active_backends]
     print(f"  [iter {iter_idx}] evaluating (skip={skip_backends}) ...", flush=True)
     feedback = evaluate(op=op, iter_dir=iter_dir, skip_backends=skip_backends)
@@ -207,55 +298,39 @@ def main():
         help="Reasoning effort level (default xhigh). 'high' is ~3-5× faster.",
     )
     ap.add_argument("--max-iters", type=int, default=10)
-    ap.add_argument(
-        "--threshold", type=float, default=0.80,
-        help="Geo-mean roofline_pct to stop (default 0.80 = 80%%)",
-    )
     args = ap.parse_args()
 
     client = LLMClient(model=args.model, effort=args.effort)
 
     print(
         f"=== LLM codegen: op={args.operator} model={args.model} "
-        f"effort={args.effort} threshold={args.threshold} ===",
+        f"effort={args.effort} max_iters={args.max_iters} ===",
         flush=True,
     )
 
     prev_feedback = None
     history: list[dict] = []
     # Per-backend state.
-    #   frozen[b]: iter index where backend `b` first met the stop condition,
-    #              or None if not yet frozen. Once frozen, `b` is skipped end-
-    #              to-end in subsequent iters (no LLM, no eval).
     #   best_clean[b]: highest stop_score_<b> among verify-clean iters for `b`
     #                  (carries impl source so the feedback prompt can show it
     #                  for regression-recovery), plus iter index.
     #   best_any[b]:   highest stop_score_<b> regardless of verify cleanliness
     #                  (fallback for promotion).
-    frozen: dict[str, int | None] = {b: None for b in BACKENDS}
-    frozen_score: dict[str, float] = {b: 0.0 for b in BACKENDS}
+    # There is no roofline-based early stopping; the loop runs the full
+    # max_iters budget. Both backends are regenerated every iter.
     best_clean: dict[str, dict] = {}
     best_any: dict[str, dict] = {}
 
     for i in range(args.max_iters):
-        active_backends = tuple(b for b in BACKENDS if frozen[b] is None)
-        if not active_backends:
-            print(f"\n✅ All backends frozen by iter {i-1}; stopping pipeline.", flush=True)
-            break
+        active_backends = BACKENDS  # both backends generated every iter
 
-        frozen_info = {
-            b: {"iter": frozen[b], "stop_score": frozen_score[b]}
-            for b in BACKENDS if frozen[b] is not None
-        }
-        print(f"\n=== Iteration {i} (active={list(active_backends)}, "
-              f"frozen={list(frozen_info.keys())}) ===", flush=True)
+        print(f"\n=== Iteration {i} ===", flush=True)
         iter_t0 = time.time()
         try:
             feedback = run_one_iter(
                 op=args.operator, model=args.model, effort=args.effort,
                 iter_idx=i, client=client, prev_feedback=prev_feedback,
                 active_backends=active_backends,
-                frozen_info=frozen_info or None,
                 history=history,
                 best_so_far=best_clean or None,
             )
@@ -278,22 +353,30 @@ def main():
         (iter_dir / "feedback.json").write_text(json.dumps(feedback, indent=2, default=str))
         prev_feedback = feedback
 
-        # ---- Track per-backend history + bests + freezing ----
+        # ---- Track per-backend history + bests ----
         per_backend_h: dict[str, dict] = {}
         for b in BACKENDS:
-            if b not in active_backends:
-                per_backend_h[b] = {"skipped": True, "frozen_at": frozen[b]}
-                continue
             score = feedback.get(f"stop_score_{b}", 0.0)
             rep = feedback.get(f"report_arith_mean_{b}", 0.0)
             vf_count = len(feedback.get(f"verify_failures_{b}", []))
             clean = is_backend_verify_clean(feedback, b)
+            # Pick a representative cfg + speedup for this backend in this iter:
+            # use the LARGEST verify-clean case (last in problem-size sort).
+            # If all combos failed verify, leave cfg/speedup as None.
+            backend_combos = [
+                r for r in feedback.get("roofline_per_combo", [])
+                if r.get("backend") == b
+            ]
+            backend_combos.sort(key=lambda r: -(r.get("problem_size") or 0))
+            rep_combo = backend_combos[0] if backend_combos else {}
             per_backend_h[b] = {
                 "skipped": False,
                 "stop_score": score,
                 "report_mean": rep,
                 "verify_clean": clean,
                 "verify_fail_count": vf_count,
+                "cfg": rep_combo.get("cfg"),
+                "speedup_vs_torch": rep_combo.get("speedup_vs_torch"),
             }
             # best_any: highest score regardless of verify
             if b not in best_any or score > best_any[b]["stop_score"]:
@@ -305,11 +388,6 @@ def main():
                     "iter": i, "stop_score": score, "report_mean": rep,
                     f"impl_{b}": src_path.read_text() if src_path.exists() else "",
                 }
-            # Freeze if this iter hit threshold AND is verify-clean for `b`.
-            if is_backend_stopping_met(feedback, b, threshold=args.threshold):
-                frozen[b] = i
-                frozen_score[b] = score
-                print(f"  🥶 `{b}` froze at iter {i} (stop_score={score*100:.1f}%)", flush=True)
 
         history_entry = {
             "iter": i,
@@ -320,16 +398,11 @@ def main():
         }
         history.append(history_entry)
 
-        if all(frozen[b] is not None for b in BACKENDS):
-            print(f"\n✅ All backends frozen at iter {i}; stopping pipeline.", flush=True)
-            break
-    else:
-        print(
-            f"\n⏹ Max iterations ({args.max_iters}) reached. "
-            f"frozen={ {b: frozen[b] for b in BACKENDS if frozen[b] is not None} } | "
-            f"best_clean={ {b: best_clean[b]['iter'] for b in best_clean} }",
-            flush=True,
-        )
+    print(
+        f"\n⏹ Iteration budget exhausted ({args.max_iters} iters). "
+        f"best_clean={ {b: best_clean[b]['iter'] for b in best_clean} }",
+        flush=True,
+    )
 
     # ---- Promote per-backend best ----
     final_dir = _final_dir(args.operator, args.model, args.effort)
@@ -365,11 +438,9 @@ def main():
         "op": args.operator,
         "model": args.model,
         "effort": args.effort,
-        "threshold": args.threshold,
         "max_iters": args.max_iters,
         "backends": list(BACKENDS),
         "history": history,
-        "frozen": {b: frozen[b] for b in BACKENDS},
         "best_clean": {
             b: {k: v for k, v in best_clean[b].items() if not k.startswith("impl_")}
             for b in best_clean
