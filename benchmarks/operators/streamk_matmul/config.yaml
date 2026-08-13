@@ -1,12 +1,4 @@
-# Stream-K's value comes from balanced K-iteration distribution when
-# total_tiles doesn't tile-align with the SM count (wave-quantization
-# tail). We sweep (M, N) to exercise a range of total_tiles vs SM-count
-# ratios — that's what stresses the scheduler. K is fixed because it
-# only changes per-tile inner-loop work, not the inter-CTA distribution
-# Stream-K is designed to balance.
 verify:
-  # TF32 accumulation error grows as sqrt(K) * TF32_eps (~5e-4); for k=4096 max ~0.5.
-  # This tolerance is only a sanity check — the output magnitude is ~sqrt(K) >> atol.
   atol: 1.0
   rtol: 1e-2
 
