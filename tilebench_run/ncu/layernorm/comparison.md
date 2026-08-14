@@ -15,18 +15,18 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 20.00 us | 41.74 % | 28.97 % | 54.76 % | 25.63 % | 45.68 % | 2.22 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
-| fp16 | cutile | 35.30 us | 53.71 % | 22.78 % | 67.40 % | 45.65 % | 41.40 % | 1.74 Tbyte/s | 128 | 32 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| bf16 | triton | 20.77 us | 39.47 % | 27.93 % | 51.06 % | 24.54 % | 46.47 % | 2.14 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
-| bf16 | cutile | 37.18 us | 52.50 % | 21.60 % | 66.04 % | 43.18 % | 42.57 % | 1.66 Tbyte/s | 128 | 32 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
-| fp32 | triton | 32.74 us | 51.14 % | 51.14 % | 56.99 % | 34.69 % | 26.52 % | 3.92 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
-| fp32 | cutile | 33.63 us | 47.79 % | 47.79 % | 51.92 % | 33.22 % | 37.41 % | 3.66 Tbyte/s | 128 | 64 register/thread | 28 byte/block | 0 byte/block | 8 block / 28 block |
+| fp16 | triton | 24.54 us | 46.75 % | 46.75 % | 42.44 % | 22.69 % | 37.56 % | 3.58 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
+| fp16 | cutile | 37.95 us | 49.93 % | 40.37 % | 61.26 % | 42.30 % | 38.50 % | 3.09 Tbyte/s | 128 | 32 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+| bf16 | triton | 24.64 us | 46.48 % | 46.48 % | 39.30 % | 22.49 % | 38.70 % | 3.56 Tbyte/s | 256 | 40 register/thread | 0 byte/block | 32 byte/block | 6 block / 14 block |
+| bf16 | cutile | 39.10 us | 49.20 % | 39.31 % | 60.30 % | 40.99 % | 39.92 % | 3.01 Tbyte/s | 128 | 32 register/thread | 28 byte/block | 0 byte/block | 16 block / 28 block |
+| fp32 | triton | 41.31 us | 59.37 % | 59.37 % | 45.71 % | 30.74 % | 22.35 % | 4.55 Tbyte/s | 256 | 32 register/thread | 0 byte/block | 32 byte/block | 8 block / 28 block |
+| fp32 | cutile | 38.94 us | 61.14 % | 61.14 % | 42.78 % | 32.06 % | 33.54 % | 4.68 Tbyte/s | 128 | 64 register/thread | 28 byte/block | 0 byte/block | 8 block / 28 block |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **1.76× faster** (20.0 µs vs 35.3 µs).
-- **bf16**: Triton is **1.79× faster** (20.8 µs vs 37.2 µs).
-- **fp32**: Triton is **1.03× faster** (32.7 µs vs 33.6 µs).
+- **fp16**: Triton is **1.55× faster** (24.5 µs vs 38.0 µs).
+- **bf16**: Triton is **1.59× faster** (24.6 µs vs 39.1 µs).
+- **fp32**: cuTile is **1.06× faster** (38.9 µs vs 41.3 µs).
 
 ## NCU's own bottleneck verdict
 
@@ -34,7 +34,7 @@
 - **bf16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 - **fp16 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.86 full waves across all SMs. Look at Launch Statistics for more details.
 - **fp16 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
-- **fp32 / cutile** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp32 / cutile** — Memory is more heavily utilized than Compute
 - **fp32 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
 
 ## Reports
