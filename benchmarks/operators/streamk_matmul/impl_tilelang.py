@@ -3,7 +3,7 @@ import math
 import torch
 import tilelang
 import tilelang.language as T
-from tilelang.autotuner import set_autotune_inputs
+from triton.testing import do_bench
 
 
 _DEFAULT_CONFIG = {
@@ -14,6 +14,7 @@ _DEFAULT_CONFIG = {
     "threads": 256,
     "num_stages": 3,
 }
+_autotune_cache: dict = {}
 _last_autotune_config: dict = {}
 
 
@@ -35,7 +36,6 @@ def _streamk_partition(M: int, N: int, BLOCK_M: int, BLOCK_N: int, NUM_SMS: int)
     return total_tiles, streamk_tiles
 
 
-@tilelang.autotune(configs=streamk_configs(), warmup=3, rep=10, timeout=60)
 @tilelang.jit(
     pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
 )
@@ -203,6 +203,87 @@ def full_tiles_kernel(
         T.copy(acc, C[pid_m * BLOCK_M, pid_n * BLOCK_N])
 
 
+def _compile_first_wave(a, b, c, dtype, NUM_SMS, cfg):
+    return first_wave_kernel.compile(
+        a,
+        b,
+        c,
+        dtype=dtype,
+        NUM_SMS=NUM_SMS,
+        BLOCK_M=cfg["BLOCK_M"],
+        BLOCK_N=cfg["BLOCK_N"],
+        BLOCK_K=cfg["BLOCK_K"],
+        GROUP_M=cfg["GROUP_M"],
+        threads=cfg["threads"],
+        num_stages=cfg["num_stages"],
+    )
+
+
+def _compile_full_tiles(a, b, c, dtype, NUM_SMS, cfg):
+    return full_tiles_kernel.compile(
+        a,
+        b,
+        c,
+        dtype=dtype,
+        NUM_SMS=NUM_SMS,
+        BLOCK_M=cfg["BLOCK_M"],
+        BLOCK_N=cfg["BLOCK_N"],
+        BLOCK_K=cfg["BLOCK_K"],
+        GROUP_M=cfg["GROUP_M"],
+        threads=cfg["threads"],
+        num_stages=cfg["num_stages"],
+    )
+
+
+def _tune_pipeline(a, b, M, N, K, dtype, NUM_SMS) -> dict:
+    key = (M, N, K, str(a.dtype))
+    cached = _autotune_cache.get(key)
+    if cached is not None:
+        return cached
+
+    ref = a @ b
+    torch.cuda.synchronize()
+    scratch = torch.empty((M, N), device=a.device, dtype=torch.float32)
+    best_cfg, best_ms, failures = None, float("inf"), []
+    for cfg in streamk_configs():
+        total_tiles, streamk_tiles = _streamk_partition(
+            M, N, cfg["BLOCK_M"], cfg["BLOCK_N"], NUM_SMS)
+        blocking_tiles = total_tiles - streamk_tiles
+        try:
+            first_kernel = _compile_first_wave(a, b, scratch, dtype, NUM_SMS, cfg)
+            full_kernel = None
+            if blocking_tiles > 0:
+                full_kernel = _compile_full_tiles(a, b, scratch, dtype, NUM_SMS, cfg)
+
+            def _pipeline():
+                first_kernel(a, b, scratch)
+                if full_kernel is not None:
+                    full_kernel(a, b, scratch)
+
+            scratch.zero_()
+            _pipeline()
+            torch.cuda.synchronize()
+            candidate = scratch if a.dtype == torch.float32 else scratch.to(a.dtype)
+            if not torch.allclose(candidate, ref, atol=1.0, rtol=1e-2):
+                failures.append((cfg, "correctness check failed"))
+                continue
+            ms = do_bench(_pipeline, warmup=1, rep=3)
+        except Exception as e:
+            failures.append((cfg, f"{type(e).__name__}: {e}"))
+            continue
+        if ms < best_ms:
+            best_cfg, best_ms = cfg, ms
+    if best_cfg is None:
+        raise RuntimeError(
+            f"streamk_matmul: all {len(streamk_configs())} pipeline configs "
+            f"failed to run; first error: {failures[0][1] if failures else 'n/a'}")
+    if failures:
+        print(f"  streamk_matmul tilelang autotune: skipped {len(failures)} "
+              f"failing config(s), e.g. {failures[0][1][:80]}")
+    _autotune_cache[key] = best_cfg
+    return best_cfg
+
+
 def run(a: torch.Tensor, b: torch.Tensor,
         block_size: int = None, autotune: bool = False, **kwargs):
     assert a.is_contiguous() and b.is_contiguous()
@@ -224,29 +305,26 @@ def run(a: torch.Tensor, b: torch.Tensor,
         c = torch.zeros((M, N), device=a.device, dtype=torch.float32)
 
     if autotune:
-        with set_autotune_inputs(a, b, c):
-            first_kernel = first_wave_kernel.compile(a, b, c, dtype=dtype, NUM_SMS=NUM_SMS)
-        cfg = dict(first_kernel.config or {})
+        cfg = _tune_pipeline(a, b, M, N, K, dtype, NUM_SMS)
         _last_autotune_config.clear()
         _last_autotune_config.update(cfg)
         c.zero_()
-        first_kernel(a, b, c)
     else:
         _last_autotune_config.clear()
         cfg = dict(_DEFAULT_CONFIG)
-        first_wave_kernel(
-            a,
-            b,
-            c,
-            dtype,
-            NUM_SMS=NUM_SMS,
-            BLOCK_M=cfg["BLOCK_M"],
-            BLOCK_N=cfg["BLOCK_N"],
-            BLOCK_K=cfg["BLOCK_K"],
-            GROUP_M=cfg["GROUP_M"],
-            threads=cfg["threads"],
-            num_stages=cfg["num_stages"],
-        )
+    first_wave_kernel(
+        a,
+        b,
+        c,
+        dtype,
+        NUM_SMS=NUM_SMS,
+        BLOCK_M=cfg["BLOCK_M"],
+        BLOCK_N=cfg["BLOCK_N"],
+        BLOCK_K=cfg["BLOCK_K"],
+        GROUP_M=cfg["GROUP_M"],
+        threads=cfg["threads"],
+        num_stages=cfg["num_stages"],
+    )
 
     total_tiles, streamk_tiles = _streamk_partition(M, N, cfg["BLOCK_M"], cfg["BLOCK_N"], NUM_SMS)
     blocking_tiles = total_tiles - streamk_tiles
