@@ -6,19 +6,19 @@ from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIGS = {
     torch.float32: {
         "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 32,
-        "GROUP_SIZE_M": 8, "threads": 256, "num_stages": 3,
+        "GROUP_SIZE_M": 8, "threads": 128, "num_stages": 3,
     },
     torch.float16: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "threads": 256, "num_stages": 3,
+        "BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
+        "GROUP_SIZE_M": 8, "threads": 128, "num_stages": 3,
     },
     torch.float8_e4m3fn: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "threads": 256, "num_stages": 3,
+        "BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8, "threads": 128, "num_stages": 3,
     },
     torch.float8_e5m2: {
-        "BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64,
-        "GROUP_SIZE_M": 8, "threads": 256, "num_stages": 3,
+        "BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8, "threads": 128, "num_stages": 3,
     },
 }
 
@@ -28,7 +28,7 @@ def matmul_configs():
     BLOCK_SIZE_M = [128, 256]
     BLOCK_SIZE_N = [128, 256]
     BLOCK_SIZE_K = [64, 128]
-    GROUP_SIZE_M = [64, 128]
+    GROUP_SIZE_M = [8]
     threads = [128, 256]
     stages = [3]
     return [
@@ -40,6 +40,11 @@ def matmul_configs():
         for gs in GROUP_SIZE_M
         for nt in threads
         for ns in stages
+    ] + [
+        dict(BLOCK_SIZE_M=128, BLOCK_SIZE_N=128, BLOCK_SIZE_K=bk,
+             GROUP_SIZE_M=8, threads=nt, num_stages=ns)
+        for bk, ns in [(64, 2), (32, 3), (32, 4)]
+        for nt in threads
     ]
 
 @tilelang.autotune(configs=matmul_configs(), warmup=20, rep=100, timeout=60)
@@ -65,18 +70,12 @@ def matmul_kernel(
     with T.Kernel(T.ceildiv(M, BLOCK_SIZE_M), 
                   T.ceildiv(N, BLOCK_SIZE_N), threads=threads) as (pid_m, pid_n):
         T.use_swizzle(panel_size=GROUP_SIZE_M, enable = True)
-        # C tile is shape [BLOCK_SIZE_M, BLOCK_SIZE_N]
-        # each index [i, j] in C tile needs whole row / col in A and B
-        # BLOCK_SIZE_K is used to compute elements in BLOCK along A / B
-        # what do we want in SMEM? each thread computes part of the tile
-        # each thread needs access to what similar elements?
-        # Most likely the A and B tile that we are @ then adding to acc
         start_m = pid_m * BLOCK_SIZE_M
         start_n = pid_n * BLOCK_SIZE_N
         a_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
         b_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
         acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
-        use_tmem = dtype != "float32"
+        use_tmem = dtype != T.tfloat32
         if use_tmem:
             acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
             mbar = T.alloc_barrier(1)
@@ -105,7 +104,7 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     M, _ = a.shape
     _, N = b.shape
     c = torch.empty((M, N), device=a.device, dtype=a.dtype)
-    dtype = str(a.dtype).removeprefix("torch.")
+    dtype = T.tfloat32 if a.dtype == torch.float32 else str(a.dtype).removeprefix("torch.")
 
     if autotune:
         with set_autotune_inputs(a, b, c):

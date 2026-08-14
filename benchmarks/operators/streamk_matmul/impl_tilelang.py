@@ -9,24 +9,21 @@ from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128,
     "BLOCK_N": 128,
-    "BLOCK_K": 32,
+    "BLOCK_K": 64,
     "GROUP_M": 8,
     "threads": 256,
-    "num_stages": 4,
+    "num_stages": 3,
 }
 _last_autotune_config: dict = {}
 
 
 def streamk_configs():
-    # num_stages=3 is racy in the fp32 first-wave split-tile path on B200.
-    # The 128x256 TMEM fragment is not mapped correctly across two warpgroups.
     return [
-        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=bk, GROUP_M=8, threads=nt, num_stages=4)
+        dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=bk, GROUP_M=8, threads=nt, num_stages=3)
         for bm in [64, 128]
         for bn in [128, 256]
         for bk in [32, 64]
         for nt in [128, 256]
-        if not (bn == 256 and nt == 256)
     ]
 
 
@@ -53,7 +50,7 @@ def first_wave_kernel(
     BLOCK_K: int = 32,
     GROUP_M: int = 8,
     threads: int = 256,
-    num_stages: int = 4,
+    num_stages: int = 3,
 ):
     M, K, N = T.const("M, K, N")
     A: T.Tensor((M, K), dtype)
@@ -152,7 +149,7 @@ def full_tiles_kernel(
     BLOCK_K: int = 32,
     GROUP_M: int = 8,
     threads: int = 256,
-    num_stages: int = 4,
+    num_stages: int = 3,
 ):
     M, K, N = T.const("M, K, N")
     A: T.Tensor((M, K), dtype)
@@ -237,10 +234,6 @@ def run(a: torch.Tensor, b: torch.Tensor,
     else:
         _last_autotune_config.clear()
         cfg = dict(_DEFAULT_CONFIG)
-        props = torch.cuda.get_device_properties(torch.cuda.current_device())
-        smem_budget = getattr(props, "shared_memory_per_block_optin", 99 * 1024)
-        stage_bytes = (cfg["BLOCK_M"] + cfg["BLOCK_N"]) * cfg["BLOCK_K"] * a.element_size()
-        cfg["num_stages"] = max(1, min(cfg["num_stages"], smem_budget // stage_bytes))
         first_wave_kernel(
             a,
             b,
