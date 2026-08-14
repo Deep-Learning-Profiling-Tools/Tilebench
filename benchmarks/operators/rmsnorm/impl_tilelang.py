@@ -31,32 +31,31 @@ def rmsnorm_kernel(
     rms_w: T.Tensor((N,), dtype)
     Y: T.Tensor((M, N), dtype)
 
-    accum_dtype = "float"
+    accum_dtype = "float32"
 
     with T.Kernel(M, threads=threads) as row:
-        sumsq_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
+        sumsq_local = T.alloc_fragment((BLOCK_N,), accum_dtype)
         row_sum = T.alloc_fragment((1,), accum_dtype)
         inv_rms = T.alloc_fragment((1,), accum_dtype)
 
         T.fill(sumsq_local, 0.0)
 
         for off in T.serial(0, N, BLOCK_N):
-            for i, j in T.Parallel(1, BLOCK_N):
+            for j in T.Parallel(BLOCK_N):
                 col = off + j
                 x_val = T.Cast(accum_dtype, X[row, col])
-                sumsq_local[i, j] += x_val * x_val
+                sumsq_local[j] += x_val * x_val
 
-        T.reduce_sum(sumsq_local, row_sum, dim=1)
+        T.reduce_sum(sumsq_local, row_sum, dim=0)
 
-        for i in T.Parallel(1):
-            inv_rms[i] = T.rsqrt(row_sum[i] / N + T.Cast(accum_dtype, eps))
+        inv_rms[0] = T.rsqrt(row_sum[0] / N + T.Cast(accum_dtype, eps))
 
         for off in T.serial(0, N, BLOCK_N):
-            for i, j in T.Parallel(1, BLOCK_N):
+            for j in T.Parallel(BLOCK_N):
                 col = off + j
                 x_val = T.Cast(accum_dtype, X[row, col])
                 weight = T.Cast(accum_dtype, rms_w[col])
-                Y[row, col] = T.Cast(dtype, x_val * inv_rms[i] * weight)
+                Y[row, col] = T.Cast(dtype, x_val * inv_rms[0] * weight)
 
 
 def run(

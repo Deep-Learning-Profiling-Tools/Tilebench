@@ -46,17 +46,15 @@ def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128)
 
             for i in T.Parallel(BLOCK_N):
                 col = start + i
-                if col < N:
-                    if x_tile[i] == tile_max[0]:
-                        idx_tile[i] = col
+                idx_tile[i] = T.Select(x_tile[i] == tile_max[0], col, N)
 
             T.reduce_min(idx_tile, tile_idx, dim=0, clear=True)
 
-            if tile_max[0] > best_val[0]:
-                best_val[0] = tile_max[0]
-                best_idx[0] = tile_idx[0]
+            better = tile_max[0] > best_val[0]
+            best_val[0] = T.Select(better, tile_max[0], best_val[0])
+            best_idx[0] = T.Select(better, tile_idx[0], best_idx[0])
 
-        Out[row] = T.Cast("int64", best_idx[0])
+        Out[row] = T.cast(best_idx[0], "int64")
 
 
 def run(

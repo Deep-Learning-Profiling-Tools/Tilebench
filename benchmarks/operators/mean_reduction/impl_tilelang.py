@@ -31,15 +31,14 @@ def mean_reduction_kernel(
     output: T.Tensor((M,), out_dtype)
 
     with T.Kernel(M, threads=threads) as row:
-        acc = T.alloc_fragment((BLOCK_N,) , out_dtype)
-        row_sum = T.alloc_fragment((1,), out_dtype)
+        acc = T.alloc_fragment((BLOCK_N,) , "float32")
+        row_sum = T.alloc_fragment((1,), "float32")
         T.fill(acc, 0.0)
 
         for tile_idx in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
             for local_col in T.Parallel(BLOCK_N):
                 col = tile_idx * BLOCK_N + local_col
-                if col < N:
-                    acc[local_col] += T.cast(x[row, col], out_dtype)
+                acc[local_col] += T.cast(x[row, col], "float32")
 
         T.reduce_sum(acc, row_sum, dim=0)
         output[row] = row_sum[0] / N

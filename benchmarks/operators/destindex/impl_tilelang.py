@@ -5,6 +5,12 @@ from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
 _last_autotune_config: dict = {}
 _out_cache = torch.utils.weak.WeakTensorKeyDictionary()
+def _cached_out(o: torch.Tensor) -> torch.Tensor:
+    out = _out_cache.get(o)
+    if out is None:
+        out = o.clone()
+        _out_cache[o] = out
+    return out
 
 def destindex_config():
     BLOCK_SIZE = [256, 512, 1024]
@@ -37,22 +43,16 @@ def copy_by_dest_kernel(
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads=threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             offs = pid * BLOCK_SIZE + local_idx
-            if offs < n_elements:
-                d = offs % head_dim
-                tmp = offs // head_dim
-                head = tmp % head_num
-                token = tmp // head_num
-                dest_index = T.Cast("int32", dest[token])
-                dst_off = (dest_index * head_num + head) * head_dim + d
-                out[dst_off] = kv[offs]
+            d = offs % head_dim
+            tmp = offs // head_dim
+            head = tmp % head_num
+            token = tmp // head_num
+            dest_index = T.Cast("int32", dest[token])
+            dst_off = (dest_index * head_num + head) * head_dim + d
+            out[dst_off] = kv[offs]
 
 
-def _cached_out(o: torch.Tensor) -> torch.Tensor:
-    out = _out_cache.get(o)
-    if out is None:
-        out = o.clone()
-        _out_cache[o] = out
-    return out
+
 
 
 def _launch_copy(

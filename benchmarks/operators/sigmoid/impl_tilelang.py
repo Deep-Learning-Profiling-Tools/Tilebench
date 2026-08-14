@@ -8,8 +8,8 @@ _last_autotune_config: dict = {}
 
 
 def sigmoid_configs():
-    BLOCK_SIZE = [512, 1024, 2048]
-    threads = [64, 128, 256]
+    BLOCK_SIZE = [1024, 2048, 4096, 8192]
+    threads = [128, 256]
     return [
         dict(BLOCK_SIZE = bs, threads = nt)
         for bs in BLOCK_SIZE
@@ -27,15 +27,13 @@ def sigmoid_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128)
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                output[idx] = T.sigmoid(x[idx])
+            output[idx] = T.sigmoid(T.cast(x[idx], "float32"))
 
 
 def run(X: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
 
     dtype = str(X.dtype).removeprefix("torch.")
     output = torch.empty_like(X)
-    #output.fill_(float("nan"))
     if autotune:
         with set_autotune_inputs(X, output):
             kernel = sigmoid_kernel.compile(X, output, dtype = dtype)

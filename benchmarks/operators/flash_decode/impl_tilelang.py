@@ -5,14 +5,15 @@ from tilelang.autotuner import set_autotune_inputs
 from tilelang.math import next_power_of_2
 
 
-_DEFAULT_CONFIG = {"threads": 128}
+_DEFAULT_CONFIG = {"threads": 128, "num_stages": 2}
 _last_autotune_config: dict = {}
 
 
 def flash_decode_stage2_configs():
     return [
-        dict(threads=nt)
+        dict(threads=nt, num_stages=ns)
         for nt in [32, 64, 128]
+        for ns in [2, 3, 4]
     ]
 
 
@@ -27,6 +28,7 @@ def flash_decode_stage2_kernel(
     BLOCK_SEQ: int,
     BLOCK_DMODEL: int,
     threads: int = 128,
+    num_stages: int = 2,
 ):
     batch, head_num, num_blocks, head_dim = T.const("batch, head_num, num_blocks, head_dim")
     mid_o: T.Tensor((batch, head_num, num_blocks, head_dim), dtype)
@@ -45,15 +47,14 @@ def flash_decode_stage2_kernel(
         T.fill(acc, 0.0)
 
         cur_batch_seq_len = b_seqlen[cur_batch]
-        block_n_size = T.if_then_else(
+        block_n_size = T.Select(
             cur_batch_seq_len <= 0,
             0,
             (cur_batch_seq_len + BLOCK_SEQ - 1) // BLOCK_SEQ,
         )
 
-        for block_seq_n in T.serial(block_n_size):
-            T.fill(tv, 0.0)
-            T.copy(mid_o[cur_batch, cur_head, block_seq_n, 0:head_dim], tv)
+        for block_seq_n in T.Pipelined(block_n_size, num_stages=num_stages):
+            T.copy(mid_o[cur_batch, cur_head, block_seq_n, 0:BLOCK_DMODEL], tv)
             tlogic = T.cast(mid_o_lse[cur_batch, cur_head, block_seq_n], "float32")
             new_max_logic = T.max(tlogic, max_logic)
             old_scale = T.exp(max_logic - new_max_logic)
@@ -66,9 +67,9 @@ def flash_decode_stage2_kernel(
             max_logic = new_max_logic
 
         for d in T.Parallel(BLOCK_DMODEL):
-            out[d] = T.Cast(dtype, acc[d] / sum_exp)
+            out[d] = T.cast(acc[d] / sum_exp, dtype)
 
-        T.copy(out, output[cur_batch, cur_head, 0:head_dim])
+        T.copy(out, output[cur_batch, cur_head, 0:BLOCK_DMODEL])
 
 
 def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor,
@@ -107,6 +108,7 @@ def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor,
             BLOCK_SEQ=block_seq,
             BLOCK_DMODEL=block_dmodel,
             threads=cfg["threads"],
+            num_stages=cfg["num_stages"],
         )
 
     return output

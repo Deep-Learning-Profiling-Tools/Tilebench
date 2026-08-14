@@ -31,10 +31,11 @@ def layernorm_kernel(X, weight, bias, Y, dtype, eps,
     bias: T.Tensor((N,), dtype)
     Y: T.Tensor((M, N), dtype)
 
-    accum_dtype = "float"
+    accum_dtype = "float32"
     with T.Kernel(M, threads=threads) as row:
-        sum_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
-        sumsq_local = T.alloc_fragment((1, BLOCK_N), accum_dtype)
+        sum_local = T.alloc_fragment((BLOCK_N,), accum_dtype)
+        sumsq_local = T.alloc_fragment((BLOCK_N,), accum_dtype)
+        Y_local = T.alloc_fragment((BLOCK_N,), dtype)
 
         sum_row = T.alloc_fragment((1,), accum_dtype)
         sumsq_row = T.alloc_fragment((1,), accum_dtype)
@@ -45,30 +46,31 @@ def layernorm_kernel(X, weight, bias, Y, dtype, eps,
         T.fill(sumsq_local, 0.0)
 
         for off in T.serial(0, N, BLOCK_N):
-            for i, j in T.Parallel(1, BLOCK_N):
+            for j in T.Parallel(BLOCK_N):
                 col = off + j
-                x_val = T.Cast(accum_dtype, X[row, col])
-                sum_local[i, j] += x_val
-                sumsq_local[i, j] += x_val * x_val
+                x_val = T.cast(X[row, col], accum_dtype)
+                sum_local[j] += x_val
+                sumsq_local[j] += x_val * x_val
 
-        T.reduce_sum(sum_local, sum_row, dim=1)
-        T.reduce_sum(sumsq_local, sumsq_row, dim=1)
+        T.reduce_sum(sum_local, sum_row, dim=0)
+        T.reduce_sum(sumsq_local, sumsq_row, dim=0)
 
         mean_row[0] = sum_row[0] / N
         variance = sumsq_row[0] / N - mean_row[0] * mean_row[0]
-        rstd_row[0] = T.rsqrt(variance + T.Cast(accum_dtype, eps))
+        rstd_row[0] = T.rsqrt(variance + T.cast(eps, accum_dtype))
 
         for off in T.serial(0, N, BLOCK_N):
-            for i, j in T.Parallel(1, BLOCK_N):
+            for j in T.Parallel(BLOCK_N):
                 col = off + j
-                x_val = T.Cast(accum_dtype, X[row, col])
-                norm = (x_val - mean_row[i]) * rstd_row[i]
-                Y[row, col] = T.Cast(
-                    dtype,
+                x_val = T.cast(X[row, col], accum_dtype)
+                norm = (x_val - mean_row[0]) * rstd_row[0]
+                Y_local[j] = T.cast(
                     norm
-                    * T.Cast(accum_dtype, weight[col])
-                    + T.Cast(accum_dtype, bias[col]),
+                    * T.cast(weight[col], accum_dtype)
+                    + T.cast(bias[col], accum_dtype),
+                    dtype,
                 )
+            T.copy(Y_local, Y[row, off : off + BLOCK_N])
 
 
 def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,

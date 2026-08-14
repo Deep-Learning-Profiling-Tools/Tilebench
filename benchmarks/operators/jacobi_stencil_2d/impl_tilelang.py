@@ -47,7 +47,7 @@ def jacobi_stencil_kernel(input, output, dtype,
             gb_r = i + start_r 
             gb_c = j + start_c
             is_inner = gb_r >= 1 and gb_c >= 1 and gb_r < M - 1 and gb_c < N - 1
-            avg = T.cast(0.25, dtype) * (
+            avg = 0.25 * (
                 bottom_tile[i, j] +
                 top_tile[i, j] +
                 right_tile[i, j] +

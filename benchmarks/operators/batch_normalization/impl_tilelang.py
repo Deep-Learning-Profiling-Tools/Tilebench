@@ -3,45 +3,51 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 from tilelang.math import next_power_of_2
-_DEFAULT_CONFIG = {"BLOCK": 256, "threads": 128}
+_DEFAULT_CONFIG = {"ROWS": 16, "threads": 256}
 _last_autotune_config: dict = {}
 def apply_batch_norm_configs():
-    BLOCK_SIZE = [256, 512, 1024, 2048]
+    ROWS = [8, 16, 32, 64]
     threads = [128, 256]
     return [
-        dict(BLOCK=bs, threads=nt)
-        for bs in BLOCK_SIZE
+        dict(ROWS=rows, threads=nt)
+        for rows in ROWS
         for nt in threads
     ]
 
+_STEP = 8
+_K1_BLOCK_N = 64
+
 @tilelang.jit
 def compute_block_sums_kernel(
-    input, block_sum, block_sq_sum, N, C, NUM_BLOCKS, dtype, 
-    BLOCK_N: int = 1024, threads: int = 128
+    input, block_sum, block_sq_sum, N, C, NUM_BLOCKS, dtype,
+    C_P2: int, BLOCK_N: int, STEP: int, threads: int = 128
 ):
-    total_elements = T.const("total_elements")
-    block_elements = T.const("block_elements")
-    input: T.Tensor((total_elements,), dtype)
-    block_sum: T.Tensor((block_elements,), "float32")
-    block_sq_sum: T.Tensor((block_elements,), "float32")
-    with T.Kernel(T.ceildiv(N, BLOCK_N), C, threads=threads) as (block_id, channel_id):
-        
-        local_sum = T.alloc_fragment((1,), "float32")
-        local_sq_sum = T.alloc_fragment((1, ), "float32")
-        input_local = T.alloc_fragment((BLOCK_N,), "float32")
-        input_sq_local = T.alloc_fragment((BLOCK_N,), "float32")
-        T.fill(input_local, 0.0)
-        for i in T.Parallel(BLOCK_N):
-            row = block_id * BLOCK_N + i
-            input_local[i] = T.cast(input[row * C + channel_id], "float32")
-        T.reduce_sum(input_local, local_sum, dim=0, clear = True)
-        for i in T.Parallel(BLOCK_N):
-            input_sq_local[i] = input_local[i] * input_local[i]
-        T.reduce_sum(input_sq_local, local_sq_sum, dim=0, clear = True)
+    input: T.Tensor((N, C), dtype)
+    block_sum: T.Tensor((NUM_BLOCKS, C), "float32")
+    block_sq_sum: T.Tensor((NUM_BLOCKS, C), "float32")
+    with T.Kernel(NUM_BLOCKS, threads=threads) as block_id:
+        acc_sum = T.alloc_fragment((C_P2,), "float32")
+        acc_sq = T.alloc_fragment((C_P2,), "float32")
+        input_local = T.alloc_fragment((STEP, C_P2), "float32")
+        input_sq_local = T.alloc_fragment((STEP, C_P2), "float32")
+        tile_sum = T.alloc_fragment((C_P2,), "float32")
+        tile_sq_sum = T.alloc_fragment((C_P2,), "float32")
+        T.fill(acc_sum, 0.0)
+        T.fill(acc_sq, 0.0)
 
-        block_idx = block_id * C + channel_id
-        T.copy(local_sum, block_sum[block_idx])
-        T.copy(local_sq_sum, block_sq_sum[block_idx])
+        for r in T.unroll(0, BLOCK_N, STEP):
+            for i, col in T.Parallel(STEP, C_P2):
+                row = block_id * BLOCK_N + r + i
+                input_local[i, col] = T.cast(input[row, col], "float32")
+                input_sq_local[i, col] = input_local[i, col] * input_local[i, col]
+            T.reduce_sum(input_local, tile_sum, dim=0, clear=True)
+            T.reduce_sum(input_sq_local, tile_sq_sum, dim=0, clear=True)
+            for col in T.Parallel(C_P2):
+                acc_sum[col] += tile_sum[col]
+                acc_sq[col] += tile_sq_sum[col]
+
+        T.copy(acc_sum, block_sum[block_id, 0:C_P2])
+        T.copy(acc_sq, block_sq_sum[block_id, 0:C_P2])
 
 @tilelang.jit
 def compute_mean_invstd_kernel(
@@ -49,22 +55,15 @@ def compute_mean_invstd_kernel(
     dtype, eps,
     BLOCK_B: int, threads: int = 128
 ):
-    block_elements = T.const("block_elements")
-    block_sum: T.Tensor((block_elements,), dtype)
-    block_sq_sum: T.Tensor((block_elements,), dtype)
+    block_sum: T.Tensor((NUM_BLOCKS, C), dtype)
+    block_sq_sum: T.Tensor((NUM_BLOCKS, C), dtype)
     mean: T.Tensor((C,), "float32")
     inv_std: T.Tensor((C,), "float32")
     with T.Kernel(C, threads=threads) as channel_id:
-        sums = T.alloc_fragment((BLOCK_B, ), dtype)
-        sq_sums = T.alloc_fragment((BLOCK_B, ), dtype)
-        T.fill(sums, 0.0)
-        T.fill(sq_sums, 0.0)
-        for i in T.Parallel(BLOCK_B):
-            block_idx = i * C + channel_id
-            sums[i] = block_sum[block_idx]
-        for i in T.Parallel(BLOCK_B):
-            block_idx = i * C + channel_id
-            sq_sums[i] = block_sq_sum[block_idx]
+        sums = T.alloc_fragment((BLOCK_B, 1), dtype)
+        sq_sums = T.alloc_fragment((BLOCK_B, 1), dtype)
+        T.copy(block_sum[0:BLOCK_B, channel_id:channel_id + 1], sums)
+        T.copy(block_sq_sum[0:BLOCK_B, channel_id:channel_id + 1], sq_sums)
         total_sum = T.alloc_fragment((1, ), dtype)
         total_sq_sum = T.alloc_fragment((1, ), dtype)
         mean_local = T.alloc_fragment((1, ), dtype)
@@ -90,42 +89,46 @@ def apply_batch_norm_kernel(
     output,
     mean,
     inv_std,
+    N,
     C,
     dtype,
-    BLOCK: int = 256,
+    C_P2: int,
+    ROWS: int = 16,
+    STEP: int = 8,
     threads: int = 128
 ):
-    total_elements = T.const("total_elements")
-    input: T.Tensor((total_elements, ), dtype)
-    output: T.Tensor((total_elements, ), dtype)
+    input: T.Tensor((N, C), dtype)
+    output: T.Tensor((N, C), dtype)
     gamma: T.Tensor((C, ), dtype)
     beta: T.Tensor((C, ), dtype)
     mean: T.Tensor((C, ), "float32")
     inv_std: T.Tensor((C, ), "float32")
 
-    with T.Kernel(T.ceildiv(total_elements, BLOCK), threads=threads) as pid:
-        start = pid * BLOCK
-        channel_id = T.alloc_fragment((BLOCK, ), "int32")
-        x = T.alloc_fragment((BLOCK, ), dtype)
-        mean_local = T.alloc_fragment((BLOCK, ), "float32")
-        inv_std_local = T.alloc_fragment((BLOCK, ), "float32")
-        gamma_local = T.alloc_fragment((BLOCK, ), dtype)
-        beta_local = T.alloc_fragment((BLOCK, ), dtype)
-        y = T.alloc_fragment((BLOCK, ), dtype)
-        T.copy(input[start], x)
-        for i in T.Parallel(BLOCK):
-            channel_id[i] = (start + i) % C
-        for i in T.Parallel(BLOCK):
-            mean_local[i] = mean[channel_id[i]]
-        for i in T.Parallel(BLOCK):
-            inv_std_local[i] = inv_std[channel_id[i]] 
-        for i in T.Parallel(BLOCK):
-            gamma_local[i] = gamma[channel_id[i]]
-        for i in T.Parallel(BLOCK):
-            beta_local[i] = beta[channel_id[i]]
-        for i in T.Parallel(BLOCK):
-            y[i] = (x[i] - mean_local[i]) * inv_std_local[i] * gamma_local[i] + beta_local[i]
-        T.copy(y, output[start])
+    with T.Kernel(T.ceildiv(N, ROWS), threads=threads) as block_id:
+        mean_local = T.alloc_fragment((C_P2,), "float32")
+        inv_std_local = T.alloc_fragment((C_P2,), "float32")
+        gamma_local = T.alloc_fragment((C_P2,), "float32")
+        beta_local = T.alloc_fragment((C_P2,), "float32")
+        scale = T.alloc_fragment((C_P2,), "float32")
+        shift = T.alloc_fragment((C_P2,), "float32")
+        x = T.alloc_fragment((STEP, C_P2), "float32")
+        y = T.alloc_fragment((STEP, C_P2), "float32")
+
+        T.copy(mean[0:C_P2], mean_local)
+        T.copy(inv_std[0:C_P2], inv_std_local)
+        T.copy(gamma[0:C_P2], gamma_local)
+        T.copy(beta[0:C_P2], beta_local)
+
+        for col in T.Parallel(C_P2):
+            scale[col] = inv_std_local[col] * gamma_local[col]
+            shift[col] = beta_local[col] - mean_local[col] * scale[col]
+
+        for r in T.unroll(0, ROWS, STEP):
+            row_start = block_id * ROWS + r
+            T.copy(input[row_start:row_start + STEP, 0:C_P2], x)
+            for i, col in T.Parallel(STEP, C_P2):
+                y[i, col] = x[i, col] * scale[col] + shift[col]
+            T.copy(y, output[row_start:row_start + STEP, 0:C_P2])
     
 
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
@@ -134,52 +137,50 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
     output = torch.empty_like(input)
     dtype = str(input.dtype).removeprefix("torch.")
 
-    BLOCK_N = 1024
+    BLOCK_N = _K1_BLOCK_N
     NUM_BLOCKS = (N + BLOCK_N - 1) // BLOCK_N
+    C_P2 = next_power_of_2(C)
 
     block_sum = torch.empty((NUM_BLOCKS, C), device=input.device, dtype=torch.float32)
     block_sq_sum = torch.empty((NUM_BLOCKS, C), device=input.device, dtype=torch.float32)
     mean = torch.empty((C,), device=input.device, dtype=torch.float32)
     inv_std = torch.empty((C,), device=input.device, dtype=torch.float32)
-    input_flat = input.contiguous().view(-1)
-    output_flat = output.view(-1)
-    block_sum_flat = block_sum.view(-1)
-    block_sq_sum_flat = block_sq_sum.view(-1)
+    input_2d = input.contiguous().view(N, C)
+    output_2d = output.view(N, C)
 
-    # Kernel 1: per-(block, channel) partial sums.
     compute_block_sums_kernel(
-        input_flat, block_sum_flat, block_sq_sum_flat,
-        N, C, NUM_BLOCKS, dtype,
+        input_2d, block_sum, block_sq_sum,
+        N, C, NUM_BLOCKS, dtype, C_P2,
         BLOCK_N=BLOCK_N,
+        STEP=_STEP,
         threads=128,
     )
 
-    # Kernel 2: finish reduction per channel, compute mean/inv_std.
     BLOCK_B = next_power_of_2(NUM_BLOCKS)
     compute_mean_invstd_kernel(
-        block_sum_flat, block_sq_sum_flat, mean, inv_std,
+        block_sum, block_sq_sum, mean, inv_std,
         N, C, NUM_BLOCKS, "float32", eps,
         BLOCK_B=BLOCK_B,
         threads=128,
     )
 
-    # Kernel 3: apply normalization element-wise.
     if autotune:
-        with set_autotune_inputs(input_flat, gamma, beta, output_flat, mean, inv_std):
+        with set_autotune_inputs(input_2d, gamma, beta, output_2d, mean, inv_std):
             tuned_kernel = apply_batch_norm_kernel.compile(
-                input_flat, gamma, beta, output_flat, mean, inv_std,
-                C, dtype,
+                input_2d, gamma, beta, output_2d, mean, inv_std,
+                N, C, dtype, C_P2,
             )
         _last_autotune_config.clear()
         _last_autotune_config.update(dict(tuned_kernel.config or {}))
-        tuned_kernel(input_flat, gamma, beta, output_flat, mean, inv_std)
+        tuned_kernel(input_2d, gamma, beta, output_2d, mean, inv_std)
     else:
         _last_autotune_config.clear()
         cfg = _DEFAULT_CONFIG
         apply_batch_norm_kernel(
-            input_flat, gamma, beta, output_flat, mean, inv_std,
-            C, dtype,
-            BLOCK=cfg["BLOCK"],
+            input_2d, gamma, beta, output_2d, mean, inv_std,
+            N, C, dtype, C_P2,
+            ROWS=cfg["ROWS"],
+            STEP=_STEP,
             threads=cfg["threads"],
         )
 

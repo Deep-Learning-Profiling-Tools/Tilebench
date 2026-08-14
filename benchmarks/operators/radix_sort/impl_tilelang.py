@@ -2,11 +2,15 @@ import torch
 import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
+from tilelang.math import next_power_of_2
 
 
-_DEFAULT_CONFIG = {"threads": 64}
+_DEFAULT_CONFIG = {"threads": 128}
 _BLOCK_SIZE = 1024
-_BLOCK_BB = 128
+_RADIX_BITS = 2
+_RADIX = 1 << _RADIX_BITS
+_FIELD_BITS = 16
+_FIELD_MASK = (1 << _FIELD_BITS) - 1
 _last_autotune_config: dict = {}
 
 
@@ -15,142 +19,174 @@ def scatter_configs():
 
 
 @tilelang.jit
-def count_ones_in_block_kernel(N, BLOCK_SIZE: int = 1024, threads: int = 128):
+def radix_histogram_kernel(
+    N,
+    K,
+    BLOCK_SIZE: int = 1024,
+    RADIX: int = 4,
+    FIELD_BITS: int = 16,
+    FIELD_MASK: int = 65535,
+    threads: int = 128,
+):
     @T.prim_func
     def main(
         input: T.Tensor((N,), "int32"),
-        block_sum: T.Tensor((T.ceildiv(N, BLOCK_SIZE),), "int32"),
-        bit: T.int32,
+        hist: T.Tensor((RADIX * K,), "int32"),
+        shift: T.int32,
     ):
-        with T.Kernel(T.ceildiv(N, BLOCK_SIZE), threads=threads) as pid:
-            bits = T.alloc_fragment((BLOCK_SIZE,), "int32")
-            total = T.alloc_fragment((1,), "int32")
+        with T.Kernel(K, threads=threads) as pid:
+            packed = T.alloc_fragment((BLOCK_SIZE,), "int64")
+            total = T.alloc_fragment((1,), "int64")
 
             for local_idx in T.Parallel(BLOCK_SIZE):
                 idx = pid * BLOCK_SIZE + local_idx
-                val = T.if_then_else(idx < N, input[idx], 0)
-                bits[local_idx] = T.bitwise_and(T.shift_right(val, bit), 1)
+                valid = idx < N
+                block = input[idx]
+                digit = T.bitwise_and(T.shift_right(block, shift), RADIX - 1)
+                packed[local_idx] = T.shift_left(
+                    T.cast(valid, "int64"),
+                    digit * FIELD_BITS,
+                )
 
-            T.reduce_sum(bits, total, dim=0, clear=True)
-            block_sum[pid] = total[0]
+            T.reduce_sum(packed, total, dim=0, clear=True)
+
+            for digit in T.Parallel(RADIX):
+                hist[digit * K + pid] = T.cast(
+                    T.bitwise_and(
+                        T.shift_right(total[0], digit * FIELD_BITS),
+                        FIELD_MASK,
+                    ),
+                    "int32",
+                )
 
     return main
 
 
 @tilelang.jit
-def count_ones_per_block_blocks_kernel(first_layer_sum, block_block_sum, BLOCK_SIZE: int = 1024, threads: int = 128):
-    K, L = T.const("K, L")
-    first_layer_sum: T.Tensor((K,), "int32")
-    block_block_sum: T.Tensor((L,), "int32")
+def radix_sum_chunks_kernel(M, G2, BLOCK_SIZE: int = 1024, threads: int = 128):
+    @T.prim_func
+    def main(
+        src: T.Tensor((M,), "int32"),
+        dst: T.Tensor((G2,), "int32"),
+    ):
+        with T.Kernel(G2, threads=threads) as pid:
+            vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
+            total = T.alloc_fragment((1,), "int32")
 
-    with T.Kernel(T.ceildiv(K, BLOCK_SIZE), threads=threads) as pid:
-        vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
-        total = T.alloc_fragment((1,), "int32")
+            for local_idx in T.Parallel(BLOCK_SIZE):
+                idx = pid * BLOCK_SIZE + local_idx
+                vals[local_idx] = src[idx]
 
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = pid * BLOCK_SIZE + local_idx
-            vals[local_idx] = T.if_then_else(idx < K, first_layer_sum[idx], 0)
+            T.reduce_sum(vals, total, dim=0, clear=True)
+            dst[pid] = total[0]
 
-        T.reduce_sum(vals, total, dim=0, clear=True)
-        block_block_sum[pid] = total[0]
-
-
-@tilelang.jit
-def compute_prefix_sums_bb_kernel(block_block_sum, global_ones, BLOCK_SIZE: int = 128, threads: int = 128):
-    L = T.const("L")
-    block_block_sum: T.Tensor((L,), "int32")
-    global_ones: T.Tensor((1,), "int32")
-
-    with T.Kernel(1, threads=threads) as _:
-        vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
-        original = T.alloc_fragment((BLOCK_SIZE,), "int32")
-        total = T.alloc_fragment((1,), "int32")
-
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            valid = local_idx < L
-            vals[local_idx] = T.if_then_else(valid, block_block_sum[local_idx], 0)
-            original[local_idx] = vals[local_idx]
-
-        T.cumsum(vals, dim=0)
-
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            if local_idx < L:
-                block_block_sum[local_idx] = vals[local_idx] - original[local_idx]
-
-        T.reduce_sum(original, total, dim=0, clear=True)
-        global_ones[0] = total[0]
+    return main
 
 
 @tilelang.jit
-def compute_prefix_sums_per_block_kernel(first_layer_sum, block_block_sum, BLOCK_SIZE: int = 1024, threads: int = 128):
-    K, L = T.const("K, L")
-    first_layer_sum: T.Tensor((K,), "int32")
-    block_block_sum: T.Tensor((L,), "int32")
+def radix_scan_chunk_sums_kernel(G2, BLOCK_BB: int = 1024, threads: int = 128):
+    @T.prim_func
+    def main(sums: T.Tensor((G2,), "int32")):
+        with T.Kernel(1, threads=threads) as _:
+            vals = T.alloc_fragment((BLOCK_BB,), "int32")
+            original = T.alloc_fragment((BLOCK_BB,), "int32")
 
-    with T.Kernel(T.ceildiv(K, BLOCK_SIZE), threads=threads) as pid:
-        vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
-        original = T.alloc_fragment((BLOCK_SIZE,), "int32")
-        prefix = block_block_sum[pid]
+            for local_idx in T.Parallel(BLOCK_BB):
+                valid = local_idx < G2
+                vals[local_idx] = sums[local_idx]
+                original[local_idx] = vals[local_idx]
 
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = pid * BLOCK_SIZE + local_idx
-            vals[local_idx] = T.if_then_else(idx < K, first_layer_sum[idx], 0)
-            original[local_idx] = vals[local_idx]
+            T.cumsum(vals, dim=0)
 
-        T.cumsum(vals, dim=0)
+            for local_idx in T.Parallel(BLOCK_BB):
+                if local_idx < G2:
+                    sums[local_idx] = vals[local_idx] - original[local_idx]
 
-        for local_idx in T.Parallel(BLOCK_SIZE):
-            idx = pid * BLOCK_SIZE + local_idx
-            if idx < K:
-                first_layer_sum[idx] = vals[local_idx] - original[local_idx] + prefix
+    return main
+
+
+@tilelang.jit
+def radix_scan_chunks_kernel(M, G2, BLOCK_SIZE: int = 1024, threads: int = 128):
+    @T.prim_func
+    def main(
+        src: T.Tensor((M,), "int32"),
+        chunk_offsets: T.Tensor((G2,), "int32"),
+    ):
+        with T.Kernel(G2, threads=threads) as pid:
+            vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
+            original = T.alloc_fragment((BLOCK_SIZE,), "int32")
+            base = chunk_offsets[pid]
+
+            for local_idx in T.Parallel(BLOCK_SIZE):
+                idx = pid * BLOCK_SIZE + local_idx
+                vals[local_idx] = src[idx]
+                original[local_idx] = vals[local_idx]
+
+            T.cumsum(vals, dim=0)
+
+            for local_idx in T.Parallel(BLOCK_SIZE):
+                idx = pid * BLOCK_SIZE + local_idx
+                if idx < M:
+                    src[idx] = vals[local_idx] - original[local_idx] + base
+
+    return main
 
 
 @tilelang.autotune(configs=scatter_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
-def radix_sort_kernel(N, BLOCK_SIZE: int = 1024, threads: int = 128):
+def radix_scatter_kernel(
+    N,
+    K,
+    BLOCK_SIZE: int = 1024,
+    RADIX: int = 4,
+    FIELD_BITS: int = 16,
+    FIELD_MASK: int = 65535,
+    threads: int = 128,
+):
     @T.prim_func
     def main(
         input: T.Tensor((N,), "int32"),
         output: T.Tensor((N,), "int32"),
-        first_layer_sum: T.Tensor((T.ceildiv(N, BLOCK_SIZE),), "int32"),
-        global_ones: T.Tensor((1,), "int32"),
-        bit: T.int32,
+        hist: T.Tensor((RADIX * K,), "int32"),
+        shift: T.int32,
     ):
-        with T.Kernel(T.ceildiv(N, BLOCK_SIZE), threads=threads) as pid:
+        with T.Kernel(K, threads=threads) as pid:
             block = T.alloc_fragment((BLOCK_SIZE,), "int32")
-            bit_values = T.alloc_fragment((BLOCK_SIZE,), "int32")
-            ones_scan = T.alloc_fragment((BLOCK_SIZE,), "int32")
-            zeros_scan = T.alloc_fragment((BLOCK_SIZE,), "int32")
-
-            ones_before = first_layer_sum[pid]
-            zeros_before = pid * BLOCK_SIZE - ones_before
-            global_zeros = N - global_ones[0]
+            digit_vals = T.alloc_fragment((BLOCK_SIZE,), "int32")
+            packed = T.alloc_fragment((BLOCK_SIZE,), "int64")
 
             for local_idx in T.Parallel(BLOCK_SIZE):
                 idx = pid * BLOCK_SIZE + local_idx
                 valid = idx < N
-                val = T.if_then_else(valid, input[idx], 0)
-                bit_value = T.bitwise_and(T.shift_right(val, bit), 1)
+                val = input[idx]
+                digit = T.bitwise_and(T.shift_right(val, shift), RADIX - 1)
                 block[local_idx] = val
-                bit_values[local_idx] = bit_value
-                ones_scan[local_idx] = bit_value
-                zeros_scan[local_idx] = 1 - bit_value
+                digit_vals[local_idx] = digit
+                packed[local_idx] = T.shift_left(
+                    T.cast(valid, "int64"),
+                    digit * FIELD_BITS,
+                )
 
-            T.cumsum(ones_scan, dim=0)
-            T.cumsum(zeros_scan, dim=0)
+            T.cumsum(packed, dim=0)
 
             for local_idx in T.Parallel(BLOCK_SIZE):
                 idx = pid * BLOCK_SIZE + local_idx
                 if idx < N:
-                    bit_value = bit_values[local_idx]
-                    ones_rank = ones_scan[local_idx] - bit_value
-                    zeros_rank = zeros_scan[local_idx] - (1 - bit_value)
-                    dest = T.if_then_else(
-                        bit_value == 0,
-                        zeros_before + zeros_rank,
-                        global_zeros + ones_before + ones_rank,
+                    digit = digit_vals[local_idx]
+                    field = digit * FIELD_BITS
+                    rank = T.cast(
+                        T.bitwise_and(
+                            T.shift_right(
+                                packed[local_idx]
+                                - T.shift_left(T.cast(1, "int64"), field),
+                                field,
+                            ),
+                            FIELD_MASK,
+                        ),
+                        "int32",
                     )
-                    output[dest] = block[local_idx]
+                    base = hist[digit * K + pid]
+                    output[base + rank] = block[local_idx]
 
     return main
 
@@ -165,51 +201,73 @@ def run(input: torch.Tensor, N: int,
 
     BLOCK_SIZE = _BLOCK_SIZE
     K = (N + BLOCK_SIZE - 1) // BLOCK_SIZE
-    L = (K + BLOCK_SIZE - 1) // BLOCK_SIZE
+    M = _RADIX * K
+    G2 = (M + BLOCK_SIZE - 1) // BLOCK_SIZE
+    BB = max(1024, next_power_of_2(G2))
 
-    first_layer = torch.empty((K,), dtype=torch.int32, device=input.device)
-    second_layer = torch.empty((L,), dtype=torch.int32, device=input.device)
-    global_ones = torch.empty((1,), dtype=torch.int32, device=input.device)
+    hist = torch.empty((M,), dtype=torch.int32, device=input.device)
+    chunk_sums = torch.empty((G2,), dtype=torch.int32, device=input.device)
 
-    count_kernel = count_ones_in_block_kernel(N, BLOCK_SIZE=BLOCK_SIZE, threads=128)
+    hist_kernel = radix_histogram_kernel(
+        N,
+        K,
+        BLOCK_SIZE=BLOCK_SIZE,
+        RADIX=_RADIX,
+        FIELD_BITS=_FIELD_BITS,
+        FIELD_MASK=_FIELD_MASK,
+        threads=128,
+    )
+    sum_chunks_kernel = radix_sum_chunks_kernel(
+        M,
+        G2,
+        BLOCK_SIZE=BLOCK_SIZE,
+        threads=128,
+    )
+    scan_chunk_sums_kernel = radix_scan_chunk_sums_kernel(
+        G2,
+        BLOCK_BB=BB,
+        threads=128,
+    )
+    scan_chunks_kernel = radix_scan_chunks_kernel(
+        M,
+        G2,
+        BLOCK_SIZE=BLOCK_SIZE,
+        threads=128,
+    )
 
     if autotune:
-        with set_autotune_inputs(work, output, first_layer, global_ones, 0):
-            scatter_kernel = radix_sort_kernel(N, BLOCK_SIZE=BLOCK_SIZE)
+        with set_autotune_inputs(work, output, hist, 0):
+            scatter_kernel = radix_scatter_kernel(
+                N,
+                K,
+                BLOCK_SIZE=BLOCK_SIZE,
+                RADIX=_RADIX,
+                FIELD_BITS=_FIELD_BITS,
+                FIELD_MASK=_FIELD_MASK,
+            )
         _last_autotune_config.clear()
         _last_autotune_config.update(dict(scatter_kernel.config or {}))
     else:
         _last_autotune_config.clear()
-        scatter_kernel = radix_sort_kernel(
+        scatter_kernel = radix_scatter_kernel(
             N,
+            K,
             BLOCK_SIZE=BLOCK_SIZE,
+            RADIX=_RADIX,
+            FIELD_BITS=_FIELD_BITS,
+            FIELD_MASK=_FIELD_MASK,
             threads=_DEFAULT_CONFIG["threads"],
         )
 
-    for bit in range(32):
-        count_kernel(work, first_layer, bit)
-        count_ones_per_block_blocks_kernel(
-            first_layer,
-            second_layer,
-            BLOCK_SIZE=BLOCK_SIZE,
-            threads=128,
-        )
-        compute_prefix_sums_bb_kernel(
-            second_layer,
-            global_ones,
-            BLOCK_SIZE=_BLOCK_BB,
-            threads=128,
-        )
-        compute_prefix_sums_per_block_kernel(
-            first_layer,
-            second_layer,
-            BLOCK_SIZE=BLOCK_SIZE,
-            threads=128,
-        )
-        scatter_kernel(work, output, first_layer, global_ones, bit)
-        work.copy_(output)
+    for shift in range(0, 32, _RADIX_BITS):
+        hist_kernel(work, hist, shift)
+        sum_chunks_kernel(hist, chunk_sums)
+        scan_chunk_sums_kernel(chunk_sums)
+        scan_chunks_kernel(hist, chunk_sums)
+        scatter_kernel(work, output, hist, shift)
+        work, output = output, work
 
-    return output
+    return work
 
 
 def get_last_config() -> dict | None:

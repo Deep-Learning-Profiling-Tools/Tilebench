@@ -15,7 +15,6 @@ def matrix_copy_configs():
         for nt in threads
     ]
 
-#remove _ at start
 
 @tilelang.autotune(configs = matrix_copy_configs(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
@@ -27,10 +26,8 @@ def matrix_copy_kernel(A, B, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads = threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             idx = local_idx + pid * BLOCK_SIZE
-            if idx < n_elements:
-                B[idx] = A[idx]
+            B[idx] = A[idx]
                 
-# flatten to 1d as torch + cuTile implentation does the same
 def run(A: torch.Tensor, N : int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     dtype = str(A.dtype).removeprefix("torch.")
     B = torch.empty_like(A)

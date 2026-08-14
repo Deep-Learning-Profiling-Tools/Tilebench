@@ -5,43 +5,33 @@ from tilelang.autotuner import set_autotune_inputs
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE_M": 128,
-    "BLOCK_SIZE_N": 128,
+    "BLOCK_SIZE_M": 256,
+    "BLOCK_SIZE_N": 64,
     "BLOCK_SIZE_K": 64,
     "GROUP_SIZE_M": 8,
     "threads": 128,
-    "num_stages": 2,
+    "num_stages": 4,
 }
 _last_autotune_config: dict = {}
 
 
 def matmul_configs():
-    # Keep autotune broad, but avoid large-K variants that have historically
-    # hung/timed out or failed verification at K=16384 on B200.
-    def runtime_or_correctness_prone(bm, bn, nt, ns):
-        if bn == 256:
-            return True
-        if nt == 512 and bn == 64 and bm in (64, 128):
-            return True
-        if bm == 64 and bn == 128 and nt == 512 and ns == 3:
-            return True
-        return False
-
     return [
         dict(
             BLOCK_SIZE_M=bm,
             BLOCK_SIZE_N=bn,
-            BLOCK_SIZE_K=64,
+            BLOCK_SIZE_K=bk,
             GROUP_SIZE_M=8,
             threads=nt,
             num_stages=ns,
         )
         for bm in [64, 128, 256]
         for bn in [64, 128, 256]
+        for bk in [32, 64]
         for nt in [128, 256, 512]
-        for ns in [2, 3]
+        for ns in [3, 4]
         if bm * bn <= 128 * 256
-        and not runtime_or_correctness_prone(bm, bn, nt, ns)
+        if (bm * bk + bn * bk) * ns + bm * bn * 4 <= 220_000
     ]
 
 
