@@ -103,20 +103,10 @@ def block_sparse_attention_kernel(
         qk = ct.where(mask, qk, -float("inf"))
 
 
-        row_has_prev = l_i > 0.0
-        row_has_valid = (
-            ct.sum(ct.astype(mask, ct.int32), axis=1, keepdims=True) > 0
-        )
-        block_max = ct.where(
-            row_has_valid,
-            ct.max(qk, axis=1, keepdims=True),
-            -float("inf"),
-        )
-        m_i_new = ct.maximum(m_i, block_max)
-        row_has_any = row_has_prev | row_has_valid
-        m_safe = ct.where(row_has_any, m_i_new, 0.0)
-        alpha = ct.where(row_has_prev, ct.exp(m_i - m_safe), 0.0)
-        p = ct.where(mask, ct.exp(qk - m_safe), 0.0)
+        m_i_new = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
+        m_safe = ct.maximum(m_i_new, -1.0e30)
+        alpha = ct.exp(m_i - m_safe)
+        p = ct.exp(qk - m_safe)
         l_i_new = l_i * alpha + ct.sum(p, axis=1, keepdims=True)
 
         acc = acc * alpha
@@ -142,7 +132,7 @@ def block_sparse_attention_kernel(
             acc2 = ct.mma(p_casted, v2, acc2)
 
         l_i = l_i_new
-        m_i = ct.where(row_has_any, m_i_new, m_i)
+        m_i = m_i_new
         l = l + 1
 
     l_safe = ct.where(l_i > 0.0, l_i, 1.0)

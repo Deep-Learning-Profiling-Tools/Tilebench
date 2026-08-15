@@ -7,23 +7,40 @@
 
 | dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |
 |---|---|---|---|
-| fp32 | `{'M': 10000, 'D': 256, 'eps': 1e-06}` | `{'kv_BLOCK_M': 32, 'kv_BLOCK_N': 32, 'kv_BLOCK_K': 64, 'kv_num_warps': 4, 'kv_num_stages': 3, 'out_BLOCK_M': 64, 'out_BLOCK_N': 128, 'out_BLOCK_K': 32, 'out_num_warps': 4, 'out_num_stages': 3}` | `{'kv_block_m': 16, 'kv_block_n': 64, 'kv_block_k': 32, 'kv_occupancy': 4, 'out_block_m': 32, 'out_block_n': 64, 'out_block_k': 32, 'out_occupancy': 4}` |
+| fp32 | `{'eps': 1e-06, 'M': 10000, 'D': 256}` | `{'kv_BLOCK_M': 32, 'kv_BLOCK_N': 32, 'kv_BLOCK_K': 64, 'kv_num_warps': 4, 'kv_num_stages': 3, 'out_BLOCK_M': 64, 'out_BLOCK_N': 128, 'out_BLOCK_K': 32, 'out_num_warps': 4, 'out_num_stages': 3}` | `{'kv_block_m': 16, 'kv_block_n': 64, 'kv_block_k': 32, 'kv_occupancy': 4, 'out_block_m': 32, 'out_block_n': 64, 'out_block_k': 32, 'out_occupancy': 4}` |
 
 ## Headline (per dtype, both backends)
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 63.08 us | 22.82 % | 7.56 % | 36.63 % | 13.09 % | 19.18 % | 578.75 Gbyte/s | 128 | 48 register/thread | 0 byte/block | 49.23 Kbyte/block | 10 block / 4 block |
-| fp32 | cutile | 2251.47 us | 2.24 % | 0.15 % | 10.31 % | 0.56 % | 1.37 % | 11.32 Gbyte/s | 128 | 64 register/thread | 8.30 Kbyte/block | 0 byte/block | 8 block / 14 block |
+| fp32 | triton | 204.54 us | 1.56 % | 0.03 % | 30.52 % | 0.38 % | 0.64 % | 2.03 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 512 byte/block | 16 block / 42 block |
+| fp32 | cutile | 779.25 us | 7.61 % | 0.65 % | 21.62 % | 2.06 % | 3.63 % | 49.92 Gbyte/s | 256 | 64 register/thread | 41.20 Kbyte/block | 0 byte/block | 4 block / 4 block |
+
+## Per-kernel breakdown (multi-kernel pipelines)
+
+End-to-end Duration in the headline above sums every kernel launched per `impl.run()` call. This table lists each kernel in launch order; the headline rate metrics (Mem%, Compute%, etc.) come from the heaviest kernel of the pipeline.
+
+| dtype | backend | k# | kernel duration | kernel name |
+|---|---|---|---|---|
+| fp32 | cutile | 1/5 | 8.80 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | cutile | 2/5 | 8.06 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | cutile | 3/5 | 435.26 us | `kv_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_` |
+| fp32 | cutile | 4/5 | 260.83 us | `z_kernel_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16` |
+| fp32 | cutile | 5/5 | 66.30 us | `out_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32` |
+| fp32 | triton | 1/5 | 8.29 us | `phi_kernel` |
+| fp32 | triton | 2/5 | 8.03 us | `phi_kernel` |
+| fp32 | triton | 3/5 | 56.19 us | `kv_gemm_kernel` |
+| fp32 | triton | 4/5 | 118.21 us | `z_kernel` |
+| fp32 | triton | 5/5 | 13.82 us | `out_gemm_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **35.69× faster** (63.1 µs vs 2251.5 µs).
+- **fp32**: Triton is **3.81× faster** (204.5 µs vs 779.2 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp32 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.03 full waves across all SMs. Look at Launch Statistics for more details.
-- **fp32 / triton** — This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potent
+- **fp32 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.11 full waves across all SMs. Look at Launch Statistics for more details.
+- **fp32 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
 
 ## Reports
 
@@ -33,7 +50,6 @@
 ## Notes
 
 Bottleneck verdicts above come from NCU's own SOLBottleneck rule (headline `OPT` recommendation). For per-section detail, open the .ncu-rep in `ncu-ui` or run `ncu --import <file> --page details | less`.
-
 ## SASS instruction-level findings (manual analysis, 2026-07-20)
 
 Both reports above are `--set full` captures at the sweep-max autotune

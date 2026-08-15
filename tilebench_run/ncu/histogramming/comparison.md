@@ -13,8 +13,8 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| int32 | triton | 793.66 us | 12.20 % | 4.54 % | 13.48 % | 4.82 % | 5.50 % | 348.63 Gbyte/s | 256 | 40 register/thread | 0 byte/block | 16.38 Kbyte/block | 6 block / 7 block |
-| int32 | cutile | 1436.56 us | 7.44 % | 2.50 % | 7.84 % | 2.75 % | 4.93 % | 192.09 Gbyte/s | 128 | 128 register/thread | 26.64 Kbyte/block | 0 byte/block | 4 block / 4 block |
+| int32 | triton | 822.18 us | 12.12 % | 5.27 % | 13.30 % | 4.66 % | 5.46 % | 404.23 Gbyte/s | 256 | 40 register/thread | 0 byte/block | 16.38 Kbyte/block | 6 block / 7 block |
+| int32 | cutile | 1427.26 us | 7.47 % | 3.02 % | 7.77 % | 2.76 % | 4.95 % | 231.87 Gbyte/s | 128 | 128 register/thread | 26.64 Kbyte/block | 0 byte/block | 4 block / 4 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -22,14 +22,14 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| int32 | cutile | 1/2 | 1430.00 us | `histogram_partial_kernel_Kt1_A1i32_1i16t1_p16_A2i3` |
-| int32 | cutile | 2/2 | 6.56 us | `histogram_reduce_kernel_Kt1_A2i32_1v4l0_2t1_3i16_p` |
-| int32 | triton | 1/2 | 784.64 us | `histogram_partial_kernel` |
-| int32 | triton | 2/2 | 9.02 us | `histogram_reduce_kernel` |
+| int32 | cutile | 1/2 | 1420.00 us | `histogram_partial_kernel_Kt1_A1i32_1i16t1_p16_A2i3` |
+| int32 | cutile | 2/2 | 7.26 us | `histogram_reduce_kernel_Kt1_A2i32_1v4l0_2t1_3i16_p` |
+| int32 | triton | 1/2 | 813.06 us | `histogram_partial_kernel` |
+| int32 | triton | 2/2 | 9.12 us | `histogram_reduce_kernel` |
 
 ## Key findings (auto-derived)
 
-- **int32**: Triton is **1.81× faster** (793.7 µs vs 1436.6 µs).
+- **int32**: Triton is **1.74× faster** (822.2 µs vs 1427.3 µs).
 
 ## NCU's own bottleneck verdict
 
