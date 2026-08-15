@@ -3,6 +3,8 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
+from . import impl_torch
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 128,
@@ -15,37 +17,70 @@ _DEFAULT_CONFIG = {
 _last_autotune_config: dict = {}
 
 
+_HANG = frozenset({
+    (64, 64, 32, 128, 3), (64, 64, 32, 128, 4), (64, 64, 32, 256, 3),
+    (64, 64, 32, 256, 4), (64, 64, 32, 512, 3), (64, 64, 32, 512, 4),
+    (64, 64, 64, 512, 3), (64, 64, 64, 512, 4), (64, 128, 32, 128, 3),
+    (64, 128, 32, 128, 4), (64, 128, 32, 256, 3), (64, 128, 32, 256, 4),
+    (64, 128, 32, 512, 3), (64, 128, 32, 512, 4), (64, 256, 32, 512, 3),
+    (64, 256, 32, 512, 4), (64, 256, 64, 128, 4), (128, 64, 32, 128, 3),
+    (128, 64, 32, 128, 4), (128, 64, 32, 256, 3), (128, 64, 32, 256, 4),
+    (128, 64, 32, 512, 3), (128, 64, 32, 512, 4), (128, 64, 64, 512, 3),
+    (128, 64, 64, 512, 4), (128, 128, 32, 512, 4), (128, 256, 32, 512, 3),
+    (128, 256, 32, 512, 4),
+})
+
+_ref_state: dict = {}
+
+
+def _autotune_ref(a, b, c):
+    _ref_state["c"] = c
+    _ref_state["ref"] = impl_torch.run(a, b)
+    return None
+
+
+def _autotune_check(lib_outs, ref_outs):
+    torch.testing.assert_close(
+        _ref_state["c"], _ref_state["ref"], atol=0, rtol=0
+    )
+
+
 def matmul_configs():
-    # Keep autotune broad, but avoid large-K variants that have historically
-    # hung/timed out or failed verification at K=16384 on B200.
-    def runtime_or_correctness_prone(bm, bn, nt, ns):
-        if bn == 256:
-            return True
-        if nt == 512 and bn == 64 and bm in (64, 128):
-            return True
-        if bm == 64 and bn == 128 and nt == 512 and ns == 3:
-            return True
-        return False
+    # from Triton implementation
+    def fits_triton_smem_budget(bm, bn, bk, ns):
+        return (bm * bk + bn * bk) * ns + bm * bn * 4 <= 220_000
+
+    def runtime_or_correctness_prone(bm, bn, bk, nt, ns):
+        return (bm, bn, bk, nt, ns) in _HANG
 
     return [
         dict(
             BLOCK_SIZE_M=bm,
             BLOCK_SIZE_N=bn,
-            BLOCK_SIZE_K=64,
+            BLOCK_SIZE_K=bk,
             GROUP_SIZE_M=8,
             threads=nt,
             num_stages=ns,
         )
         for bm in [64, 128, 256]
         for bn in [64, 128, 256]
+        for bk in [32, 64]
         for nt in [128, 256, 512]
-        for ns in [2, 3]
+        for ns in [3, 4]
         if bm * bn <= 128 * 256
-        and not runtime_or_correctness_prone(bm, bn, nt, ns)
+        and fits_triton_smem_budget(bm, bn, bk, ns)
+        and not runtime_or_correctness_prone(bm, bn, bk, nt, ns)
     ]
 
 
-@tilelang.autotune(configs=matmul_configs(), warmup=3, rep=10, timeout=60)
+@tilelang.autotune(
+    configs=matmul_configs(),
+    warmup=3,
+    rep=10,
+    timeout=60,
+    ref_prog=_autotune_ref,
+    manual_check_prog=_autotune_check,
+)
 @tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
 def matmul_kernel(
     a,
