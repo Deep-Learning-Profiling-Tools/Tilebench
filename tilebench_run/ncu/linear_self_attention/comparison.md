@@ -13,8 +13,8 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 415.35 us | 0.77 % | 0.56 % | 14.56 % | 0.37 % | 0.32 % | 42.68 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 512 byte/block | 16 block / 42 block |
-| fp32 | cutile | 2269.63 us | 2.21 % | 0.15 % | 10.29 % | 0.55 % | 1.35 % | 11.22 Gbyte/s | 128 | 64 register/thread | 8.30 Kbyte/block | 0 byte/block | 8 block / 14 block |
+| fp32 | triton | 204.54 us | 1.56 % | 0.03 % | 30.52 % | 0.38 % | 0.64 % | 2.03 Gbyte/s | 128 | 32 register/thread | 0 byte/block | 512 byte/block | 16 block / 42 block |
+| fp32 | cutile | 779.25 us | 7.61 % | 0.65 % | 21.62 % | 2.06 % | 3.63 % | 49.92 Gbyte/s | 256 | 64 register/thread | 41.20 Kbyte/block | 0 byte/block | 4 block / 4 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -22,24 +22,24 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| fp32 | cutile | 1/5 | 7.62 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
-| fp32 | cutile | 2/5 | 7.30 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
-| fp32 | cutile | 3/5 | 1830.00 us | `kv_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_` |
-| fp32 | cutile | 4/5 | 324.26 us | `z_kernel_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16` |
-| fp32 | cutile | 5/5 | 100.45 us | `out_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32` |
-| fp32 | triton | 1/5 | 6.78 us | `phi_kernel` |
-| fp32 | triton | 2/5 | 6.62 us | `phi_kernel` |
-| fp32 | triton | 3/5 | 144.16 us | `kv_gemm_kernel` |
-| fp32 | triton | 4/5 | 240.03 us | `z_kernel` |
-| fp32 | triton | 5/5 | 17.76 us | `out_gemm_kernel` |
+| fp32 | cutile | 1/5 | 8.80 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | cutile | 2/5 | 8.06 us | `phi_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_1v4l` |
+| fp32 | cutile | 3/5 | 435.26 us | `kv_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32_` |
+| fp32 | cutile | 4/5 | 260.83 us | `z_kernel_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16` |
+| fp32 | cutile | 5/5 | 66.30 us | `out_gemm_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A2f32` |
+| fp32 | triton | 1/5 | 8.29 us | `phi_kernel` |
+| fp32 | triton | 2/5 | 8.03 us | `phi_kernel` |
+| fp32 | triton | 3/5 | 56.19 us | `kv_gemm_kernel` |
+| fp32 | triton | 4/5 | 118.21 us | `z_kernel` |
+| fp32 | triton | 5/5 | 13.82 us | `out_gemm_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp32**: Triton is **5.46× faster** (415.4 µs vs 2269.6 µs).
+- **fp32**: Triton is **3.81× faster** (204.5 µs vs 779.2 µs).
 
 ## NCU's own bottleneck verdict
 
-- **fp32 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.03 full waves across all SMs. Look at Launch Statistics for more details.
+- **fp32 / cutile** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.11 full waves across all SMs. Look at Launch Statistics for more details.
 - **fp32 / triton** — This kernel grid is too small to fill the available resources on this device, resulting in only 0.00 full waves across all SMs. Look at Launch Statistics for more details.
 
 ## Reports
