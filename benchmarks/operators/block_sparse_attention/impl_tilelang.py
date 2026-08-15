@@ -4,22 +4,31 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 
-_DEFAULT_CONFIG = {"threads": 128, "num_stages": 2}
+_DEFAULT_CONFIG = {"threads": 256, "num_stages": 2}
 _last_autotune_config: dict = {}
 
 
+_HANG = frozenset({
+    (128, 2), (128, 3), (128, 4),
+})
+
+
 def block_sparse_attention_configs():
+    def runtime_timeout_prone(nt, ns):
+        return (nt, ns) in _HANG
+
     return [
         dict(threads=nt, num_stages=ns)
         for nt in [64, 128, 256]
         for ns in [2, 3, 4]
+        if not runtime_timeout_prone(nt, ns)
     ]
 
 
 @tilelang.autotune(configs=block_sparse_attention_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit(
     pass_configs={
-        tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
+        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
     },
 )
 def block_sparse_attention_kernel(
@@ -41,7 +50,6 @@ def block_sparse_attention_kernel(
     num_stages: int = 2,
 ):
     accum_dtype = "float32"
-    total_d = BLOCK_D * NUM_D_BLOCKS
     csr_row_storage = num_layout * csr_row_len
     csr_col_storage = num_layout * csr_col_len
 
@@ -64,37 +72,56 @@ def block_sparse_attention_kernel(
             off_h_kv = off_h // head_groups
             layout_h = off_h % num_layout
 
-            q_shared = T.alloc_shared((BLOCK_M, total_d), dtype)
-            k_shared = T.alloc_shared((BLOCK_N, total_d), dtype)
-            v_shared = T.alloc_shared((BLOCK_N, total_d), dtype)
-            o_shared = T.alloc_shared((BLOCK_M, total_d), dtype)
+            q_shared = T.alloc_shared((BLOCK_M, BLOCK_D), dtype)
+            k_shared = T.alloc_shared((BLOCK_N, BLOCK_D), dtype)
+            v_shared = T.alloc_shared((BLOCK_N, BLOCK_D), dtype)
+            o_shared = T.alloc_shared((BLOCK_M, BLOCK_D), dtype)
+            if NUM_D_BLOCKS >= 2:
+                q_shared2 = T.alloc_shared((BLOCK_M, BLOCK_D), dtype)
+                k_shared2 = T.alloc_shared((BLOCK_N, BLOCK_D), dtype)
+                v_shared2 = T.alloc_shared((BLOCK_N, BLOCK_D), dtype)
+                o_shared2 = T.alloc_shared((BLOCK_M, BLOCK_D), dtype)
 
             qk = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            qk_tc = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
             qk_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
-            qk_bridge = T.alloc_shared((BLOCK_M, BLOCK_N), accum_dtype)
             p_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
-            acc = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
-            pv = T.alloc_fragment((BLOCK_M, total_d), accum_dtype)
-            pv_tmem = T.alloc_tmem((BLOCK_M, total_d), accum_dtype)
+            acc = T.alloc_fragment((BLOCK_M, BLOCK_D), accum_dtype)
+            pv = T.alloc_fragment((BLOCK_M, BLOCK_D), accum_dtype)
+            pv_tmem = T.alloc_tmem((BLOCK_M, BLOCK_D), accum_dtype)
+            if NUM_D_BLOCKS >= 2:
+                acc2 = T.alloc_fragment((BLOCK_M, BLOCK_D), accum_dtype)
+                pv2 = T.alloc_fragment((BLOCK_M, BLOCK_D), accum_dtype)
+                pv2_tmem = T.alloc_tmem((BLOCK_M, BLOCK_D), accum_dtype)
             qk_mbar = T.alloc_barrier(1)
             pv_mbar = T.alloc_barrier(1)
             scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
-            scores_scale = T.alloc_fragment((BLOCK_M,), accum_dtype)
             scores_sum = T.alloc_fragment((BLOCK_M,), accum_dtype)
             logsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            alpha = T.alloc_fragment((BLOCK_M,), accum_dtype)
 
             T.copy(
                 Q[
                     off_b,
                     off_h,
                     start_m * BLOCK_M : (start_m + 1) * BLOCK_M,
-                    0:total_d,
+                    0:BLOCK_D,
                 ],
                 q_shared,
             )
+            if NUM_D_BLOCKS >= 2:
+                T.copy(
+                    Q[
+                        off_b,
+                        off_h,
+                        start_m * BLOCK_M : (start_m + 1) * BLOCK_M,
+                        BLOCK_D : 2 * BLOCK_D,
+                    ],
+                    q_shared2,
+                )
             T.fill(acc, 0.0)
+            if NUM_D_BLOCKS >= 2:
+                T.fill(acc2, 0.0)
             T.fill(logsum, 0.0)
             T.fill(scores_max, -T.infinity(accum_dtype))
 
@@ -112,7 +139,7 @@ def block_sparse_attention_kernel(
                 col_idx = col_indices[layout_h * csr_col_len + l]
                 start_n = col_idx * BLOCK_N
 
-                T.copy(K[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:total_d], k_shared)
+                T.copy(K[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:BLOCK_D], k_shared)
                 T.gemm(
                     q_shared,
                     k_shared,
@@ -121,15 +148,34 @@ def block_sparse_attention_kernel(
                     mbar=qk_mbar,
                     clear_accum=True,
                 )
+                if NUM_D_BLOCKS >= 2:
+                    T.copy(
+                        K[
+                            off_b,
+                            off_h_kv,
+                            start_n : start_n + BLOCK_N,
+                            BLOCK_D : 2 * BLOCK_D,
+                        ],
+                        k_shared2,
+                    )
+                    T.gemm(
+                        q_shared2,
+                        k_shared2,
+                        qk_tmem,
+                        transpose_B=True,
+                        mbar=qk_mbar,
+                        clear_accum=False,
+                )
                 T.sync_threads()
-                T.copy(qk_tmem, qk_tc)
-                T.copy(qk_tc, qk_bridge)
+                T.copy(qk_tmem, qk)
                 T.sync_threads()
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                    qk[i, j] = T.if_then_else(
-                        start_m * BLOCK_M + i >= start_n + j,
-                        qk_bridge[i, j],
+                    qk[i, j] = T.Select(
+                        (start_m * BLOCK_M + i < total_seq_len)
+                        and (start_n + j < total_seq_len)
+                        and (start_m * BLOCK_M + i >= start_n + j),
+                        qk[i, j],
                         -T.infinity(accum_dtype),
                     )
 
@@ -141,44 +187,76 @@ def block_sparse_attention_kernel(
                 T.reduce_max(qk, scores_max, dim=1, clear=False)
 
                 for i in T.Parallel(BLOCK_M):
+                    has_prev = logsum[i] > 0.0
+                    has_valid = (
+                        (start_m * BLOCK_M + i < total_seq_len)
+                        and (start_n < total_seq_len)
+                        and (start_m * BLOCK_M + i >= start_n)
+                    )
                     scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
-                    scores_scale[i] = T.exp(scores_max_prev[i] - scores_max[i])
+                    m_safe = T.Select(has_prev or has_valid, scores_max[i], 0.0)
+                    alpha[i] = T.Select(has_prev, T.exp(scores_max_prev[i] - m_safe), 0.0)
+                    scores_max[i] = T.Select(has_prev or has_valid, scores_max[i], scores_max_prev[i])
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                    qk[i, j] = T.if_then_else(
-                        start_m * BLOCK_M + i >= start_n + j,
-                        T.exp(qk[i, j] - scores_max[i]),
+                    m_safe = T.Select(
+                        (logsum[i] > 0.0)
+                        or (
+                            (start_m * BLOCK_M + i < total_seq_len)
+                            and (start_n < total_seq_len)
+                            and (start_m * BLOCK_M + i >= start_n)
+                        ),
+                        scores_max[i],
+                        0.0,
+                    )
+                    qk[i, j] = T.Select(
+                        (start_m * BLOCK_M + i < total_seq_len)
+                        and (start_n + j < total_seq_len)
+                        and (start_m * BLOCK_M + i >= start_n + j),
+                        T.exp(qk[i, j] - m_safe),
                         0.0,
                     )
 
                 T.reduce_sum(qk, scores_sum, dim=1)
                 for i in T.Parallel(BLOCK_M):
-                    logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
-                    scores_scale[i] = T.if_then_else(logsum[i] > 0.0, 1.0 / logsum[i], 0.0)
-
-                for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                    qk[i, j] *= scores_scale[i]
+                    logsum[i] = logsum[i] * alpha[i] + scores_sum[i]
 
                 T.copy(qk, p_shared)
 
-                for i, j in T.Parallel(BLOCK_M, total_d):
-                    acc[i, j] *= T.if_then_else(
-                        logsum[i] > 0.0,
-                        (logsum[i] - scores_sum[i]) * scores_scale[i],
-                        1.0,
-                    )
+                for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                    acc[i, j] *= alpha[i]
+                if NUM_D_BLOCKS >= 2:
+                    for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                        acc2[i, j] *= alpha[i]
 
-                T.copy(V[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:total_d], v_shared)
+                T.copy(V[off_b, off_h_kv, start_n : start_n + BLOCK_N, 0:BLOCK_D], v_shared)
                 T.gemm(p_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
                 T.sync_threads()
                 T.copy(pv_tmem, pv)
-                T.copy(pv, o_shared)
                 T.sync_threads()
-                for i, j in T.Parallel(BLOCK_M, total_d):
-                    acc[i, j] += o_shared[i, j]
+                for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                    acc[i, j] += pv[i, j]
+                if NUM_D_BLOCKS >= 2:
+                    T.copy(
+                        V[
+                            off_b,
+                            off_h_kv,
+                            start_n : start_n + BLOCK_N,
+                            BLOCK_D : 2 * BLOCK_D,
+                        ],
+                        v_shared2,
+                    )
+                    T.gemm(p_shared, v_shared2, pv2_tmem, mbar=pv_mbar, clear_accum=True)
+                    T.sync_threads()
+                    T.copy(pv2_tmem, pv2)
+                    T.sync_threads()
+                    for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                        acc2[i, j] += pv2[i, j]
 
                 l += 1
 
+            for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                acc[i, j] /= T.Select(logsum[i] > 0.0, logsum[i], 1.0)
             T.copy(acc, o_shared)
             T.copy(
                 o_shared,
@@ -186,9 +264,22 @@ def block_sparse_attention_kernel(
                     off_b,
                     off_h,
                     start_m * BLOCK_M : (start_m + 1) * BLOCK_M,
-                    0:total_d,
+                    0:BLOCK_D,
                 ],
             )
+            if NUM_D_BLOCKS >= 2:
+                for i, j in T.Parallel(BLOCK_M, BLOCK_D):
+                    acc2[i, j] /= T.Select(logsum[i] > 0.0, logsum[i], 1.0)
+                T.copy(acc2, o_shared2)
+                T.copy(
+                    o_shared2,
+                    O[
+                        off_b,
+                        off_h,
+                        start_m * BLOCK_M : (start_m + 1) * BLOCK_M,
+                        BLOCK_D : 2 * BLOCK_D,
+                    ],
+                )
 
     return main
 
