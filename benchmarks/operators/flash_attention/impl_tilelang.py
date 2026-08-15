@@ -4,7 +4,7 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 
-_DEFAULT_CONFIG = {"BLOCK_M": 64, "BLOCK_N": 64, "threads": 256, "num_stages": 4}
+_DEFAULT_CONFIG = {"BLOCK_M": 128, "BLOCK_N": 64, "threads": 256, "num_stages": 3}
 _last_autotune_config: dict = {}
 
 
@@ -15,14 +15,13 @@ def flash_attention_configs():
         for bn in [32, 64, 128]
         for nt in [64, 128, 256]
         for ns in [2, 3, 4]
-        if not (bn == 64 and nt == 256 and ns == 2)
     ]
 
 
 @tilelang.autotune(configs=flash_attention_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit(
     pass_configs={
-        tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
+        tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
     },
 )
 def flash_attention_kernel(
@@ -52,24 +51,26 @@ def flash_attention_kernel(
             k_shared = T.alloc_shared((BLOCK_N, dim), dtype)
             v_shared = T.alloc_shared((BLOCK_N, dim), dtype)
 
-            scores = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
-            scores_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
-            scores_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
-            acc_o = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
+            qk = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+            qk_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), accum_dtype)
+            p_shared = T.alloc_shared((BLOCK_M, BLOCK_N), dtype)
+            acc = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
             pv = T.alloc_fragment((BLOCK_M, dim), accum_dtype)
             pv_tmem = T.alloc_tmem((BLOCK_M, dim), accum_dtype)
             qk_mbar = T.alloc_barrier(1)
             pv_mbar = T.alloc_barrier(1)
-            scores_max = T.alloc_fragment((BLOCK_M,), accum_dtype)
-            scores_max_prev = T.alloc_fragment((BLOCK_M,), accum_dtype)
-            scores_scale = T.alloc_fragment((BLOCK_M,), accum_dtype)
-            scores_sum = T.alloc_fragment((BLOCK_M,), accum_dtype)
-            logsum = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            m_i = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            m_ij = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            alpha = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            l_ij = T.alloc_fragment((BLOCK_M,), accum_dtype)
+            l_i = T.alloc_fragment((BLOCK_M,), accum_dtype)
 
             T.copy(Q[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :], q_shared)
-            T.fill(acc_o, 0)
-            T.fill(logsum, 0)
-            T.fill(scores_max, -T.infinity(accum_dtype))
+            for i, j in T.Parallel(BLOCK_M, dim):
+                q_shared[i, j] = T.cast(T.cast(q_shared[i, j], accum_dtype) * qk_scale, dtype)
+            T.fill(acc, 0)
+            T.fill(l_i, 0)
+            T.fill(m_i, -T.infinity(accum_dtype))
 
             loop_range = (
                 T.min(T.ceildiv(seq_len, BLOCK_N), T.ceildiv((pid_m + 1) * BLOCK_M, BLOCK_N))
@@ -77,60 +78,60 @@ def flash_attention_kernel(
                 else T.ceildiv(seq_len, BLOCK_N)
             )
 
-            for k_tile in T.Pipelined(loop_range, num_stages=num_stages):
+            for k_tile in T.serial(loop_range):
                 T.copy(K[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], k_shared)
                 T.gemm(
                     q_shared,
                     k_shared,
-                    scores_tmem,
+                    qk_tmem,
                     transpose_B=True,
                     mbar=qk_mbar,
                     clear_accum=True,
                 )
-                T.copy(scores_tmem, scores)
+                T.copy(qk_tmem, qk)
                 if is_causal:
                     for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                        scores[i, j] = T.if_then_else(
+                        qk[i, j] = T.Select(
                             pid_m * BLOCK_M + i >= k_tile * BLOCK_N + j,
-                            scores[i, j],
+                            qk[i, j],
                             -T.infinity(accum_dtype),
                         )
                 else:
                     for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                        scores[i, j] = T.if_then_else(
+                        qk[i, j] = T.Select(
                             k_tile * BLOCK_N + j >= seq_len,
                             -T.infinity(accum_dtype),
-                            scores[i, j],
+                            qk[i, j],
                         )
 
-                T.copy(scores_max, scores_max_prev)
-                T.fill(scores_max, -T.infinity(accum_dtype))
-                T.reduce_max(scores, scores_max, dim=1, clear=False)
+                T.fill(m_ij, -T.infinity(accum_dtype))
+                T.reduce_max(qk, m_ij, dim=1, clear=False)
                 for i in T.Parallel(BLOCK_M):
-                    scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
-                    scores_scale[i] = T.exp2(scores_max_prev[i] * qk_scale - scores_max[i] * qk_scale)
+                    m_ij[i] = T.max(m_i[i], m_ij[i])
+                    alpha[i] = T.exp2(m_i[i] - m_ij[i])
 
                 for i, j in T.Parallel(BLOCK_M, BLOCK_N):
-                    scores[i, j] = T.exp2(scores[i, j] * qk_scale - scores_max[i] * qk_scale)
+                    qk[i, j] = T.exp2(qk[i, j] - m_ij[i])
 
-                T.reduce_sum(scores, scores_sum, dim=1)
+                T.reduce_sum(qk, l_ij, dim=1)
                 for i in T.Parallel(BLOCK_M):
-                    logsum[i] = logsum[i] * scores_scale[i] + scores_sum[i]
+                    l_i[i] = l_i[i] * alpha[i] + l_ij[i]
 
-                T.copy(scores, scores_shared)
+                T.copy(qk, p_shared)
                 for i, j in T.Parallel(BLOCK_M, dim):
-                    acc_o[i, j] *= scores_scale[i]
+                    acc[i, j] *= alpha[i]
 
                 T.copy(V[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], v_shared)
-                T.gemm(scores_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
+                T.gemm(p_shared, v_shared, pv_tmem, mbar=pv_mbar, clear_accum=True)
                 T.copy(pv_tmem, pv)
                 for i, j in T.Parallel(BLOCK_M, dim):
-                    acc_o[i, j] += pv[i, j]
+                    acc[i, j] += pv[i, j]
+                T.copy(m_ij, m_i)
 
             for i, j in T.Parallel(BLOCK_M, dim):
-                acc_o[i, j] /= logsum[i]
+                acc[i, j] /= l_i[i]
 
-            T.copy(acc_o, O[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :])
+            T.copy(acc, O[pid_b, pid_h, pid_m * BLOCK_M : (pid_m + 1) * BLOCK_M, :])
 
     return main
 
