@@ -1,45 +1,94 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
-    PMAX = nl.tile_size.pmax
+    import nki
+    import nki.isa as nisa
+    import nki.language as nl
 except ImportError:
     nki = None
+
+# Hardware constant (NeuronCore-v2/v3): number of SBUF partitions.
+PMAX = 128
+
+
+def kernel_assert(condition: bool, error_text: str):
+    """Assert with NKI-formatted error message."""
+    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+
+
+def div_ceil(n: int, d: int) -> int:
+    """Ceiling division: smallest integer >= n/d."""
+    return (n + d - 1) // d
+
 
 if nki is not None:
     @nki.jit
     def mean_rowwise_kernel(a_input):
-        m, n = a_input.shape
+        """Row-wise mean over the last (free) dimension.
 
-        num_blocks = (m + (PMAX - 1)) // PMAX
+        Mirrors ``x.mean(dim=1, dtype=torch.float32)``:
+        ``y[r] = (sum_c x[r, c]) / n_cols``.
 
-        hbm_result_tile = nl.ndarray((m, 1), dtype=a_input.dtype, buffer=nl.hbm)
+        Args:
+            a_input: input tensor [n_rows, n_cols] in HBM (fp32 / bf16 / fp16).
 
-        for i in range(num_blocks):
-            offset = i*PMAX
+        Returns:
+            [n_rows, 1] fp32 tensor in HBM. The result is always fp32 -- the
+            reference accumulates and returns in fp32 regardless of the input
+            dtype, so narrowing the output here would lose that precision.
 
-            partition_index = nl.arange(PMAX)[:, None]
-            free_dim_index = nl.arange(a_input.shape[1])[None, :]
-            
-            mask = partition_index < (a_input.shape[0] - offset)
+        Notes:
+            * The reduction runs *along the free axis within each partition-row*,
+              so it is a plain ``nisa.tensor_reduce`` on the Vector engine. The
+              engine always accumulates in fp32 internally, so the input tile is
+              loaded in its native dtype (DMA cannot convert dtypes anyway) and
+              widened on its way into the fp32 accumulator.
+            * Row blocks are clamped to the tensor extent with ``min(...)``, so
+              every tile is allocated at its real extent and no load/store
+              masking is required for a trailing partial block.
+            * The whole row block (all ``n_cols`` columns) lives in SBUF in one
+              tile; there is no column tiling.
+            * The division by ``n_cols`` is folded into a ``tensor_scalar``
+              multiply by the reciprocal, computed once in Python at trace time
+              (there is no ISA divide op).
+        """
+        kernel_assert(len(a_input.shape) == 2, "input must be 2D [n_rows, n_cols]")
+        n_rows, n_cols = a_input.shape
+        kernel_assert(n_cols <= nl.tile_size.sbuf_fmax,
+                      "row width exceeds the SBUF free dimension")
 
-            a_tile = nl.load(a_input[offset + partition_index, free_dim_index], mask=mask, dtype=nl.float32)
-            
-            row_sum = nl.sum(a_tile, axis=1)
-            row_mean = nl.divide(row_sum, n)
-            
-            nl.store(hbm_result_tile[offset + partition_index, nl.arange(1)[None, :]], value=row_mean, mask=mask)
+        out_hbm = nl.ndarray((n_rows, 1), dtype=nl.float32, buffer=nl.shared_hbm)
+        n_row_tiles = div_ceil(n_rows, PMAX)
+        inv_n_cols = 1.0 / n_cols
 
-        return hbm_result_tile
+        for row_tile in nl.affine_range(n_row_tiles):
+            row_start = row_tile * PMAX
+            row_size = min(PMAX, n_rows - row_start)
+            row_end = row_start + row_size
+
+            x_tile = nl.ndarray((row_size, n_cols), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=x_tile, src=a_input[row_start:row_end, 0:n_cols])
+
+            row_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=row_sum, op=nl.add, data=x_tile, axis=(1,),
+                               keepdims=True)
+
+            row_mean = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=row_mean, data=row_sum,
+                               op0=nl.multiply, operand0=inv_n_cols)
+
+            nisa.dma_copy(dst=out_hbm[row_start:row_end, 0:1], src=row_mean)
+
+        return out_hbm
+
 
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("mean reduction NKI: int8 not supported")
-    
+
     result = mean_rowwise_kernel(x)
-    return result.reshape(-1) 
+    return result.reshape(-1)
+
 
 def get_last_config() -> dict | None:
     return None

@@ -1,54 +1,50 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
-if nki is not None:
-    @nki.jit
-    def mul2_kernel(a_input):
-        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
+@nki.jit
+def mul2_kernel(a_input):
+    P, F = a_input.shape
 
-        free_tile_size = 16384
+    num_blocks = (P + PMAX - 1) // PMAX
 
-        num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
+    free_tile_size = 16384
+    num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
-        hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
+    hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.shared_hbm)
 
-        for i in range(num_blocks):
-            offset = i * PMAX
+    for i in range(num_blocks):
+        p_start = i * PMAX
+        p_end = min(p_start + PMAX, P)
+        p_sz = p_end - p_start
 
-            partition_index = nl.arange(PMAX)[:, None]
+        for j in range(num_free_blocks):
+            f_start = j * free_tile_size
+            f_end = min(f_start + free_tile_size, F)
+            f_sz = f_end - f_start
 
-            mask_p = partition_index < (a_input.shape[0] - offset)
+            a_tile = nl.ndarray((p_sz, f_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=a_tile, src=a_input[p_start:p_end, f_start:f_end])
 
-            for j in range(num_free_blocks):
-                free_offset = j * free_tile_size
+            result_tile = nl.ndarray((p_sz, f_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=result_tile, data=a_tile, op0=nl.multiply, operand0=2)
 
-                free_dim_index = nl.arange(free_tile_size)[None, :]
-            
-                mask_f = free_dim_index < (a_input.shape[1] - free_offset)
+            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end], src=result_tile)
 
-                mask = mask_p & mask_f
-
-                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
-
-                result_tile = nl.multiply(a_tile, 2, mask=mask)
-            
-                nl.store(hbm_result_tile[offset + partition_index, free_offset + free_dim_index], value=result_tile, mask=mask)
-
-        return hbm_result_tile
+    return hbm_result_tile
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     n = x.numel()
-    
-    free_dim = (n + (PMAX -1)) // PMAX
+
+    free_dim = (n + (PMAX - 1)) // PMAX
     padded_size = PMAX * free_dim
-    
+
     if padded_size > n:
         x = torch.nn.functional.pad(x, (0, padded_size - n))
 

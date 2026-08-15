@@ -1,45 +1,49 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
-if nki is not None:
-    @nki.jit
-    def sigmoid_kernel(a_input):
-        free_tile_size = 16384
+@nki.jit
+def sigmoid_kernel(a_input):
+    """Element-wise sigmoid: out = 1 / (1 + exp(-x)), matching torch.sigmoid."""
+    P, F = a_input.shape
 
-        num_blocks = (a_input.shape[0] + (PMAX - 1)) // PMAX
-        num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
+    num_blocks = (P + PMAX - 1) // PMAX
 
-        hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
+    free_tile_size = 16384
+    num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
-        for i in range(num_blocks):
-            offset = i*PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            mask_p = partition_index < (a_input.shape[0] - offset)
-            
-            for j in range(num_free_blocks):
-                free_offset = j * free_tile_size
-                free_dim_index = nl.arange(free_tile_size)[None, :]
-                
-                mask_f = free_dim_index < (a_input.shape[1] - free_offset)
-                mask = mask_p & mask_f
-            
-                a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
-                result_tile = nl.sigmoid(a_tile, mask=mask)
-                nl.store(hbm_result_tile[offset + partition_index, free_offset + free_dim_index], value=result_tile, mask=mask)
+    hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.shared_hbm)
 
-        return hbm_result_tile
+    for i in range(num_blocks):
+        p_start = i * PMAX
+        p_end = min(p_start + PMAX, P)
+        p_sz = p_end - p_start
+
+        for j in range(num_free_blocks):
+            f_start = j * free_tile_size
+            f_end = min(f_start + free_tile_size, F)
+            f_sz = f_end - f_start
+
+            a_tile = nl.ndarray((p_sz, f_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=a_tile, src=a_input[p_start:p_end, f_start:f_end])
+
+            result_tile = nl.ndarray((p_sz, f_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.activation(dst=result_tile, data=a_tile, op=nl.sigmoid)
+
+            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end], src=result_tile)
+
+    return hbm_result_tile
 
 def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("sigmoid NKI: int8 not supported")
-    
+
     free_dim = (n + (PMAX - 1)) // PMAX
     padded_size = PMAX * free_dim
 

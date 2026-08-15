@@ -1,44 +1,53 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
-if nki is not None:
-    @nki.jit
-    def swiglu_kernel(x_input, y_input):
-        free_tile_size = 16384
+@nki.jit
+def swiglu_kernel(x_input, y_input):
+    """SwiGLU: out = silu(x) * y, tiled over partition and free dims."""
+    P, F = x_input.shape
 
-        num_blocks = (x_input.shape[0] +(PMAX - 1)) // PMAX
-        num_free_blocks = (x_input.shape[1] + free_tile_size - 1) // free_tile_size
+    num_blocks = (P + PMAX - 1) // PMAX
 
-        hbm_result_tile = nl.ndarray(x_input.shape, dtype=x_input.dtype, buffer=nl.hbm)
+    free_tile_size = 16384
+    num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
-        for i in range(num_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            mask_p = partition_index < (x_input.shape[0] - offset)
+    hbm_result_tile = nl.ndarray(x_input.shape, dtype=x_input.dtype, buffer=nl.shared_hbm)
 
-            for j in range(num_free_blocks):
-                free_offset = j * free_tile_size
-                free_dim_index = nl.arange(free_tile_size)[None, :]
+    for i in range(num_blocks):
+        p_start = i * PMAX
+        p_end = min(p_start + PMAX, P)
+        p_sz = p_end - p_start
 
-                mask_f = free_dim_index < (x_input.shape[1] - free_offset)
-                mask = mask_p & mask_f
+        for j in range(num_free_blocks):
+            f_start = j * free_tile_size
+            f_end = min(f_start + free_tile_size, F)
+            f_sz = f_end - f_start
 
-                x_tile = nl.load(x_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
-                y_tile = nl.load(y_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
+            x_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=x_tile, src=x_input[p_start:p_end, f_start:f_end])
 
-                silu_x = nl.silu(x_tile, mask=mask)
-                result_tile = nl.multiply(silu_x, y_tile, mask=mask)
+            y_tile = nl.ndarray((p_sz, f_sz), dtype=y_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=y_tile, src=y_input[p_start:p_end, f_start:f_end])
 
-                nl.store(hbm_result_tile[offset + partition_index, free_offset + free_dim_index], value=result_tile, mask=mask)
-        
-        return hbm_result_tile
+            # silu_x = silu(x)
+            silu_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
+            nisa.activation(dst=silu_tile, data=x_tile, op=nl.silu)
+
+            # out = silu_x * y
+            result_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=result_tile, data1=silu_tile, data2=y_tile,
+                               op=nl.multiply)
+
+            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end], src=result_tile)
+
+    return hbm_result_tile
 
 def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     return swiglu_kernel(x, y)

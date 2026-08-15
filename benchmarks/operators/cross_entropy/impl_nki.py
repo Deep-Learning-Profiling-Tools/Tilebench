@@ -1,63 +1,130 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.isa as nisa
+    import nki.language as nl
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
+
+def kernel_assert(condition: bool, error_text: str):
+    """Assert with NKI-formatted error message."""
+    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+
+
+def div_ceil(n: int, d: int) -> int:
+    """Ceiling division: smallest integer >= n/d."""
+    return (n + d - 1) // d
+
+
 if nki is not None:
     @nki.jit
     def cross_entropy_kernel(logits, targets):
+        """Per-row cross-entropy loss against a hard target class.
+
+        Mirrors ``F.cross_entropy(logits, targets, reduction='none')`` in its
+        numerically stable form::
+
+            shifted[r, c] = logits[r, c] - max_c logits[r, c]
+            loss[r]       = log(sum_c exp(shifted[r, c])) - shifted[r, target[r]]
+
+        Args:
+            logits: [B, C] tensor in HBM (fp32 / bf16 / fp16).
+            targets: [B, 1] int32 tensor in HBM with the target class per row.
+
+        Returns:
+            [B, 1] tensor in HBM with the same dtype as ``logits``.
+
+        Notes:
+            * ``shifted[r, target[r]]`` is a gather at a *data-dependent* column,
+              which the vector engines cannot address directly. It is computed
+              with the standard one-hot trick instead: a free-axis iota row
+              ``0..C-1`` is compared against the row's target id, the resulting
+              one-hot predicate selects ``shifted`` (0 elsewhere) via
+              ``nisa.select_reduce``, and a free-axis sum extracts the single
+              surviving column exactly (all other addends are exactly +0.0).
+            * ``nisa.tensor_scalar``'s ``operand0`` must be fp32 when it is a
+              ``[P, 1]`` tile (an int32 ``operand0`` is rejected by the MLIR
+              verifier), so the int32 target ids are converted to fp32 by a
+              ``nisa.tensor_copy`` and compared against an fp32 iota. Class ids
+              are far below 2^24, so the compare is exact.
+            * ``nisa.select_reduce`` is the NKI 0.4.0 replacement for
+              ``np.where``; its ``on_false`` operand must be a scalar (or a
+              ``[P, 1]`` column), which the constant 0.0 satisfies directly, and
+              its ``predicate`` must be integer-typed, hence the ``uint8``
+              comparison result.
+            * Row blocks are clamped to ``B`` with ``min(...)``, so every tile is
+              allocated at its real extent and no load/store masking (nor any
+              ``-inf`` / zero padding fed to the max and sum reductions) is
+              required. The full class axis is loaded in one tile.
+        """
+        kernel_assert(len(logits.shape) == 2, "logits must be 2D [B, C]")
+        kernel_assert(len(targets.shape) == 2 and targets.shape[1] == 1,
+                      "targets must be a [B, 1] column")
+        kernel_assert(logits.shape[0] == targets.shape[0],
+                      "logits and targets must agree on the batch dimension")
+
         B, C = logits.shape
-        NEG_INF = -3.0e38
+        kernel_assert(C <= nl.tile_size.sbuf_fmax, "class axis exceeds the SBUF free dimension")
 
-        num_blocks = (B + (PMAX - 1)) // PMAX
-        hbm_result = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.hbm)
+        hbm_result = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.shared_hbm)
+        n_row_tiles = div_ceil(B, PMAX)
 
-        for i in range(num_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            row_mask = partition_index < (B - offset)
+        for row_tile in nl.affine_range(n_row_tiles):
+            row_start = row_tile * PMAX
+            row_size = min(PMAX, B - row_start)
+            row_end = row_start + row_size
 
-            class_index = nl.arange(C)[None, :]
-            zero_index = nl.arange(1)[None, :]
+            # DMA cannot convert dtypes: load in the input dtype and let the
+            # Vector/Scalar engines widen to fp32 on their way out.
+            logits_tile = nl.ndarray((row_size, C), dtype=logits.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=logits_tile, src=logits[row_start:row_end, 0:C])
 
-            logits_tile = nl.load(
-                logits[offset + partition_index, class_index],
-                mask=row_mask, dtype=nl.float32,
-            )
-            targets_tile = nl.load(
-                targets[offset + partition_index, zero_index],
-                mask=row_mask,
-            )
+            targets_tile = nl.ndarray((row_size, 1), dtype=targets.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=targets_tile, src=targets[row_start:row_end, 0:1])
 
-            grid = nl.mgrid[0:PMAX, 0:C]
-            class_iota = nisa.iota(expr=grid.x, dtype=nl.int32)
+            targets_f32 = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=targets_f32, src=targets_tile)
 
-            neg_fill = nl.full(logits_tile.shape, NEG_INF, dtype=nl.float32, buffer=nl.sbuf)
-            logits_for_max = nl.where(row_mask, logits_tile, neg_fill)
-            row_max = nl.max(logits_for_max, axis=1, keepdims=True)
+            # class_iota[r, c] = c on every partition (channel_multiplier=0).
+            class_iota = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.iota(dst=class_iota, pattern=[[1, C]], offset=0, channel_multiplier=0)
 
-            shifted = nl.subtract(logits_tile, row_max)
-            exp_tile = nl.exp(shifted)
-            zero_fill = nl.zeros(exp_tile.shape, dtype=nl.float32, buffer=nl.sbuf)
-            exp_safe = nl.where(row_mask, exp_tile, zero_fill)
-            row_sum = nl.sum(exp_safe, axis=1, keepdims=True)
-            log_sum = nl.log(row_sum)
+            # ---- shifted = logits - row_max ------------------------------
+            row_max = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=row_max, op=nl.maximum, data=logits_tile, axis=(1,))
 
-            target_mask = class_iota == targets_tile
-            zero_fill2 = nl.zeros(shifted.shape, dtype=nl.float32, buffer=nl.sbuf)
-            target_shifted_full = nl.where(target_mask, shifted, zero_fill2)
-            target_shifted = nl.sum(target_shifted_full, axis=1, keepdims=True)
+            shifted = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=shifted, data=logits_tile, op0=nl.subtract, operand0=row_max)
 
-            loss = nl.subtract(log_sum, target_shifted)
-            loss_out = nl.add(loss, 0.0, dtype=logits.dtype)
+            # ---- log_sum = log(sum_c exp(shifted)) -----------------------
+            exp_tile = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.activation(dst=exp_tile, op=nl.exp, data=shifted)
 
-            nl.store(hbm_result[offset + partition_index, zero_index],
-                     value=loss_out, mask=row_mask)
+            row_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=row_sum, op=nl.add, data=exp_tile, axis=(1,))
+
+            log_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.activation(dst=log_sum, op=nl.log, data=row_sum)
+
+            # ---- target_shifted = shifted[r, target[r]] (one-hot gather) --
+            target_mask = nl.ndarray((row_size, C), dtype=nl.uint8, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=target_mask, data=class_iota, op0=nl.equal,
+                               operand0=targets_f32)
+
+            target_only = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.select_reduce(dst=target_only, predicate=target_mask, on_true=shifted,
+                               on_false=0.0)
+
+            target_shifted = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=target_shifted, op=nl.add, data=target_only, axis=(1,))
+
+            loss = nl.ndarray((row_size, 1), dtype=logits.dtype, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=loss, data1=log_sum, data2=target_shifted, op=nl.subtract)
+
+            nisa.dma_copy(dst=hbm_result[row_start:row_end, 0:1], src=loss)
 
         return hbm_result
 

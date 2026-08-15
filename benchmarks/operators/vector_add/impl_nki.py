@@ -1,9 +1,9 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
@@ -13,32 +13,32 @@ def add_kernel(a_input, b_input):
     assert a_input.shape == b_input.shape
     assert a_input.dtype == b_input.dtype
 
-    num_blocks = (a_input.shape[0] + PMAX - 1) // PMAX
+    P, F = a_input.shape
+    num_blocks = (P + PMAX - 1) // PMAX
 
     free_tile_size = 16384
-    num_free_blocks = (a_input.shape[1] + free_tile_size - 1) // free_tile_size
+    num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
-    hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.hbm)
+    hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.shared_hbm)
 
     for i in range(num_blocks):
-        offset = i * PMAX
-
-        partition_index = nl.arange(PMAX)[:, None]
-        mask_p = partition_index < (a_input.shape[0] - offset)
+        p_start = i * PMAX
+        p_end = min(p_start + PMAX, P)
+        p_sz = p_end - p_start
 
         for j in range(num_free_blocks):
-            free_offset = j * free_tile_size
-            free_dim_index = nl.arange(free_tile_size)[None, :]
-            mask_f = free_dim_index < (a_input.shape[1] - free_offset)
+            f_start = j * free_tile_size
+            f_end = min(f_start + free_tile_size, F)
+            f_sz = f_end - f_start
 
-            mask = mask_p & mask_f
+            a_tile = nl.ndarray((p_sz, f_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            b_tile = nl.ndarray((p_sz, f_sz), dtype=b_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=a_tile, src=a_input[p_start:p_end, f_start:f_end])
+            nisa.dma_copy(dst=b_tile, src=b_input[p_start:p_end, f_start:f_end])
 
-            a_tile = nl.load(a_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
-            b_tile = nl.load(b_input[offset + partition_index, free_offset + free_dim_index], mask=mask)
+            result_tile = nl.add(a_tile, b_tile)
 
-            result_tile = nl.add(a_tile, b_tile, mask=mask)
-
-            nl.store(hbm_result_tile[offset + partition_index, free_offset + free_dim_index], value=result_tile, mask=mask)
+            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end], src=result_tile)
 
     return hbm_result_tile
 

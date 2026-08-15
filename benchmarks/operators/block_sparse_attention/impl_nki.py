@@ -74,9 +74,11 @@ Two NKI details this kernel is built around (inherited from the ``1d_conv`` /
   ``[NCC_IXGM002] ... 1 basic blocks``.
 """
 
+import functools
 import math
 import os
 import re
+import subprocess
 
 import torch
 
@@ -99,6 +101,7 @@ NEG_INF = -3.0e38
 MIN_DYNAMIC_ITERS = 3
 
 
+@functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
     """Logical-NeuronCore degree the kernel must be launched with.
 
@@ -115,7 +118,18 @@ def _lnc_degree() -> int:
     if match:
         return int(match.group(1))
     target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
-    return 2 if target in ("trn2", "gen3", "trn3", "gen4") else 1
+    if target in ("trn2", "gen3", "trn3", "gen4"):
+        return 2
+    # NEURON_PLATFORM_TARGET_OVERRIDE is rarely set in practice, so the branch
+    # above rarely fires -- ask the instance directly rather than guessing LNC=1.
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
 def div_ceil(numerator: int, denominator: int) -> int:

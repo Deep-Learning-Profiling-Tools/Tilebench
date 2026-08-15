@@ -1,53 +1,81 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
-if nki is not None:
-    @nki.jit
-    def transpose_kernel(a_input):
-        m, n = a_input.shape
-        hbm_result_tile = nl.ndarray((n, m), dtype=a_input.dtype, buffer=nl.hbm)
 
-        num_m_blocks = (m + (PMAX - 1)) // PMAX
-        num_n_blocks = (n + (PMAX - 1)) // PMAX
+@nki.jit
+def transpose_kernel(a_input):
+    """2D matrix transpose: out[n, m] = in[m, n].
 
-        for i in range(num_m_blocks):
-            m_offset = i * PMAX
+    Tiles the input into (<=128, <=128) blocks, transposes each block with
+    ``nisa.nc_transpose`` (Tensor Engine, SBUF -> PSUM), copies the result back to
+    SBUF and DMAs it into the transposed location of the output tensor.
 
-            for j in range(num_n_blocks):
-                n_offset = j * PMAX
+    Boundary tiles are handled by clamping the tile extents with ``min()`` (no
+    masking): a partial input tile of shape (m_sz, n_sz) yields an output tile of
+    shape (n_sz, m_sz) that is written to out[n_start:n_end, m_start:m_end].
 
-                partition_index = nl.arange(PMAX)[:, None]
-                free_dim_index = nl.arange(PMAX)[None, :]
+    Notes:
+        ``nc_transpose`` is lowered to ``nc_matmul`` against an identity matrix, which
+        does not accept 1-byte integer operands. For int8/uint8 inputs the tile is
+        widened to bfloat16 before the transpose and narrowed back afterwards. bfloat16
+        has 8 mantissa bits, so every 8-bit integer is represented exactly and the
+        round trip (including the fp32 PSUM accumulation of value * 1.0) is lossless.
+    """
+    m, n = a_input.shape
 
-                load_mask = (partition_index < (m - m_offset)) & (free_dim_index < (n - n_offset))
+    hbm_result_tile = nl.ndarray((n, m), dtype=a_input.dtype, buffer=nl.shared_hbm)
 
-                a_tile = nl.load(a_input[m_offset + partition_index, n_offset + free_dim_index], mask=load_mask)
+    # dtypes the Tensor Engine cannot transpose natively -> transpose in bfloat16.
+    needs_widening = a_input.dtype in (nl.int8, nl.uint8)
+    transpose_dtype = nl.bfloat16 if needs_widening else a_input.dtype
 
-                result_tile = nl.transpose(a_tile)
+    num_m_blocks = (m + PMAX - 1) // PMAX
+    num_n_blocks = (n + PMAX - 1) // PMAX
 
-                store_mask = (partition_index < (n - n_offset)) & (free_dim_index < (m - m_offset))
+    for i in range(num_m_blocks):
+        m_start = i * PMAX
+        m_end = min(m_start + PMAX, m)
+        m_sz = m_end - m_start
 
-                nl.store(hbm_result_tile[n_offset + partition_index, m_offset + free_dim_index], value=result_tile, mask=store_mask)
+        for j in range(num_n_blocks):
+            n_start = j * PMAX
+            n_end = min(n_start + PMAX, n)
+            n_sz = n_end - n_start
 
-        return hbm_result_tile
+            a_tile = nl.ndarray((m_sz, n_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=a_tile, src=a_input[m_start:m_end, n_start:n_end])
+
+            if needs_widening:
+                wide_tile = nl.ndarray((m_sz, n_sz), dtype=transpose_dtype, buffer=nl.sbuf)
+                nisa.tensor_copy(dst=wide_tile, src=a_tile)
+                source_tile = wide_tile
+            else:
+                source_tile = a_tile
+
+            # Partition/free axes swap: (m_sz, n_sz) -> (n_sz, m_sz)
+            psum_tile = nl.ndarray((n_sz, m_sz), dtype=transpose_dtype, buffer=nl.psum)
+            nisa.nc_transpose(dst=psum_tile, data=source_tile)
+
+            # PSUM cannot be DMA'd to HBM directly; stage through SBUF (this copy also
+            # narrows bfloat16 back to the 8-bit integer output dtype when widened).
+            result_tile = nl.ndarray((n_sz, m_sz), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=result_tile, src=psum_tile)
+
+            nisa.dma_copy(dst=hbm_result_tile[n_start:n_end, m_start:m_end], src=result_tile)
+
+    return hbm_result_tile
+
 
 def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
-    m, n = x.shape
-    m_padded = ((m + PMAX - 1) // PMAX) * PMAX
-    n_padded = ((n + PMAX - 1) // PMAX) * PMAX
+    return transpose_kernel(x)
 
-    if m_padded > m or n_padded > n:
-        x = torch.nn.functional.pad(x, (0, n_padded - n, 0, m_padded - m))
-
-    result = transpose_kernel(x)
-    return result[:n, :m]
 
 def get_last_config() -> dict | None:
     return None

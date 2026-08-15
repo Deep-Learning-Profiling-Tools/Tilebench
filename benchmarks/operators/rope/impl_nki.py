@@ -1,9 +1,9 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
@@ -11,34 +11,67 @@ except ImportError:
 if nki is not None:
     @nki.jit
     def rope_kernel(q, cos, sin):
-        # q: (seq_len, head_dim) for one (batch, head) slice. cos/sin:
-        # (seq_len, head_dim // 2), same shape as each half of q -- a plain
-        # elementwise op, no broadcast needed.
+        """Rotary position embedding for one (seq_len, head_dim) slice of q.
+
+        cos/sin are (seq_len, head_dim // 2) -- the same shape as each half of q,
+        so this is a plain elementwise op, no broadcast needed.
+
+        Per PMAX-row block:
+            q1_out = q1 * cos - q2 * sin
+            q2_out = q2 * cos + q1 * sin
+        """
         seq_len, head_dim = q.shape
         half = head_dim // 2
         num_blocks = (seq_len + (PMAX - 1)) // PMAX
 
-        hbm_result = nl.ndarray((seq_len, head_dim), dtype=q.dtype, buffer=nl.hbm)
+        hbm_result = nl.ndarray((seq_len, head_dim), dtype=q.dtype, buffer=nl.shared_hbm)
 
         for i in range(num_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            half_index = nl.arange(half)[None, :]
-            mask_p = partition_index < (seq_len - offset)
+            p_start = i * PMAX
+            p_end = min(p_start + PMAX, seq_len)
+            p_sz = p_end - p_start
 
-            q1 = nl.load(q[offset + partition_index, half_index], mask=mask_p, dtype=nl.float32)
-            q2 = nl.load(q[offset + partition_index, half + half_index], mask=mask_p, dtype=nl.float32)
-            cos_tile = nl.load(cos[offset + partition_index, half_index], mask=mask_p, dtype=nl.float32)
-            sin_tile = nl.load(sin[offset + partition_index, half_index], mask=mask_p, dtype=nl.float32)
+            # Tiles are sized to the clamped extent, so no masking is needed.
+            q1_tile = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=q1_tile, src=q[p_start:p_end, 0:half])
 
-            q1_out = nl.subtract(nl.multiply(q1, cos_tile), nl.multiply(q2, sin_tile))
-            q2_out = nl.add(nl.multiply(q2, cos_tile), nl.multiply(q1, sin_tile))
+            q2_tile = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=q2_tile, src=q[p_start:p_end, half:head_dim])
 
-            q1_out_c = nl.add(q1_out, 0.0, dtype=q.dtype)
-            q2_out_c = nl.add(q2_out, 0.0, dtype=q.dtype)
+            cos_tile = nl.ndarray((p_sz, half), dtype=cos.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=cos_tile, src=cos[p_start:p_end, 0:half])
 
-            nl.store(hbm_result[offset + partition_index, half_index], value=q1_out_c, mask=mask_p)
-            nl.store(hbm_result[offset + partition_index, half + half_index], value=q2_out_c, mask=mask_p)
+            sin_tile = nl.ndarray((p_sz, half), dtype=sin.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=sin_tile, src=sin[p_start:p_end, 0:half])
+
+            # Products are accumulated in fp32 regardless of the input dtype.
+            q1_cos = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q1_cos, data1=q1_tile, data2=cos_tile, op=nl.multiply)
+
+            q2_sin = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q2_sin, data1=q2_tile, data2=sin_tile, op=nl.multiply)
+
+            q2_cos = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q2_cos, data1=q2_tile, data2=cos_tile, op=nl.multiply)
+
+            q1_sin = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q1_sin, data1=q1_tile, data2=sin_tile, op=nl.multiply)
+
+            q1_out = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q1_out, data1=q1_cos, data2=q2_sin, op=nl.subtract)
+
+            q2_out = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=q2_out, data1=q2_cos, data2=q1_sin, op=nl.add)
+
+            # tensor_copy performs the cast back to q's dtype.
+            q1_out_c = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=q1_out_c, src=q1_out)
+
+            q2_out_c = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=q2_out_c, src=q2_out)
+
+            nisa.dma_copy(dst=hbm_result[p_start:p_end, 0:half], src=q1_out_c)
+            nisa.dma_copy(dst=hbm_result[p_start:p_end, half:head_dim], src=q2_out_c)
 
         return hbm_result
 

@@ -1,47 +1,108 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.language as nl
+    import nki.isa as nisa
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
 
+
+def kernel_assert(condition: bool, error_text: str):
+    """Assert with NKI-formatted error message."""
+    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+
+
+def div_ceil(n: int, d: int) -> int:
+    """Ceiling division: smallest integer >= n/d."""
+    return (n + d - 1) // d
+
+
 if nki is not None:
     @nki.jit
     def weight_dequant_kernel(X, S, TILE_SIZE):
+        """Block-wise weight dequantization: ``out[m, n] = X[m, n] * S[m // T, n // T]``.
+
+        ``S`` holds one scale per ``TILE_SIZE x TILE_SIZE`` block of ``X``.
+
+        Args:
+            X: [M, N] quantized weights in HBM.
+            S: [ceil(M/T), ceil(N/T)] per-block scales in HBM (same dtype as X).
+            TILE_SIZE: block edge length T, a multiple of PMAX (checked in ``run``).
+
+        Returns:
+            [M, N] tensor in HBM with the same dtype as ``X``.
+
+        Notes:
+            * Because ``TILE_SIZE`` is a multiple of ``PMAX``, a ``PMAX``-row tile never
+              straddles two scale rows, so one scale row of ``S`` serves every row tile
+              inside a ``TILE_SIZE``-row band.
+            * The scalar broadcast is done in two cheap steps rather than by
+              materializing a full [PMAX, TILE_SIZE] scale tile:
+              1. one DMA per scale row with a partition stride of 0
+                 (``S.ap(pattern=[[0, PMAX], [1, s_cols]])``) replicates the whole
+                 scale row to all 128 partitions in a single instruction;
+              2. ``nisa.tensor_scalar`` with ``operand0`` = the [PMAX, 1] column for
+                 that block broadcasts along the free axis in hardware.
+              ``operand0`` must be float32 (the MLIR verifier rejects a half-precision
+              ``operand0``), hence the fp32 copy of the broadcast row.
+            * Boundary tiles are clamped (tile sized to the surviving extent) instead of
+              masked, so no out-of-range element is ever loaded, multiplied or stored.
+        """
+        kernel_assert(len(X.shape) == 2, "X must be 2D [M, N]")
+        kernel_assert(len(S.shape) == 2, "S must be 2D [M/T, N/T]")
+
         M, N = X.shape
+        s_rows = div_ceil(M, TILE_SIZE)
+        s_cols = div_ceil(N, TILE_SIZE)
+        kernel_assert(S.shape[0] >= s_rows and S.shape[1] >= s_cols,
+                      "S is too small for the requested block grid")
 
-        num_row_blocks = (M + (PMAX - 1)) // PMAX
-        num_col_blocks = (N + TILE_SIZE - 1) // TILE_SIZE
+        hbm_result = nl.ndarray((M, N), dtype=X.dtype, buffer=nl.shared_hbm)
 
-        hbm_result = nl.ndarray((M, N), dtype=X.dtype, buffer=nl.hbm)
+        s_stride = S.shape[1]
 
-        for i in range(num_row_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            mask_p = partition_index < (M - offset)
-            s_row = offset // TILE_SIZE
+        for sr in range(s_rows):
+            band_start = sr * TILE_SIZE
+            band_size = min(TILE_SIZE, M - band_start)
 
-            for j in range(num_col_blocks):
-                free_offset = j * TILE_SIZE
-                free_dim_index = nl.arange(TILE_SIZE)[None, :]
-                mask_f = free_dim_index < (N - free_offset)
-                mask = mask_p & mask_f
-                s_col = free_offset // TILE_SIZE
+            # Replicate scale row ``sr`` to every partition: partition stride 0.
+            s_row_bcast = nl.ndarray((PMAX, s_cols), dtype=S.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(
+                dst=s_row_bcast,
+                src=S.ap(pattern=[[0, PMAX], [1, s_cols]], offset=sr * s_stride),
+            )
 
-                x_tile = nl.load(X[offset + partition_index, free_offset + free_dim_index],
-                                  mask=mask, dtype=nl.float32)
+            s_row_f32 = nl.ndarray((PMAX, s_cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=s_row_f32, src=s_row_bcast)
 
-                s_scalar = nl.load(S[s_row:s_row + 1, s_col:s_col + 1], dtype=nl.float32)
-                s_broadcast = nl.broadcast_to(s_scalar, shape=(PMAX, TILE_SIZE))
+            for rt in range(div_ceil(band_size, PMAX)):
+                row_start = band_start + rt * PMAX
+                row_size = min(PMAX, M - row_start)
 
-                result_fp32 = nl.multiply(x_tile, s_broadcast)
-                result_tile = nl.add(result_fp32, 0.0, dtype=X.dtype)
+                for sc in range(s_cols):
+                    col_start = sc * TILE_SIZE
+                    col_size = min(TILE_SIZE, N - col_start)
 
-                nl.store(hbm_result[offset + partition_index, free_offset + free_dim_index],
-                         value=result_tile, mask=mask)
+                    x_tile = nl.ndarray((row_size, col_size), dtype=X.dtype,
+                                        buffer=nl.sbuf)
+                    nisa.dma_copy(
+                        dst=x_tile,
+                        src=X[row_start:row_start + row_size,
+                              col_start:col_start + col_size],
+                    )
+
+                    out_tile = nl.ndarray((row_size, col_size), dtype=X.dtype,
+                                          buffer=nl.sbuf)
+                    nisa.tensor_scalar(dst=out_tile, data=x_tile, op0=nl.multiply,
+                                       operand0=s_row_f32[0:row_size, sc:sc + 1])
+
+                    nisa.dma_copy(
+                        dst=hbm_result[row_start:row_start + row_size,
+                                       col_start:col_start + col_size],
+                        src=out_tile,
+                    )
 
         return hbm_result
 

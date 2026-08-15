@@ -16,23 +16,16 @@ def run(data: torch.Tensor, N: int, **kwargs):
         j = k // 2
         while j > 0:
             ixj = offs ^ j
-            active = ixj > offs
+            is_lower = ixj > offs
             ascending = (offs & k) == 0
 
-            active_i = offs[active]
-            active_j = ixj[active]
-            a_vals = work[active_i]
-            b_vals = work[active_j]
-            asc = ascending[active]
-            need_swap = torch.where(asc, a_vals > b_vals, a_vals < b_vals)
+            partner = work[ixj]
+            cmp = torch.where(ascending, work > partner, work < partner)
+            # a pair (i, ixj[i]) must swap together; only the lower index's
+            # comparison is meaningful, so gather it for the upper index too.
+            decision = torch.where(is_lower, cmp, cmp[ixj])
 
-            swap_i = active_i[need_swap]
-            swap_j = active_j[need_swap]
-
-            a_keep = work[swap_i]
-            b_keep = work[swap_j]
-            work[swap_i] = b_keep
-            work[swap_j] = a_keep
+            work = torch.where(decision, partner, work)
 
             j //= 2
         k *= 2

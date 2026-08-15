@@ -1,113 +1,225 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
+    import nki
+    import nki.isa as nisa
+    import nki.language as nl
     PMAX = nl.tile_size.pmax
     TILE = 128
 except ImportError:
     nki = None
 
+
+def kernel_assert(condition: bool, error_text: str):
+    """Assert with NKI-formatted error message."""
+    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+
+
+def div_ceil(n: int, d: int) -> int:
+    """Ceiling division: smallest integer >= n/d."""
+    return (n + d - 1) // d
+
+
 if nki is not None:
     @nki.jit
     def phi_kernel(x):
+        """Linear-attention feature map ``phi(x) = x + 1 if x > 0 else exp(x)``.
+
+        Args:
+            x: [rows, cols] tensor in HBM.
+
+        Returns:
+            [rows, cols] fp32 tensor in HBM.
+
+        Notes:
+            ``nisa.select_reduce`` implements ``np.where`` but only accepts a scalar
+            (or ``[P, 1]`` column) for ``on_false``, so the two branches cannot be
+            selected in a single instruction. Instead each branch is selected against
+            0.0 -- the ``x > 0`` branch directly, the ``exp`` branch with
+            ``reverse_pred=True`` -- and the two disjoint halves are added.
+        """
         rows, cols = x.shape
-        num_blocks = (rows + (PMAX - 1)) // PMAX
-        result = nl.ndarray((rows, cols), dtype=nl.float32, buffer=nl.hbm)
+        kernel_assert(len(x.shape) == 2, "phi input must be 2D")
+        kernel_assert(cols <= nl.tile_size.sbuf_fmax, "cols exceeds the SBUF free dimension")
 
-        for i in range(num_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            free_index = nl.arange(cols)[None, :]
-            mask_p = partition_index < (rows - offset)
+        result = nl.ndarray((rows, cols), dtype=nl.float32, buffer=nl.shared_hbm)
 
-            x_tile = nl.load(x[offset + partition_index, free_index], mask=mask_p, dtype=nl.float32)
-            pos_val = nl.add(x_tile, 1.0)
-            exp_val = nl.exp(x_tile)
-            is_pos = nl.greater(x_tile, 0.0)
-            result_tile = nl.where(is_pos, pos_val, exp_val)
+        num_row_tiles = div_ceil(rows, PMAX)
 
-            nl.store(result[offset + partition_index, free_index], value=result_tile, mask=mask_p)
+        for row_tile in range(num_row_tiles):
+            # Boundary-clamped tile: the allocation itself is sized to the valid
+            # extent, so no load/store masking is required.
+            row_start = row_tile * PMAX
+            row_size = min(PMAX, rows - row_start)
+
+            # DMA cannot convert dtypes: load in the input dtype and let the
+            # Vector/Scalar engines widen to fp32 on their way out.
+            x_tile = nl.ndarray((row_size, cols), dtype=x.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=x_tile, src=x[row_start:row_start + row_size, 0:cols])
+
+            pos_val = nl.ndarray((row_size, cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=pos_val, data=x_tile, op0=nl.add, operand0=1.0)
+
+            exp_val = nl.ndarray((row_size, cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.activation(dst=exp_val, op=nl.exp, data=x_tile)
+
+            # select_reduce requires an integer-typed predicate.
+            is_pos = nl.ndarray((row_size, cols), dtype=nl.uint8, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=is_pos, data=x_tile, op0=nl.greater, operand0=0.0)
+
+            pos_part = nl.ndarray((row_size, cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.select_reduce(dst=pos_part, predicate=is_pos,
+                               on_true=pos_val, on_false=0.0)
+
+            exp_part = nl.ndarray((row_size, cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.select_reduce(dst=exp_part, predicate=is_pos,
+                               on_true=exp_val, on_false=0.0, reverse_pred=True)
+
+            result_tile = nl.ndarray((row_size, cols), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=result_tile, data1=pos_part, data2=exp_part, op=nl.add)
+
+            nisa.dma_copy(dst=result[row_start:row_start + row_size, 0:cols], src=result_tile)
 
         return result
 
     @nki.jit
     def stageA_kernel(phi_K, V_aug):
+        """``S_aug = phi_K.T @ V_aug`` -- [D, D+1] linear-attention state.
+
+        Args:
+            phi_K: [M, D] fp32 tensor in HBM.
+            V_aug: [M, D+1] fp32 tensor in HBM (``V`` with a column of ones appended).
+
+        Returns:
+            [D, D+1] fp32 tensor in HBM.
+
+        Notes:
+            ``nc_matmul`` computes ``dst[M, N] = stationary[K, M].T @ moving[K, N]``,
+            so the contraction axis M (of the attention problem) is the partition axis
+            of both operands. Each D-tile owns one PSUM bank that accumulates across
+            all M-tiles via ``accumulate=True``.
+        """
         M, D = phi_K.shape
-        _, Dp1 = V_aug.shape
-        num_m_tiles = (M + TILE - 1) // TILE
-        num_d_tiles = (D + TILE - 1) // TILE
+        M_v, Dp1 = V_aug.shape
+        kernel_assert(M == M_v, "phi_K and V_aug must have the same number of rows")
+        kernel_assert(Dp1 <= nl.tile_size.psum_fmax, "D+1 exceeds the PSUM free dimension")
 
-        S_aug = nl.ndarray((num_d_tiles * TILE, Dp1), dtype=nl.float32, buffer=nl.hbm)
+        num_m_tiles = div_ceil(M, TILE)
+        num_d_tiles = div_ceil(D, TILE)
 
-        for di in range(num_d_tiles):
-            d_offset = di * TILE
-            d_valid = min(TILE, D - d_offset)
-            psum = nl.zeros((TILE, Dp1), dtype=nl.float32, buffer=nl.psum)
+        S_aug = nl.ndarray((D, Dp1), dtype=nl.float32, buffer=nl.shared_hbm)
 
-            for mi in range(num_m_tiles):
-                m_offset = mi * TILE
-                m_partition = nl.arange(TILE)[:, None]
-                d_free = nl.arange(TILE)[None, :]
-                mask_m = m_partition < (M - m_offset)
-                mask_d = d_free < d_valid
+        for d_tile in range(num_d_tiles):
+            d_start = d_tile * TILE
+            d_size = min(TILE, D - d_start)
 
-                stat_raw = nl.load(phi_K[m_offset + m_partition, d_offset + d_free],
-                                    mask=(mask_m & mask_d), dtype=nl.float32)
-                zero_stat = nl.zeros(stat_raw.shape, dtype=nl.float32, buffer=nl.sbuf)
-                stat_tile = nl.where(mask_m & mask_d, stat_raw, zero_stat)
+            psum = nl.ndarray((d_size, Dp1), dtype=nl.float32, buffer=nl.psum)
 
-                mov_free = nl.arange(Dp1)[None, :]
-                mov_tile = nl.load(V_aug[m_offset + m_partition, mov_free], mask=mask_m, dtype=nl.float32)
-                zero_mov = nl.zeros(mov_tile.shape, dtype=nl.float32, buffer=nl.sbuf)
-                mov_safe = nl.where(mask_m, mov_tile, zero_mov)
+            for m_tile in range(num_m_tiles):
+                m_start = m_tile * TILE
+                m_size = min(TILE, M - m_start)
 
-                psum += nisa.nc_matmul(stat_tile, mov_safe)
+                # Both operands are clamped to the valid extent on the partition (M)
+                # and free (D / D+1) axes, so there is no garbage to mask out.
+                stat_tile = nl.ndarray((m_size, d_size), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.dma_copy(dst=stat_tile,
+                              src=phi_K[m_start:m_start + m_size, d_start:d_start + d_size])
 
-            result_tile = nl.copy(psum, dtype=nl.float32)
-            nl.store(S_aug[d_offset + nl.arange(TILE)[:, None], nl.arange(Dp1)[None, :]], value=result_tile)
+                mov_raw = nl.ndarray((m_size, Dp1), dtype=V_aug.dtype, buffer=nl.sbuf)
+                nisa.dma_copy(dst=mov_raw,
+                              src=V_aug[m_start:m_start + m_size, 0:Dp1])
+
+                # nc_matmul operands must share the (fp32) dtype of the phi tile.
+                if V_aug.dtype == nl.float32:
+                    mov_tile = mov_raw
+                else:
+                    mov_tile = nl.ndarray((m_size, Dp1), dtype=nl.float32, buffer=nl.sbuf)
+                    nisa.tensor_copy(dst=mov_tile, src=mov_raw)
+
+                nisa.nc_matmul(dst=psum, stationary=stat_tile, moving=mov_tile,
+                               accumulate=(m_tile > 0))
+
+            result_tile = nl.ndarray((d_size, Dp1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=result_tile, src=psum)
+            nisa.dma_copy(dst=S_aug[d_start:d_start + d_size, 0:Dp1], src=result_tile)
 
         return S_aug
 
     @nki.jit
-    def stageB_kernel(phi_Q, S_aug, D, eps):
-        M, D_full = phi_Q.shape
-        Dp1 = S_aug.shape[1]
-        num_m_tiles = (M + TILE - 1) // TILE
-        num_d_tiles = (D + TILE - 1) // TILE
+    def stageB_kernel(phi_Q, S_aug, eps):
+        """``out = (phi_Q @ S_aug)[:, :D] / ((phi_Q @ S_aug)[:, D] + eps)``.
 
-        out = nl.ndarray((M, D), dtype=nl.float32, buffer=nl.hbm)
+        Args:
+            phi_Q: [M, D] fp32 tensor in HBM.
+            S_aug: [D, D+1] fp32 tensor in HBM (output of ``stageA_kernel``).
+            eps: denominator epsilon (compile-time constant).
 
-        for mi in range(num_m_tiles):
-            m_offset = mi * TILE
-            m_partition = nl.arange(TILE)[:, None]
-            mask_m = m_partition < (M - m_offset)
+        Returns:
+            [M, D] fp32 tensor in HBM.
 
-            psum = nl.zeros((TILE, Dp1), dtype=nl.float32, buffer=nl.psum)
-            for di in range(num_d_tiles):
-                d_offset = di * TILE
-                d_valid = min(TILE, D - d_offset)
-                d_free = nl.arange(TILE)[None, :]
-                mask_d = d_free < d_valid
+        Notes:
+            ``nc_matmul`` contracts on the partition axis, so each ``phi_Q`` tile is
+            transposed to ``[D_tile, M_tile]`` with ``nc_transpose`` (Tensor Engine,
+            SBUF -> PSUM) before being used as the stationary operand. The division is
+            expressed as ``nisa.reciprocal`` followed by a ``tensor_scalar`` multiply
+            with the ``[P, 1]`` reciprocal column broadcast across the free axis --
+            ``nl.divide`` is not a valid ISA operator.
+        """
+        M, D = phi_Q.shape
+        D_s, Dp1 = S_aug.shape
+        kernel_assert(D == D_s, "phi_Q columns must match S_aug rows")
+        kernel_assert(Dp1 == D + 1, "S_aug must have D+1 columns")
+        kernel_assert(Dp1 <= nl.tile_size.psum_fmax, "D+1 exceeds the PSUM free dimension")
 
-                q_raw = nl.load(phi_Q[m_offset + m_partition, d_offset + d_free],
-                                 mask=(mask_m & mask_d), dtype=nl.float32)
-                zero_q = nl.zeros(q_raw.shape, dtype=nl.float32, buffer=nl.sbuf)
-                q_tile = nl.where(mask_m & mask_d, q_raw, zero_q)
-                q_t = nisa.nc_transpose(q_tile)  # (D_tile=128, M_tile=128)
+        num_m_tiles = div_ceil(M, TILE)
+        num_d_tiles = div_ceil(D, TILE)
 
-                s_tile = nl.load(S_aug[d_offset + nl.arange(TILE)[:, None], nl.arange(Dp1)[None, :]],
-                                  dtype=nl.float32)
+        out = nl.ndarray((M, D), dtype=nl.float32, buffer=nl.shared_hbm)
 
-                psum += nisa.nc_matmul(q_t, s_tile)
+        for m_tile in range(num_m_tiles):
+            m_start = m_tile * TILE
+            m_size = min(TILE, M - m_start)
 
-            o_aug = nl.copy(psum, dtype=nl.float32)
-            o_num = o_aug[:, 0:D]
-            o_den = o_aug[:, D:D + 1]
-            result_tile = nl.divide(o_num, nl.add(o_den, eps))
+            psum = nl.ndarray((m_size, Dp1), dtype=nl.float32, buffer=nl.psum)
 
-            nl.store(out[m_offset + m_partition, nl.arange(D)[None, :]], value=result_tile, mask=mask_m)
+            for d_tile in range(num_d_tiles):
+                d_start = d_tile * TILE
+                d_size = min(TILE, D - d_start)
+
+                q_tile = nl.ndarray((m_size, d_size), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.dma_copy(dst=q_tile,
+                              src=phi_Q[m_start:m_start + m_size, d_start:d_start + d_size])
+
+                # [m_size, d_size] -> [d_size, m_size] (partition/free axes swap).
+                q_t_psum = nl.ndarray((d_size, m_size), dtype=nl.float32, buffer=nl.psum)
+                nisa.nc_transpose(dst=q_t_psum, data=q_tile)
+
+                # nc_matmul operands must live in SBUF.
+                q_t = nl.ndarray((d_size, m_size), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.tensor_copy(dst=q_t, src=q_t_psum)
+
+                s_tile = nl.ndarray((d_size, Dp1), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.dma_copy(dst=s_tile, src=S_aug[d_start:d_start + d_size, 0:Dp1])
+
+                nisa.nc_matmul(dst=psum, stationary=q_t, moving=s_tile,
+                               accumulate=(d_tile > 0))
+
+            o_aug = nl.ndarray((m_size, Dp1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=o_aug, src=psum)
+
+            # denom = o_aug[:, D] + eps, then multiply by its reciprocal.
+            denom = nl.ndarray((m_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=denom, data=o_aug[0:m_size, D:Dp1],
+                               op0=nl.add, operand0=eps)
+
+            inv_denom = nl.ndarray((m_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.reciprocal(dst=inv_denom, data=denom)
+
+            result_tile = nl.ndarray((m_size, D), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=result_tile, data=o_aug[0:m_size, 0:D],
+                               op0=nl.multiply, operand0=inv_denom)
+
+            nisa.dma_copy(dst=out[m_start:m_start + m_size, 0:D], src=result_tile)
 
         return out
 
@@ -122,7 +234,7 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
     phi_K = phi_kernel(K)
 
     S_aug = stageA_kernel(phi_K, V_aug)
-    out = stageB_kernel(phi_Q, S_aug, D, eps)
+    out = stageB_kernel(phi_Q, S_aug, float(eps))
     return out
 
 

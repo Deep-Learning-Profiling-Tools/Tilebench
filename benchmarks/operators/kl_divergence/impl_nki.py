@@ -1,71 +1,143 @@
 import torch
 
 try:
-    import neuronxcc.nki as nki
-    import neuronxcc.nki.language as nl
-    import neuronxcc.nki.isa as nisa
-    PMAX = nl.tile_size.pmax
-    FREE_CAP = 2048
-    FALLBACK_TILE = 2048
+    import nki
+    import nki.isa as nisa
+    import nki.language as nl
 except ImportError:
     nki = None
 
+# Hardware constant (NeuronCore-v2/v3): number of SBUF partitions.
+PMAX = 128
+
+# Rows whose full free extent fits in a single SBUF tile take the one-pass path;
+# wider rows are streamed in ``FALLBACK_TILE``-wide column blocks.
+FREE_CAP = 2048
+FALLBACK_TILE = 2048
+
+
+def kernel_assert(condition: bool, error_text: str):
+    """Assert with NKI-formatted error message."""
+    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+
+
+def div_ceil(n: int, d: int) -> int:
+    """Ceiling division: smallest integer >= n/d."""
+    return (n + d - 1) // d
+
 
 if nki is not None:
+    def _kl_row_terms(log_p_tile, q_tile, row_size, col_size, part_sum):
+        """Row-sum of ``q * (log(q) - log_p)`` for one [row_size, col_size] block.
+
+        ``log(0)`` is -inf, and ``0 * -inf`` is NaN, so the logarithm is masked to
+        0.0 wherever ``q == 0`` before the multiply. ``nisa.select_reduce`` is the
+        NKI 0.4.0 replacement for ``np.where``; its ``on_false`` operand must be a
+        scalar (or a ``[P, 1]`` column), which the constant 0.0 satisfies directly.
+        The predicate must be integer-typed, hence the ``uint8`` comparison result.
+        """
+        is_pos = nl.ndarray((row_size, col_size), dtype=nl.uint8, buffer=nl.sbuf)
+        nisa.tensor_scalar(dst=is_pos, data=q_tile, op0=nl.greater, operand0=0.0)
+
+        log_q = nl.ndarray((row_size, col_size), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.activation(dst=log_q, op=nl.log, data=q_tile)
+
+        safe_log_q = nl.ndarray((row_size, col_size), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.select_reduce(dst=safe_log_q, predicate=is_pos, on_true=log_q, on_false=0.0)
+
+        term = nl.ndarray((row_size, col_size), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.tensor_tensor(dst=term, data1=safe_log_q, data2=log_p_tile, op=nl.subtract)
+        nisa.tensor_tensor(dst=term, data1=q_tile, data2=term, op=nl.multiply)
+
+        nisa.tensor_reduce(dst=part_sum, op=nl.add, data=term, axis=(1,))
+
     @nki.jit
     def kl_divergence_kernel(log_y_pred_input, y_true_input):
-        n_rows = log_y_pred_input.shape[0]
-        n_cols = log_y_pred_input.shape[1]
+        """Row-wise KL divergence ``sum_j q[j] * (log(q[j]) - log_p[j])``.
 
-        num_blocks = (n_rows + (PMAX - 1)) // PMAX
-        hbm_result_tile = nl.ndarray((n_rows, 1), dtype=nl.float32, buffer=nl.hbm)
+        Mirrors ``(y_true * (torch.log(y_true) - log_y_pred)).sum(dim=-1)``.
+
+        Args:
+            log_y_pred_input: [rows, n_cols] log-probabilities in HBM.
+            y_true_input: [rows, n_cols] probabilities in HBM.
+
+        Returns:
+            [rows, 1] fp32 tensor in HBM with the per-row divergence.
+
+        Notes:
+            * Row blocks (and, on the wide path, column blocks) are clamped to the
+              tensor extents with ``min(...)``, so every tile is allocated at its
+              real extent and no load/store masking is required.
+            * ``n_cols <= FREE_CAP``: one pass, the whole row lives in SBUF and its
+              row-sum is stored directly.
+            * ``n_cols > FREE_CAP``: the row is streamed in ``FALLBACK_TILE``-wide
+              column blocks whose partial row-sums are accumulated into an fp32
+              ``[P, 1]`` accumulator.
+        """
+        kernel_assert(len(log_y_pred_input.shape) == 2, "input must be 2D [rows, n_cols]")
+        kernel_assert(tuple(log_y_pred_input.shape) == tuple(y_true_input.shape),
+                      "log_y_pred and y_true must have the same shape")
+
+        n_rows, n_cols = log_y_pred_input.shape
+        kernel_assert(min(n_cols, FALLBACK_TILE) <= nl.tile_size.sbuf_fmax,
+                      "column block exceeds the SBUF free dimension")
+
+        out_hbm = nl.ndarray((n_rows, 1), dtype=nl.float32, buffer=nl.shared_hbm)
+        n_row_tiles = div_ceil(n_rows, PMAX)
 
         if n_cols <= FREE_CAP:
-            for i in range(num_blocks):
-                offset = i * PMAX
-                partition_index = nl.arange(PMAX)[:, None]
-                free_index = nl.arange(n_cols)[None, :]
-                mask_p = partition_index < (n_rows - offset)
-                mask = mask_p & (free_index < n_cols)
+            for row_tile in nl.affine_range(n_row_tiles):
+                row_start = row_tile * PMAX
+                row_size = min(PMAX, n_rows - row_start)
+                row_end = row_start + row_size
 
-                log_p_tile = nl.load(log_y_pred_input[offset + partition_index, free_index], mask=mask, dtype=nl.float32)
-                q_tile = nl.load(y_true_input[offset + partition_index, free_index], mask=mask, dtype=nl.float32)
+                # DMA cannot convert dtypes: load in the input dtype and let the
+                # Vector/Scalar engines widen to fp32 on their way out.
+                log_p_tile = nl.ndarray((row_size, n_cols), dtype=log_y_pred_input.dtype,
+                                        buffer=nl.sbuf)
+                q_tile = nl.ndarray((row_size, n_cols), dtype=y_true_input.dtype,
+                                    buffer=nl.sbuf)
+                nisa.dma_copy(dst=log_p_tile, src=log_y_pred_input[row_start:row_end, 0:n_cols])
+                nisa.dma_copy(dst=q_tile, src=y_true_input[row_start:row_end, 0:n_cols])
 
-                zero_tile = nl.zeros(q_tile.shape, dtype=nl.float32, buffer=nl.sbuf)
-                safe_log_q = nl.where(nl.greater(q_tile, 0.0), nl.log(q_tile), zero_tile)
-                term = nl.multiply(q_tile, nl.subtract(safe_log_q, log_p_tile))
-                kl_sum = nl.sum(term, axis=1, keepdims=True)
+                kl_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+                _kl_row_terms(log_p_tile, q_tile, row_size, n_cols, kl_sum)
 
-                nl.store(hbm_result_tile[offset + partition_index, nl.arange(1)[None, :]],
-                         value=kl_sum, mask=mask_p)
-            return hbm_result_tile
+                nisa.dma_copy(dst=out_hbm[row_start:row_end, 0:1], src=kl_sum)
 
-        num_free_blocks = (n_cols + FALLBACK_TILE - 1) // FALLBACK_TILE
-        for i in range(num_blocks):
-            offset = i * PMAX
-            partition_index = nl.arange(PMAX)[:, None]
-            mask_p = partition_index < (n_rows - offset)
+            return out_hbm
 
-            kl_sum = nl.zeros((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf)
-            for j in range(num_free_blocks):
-                free_offset = j * FALLBACK_TILE
-                free_dim_index = nl.arange(FALLBACK_TILE)[None, :]
-                mask_f = free_dim_index < (n_cols - free_offset)
-                mask = mask_p & mask_f
+        n_col_tiles = div_ceil(n_cols, FALLBACK_TILE)
+        for row_tile in nl.affine_range(n_row_tiles):
+            row_start = row_tile * PMAX
+            row_size = min(PMAX, n_rows - row_start)
+            row_end = row_start + row_size
 
-                log_p_tile = nl.load(log_y_pred_input[offset + partition_index, free_offset + free_dim_index], mask=mask, dtype=nl.float32)
-                q_tile = nl.load(y_true_input[offset + partition_index, free_offset + free_dim_index], mask=mask, dtype=nl.float32)
+            kl_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.memset(dst=kl_sum, value=0.0)
 
-                zero_tile = nl.zeros(q_tile.shape, dtype=nl.float32, buffer=nl.sbuf)
-                safe_log_q = nl.where(nl.greater(q_tile, 0.0), nl.log(q_tile), zero_tile)
-                term = nl.multiply(q_tile, nl.subtract(safe_log_q, log_p_tile))
-                term_safe = nl.where(mask, term, zero_tile)
-                kl_sum[...] = nl.add(kl_sum, nl.sum(term_safe, axis=1, keepdims=True))
+            for col_tile in nl.affine_range(n_col_tiles):
+                col_start = col_tile * FALLBACK_TILE
+                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_end = col_start + col_size
 
-            nl.store(hbm_result_tile[offset + partition_index, nl.arange(1)[None, :]],
-                     value=kl_sum, mask=mask_p)
+                log_p_tile = nl.ndarray((row_size, col_size), dtype=log_y_pred_input.dtype,
+                                        buffer=nl.sbuf)
+                q_tile = nl.ndarray((row_size, col_size), dtype=y_true_input.dtype,
+                                    buffer=nl.sbuf)
+                nisa.dma_copy(dst=log_p_tile,
+                              src=log_y_pred_input[row_start:row_end, col_start:col_end])
+                nisa.dma_copy(dst=q_tile,
+                              src=y_true_input[row_start:row_end, col_start:col_end])
 
-        return hbm_result_tile
+                part_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+                _kl_row_terms(log_p_tile, q_tile, row_size, col_size, part_sum)
+
+                nisa.tensor_tensor(dst=kl_sum, data1=kl_sum, data2=part_sum, op=nl.add)
+
+            nisa.dma_copy(dst=out_hbm[row_start:row_end, 0:1], src=kl_sum)
+
+        return out_hbm
 
 
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
