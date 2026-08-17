@@ -25,12 +25,14 @@ _DEFAULT_OUT_CONFIG = SimpleNamespace(
 )
 
 
+# Tile shapes mirror impl_triton's _TILE_SHAPES so both backends search the
+# same GEMM decompositions; block_m >= 64 is required for tcgen05 MMA lowering.
 _GEMM_SEARCH_SPACE = [
     SimpleNamespace(block_m=bm, block_n=bn, block_k=bk, occupancy=occ)
-    for bm in [16, 32]
-    for bn in [32, 64]
-    for bk in [16, 32]
-    for occ in [4, 8]
+    for bm in [32, 64, 128]
+    for bn in [32, 64, 128]
+    for bk in [32, 64]
+    for occ in [4, 8, 16, 32]
 ]
 
 
