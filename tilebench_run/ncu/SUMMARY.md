@@ -103,7 +103,7 @@ Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the `<backend>_<
 | l2_norm | fp16 | 18.0 | 23.0 | 1.28× |
 | l2_norm | bf16 | 17.8 | 23.2 | 1.30× |
 | l2_norm | fp32 | 32.5 | 33.7 | 1.04× |
-| linear_self_attention | fp32 | 204.5 | 779.2 | 3.81× |
+| linear_self_attention | fp32 | 203.3 | 499.0 | 2.45× |
 | matmul_fp32_fp16_fp8 | fp32 | 1340.0 | 871.7 | 0.65× |
 | matmul_fp32_fp16_fp8 | fp16 | 518.0 | 467.2 | 0.90× |
 | matmul_fp32_fp16_fp8 | fp8_e4m3fn | 257.1 | 220.8 | 0.86× |
