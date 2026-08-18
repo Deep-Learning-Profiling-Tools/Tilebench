@@ -285,10 +285,24 @@ def _compact_params(params_str: str) -> str:
 
 
 def fig_rq3_top20(main_rows: list[dict]) -> None:
-    """Paper Fig 4: top-20 autotuned-mode latency gaps at the sweep-max input."""
+    """Paper Fig 4: top-20 autotuned-mode latency gaps at the NCU-profiled
+    sweep-max input.
+
+    The (op, dtype) case is the one recorded in tilebench_run/ncu_catalogue.json
+    (`default_params_per_dtype`) — i.e. exactly the case that has an NCU report
+    — so the figure and the RQ3 profiling analysis refer to the same input.
+    Falls back to the max-`infer_problem_size` case only when the catalogue has
+    no entry (never the case for the 110 (op, dtype) pairs on main).
+    """
+    import json
     from data.tensors import infer_problem_size
     from scripts.analysis.bench_data import _parse_params
     import yaml
+
+    catalogue = json.loads(
+        (REPO / "tilebench_run" / "ncu_catalogue.json").read_text())
+    ncu_case = {(c["op"], dt): c["default_params_per_dtype"][dt]
+                for c in catalogue for dt in c["dtypes"]}
 
     by_od: dict[tuple, list[dict]] = defaultdict(list)
     for r in main_rows:
@@ -307,21 +321,38 @@ def fig_rq3_top20(main_rows: list[dict]) -> None:
         p.update(_parse_params(params_str))
         return p
 
+    def _is_ncu_case(op: str, dtype: str, fp: dict) -> bool:
+        cat = ncu_case.get((op, dtype))
+        if cat is None:
+            return False
+        return all(str(fp.get(k)) == str(v) for k, v in cat.items())
+
     best_case: dict[tuple, dict] = {}
     for (op, dtype, params_str), rs in by_od.items():
         t = next((r for r in rs if r["backend"] == "triton"), None)
         c = next((r for r in rs if r["backend"] == "cutile"), None)
         if t is None or c is None:
             continue
-        psize = infer_problem_size(op, full_params(op, params_str))
+        fp = full_params(op, params_str)
         key = (op, dtype)
-        if key not in best_case or psize > best_case[key]["psize"]:
-            gap = c["kernel_ms"] / t["kernel_ms"]
-            best_case[key] = {
-                "psize": psize, "params": params_str,
-                "gap": max(gap, 1.0 / gap),
-                "winner": "triton" if gap >= 1.0 else "cutile",
-            }
+        gap = c["kernel_ms"] / t["kernel_ms"]
+        entry = {
+            "psize": infer_problem_size(op, fp), "params": params_str,
+            "gap": max(gap, 1.0 / gap),
+            "winner": "triton" if gap >= 1.0 else "cutile",
+            "ncu": _is_ncu_case(op, dtype, fp),
+        }
+        prev = best_case.get(key)
+        if prev is None:
+            best_case[key] = entry
+        elif entry["ncu"] and not prev["ncu"]:
+            best_case[key] = entry              # NCU-profiled case wins outright
+        elif entry["ncu"] == prev["ncu"] and entry["psize"] > prev["psize"]:
+            best_case[key] = entry              # fallback: largest problem size
+    missing = [k for k, v in best_case.items() if not v["ncu"]]
+    if missing:
+        print(f"  WARNING fig_rq3_top20: no NCU-catalogue case for {missing}; "
+              f"used max problem_size instead")
 
     top = sorted(best_case.items(), key=lambda kv: -kv[1]["gap"])[:20]
 
@@ -346,7 +377,7 @@ def fig_rq3_top20(main_rows: list[dict]) -> None:
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{t}×" for t in ticks])
     ax.set_xlabel(r"Autotuned-mode latency gap (slower / faster) [$\times$]")
-    ax.set_title("Top 20 Triton vs cuTile latency gaps (autotuned mode, sweep-max input)",
+    ax.set_title("Top 20 Triton vs cuTile latency gaps (autotuned mode, NCU-profiled sweep-max input)",
                  fontsize=12)
     ax.grid(True, axis="x", alpha=0.25, which="both", zorder=0)
     handles = [plt.Rectangle((0, 0), 1, 1, color=BACKEND_COLOR["triton"],
