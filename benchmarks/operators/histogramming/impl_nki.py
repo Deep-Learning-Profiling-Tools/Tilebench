@@ -1,34 +1,3 @@
-"""NKI histogramming: per-bin count via a fully-unrolled (bin_block x chunk) loop nest.
-
-Known limitation -- compile blowup at large (N, num_bins):
-
-    ``histogram_kernel``'s two Python ``for`` loops (over ``num_bin_blocks =
-    ceil(num_bins/128)`` and ``num_chunks = ceil(N/8192)``) are both fully unrolled at
-    compile time, giving ``num_bin_blocks * num_chunks`` copies of the loop body in the
-    compiled program. The body is 4 instructions per (bin block, chunk) -- a
-    broadcasting DMA, a compare, a free-axis reduce and an accumulate -- so the compiled
-    instruction count is ~4 * num_bin_blocks * num_chunks.
-
-    Hardware-verified: num_bins=64 at the largest swept N (67,108,864 elements -> 8,192
-    unrolled iterations, one bin block), and num_bins=4096 at N=4,194,304 (32 bin blocks
-    x 512 chunks = 16,384 unrolled iterations).
-
-    The sweep's largest case, num_bins=4096 at N=67,108,864 (32 bin blocks x 8,192
-    chunks = 262,144 unrolled iterations), still does not build. It no longer reaches
-    the ``[NCC_EBVF030]`` instruction-count verdict that the pre-Beta-2 version hit
-    (35,913,891 instructions vs a 5,000,000 limit): at an identical 1,024-iteration
-    configuration this version's NEFF is 0.17 MB against the old version's 2.30 MB
-    (~13x fewer instructions, extrapolating to ~2.7M for the largest case), and compile
-    wall time dropped correspondingly (the 8,192-iteration case went from ~7 min to
-    ~75 s). What blocks it now is the sheer size of the unrolled program on disk:
-    ``neuronx-cc`` aborts partway through with ``No space left on device``
-    (``[NCC_INLA001]`` / ``LLVM ERROR: IO failure on output stream``) after filling
-    ~1 GB of its temporary workdir -- measured on a host whose root filesystem was
-    already close to capacity, so the exact threshold is machine-dependent. Both symptoms have the same root cause -- full unrolling -- which is fixed
-    elsewhere in this codebase (1d_conv, 3d_conv, block_sparse_attention) via
-    ``nl.dynamic_range``, not yet applied here. Left as a known limitation rather than
-    rewritten in this pass.
-"""
 import torch
 
 try:

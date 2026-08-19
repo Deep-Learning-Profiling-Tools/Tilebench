@@ -1,14 +1,3 @@
-"""NKI batched matmul: BATCH independent (M,K)@(K,N) matmuls.
-
-Reuses the existing, already-verified tiled Tensor-Engine matmul from
-matmul_fp32_fp16_fp8 (nc_matmul + PSUM K-accumulation) once per batch slice.
-@nki.jit caches the compiled kernel by argument shape, so with BATCH slices
-sharing one (Mp, Kp, Np) padded shape this compiles once and dispatches
-BATCH times. M/N/K here are not generally multiples of
-(TILE_M, TILE_K, TILE_N) = (128, 128, 512) (batched_matmul sweeps M=N=K in
-steps of 32), so inputs are zero-padded on the host and the output cropped
-back -- the same tail strategy matrix_transpose and vector_add use.
-"""
 import torch
 
 from benchmarks.operators.matmul_fp32_fp16_fp8.impl_nki import (

@@ -1,33 +1,3 @@
-"""NKI blocked matmul ``C[M, N] = A[M, K] @ B[K, N]`` for fp32 / fp16 / fp8.
-
-Structure
----------
-``nc_matmul`` computes ``dst = stationary.T @ moving`` and contracts along the
-*partition* axis of both operands, so the left operand has to be supplied as
-``lhsT[K, M]``.  ``A`` is stored row-major as ``[M, K]``, so every 128x128 tile
-of the loaded ``A`` block is transposed on-chip with ``nc_transpose`` before it
-is used as the stationary operand.
-
-The loop nest is a three-level blocking of the ``(M, N, K)`` iteration space:
-
-* ``m``  -- ``BLOCK_M = TILE_M * TILES_IN_BLOCK_M`` output rows; the ``m`` blocks
-  are split across ``NUM_CORES`` SPMD programs (``nl.program_id(0)``).
-* ``k``  -- ``BLOCK_K`` columns of ``A`` / rows of ``B`` are resident in SBUF at
-  a time; partial products are accumulated into an fp32 SBUF accumulator that
-  spans the whole output row (``result_tiles``).
-* ``n``  -- ``BLOCK_N`` columns of ``B``; inside a block each ``(bm, bn)`` pair
-  gets one PSUM tile that the ``bk`` loop accumulates into via
-  ``nc_matmul(..., accumulate=bk > 0)``.
-
-``DOUBLE_ROW`` (NeuronCore-v3+ fp8 double-pumped mode) folds two adjacent
-128-element K tiles into one ``nc_matmul``: the contraction axis is split
-between the partition axis and a leading free axis of size 2, so both operands
-are passed as ``[128, 2, free]`` access patterns.  See ``run()`` for when it is
-enabled -- the benchmarked configuration never reaches it (see the note there).
-
-Supported shapes: ``M % TILE_M == N % TILE_N == K % TILE_K == 0``.
-"""
-
 import functools
 import os
 import re
