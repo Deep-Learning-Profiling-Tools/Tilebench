@@ -45,10 +45,10 @@ if nki is not None:
         a_slab_w = tiles_in_block_m * 4 * block_kb      # [TILE_M, .]
         at_slab_w = tiles_in_block_m * 4 * num_j * TILE_M  # [TILE_K, .]
 
-        for m_blk in nl.affine_range(num_block_m):
+        for m_blk in range(num_block_m):
             m0 = m_blk * block_m
 
-            for n_blk in nl.affine_range(num_block_n):
+            for n_blk in range(num_block_n):
                 n0 = n_blk * tile_n
 
                 # One fp32 PSUM bank per 128-row output tile; accumulates over
@@ -59,7 +59,7 @@ if nki is not None:
                 acc_psum = nl.ndarray((TILE_M, tiles_in_block_m * TILE_N),
                                       dtype=nl.float32, buffer=nl.psum)
 
-                for kbb in nl.affine_range(num_kb_blocks):
+                for kbb in range(num_kb_blocks):
                     kb0 = kbb * block_kb
 
                     # ---- A slab: the 4 packed fields read 4 disjoint column

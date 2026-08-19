@@ -147,7 +147,7 @@ if nki is not None:
         acc = nl.ndarray((head_dim, 1), dtype=nl.float32, buffer=nl.sbuf)
         nisa.memset(dst=acc, value=0.0)
 
-        for blk_tile in nl.affine_range(n_blk_tiles):
+        for blk_tile in range(n_blk_tiles):
             blk_start = blk_tile * MOVING_FMAX
             blk_size = min(MOVING_FMAX, num_blocks - blk_start)
             blk_end = blk_start + blk_size

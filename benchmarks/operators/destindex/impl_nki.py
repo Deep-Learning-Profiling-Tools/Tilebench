@@ -15,7 +15,7 @@ if nki is not None:
         k_tile_size = PMAX
         num_k_tiles = (T + k_tile_size - 1) // k_tile_size
 
-        for kt in nl.affine_range(num_k_tiles):
+        for kt in range(num_k_tiles):
             k_valid = min(k_tile_size, T - kt * k_tile_size)
 
             idx_tile = nl.ndarray((k_valid, 1), dtype=dest.dtype, buffer=nl.sbuf)

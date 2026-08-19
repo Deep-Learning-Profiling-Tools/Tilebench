@@ -61,7 +61,7 @@ if nki is not None:
         n_row_tiles = div_ceil(n_rows, PMAX)
         inv_n_cols = 1.0 / n_cols
 
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
             row_end = row_start + row_size

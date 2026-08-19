@@ -26,7 +26,7 @@ if nki is not None:
         C = span // two_j
         pat = [[span, P], [1, span]]
 
-        for b in nl.affine_range(n_blocks):
+        for b in range(n_blocks):
             base = b * P * span
 
             tile = nl.ndarray((P, C, two_j), dtype=nl.float32, buffer=nl.sbuf)
@@ -68,8 +68,8 @@ if nki is not None:
         """
         pat = [[part_stride, P], [1, W]]
 
-        for a in nl.affine_range(n_outer):
-            for c in nl.affine_range(n_inner):
+        for a in range(n_outer):
+            for c in range(n_inner):
                 base = a * outer_stride + c * inner_stride
 
                 lower = nl.ndarray((P, W), dtype=nl.float32, buffer=nl.sbuf)

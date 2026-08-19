@@ -190,7 +190,7 @@ if nki is not None:
         # scheduler does not order, which corrupts the first scatter tile.
         hist_data = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
         hist_digit = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
-        for tile_idx in nl.sequential_range(n_hist_tiles):
+        for tile_idx in range(n_hist_tiles):
             nisa.dma_copy(
                 dst=hist_data,
                 src=work.ap(pattern=[[S, PMAX], [1, S]], offset=tile_idx * PMAX * S),
@@ -198,12 +198,12 @@ if nki is not None:
             nisa.tensor_scalar(dst=hist_digit, data=hist_data,
                                op0=nl.right_shift, operand0=sh,
                                op1=nl.bitwise_and, operand1=RADIX - 1)
-            for d in nl.static_range(RADIX):
+            for d in range(RADIX):
                 nisa.tensor_scalar(dst=indicator, data=hist_digit,
                                    op0=nl.equal, operand0=d)
                 nisa.tensor_reduce(dst=tile_counts[0:PMAX, d:d + 1],
                                    data=indicator, op=nl.add, axis=(1,))
-            for d in nl.static_range(RADIX):
+            for d in range(RADIX):
                 row = d * NBLK + tile_idx * PMAX
                 # Written through .ap() (like the read below) so the dependency
                 # tracker compares two flat views of the same buffer and orders them.
@@ -241,7 +241,7 @@ if nki is not None:
         # Pass A: sum every sub-tile into `carry`, so it ends up holding each
         # partition's full chunk total (only the sum is needed here -- the per-element
         # prefix is recomputed from scratch in pass B once the outer base is known).
-        for ct in nl.sequential_range(n_ctiles):
+        for ct in range(n_ctiles):
             w = min(CHUNK_TILE, chunk - ct * CHUNK_TILE)
             nisa.dma_copy(dst=sub_counts[0:PMAX, 0:w],
                           src=hist.ap(pattern=[[chunk, PMAX], [1, w]],
@@ -287,7 +287,7 @@ if nki is not None:
         # running total of every earlier sub-tile in this partition) plus `chunk_base`
         # (the outer, cross-partition base) to get the true chunk-wide exclusive prefix.
         nisa.memset(dst=carry, value=0)
-        for ct in nl.sequential_range(n_ctiles):
+        for ct in range(n_ctiles):
             w = min(CHUNK_TILE, chunk - ct * CHUNK_TILE)
             nisa.dma_copy(dst=sub_counts[0:PMAX, 0:w],
                           src=hist.ap(pattern=[[chunk, PMAX], [1, w]],
@@ -351,13 +351,13 @@ if nki is not None:
         slot_offsets = (slot_offsets_0, slot_offsets_1)
         step = 0
 
-        for d in nl.static_range(RADIX - 1, -1, -1):
-            for tile_rev in nl.sequential_range(n_tiles):
+        for d in range(RADIX - 1, -1, -1):
+            for tile_rev in range(n_tiles):
                 tile_idx = n_tiles - 1 - tile_rev
                 # One DMA per row rather than a single partition-strided DMA: the
                 # dependency tracker does not see that a `tile[0:128:16]` write
                 # overlaps the following full-tile read, and skips the semaphore.
-                for load_row in nl.static_range(ROWS):
+                for load_row in range(ROWS):
                     load_part = load_row * GPSIMD_STRIDE
                     nisa.dma_copy(
                         dst=data[load_part:load_part + 1, 0:S],
@@ -382,7 +382,7 @@ if nki is not None:
                 nisa.dma_copy(dst=off_row,
                               src=base.ap(pattern=[[ROWS, 1], [1, ROWS]],
                                           offset=slot_base))
-                for row_rev in nl.static_range(ROWS):
+                for row_rev in range(ROWS):
                     row = ROWS - 1 - row_rev
                     part = row * GPSIMD_STRIDE
                     run = runs[step % 2]

@@ -86,7 +86,7 @@ if nki is not None:
         n_row_tiles = div_ceil(n_rows, PMAX)
 
         if n_cols <= FREE_CAP:
-            for row_tile in nl.affine_range(n_row_tiles):
+            for row_tile in range(n_row_tiles):
                 row_start = row_tile * PMAX
                 row_size = min(PMAX, n_rows - row_start)
                 row_end = row_start + row_size
@@ -108,7 +108,7 @@ if nki is not None:
             return out_hbm
 
         n_col_tiles = div_ceil(n_cols, FALLBACK_TILE)
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
             row_end = row_start + row_size
@@ -116,7 +116,7 @@ if nki is not None:
             kl_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
             nisa.memset(dst=kl_sum, value=0.0)
 
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * FALLBACK_TILE
                 col_size = min(FALLBACK_TILE, n_cols - col_start)
                 col_end = col_start + col_size

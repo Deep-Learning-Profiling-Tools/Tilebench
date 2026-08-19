@@ -67,7 +67,7 @@ if nki is not None:
         engine: ``ones[1, 128]^T @ row[1, C] -> [128, C]``. The moving operand's
         free dimension is capped at ``MOVING_FMAX``, so wide blocks are split.
         """
-        for bcast_tile in nl.affine_range(div_ceil(col_size, MOVING_FMAX)):
+        for bcast_tile in range(div_ceil(col_size, MOVING_FMAX)):
             chunk_start = bcast_tile * MOVING_FMAX
             chunk_size = min(MOVING_FMAX, col_size - chunk_start)
             src_start = col_start + chunk_start
@@ -144,7 +144,7 @@ if nki is not None:
             weight_bcast = nl.ndarray((PMAX, n_cols), dtype=nl.float32, buffer=nl.sbuf)
             _broadcast_weight(weight_bcast, weight_row, ones_row, 0, n_cols)
 
-            for row_tile in nl.affine_range(n_row_tiles):
+            for row_tile in range(n_row_tiles):
                 row_start = row_tile * PMAX
                 row_size = min(PMAX, n_rows - row_start)
                 row_end = row_start + row_size
@@ -184,7 +184,7 @@ if nki is not None:
         # so the weight block is broadcast inside the second pass instead.
         weight_bcast = nl.ndarray((PMAX, FALLBACK_TILE), dtype=nl.float32, buffer=nl.sbuf)
 
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
             row_end = row_start + row_size
@@ -193,7 +193,7 @@ if nki is not None:
             mean_sq = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
             nisa.memset(dst=mean_sq, value=0.0)
 
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * FALLBACK_TILE
                 col_size = min(FALLBACK_TILE, n_cols - col_start)
                 col_end = col_start + col_size
@@ -217,7 +217,7 @@ if nki is not None:
             _rstd_newton(rstd, mean_sq, row_size)
 
             # ---- pass 2: y = x * rstd * weight ------------------------------
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * FALLBACK_TILE
                 col_size = min(FALLBACK_TILE, n_cols - col_start)
                 col_end = col_start + col_size

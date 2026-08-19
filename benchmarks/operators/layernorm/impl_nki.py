@@ -84,7 +84,7 @@ if nki is not None:
         weight_bcast = nl.ndarray((P_MAX, n_cols), dtype=nl.float32, buffer=nl.sbuf)
         bias_bcast = nl.ndarray((P_MAX, n_cols), dtype=nl.float32, buffer=nl.sbuf)
 
-        for bcast_tile in nl.affine_range(n_bcast_tiles):
+        for bcast_tile in range(n_bcast_tiles):
             col_start = bcast_tile * MOVING_FMAX
             col_size = min(MOVING_FMAX, n_cols - col_start)
             col_end = col_start + col_size
@@ -100,7 +100,7 @@ if nki is not None:
 
         inv_n_cols = 1.0 / float(n_cols)
 
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * P_MAX
             row_size = min(P_MAX, n_rows - row_start)
             row_end = row_start + row_size
@@ -111,7 +111,7 @@ if nki is not None:
             nisa.memset(dst=sum_x, value=0.0)
             nisa.memset(dst=sum_x2, value=0.0)
 
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * FREE_TILE
                 col_size = min(FREE_TILE, n_cols - col_start)
                 col_end = col_start + col_size
@@ -177,7 +177,7 @@ if nki is not None:
                                op0=nl.multiply, operand0=-1.0)
 
             # ---- pass 2: y = normalized * weight + bias ---------------------
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * FREE_TILE
                 col_size = min(FREE_TILE, n_cols - col_start)
                 col_end = col_start + col_size

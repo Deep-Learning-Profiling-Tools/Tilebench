@@ -87,7 +87,7 @@ if nki is not None:
             nisa.memset(dst=acc_sum, value=0.0)
             nisa.memset(dst=acc_sq, value=0.0)
 
-            for row_tile in nl.affine_range(n_row_tiles):
+            for row_tile in range(n_row_tiles):
                 row_start = row_tile * P_MAX
                 row_size = min(P_MAX, N - row_start)
 
@@ -111,7 +111,7 @@ if nki is not None:
             total_sum = nl.ndarray((1, C), dtype=nl.float32, buffer=nl.sbuf)
             total_sq = nl.ndarray((1, C), dtype=nl.float32, buffer=nl.sbuf)
 
-            for col_tile in nl.affine_range(n_col_tiles):
+            for col_tile in range(n_col_tiles):
                 col_start = col_tile * MOVING_FMAX
                 col_size = min(MOVING_FMAX, C - col_start)
                 col_end = col_start + col_size
@@ -157,7 +157,7 @@ if nki is not None:
         scale_bcast = nl.ndarray((P_MAX, C), dtype=nl.float32, buffer=nl.sbuf)
         shift_bcast = nl.ndarray((P_MAX, C), dtype=nl.float32, buffer=nl.sbuf)
 
-        for col_tile in nl.affine_range(n_col_tiles):
+        for col_tile in range(n_col_tiles):
             col_start = col_tile * MOVING_FMAX
             col_size = min(MOVING_FMAX, C - col_start)
             col_end = col_start + col_size
@@ -172,7 +172,7 @@ if nki is not None:
             nisa.tensor_copy(dst=shift_bcast[0:P_MAX, col_start:col_end], src=psum_shift)
 
         # ---- pass 2: y = x * scale + shift ----------------------------------
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * P_MAX
             row_size = min(P_MAX, N - row_start)
 

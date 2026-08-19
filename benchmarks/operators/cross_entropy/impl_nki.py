@@ -72,7 +72,7 @@ if nki is not None:
         hbm_result = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.shared_hbm)
         n_row_tiles = div_ceil(B, PMAX)
 
-        for row_tile in nl.affine_range(n_row_tiles):
+        for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, B - row_start)
             row_end = row_start + row_size
