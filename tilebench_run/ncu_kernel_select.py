@@ -59,15 +59,55 @@ def _matches_stem(name: str, stems) -> bool:
     return any(name.split("_Kt")[0] == s or name.startswith(s) for s in stems)
 
 
-def validate_capture(captured: list, expected_names) -> tuple:
-    """Confirm every profiled kernel is one of the op's expected compute kernels.
+def validate_capture(captured: list, expected_names, expected_count: int | None = None) -> tuple:
+    """Confirm the capture is complete and correct.
 
-    Returns (ok, unexpected). ok is False if any captured kernel is unexpected or
-    nothing was captured. If no expected names are known there is nothing to check
-    against, so returns (True, []) and the caller relies on its fragility warning.
+    Success requires ALL of:
+      - at least one kernel was captured;
+      - every captured kernel matches an expected stem (when stems are known);
+      - len(captured) == expected_count (when an expected launch count is
+        known). This operates on the FULL launch sequence — repeated launches
+        of the same kernel are counted individually, never deduplicated — so
+        `expected 10 / captured 7` fails even if every name is valid.
+
+    Returns (ok, problems) where problems is a list of human-readable
+    diagnostics (unexpected names, count mismatch, empty capture).
     """
+    problems: list[str] = []
     stems = kernel_stems(expected_names)
-    if not stems:
-        return True, []
-    unexpected = [nm for nm in captured if not _matches_stem(nm, stems)]
-    return (len(captured) > 0 and not unexpected), unexpected
+    if stems:
+        unexpected = [nm for nm in captured if not _matches_stem(nm, stems)]
+        if unexpected:
+            problems.append(f"unexpected kernels: {unexpected} (expected stems {stems})")
+    if not captured:
+        problems.append("nothing captured")
+    if expected_count is not None and len(captured) != expected_count:
+        problems.append(
+            f"launch-count mismatch: captured {len(captured)} != expected "
+            f"{expected_count}; sequence={[n[:40] for n in captured]}")
+    if not stems and expected_count is None:
+        return True, []          # nothing to check against
+    return (not problems), problems
+
+
+def captured_from_report(rep_path) -> list | None:
+    """Kernel names in result order from a .ncu-rep — the authoritative record
+    of what NCU profiled (stdout ==PROF== lines can repeat per replay pass).
+    Returns None if the report can't be read (caller falls back to stdout)."""
+    import glob
+    import sys as _sys
+    for cand in sorted(glob.glob("/opt/nvidia/nsight-compute/*/extras/python"),
+                       reverse=True):
+        if cand not in _sys.path:
+            _sys.path.append(cand)
+    try:
+        import ncu_report
+        rep = ncu_report.load_report(str(rep_path))
+        names = []
+        for ri in range(rep.num_ranges()):
+            rng = rep.range_by_idx(ri)
+            for i in range(rng.num_actions()):
+                names.append(rng.action_by_idx(i).name())
+        return names
+    except Exception:
+        return None
