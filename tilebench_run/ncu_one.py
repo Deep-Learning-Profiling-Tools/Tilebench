@@ -50,23 +50,29 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     env["PYTHONPATH"] = str(ROOT)
     rgx = ks.kernel_regex(kernel_names)
     if rgx:
-        m = ks.real_kernel_count(kernel_names) or n_kernels
-        skip, count = 3 * m, m
+        count = ks.real_kernel_count(kernel_names) or n_kernels
     else:
-        print(f"  WARNING {op}/{backend}/{dtype}: no kernel names known — falling "
-              f"back to FRAGILE launch-order capture (skip {3*n_kernels}, "
-              f"count {n_kernels}); cannot validate which kernel was profiled.")
-        skip, count = 3 * n_kernels, n_kernels
+        print(f"  WARNING {op}/{backend}/{dtype}: no kernel names known — "
+              f"FRAGILE launch-order capture (count {n_kernels}); cannot "
+              f"validate kernel names.")
+        count = n_kernels
+    # Harness runs warmups + 256 MB L2 eviction OUTSIDE the profiler range and
+    # exactly ONE measured impl.run() inside it — nothing to skip.
+    skip = 0
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
-        # See ncu_driver.py for the rationale; profile only inside the
-        # harness's cudaProfilerStart/Stop region (skips generator launches).
+        # Unified methodology (see ncu_driver.py): application replay + no NCU
+        # cache control; the harness's manual eviction supplies the cold entry.
+        "--replay-mode", "application", "--cache-control", "none",
+        # strict: all filtered kernels must match across replay passes in the
+        # exact order (see ncu_driver.py).
+        "--app-replay-mode", "strict",
+        # Profile only inside the harness's cudaProfilerStart/Stop region
+        # (excludes generator launches, warmups, and the eviction kernel).
         "--profile-from-start", "off",
     ]
     # Prefer selecting the op's compute kernel(s) by NAME (robust against
-    # variable input-gen / auxiliary launch counts). With --kernel-name, ncu's
-    # launch counter counts only matched kernels, so --launch-skip 3N
-    # --launch-count N still lands on the measured (4th) call.
+    # variable aux launch counts).
     if rgx:
         cmd += ["--kernel-name", f"regex:{rgx}"]
     cmd += [
@@ -87,15 +93,18 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     # Hardening: confirm NCU profiled ONLY the op's own compute kernel(s) — not an
     # aux/wrong kernel a fragile launch-order capture might have grabbed. NCU writes
     # its `==PROF== Profiling "<name>"` progress lines to stdout.
-    captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
-    if rgx:
-        ok, unexpected = ks.validate_capture(captured, kernel_names)
-        if not ok:
-            rc = rc or 3
-            print(f"  KERNEL-NAME VALIDATION FAILED: captured={captured} "
-                  f"unexpected={unexpected} expected={ks.kernel_stems(kernel_names)}")
-        else:
-            print(f"  validated: captured {captured} ⊆ {ks.kernel_stems(kernel_names)}")
+    captured = ks.captured_from_report(out_path)
+    if captured is None:
+        captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
+    ok, problems = ks.validate_capture(
+        captured, kernel_names if rgx else None, expected_count=count)
+    if not ok:
+        rc = rc or 3
+        print(f"  CAPTURE VALIDATION FAILED: captured({len(captured)})={captured} "
+              f"problems={problems}")
+    else:
+        print(f"  validated: {len(captured)}/{count} launches, "
+              f"names ⊆ {ks.kernel_stems(kernel_names)}")
     print(f"  rc={rc}, {dt:.1f}s, out={out_path}")
     return rc
 

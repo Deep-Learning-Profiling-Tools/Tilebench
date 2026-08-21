@@ -16,14 +16,14 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp16 | triton | 42.47 us | 70.97 % | 70.97 % | 47.49 % | 37.99 % | 18.48 % | 5.44 Tbyte/s | 64 | 22 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| fp16 | cutile | 114.95 us | 28.22 % | 25.78 % | 29.46 % | 13.27 % | 71.52 % | 1.98 Tbyte/s | 128 | 40 register/thread | 2.06 Kbyte/block | 0 byte/block | 12 block / 32 block |
-| bf16 | triton | 42.37 us | 71.40 % | 71.40 % | 47.49 % | 38.13 % | 18.48 % | 5.47 Tbyte/s | 64 | 22 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
-| bf16 | cutile | 115.27 us | 28.27 % | 25.80 % | 29.40 % | 13.30 % | 71.65 % | 1.98 Tbyte/s | 128 | 40 register/thread | 2.06 Kbyte/block | 0 byte/block | 12 block / 32 block |
-| fp32 | triton | 85.22 us | 76.17 % | 76.17 % | 42.01 % | 37.11 % | 22.46 % | 5.84 Tbyte/s | 256 | 16 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
-| fp32 | cutile | 126.59 us | 51.19 % | 51.19 % | 36.42 % | 24.89 % | 75.65 % | 3.93 Tbyte/s | 128 | 32 register/thread | 2.06 Kbyte/block | 0 byte/block | 16 block / 32 block |
-| int8 | triton | 41.47 us | 30.41 % | 30.41 % | 25.27 % | 19.68 % | 12.12 % | 2.33 Tbyte/s | 64 | 16 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
-| int8 | cutile | 111.61 us | 25.38 % | 10.89 % | 26.48 % | 7.62 % | 76.09 % | 835.22 Gbyte/s | 128 | 40 register/thread | 1.04 Kbyte/block | 0 byte/block | 12 block / 30 block |
+| fp16 | triton | 49.41 us | 78.00 % | 78.00 % | 40.86 % | 35.26 % | 16.13 % | 5.98 Tbyte/s | 64 | 22 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
+| fp16 | cutile | 117.24 us | 32.08 % | 32.08 % | 28.79 % | 14.17 % | 70.25 % | 2.46 Tbyte/s | 128 | 40 register/thread | 2.06 Kbyte/block | 0 byte/block | 12 block / 32 block |
+| bf16 | triton | 49.15 us | 78.20 % | 78.20 % | 40.07 % | 35.34 % | 16.13 % | 5.99 Tbyte/s | 64 | 22 register/thread | 0 byte/block | 0 byte/block | 42 block / 32 block |
+| bf16 | cutile | 116.90 us | 32.21 % | 32.21 % | 28.70 % | 14.22 % | 70.42 % | 2.47 Tbyte/s | 128 | 40 register/thread | 2.06 Kbyte/block | 0 byte/block | 12 block / 32 block |
+| fp32 | triton | 93.35 us | 78.50 % | 78.50 % | 37.59 % | 35.44 % | 20.53 % | 6.02 Tbyte/s | 256 | 16 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | cutile | 128.48 us | 57.08 % | 57.08 % | 35.92 % | 25.74 % | 74.82 % | 4.38 Tbyte/s | 128 | 32 register/thread | 2.06 Kbyte/block | 0 byte/block | 16 block / 32 block |
+| int8 | triton | 42.84 us | 48.70 % | 48.70 % | 24.79 % | 21.31 % | 11.90 % | 3.73 Tbyte/s | 64 | 16 register/thread | 0 byte/block | 0 byte/block | 64 block / 32 block |
+| int8 | cutile | 113.05 us | 25.17 % | 17.61 % | 26.17 % | 8.02 % | 75.46 % | 1.35 Tbyte/s | 128 | 40 register/thread | 1.04 Kbyte/block | 0 byte/block | 12 block / 30 block |
 
 ## Per-kernel breakdown (multi-kernel pipelines)
 
@@ -31,29 +31,29 @@ End-to-end Duration in the headline above sums every kernel launched per `impl.r
 
 | dtype | backend | k# | kernel duration | kernel name |
 |---|---|---|---|---|
-| bf16 | cutile | 1/2 | 106.69 us | `copy_by_dest_kernel_Kt1_A1bf16_1i16t1_p16_A1i64_1i` |
-| bf16 | cutile | 2/2 | 8.58 us | `copy_by_dest_kernel_Kt1_A1bf16_1i16t1_p16_A1i64_1i` |
-| bf16 | triton | 1/2 | 36.77 us | `copy_by_dest_kernel` |
-| bf16 | triton | 2/2 | 5.60 us | `copy_by_dest_kernel` |
-| fp16 | cutile | 1/2 | 106.50 us | `copy_by_dest_kernel_Kt1_A1f16_1i16t1_p16_A1i64_1i1` |
-| fp16 | cutile | 2/2 | 8.45 us | `copy_by_dest_kernel_Kt1_A1f16_1i16t1_p16_A1i64_1i1` |
-| fp16 | triton | 1/2 | 36.90 us | `copy_by_dest_kernel` |
-| fp16 | triton | 2/2 | 5.57 us | `copy_by_dest_kernel` |
-| fp32 | cutile | 1/2 | 117.25 us | `copy_by_dest_kernel_Kt1_A1f32_1i16t1_p16_A1i64_1i1` |
-| fp32 | cutile | 2/2 | 9.34 us | `copy_by_dest_kernel_Kt1_A1f32_1i16t1_p16_A1i64_1i1` |
-| fp32 | triton | 1/2 | 78.50 us | `copy_by_dest_kernel` |
-| fp32 | triton | 2/2 | 6.72 us | `copy_by_dest_kernel` |
-| int8 | cutile | 1/2 | 103.07 us | `copy_by_dest_kernel_Kt1_A1i8_1i16t1_p16_A1i64_1i16` |
-| int8 | cutile | 2/2 | 8.54 us | `copy_by_dest_kernel_Kt1_A1i8_1i16t1_p16_A1i64_1i16` |
-| int8 | triton | 1/2 | 35.74 us | `copy_by_dest_kernel` |
-| int8 | triton | 2/2 | 5.73 us | `copy_by_dest_kernel` |
+| bf16 | cutile | 1/2 | 108.13 us | `copy_by_dest_kernel_Kt1_A1bf16_1i16t1_p16_A1i64_1i` |
+| bf16 | cutile | 2/2 | 8.77 us | `copy_by_dest_kernel_Kt1_A1bf16_1i16t1_p16_A1i64_1i` |
+| bf16 | triton | 1/2 | 42.88 us | `copy_by_dest_kernel` |
+| bf16 | triton | 2/2 | 6.27 us | `copy_by_dest_kernel` |
+| fp16 | cutile | 1/2 | 108.54 us | `copy_by_dest_kernel_Kt1_A1f16_1i16t1_p16_A1i64_1i1` |
+| fp16 | cutile | 2/2 | 8.70 us | `copy_by_dest_kernel_Kt1_A1f16_1i16t1_p16_A1i64_1i1` |
+| fp16 | triton | 1/2 | 43.01 us | `copy_by_dest_kernel` |
+| fp16 | triton | 2/2 | 6.40 us | `copy_by_dest_kernel` |
+| fp32 | cutile | 1/2 | 118.02 us | `copy_by_dest_kernel_Kt1_A1f32_1i16t1_p16_A1i64_1i1` |
+| fp32 | cutile | 2/2 | 10.46 us | `copy_by_dest_kernel_Kt1_A1f32_1i16t1_p16_A1i64_1i1` |
+| fp32 | triton | 1/2 | 85.54 us | `copy_by_dest_kernel` |
+| fp32 | triton | 2/2 | 7.81 us | `copy_by_dest_kernel` |
+| int8 | cutile | 1/2 | 104.35 us | `copy_by_dest_kernel_Kt1_A1i8_1i16t1_p16_A1i64_1i16` |
+| int8 | cutile | 2/2 | 8.70 us | `copy_by_dest_kernel_Kt1_A1i8_1i16t1_p16_A1i64_1i16` |
+| int8 | triton | 1/2 | 36.54 us | `copy_by_dest_kernel` |
+| int8 | triton | 2/2 | 6.30 us | `copy_by_dest_kernel` |
 
 ## Key findings (auto-derived)
 
-- **fp16**: Triton is **2.71× faster** (42.5 µs vs 115.0 µs).
-- **bf16**: Triton is **2.72× faster** (42.4 µs vs 115.3 µs).
-- **fp32**: Triton is **1.49× faster** (85.2 µs vs 126.6 µs).
-- **int8**: Triton is **2.69× faster** (41.5 µs vs 111.6 µs).
+- **fp16**: Triton is **2.37× faster** (49.4 µs vs 117.2 µs).
+- **bf16**: Triton is **2.38× faster** (49.1 µs vs 116.9 µs).
+- **fp32**: Triton is **1.38× faster** (93.3 µs vs 128.5 µs).
+- **int8**: Triton is **2.64× faster** (42.8 µs vs 113.0 µs).
 
 ## NCU's own bottleneck verdict
 

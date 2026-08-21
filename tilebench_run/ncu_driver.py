@@ -50,30 +50,38 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
         env["NCU_CFG_JSON"] = json.dumps(cfg)
     env["PYTHONPATH"] = str(ROOT)
 
-    # Harness does 3 warmup calls + 1 measured call, each launching
-    # n_kernels_per_call kernels. Skip the warmups (3*N) and profile every
-    # kernel of the 4th call.
+    # Harness structure: 3 warmups + 256 MB L2 eviction OUTSIDE the profiler
+    # range, then exactly ONE measured impl.run() inside cudaProfilerStart/
+    # Stop. The range therefore contains only the measured run's launches:
+    # nothing to skip, and `count` = matched launches of one complete run.
     rgx = ks.kernel_regex(kernel_names)
     if rgx:
-        m = ks.real_kernel_count(kernel_names) or n_kernels_per_call
-        skip, count = 3 * m, m
+        count = ks.real_kernel_count(kernel_names) or n_kernels_per_call
     else:
         print(f"  WARNING {op}/{dtype}/{backend}: no kernel names — FRAGILE "
-              f"launch-order capture (cannot validate)", flush=True)
-        skip, count = 3 * n_kernels_per_call, n_kernels_per_call
+              f"launch-order capture (cannot validate names)", flush=True)
+        count = n_kernels_per_call
+    skip = 0
 
     cmd = [
         NCU, "--set", "full", "--import-source", "on",
+        # Unified methodology: application replay + no NCU cache control, so
+        # each replay pass re-executes the whole harness (warmups + manual
+        # eviction + one measured run) and intra-operator producer-consumer
+        # L2 state is preserved; the manual eviction supplies the cold entry.
+        "--replay-mode", "application", "--cache-control", "none",
+        # strict: every filtered kernel must match across all replay passes in
+        # the exact order, so a pass that diverges fails loudly instead of
+        # silently mixing kernels from different passes.
+        "--app-replay-mode", "strict",
         # Profile only kernels inside the harness's cudaProfilerStart/Stop
-        # region. The harness puts the impl.run() warmups + final launch
-        # inside this region so input-generator kernels (randn, *scale,
-        # to(dtype), ...) are excluded from NCU's launch counter.
+        # region (excludes input-generator launches, warmups, and the
+        # eviction kernel from NCU's launch counter).
         "--profile-from-start", "off",
     ]
     # Select the op's compute kernel(s) by NAME when known (robust against
-    # variable input-gen / auxiliary launch counts). With --kernel-name, ncu's
-    # launch counter counts only matched kernels, so --launch-skip 3N
-    # --launch-count N still lands on the measured (4th) call.
+    # variable aux launch counts). With --kernel-name, ncu's launch counter
+    # counts only matched kernels inside the range.
     if rgx:
         cmd += ["--kernel-name", f"regex:{rgx}"]
     cmd += [
@@ -90,13 +98,20 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
         )
         elapsed = time.time() - t0
         ok = (r.returncode == 0) and out.exists() and out.stat().st_size > 0
-        # Hardening: confirm NCU profiled ONLY the op's own compute kernel(s).
-        captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
-        validated, unexpected = (True, [])
-        if rgx:
-            validated, unexpected = ks.validate_capture(captured, kernel_names)
-            if ok and not validated:
-                ok = False
+        # Hardening: the report must contain EXACTLY the expected matched
+        # launch sequence — every name must belong to the expected stems AND
+        # the launch count must equal `count` (repeated launches of the same
+        # kernel are counted, not deduplicated). The rep file is authoritative
+        # (application replay may print ==PROF== lines once per pass);
+        # stdout parsing is the fallback when the rep can't be read.
+        captured = ks.captured_from_report(out)
+        if captured is None:
+            captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
+        validated, problems = ks.validate_capture(
+            captured, kernel_names if rgx else None, expected_count=count)
+        if ok and not validated:
+            ok = False
+        unexpected = problems
         return {
             "op": op, "dtype": dtype, "backend": backend,
             "ok": ok, "rc": r.returncode, "elapsed_s": round(elapsed, 2),
