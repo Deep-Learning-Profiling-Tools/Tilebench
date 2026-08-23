@@ -40,11 +40,14 @@ def jacobi_stencil_kernel(input, output, dtype,
             gb_r = i + start_r 
             gb_c = j + start_c
             is_inner = gb_r >= 1 and gb_c >= 1 and gb_r < M - 1 and gb_c < N - 1
+            # top + bottom + left + right, matching the torch reference and the
+            # Triton/cuTile kernels: fp16 adds round at each step, so summing the
+            # neighbours in a different order drifts by 1 ULP on ~31% of points.
             avg = quarter * (
-                input[gb_r + 1, gb_c] +
                 input[gb_r - 1, gb_c] +
-                input[gb_r, gb_c + 1] +
-                input[gb_r, gb_c - 1]
+                input[gb_r + 1, gb_c] +
+                input[gb_r, gb_c - 1] +
+                input[gb_r, gb_c + 1]
             )
             local_tile_out[i, j] = T.Select(is_inner, avg, local_tile_out[i, j])
         T.copy(local_tile_out, output[start_r, start_c])
