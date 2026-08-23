@@ -44,11 +44,12 @@ def block_topk_kernel(
 
             T.sync_threads()
 
-            for kb in T.unroll(1, BLOCK_SIZE.bit_length()):
-                for jj in T.unroll(BLOCK_SIZE.bit_length() - 1):
+            for kb in T.unroll(1, BLOCK_SIZE.bit_length(), explicit=True):
+                for jj in T.unroll(BLOCK_SIZE.bit_length() - 1, explicit=True):
                     if jj < kb:
                         stage = T.shift_left(1, kb)
-                        stride = T.shift_left(1, kb - 1 - jj)
+                        safe_shift = T.max(kb - 1 - jj, 0)
+                        stride = T.shift_left(1, safe_shift)
                         for pair_idx in T.Parallel(BLOCK_SIZE // 2):
                             group = pair_idx // stride
                             offset = pair_idx % stride
