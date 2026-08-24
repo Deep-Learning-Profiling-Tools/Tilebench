@@ -18,7 +18,7 @@ def flash_decode_stage2_configs():
 
 
 @tilelang.autotune(configs=flash_decode_stage2_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
+@tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True})
 def flash_decode_stage2_kernel(
     mid_o,
     mid_o_lse,
