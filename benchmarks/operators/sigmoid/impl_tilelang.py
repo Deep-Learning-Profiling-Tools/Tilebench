@@ -18,7 +18,7 @@ def sigmoid_configs():
 
 
 @tilelang.autotune(configs = sigmoid_configs(), warmup = 20, rep = 100, timeout = 60)
-@tilelang.jit
+@tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True})
 def sigmoid_kernel(x, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     n_elements = T.const("n_elements")
     x: T.Tensor((n_elements, ), dtype)
