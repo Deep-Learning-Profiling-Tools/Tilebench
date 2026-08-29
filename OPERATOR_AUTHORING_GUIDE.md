@@ -212,6 +212,50 @@ def get_last_config() -> dict | None:
   cases adds minutes of wall-clock per operator).
 - CUDA-graph capture of the compiled kernel works — keep `use_cuda_graph: true`.
 
+### NKI (optional; AWS Trainium)
+
+NKI autotuning used by TileBench MUST go through `core.nki_autotune.NkiAutotuner`
+(or an explicit replay adapter with the same trace semantics). Manual autotuners
+without replay semantics are unsupported — the profiling flow cannot replay them
+and will profile the operator as untuned (`autotune=False`) when no NKI winner
+records exist; never fabricate a winner.
+
+```python
+from types import SimpleNamespace
+from core.nki_autotune import NkiAutotuner
+
+if nki is not None:
+    @nki.jit
+    def my_kernel(a_input, TILE_FREE): ...
+    _tuner = NkiAutotuner(my_kernel)          # stable name: <module>.<func>
+    # NkiAutotuner(my_kernel, name="...")     # override on collisions
+
+_DEFAULT_CONFIG = SimpleNamespace(tile_free=2048)
+_SEARCH_SPACE = [SimpleNamespace(tile_free=t) for t in (512, 1024, 2048, 4096)]
+_last_autotune_config: dict = {}
+```
+
+- **Configs and shape keys must be deterministically serializable**: dicts,
+  dataclasses, `SimpleNamespace`, namedtuples, or plain objects with stable
+  public fields, holding only `None`/bool/int/float/str/tuple/list/dict values.
+  Anything else raises at tune time — no `repr()` fallback.
+- **Profiling flow** (`core/nki_orchestrator.py`): a SELECTOR process runs the
+  sweep and exports the canonical winner trace; a fresh PROFILE process installs
+  that trace and **replays the winner exactly** — zero candidate timings; a
+  replay mismatch (changed search space, stale winner) fails loudly before
+  anything is profiled.
+- **Artifact identity** is a canonical launch spec (`spec_id`): the profile
+  worker runs in a private per-spec CWD with a private Neuron compile cache, and
+  the exactly-one validated NEFF/HLO pair there is what gets hardware-timed.
+  The `AwsNeuronCustomNativeKernel` HLO marker validates *that a graph is an
+  NKI graph* — it does NOT distinguish two autotune candidates of the same
+  kernel; that distinction comes only from exact winner replay.
+- **Artifact selection must never depend on mtime**, sequence numbers, glob
+  order, or "most recent compile event". Zero or multiple matching artifacts is
+  a benchmark failure (`nki_ok=False`), never a guess. Each profiled case
+  writes `results/logs/nki_profiles/<op>/<case>/<spec>/manifest.json` (exact
+  NEFF path + SHA256) and a line in `results/logs/nki_neff_manifest.jsonl`.
+
 ---
 
 ## 6. Dtype Handling
