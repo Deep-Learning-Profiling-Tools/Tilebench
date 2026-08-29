@@ -56,6 +56,7 @@ class FakeRunner:
         self.selector_verify_ok = selector_verify_ok
         self.profile_error = profile_error
         self.torch_verify_ok = True
+        self.nki_verify_ok = True
 
     def __call__(self, cmd, *, cwd, env_overrides):
         args = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)
@@ -79,12 +80,16 @@ class FakeRunner:
                       "torch": {"verify_ok": self.torch_verify_ok,
                                 "verify_error": None if self.torch_verify_ok else "xla mismatch",
                                 "artifact": artifact_record(wd, "MODULE_T", False)},
-                      "nki": ({"verify_ok": True, "verify_error": None,
+                      "nki": ({"verify_ok": self.nki_verify_ok,
+                               "verify_error": None if self.nki_verify_ok else "mismatch on new inputs",
                                "replay_installed": bool(spec["autotune_replay"]),
                                "replay_consumed": bool(spec["autotune_replay"]),
                                "executed_trace": spec["autotune_replay"],
-                               "artifact": artifact_record(wd, "MODULE_N", True)}
+                               "artifact": (artifact_record(wd, "MODULE_N", True)
+                                            if self.nki_verify_ok else None)}
                               if spec["nki_enabled"] else None)}
+            if spec["nki_enabled"] and not self.nki_verify_ok:
+                result["ok"] = False
         with open(args["--result"], "w") as f:
             json.dump(result, f)
         return 0 if result["ok"] else 1
@@ -183,15 +188,30 @@ def test_no_autotune_means_untuned_profile(tmp_path):
     assert res["nki_ok"]
 
 
-def test_identical_spec_reuses_validated_manifest_without_worker(tmp_path):
+def test_identical_spec_reuses_validated_artifact_but_reverifies(tmp_path):
     runner = FakeRunner()
     first = orchestrate(tmp_path, runner, autotune=False)
     assert [c["mode"] for c in runner.calls] == ["profile"]
     second = orchestrate(tmp_path, runner, autotune=False)
-    assert [c["mode"] for c in runner.calls] == ["profile"]  # no new worker launch
+    # the worker runs again (inputs change per run -> correctness re-verified)
+    assert [c["mode"] for c in runner.calls] == ["profile", "profile"]
     assert second["spec_id"] == first["spec_id"]
     assert second["identity_source"] == "validated_manifest_reuse"
     assert second["nki_stats"]["neff_sha256"] == first["nki_stats"]["neff_sha256"]
+    # private artifacts/cache were kept for the reuse run (only wiped on rebuild)
+    assert os.path.isfile(first["nki_stats"]["neff"])
+    with open(runner.calls[1]["args"]["--spec"]) as f:
+        assert json.load(f)["expected_stems"] == {"torch": "MODULE_T", "nki": "MODULE_N"}
+
+
+def test_reuse_with_failing_reverification_is_not_published(tmp_path):
+    runner = FakeRunner()
+    orchestrate(tmp_path, runner, autotune=False)
+    runner.nki_verify_ok = False           # a data-dependent bug on the new inputs
+    second = orchestrate(tmp_path, runner, autotune=False)
+    assert second["identity_source"] == "validated_manifest_reuse"
+    assert second["nki_ok"] is False and "verification failed" in second["nki_err"]
+    assert second["nki_ms"] != second["nki_ms"]  # nan
 
 
 def test_tampered_reused_artifact_triggers_rebuild_not_reuse(tmp_path):

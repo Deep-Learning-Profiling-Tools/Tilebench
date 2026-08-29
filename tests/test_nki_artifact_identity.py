@@ -181,3 +181,19 @@ def test_resolver_never_calls_getmtime(tmp_path, monkeypatch):
     validate_pair(neff, require_marker=True, allowed_roots=[root])
     validate_manifest_reuse(manifest_for("s", "nki", neff, hlo),
                             spec_id="s", allowed_roots=[root])
+
+
+def test_resolve_expected_reuse_semantics(tmp_path):
+    from core.nki_artifact import resolve_expected
+    root = str(tmp_path)
+    neff, _ = write_pair(root, "MODULE_KEEP", marker=True)
+    write_pair(root, "MODULE_TORCH", marker=False)
+    pre = {"MODULE_KEEP", "MODULE_TORCH"}
+    assert resolve_expected([root], stem="MODULE_KEEP", expect_marker=True, pre_stems=pre).neff_path == neff
+    with pytest.raises(NkiArtifactIdentityError, match="marker="):
+        resolve_expected([root], stem="MODULE_TORCH", expect_marker=True, pre_stems=pre)
+    write_pair(root, "MODULE_NEWGRAPH", marker=True)   # graph changed during the run
+    with pytest.raises(NkiArtifactIdentityError, match="new NKI pair"):
+        resolve_expected([root], stem="MODULE_KEEP", expect_marker=True, pre_stems=pre)
+    with pytest.raises(NkiArtifactIdentityError, match="no longer present"):
+        resolve_expected([root], stem="MODULE_GONE", expect_marker=True, pre_stems=pre | {"MODULE_NEWGRAPH"})

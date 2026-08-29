@@ -100,7 +100,7 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
     import importlib
 
     from core import nki_autotune as na
-    from core.nki_artifact import resolve_unique
+    from core.nki_artifact import resolve_expected, resolve_unique
     from core.nki_timer import to_cpu, to_xla_device
     from core.verifier import verify
     from torch_xla.core import xla_model as xm
@@ -113,6 +113,12 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
     impl_torch = importlib.import_module(
         f"benchmarks.operators.{spec['operator']}.impl_torch")
 
+    # Reuse mode (parent found a validated manifest for this spec_id): the
+    # private artifacts/cache were kept, so compiles are cache hits and dump
+    # nothing new. Identity then means "the expected pair is still there and
+    # nothing new appeared"; correctness is still verified on THIS run's inputs.
+    expected = spec.get("expected_stems") or {}
+
     # ---- device transfers first, flushed, so their graphlets are excluded ----
     xla_inputs = to_xla_device(tuple(bundle["inputs"]))
     xm.mark_step()
@@ -123,9 +129,14 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
     torch_out = impl_torch.run(*xla_inputs)
     xm.mark_step()
     xm.wait_device_ops()
-    torch_pair = resolve_unique(
-        [cwd], expect_marker=False, exclude_stems=pre_compute_stems,
-        context=dict(ctx, target="torch"))
+    if expected.get("torch"):
+        torch_pair = resolve_expected(
+            [cwd], stem=expected["torch"], expect_marker=False,
+            pre_stems=pre_compute_stems, context=dict(ctx, target="torch"))
+    else:
+        torch_pair = resolve_unique(
+            [cwd], expect_marker=False, exclude_stems=pre_compute_stems,
+            context=dict(ctx, target="torch"))
     torch_ok, torch_err = verify(to_cpu(torch_out), bundle["reference_output"],
                                  atol=spec["verify_atol"], rtol=spec["verify_rtol"])
     result["torch"] = {
@@ -146,6 +157,7 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
         elif spec["run_accepts_autotune"]:
             kw["autotune"] = False
         na.clear_tuning_trace()
+        pre_nki_stems = _snapshot_stems(cwd)
         nki_out = impl_nki.run(*xla_inputs, **kw)
         xm.mark_step()
         xm.wait_device_ops()
@@ -162,8 +174,13 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
             "artifact": None,
         }
         if nki_ok:
-            nki_pair = resolve_unique([cwd], expect_marker=True,
-                                      context=dict(ctx, target="nki"))
+            if expected.get("nki"):
+                nki_pair = resolve_expected(
+                    [cwd], stem=expected["nki"], expect_marker=True,
+                    pre_stems=pre_nki_stems, context=dict(ctx, target="nki"))
+            else:
+                nki_pair = resolve_unique([cwd], expect_marker=True,
+                                          context=dict(ctx, target="nki"))
             nki_entry["artifact"] = _artifact_record(nki_pair)
         else:
             result["ok"] = False

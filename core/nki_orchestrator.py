@@ -11,11 +11,15 @@ identity rules):
       |-- build the canonical NkiProfileSpec (winner trace included)
       |     -> spec_id -> private per-spec directory
       |-- if a validated manifest for this spec_id already exists:
-      |     re-validate hashes/marker and re-profile the SAME artifact
+      |     re-validate hashes/marker, KEEP the private cache/artifacts
       |     (identity_source = "validated_manifest_reuse")
-      |-- else PROFILE subprocess: private CWD + private compile cache,
-      |     exact winner replay (no candidate timing), exactly-one validated
-      |     artifact per target, hardware profiling of those exact NEFFs
+      |   else wipe the private space (fresh compile)
+      |-- PROFILE subprocess (always — input values change per run, so
+      |     correctness is re-verified every time): private CWD + private
+      |     compile cache, exact winner replay (no candidate timing),
+      |     exactly-one validated artifact per target; on reuse the
+      |     identified artifact must hash-match the prior manifest
+      |-- PARENT re-validates SHA256s, hardware-profiles the exact NEFFs
       |-- write <spec_dir>/manifest.json (authoritative) + append the global
           audit index results/logs/nki_neff_manifest.jsonl
 
@@ -24,6 +28,7 @@ No step ever selects an artifact by mtime, sequence number, glob order, or
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import importlib.metadata
 import inspect
@@ -163,6 +168,10 @@ def _launch_worker(runner: Callable, *, mode: str, spec_path: str, bundle_path: 
     if rc != 0 and res.get("ok"):
         raise NkiOrchestrationError(f"{mode} worker exit={rc} but result claims ok")
     return res
+
+
+def dataclasses_asdict(pair) -> dict:
+    return dataclasses.asdict(pair)
 
 
 def _utcnow() -> str:
@@ -309,31 +318,30 @@ def profile_case_on_neuron(
         override_pair = resolve_explicit_override(dict(ctx, spec_id=spec_id))
 
         # ---- exact reuse of a previously validated manifest ------------------
-        reused = False
+        # Reuse means "same validated artifact, skip recompilation" — NOT "skip
+        # verification": the case's input VALUES are regenerated per run and
+        # are deliberately outside spec_id, so the profile worker always runs
+        # and verifies the current outputs. On reuse the private cache and
+        # artifacts are kept (compile-cache hits, no new dumps) and the
+        # worker-identified artifact must hash-match the manifest.
+        reuse_pairs = None
         if override_pair is None and os.path.isfile(manifest_path):
             with open(manifest_path) as f:
                 old_manifest = json.load(f)
             try:
-                pairs = validate_manifest_reuse(
+                reuse_pairs = validate_manifest_reuse(
                     old_manifest, spec_id=spec_id, allowed_roots=[spec_dir])
             except NkiArtifactIdentityError as e:
                 # Safe rebuild: this spec's private artifact space is wiped as a
                 # unit (artifacts + cache + manifest) and rebuilt from scratch.
                 print(f"  NKI manifest reuse invalid — rebuilding spec "
                       f"{spec_id[:16]}: {str(e).splitlines()[0]}")
-                for p in (artifacts_dir, cache_dir, profile_dir):
-                    shutil.rmtree(p, ignore_errors=True)
                 os.remove(manifest_path)
-            else:
-                identity_source = "validated_manifest_reuse"
-                for target, pair in pairs.items():
-                    rec = dict(old_manifest["targets"][target])
-                    rec["stats"] = profiler(pair.neff_path, warmup=int(warmup),
-                                            out_dir=profile_dir, tag=target)
-                    targets[target] = rec
-                reused = True
-
-        if not reused:
+                reuse_pairs = None
+        if reuse_pairs is not None:
+            identity_source = "validated_manifest_reuse"
+            shutil.rmtree(profile_dir, ignore_errors=True)
+        else:
             # Fresh run: artifacts + cache are wiped together so the private
             # CWD is guaranteed to receive this run's dumps (a stale private
             # cache with an empty artifacts dir could otherwise cache-hit and
@@ -343,9 +351,12 @@ def profile_case_on_neuron(
             if override_pair is None:
                 shutil.rmtree(cache_dir, ignore_errors=True)
 
+        if True:  # (kept flat: fresh and reuse share the worker + validation path)
             worker_spec = dict(spec_extra,
                                run_accepts_autotune=accepts_autotune,
-                               nki_enabled=nki_enabled and override_pair is None)
+                               nki_enabled=nki_enabled and override_pair is None,
+                               expected_stems=({t: p.stem for t, p in reuse_pairs.items()}
+                                               if reuse_pairs is not None else {}))
             worker_spec_path = os.path.join(spec_dir, "worker_spec.json")
             atomic_write_json(worker_spec_path, worker_spec)
             worker_result = _launch_worker(
@@ -359,7 +370,8 @@ def profile_case_on_neuron(
             # has exited and released the NeuronCores (neuron-explorer capture
             # needs them; capturing while the worker's PJRT client was alive
             # raced NRT allocation on trn2). Each artifact is re-validated
-            # against the worker-reported SHA256 before it is profiled.
+            # against the worker-reported SHA256 (and, on reuse, against the
+            # prior manifest) before it is profiled.
             for target in ("torch", "nki"):
                 entry = worker_result.get(target)
                 if not entry:
@@ -384,6 +396,17 @@ def profile_case_on_neuron(
                             f"and parent profiling for target {target!r}",
                             context=dict(ctx, spec_id=spec_id, target=target),
                             roots=[spec_dir])
+                    if reuse_pairs is not None and target in reuse_pairs and (
+                            reuse_pairs[target].neff_sha256 != pair.neff_sha256
+                            or reuse_pairs[target].hlo_sha256 != pair.hlo_sha256):
+                        raise NkiArtifactIdentityError(
+                            f"identical spec_id produced a different {target!r} "
+                            f"artifact than the validated manifest (non-deterministic "
+                            f"compile or environment drift)",
+                            context=dict(ctx, spec_id=spec_id, target=target),
+                            roots=[spec_dir],
+                            candidates=[dataclasses_asdict(pair),
+                                        dataclasses_asdict(reuse_pairs[target])])
                     rec.update(art)
                     rec["stats"] = profiler(pair.neff_path, warmup=int(warmup),
                                             out_dir=profile_dir, tag=target)

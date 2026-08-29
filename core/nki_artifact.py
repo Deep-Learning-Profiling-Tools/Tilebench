@@ -172,6 +172,36 @@ def resolve_unique(roots: Sequence[str], *, expect_marker: bool,
         f"identity is ambiguous", context=context, roots=roots, candidates=described)
 
 
+def resolve_expected(roots: Sequence[str], *, stem: str, expect_marker: bool,
+                     pre_stems: Iterable[str], context: dict | None = None) -> ArtifactPair:
+    """Reuse-mode resolution: the previously validated pair ``stem`` must still
+    exist (with the expected marker class) and NO new pair of that class may
+    have appeared since ``pre_stems`` (a run that compiled a different graph
+    would have dumped a new pair — that is an identity error, not a silent
+    switch). Never selects by recency."""
+    pairs, rejections = discover_pairs(roots)
+    by_stem = {p.stem: p for p in pairs}
+    pre = set(pre_stems)
+    newcomers = [p for p in pairs if p.stem not in pre and p.has_marker == expect_marker]
+    described = [dataclasses.asdict(p) for p in pairs] + rejections
+    if newcomers:
+        raise NkiArtifactIdentityError(
+            f"reuse of {stem!r} rejected: {len(newcomers)} new "
+            f"{'NKI' if expect_marker else 'non-NKI'} pair(s) appeared during this run "
+            f"({[p.stem for p in newcomers]}) — the executed graph is not the validated one",
+            context=context, roots=roots, candidates=described)
+    pair = by_stem.get(stem)
+    if pair is None:
+        raise NkiArtifactIdentityError(
+            f"reuse of {stem!r} rejected: validated pair no longer present",
+            context=context, roots=roots, candidates=described)
+    if pair.has_marker != expect_marker:
+        raise NkiArtifactIdentityError(
+            f"reuse of {stem!r} rejected: marker={pair.has_marker}, expected {expect_marker}",
+            context=context, roots=roots, candidates=described)
+    return pair
+
+
 def validate_pair(neff_path: str, *, require_marker: bool,
                   allowed_roots: Sequence[str] | None = None,
                   context: dict | None = None) -> ArtifactPair:
