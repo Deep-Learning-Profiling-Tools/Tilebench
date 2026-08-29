@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -25,7 +29,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def batch_norm_kernel(x_hbm, gamma_hbm, beta_hbm, eps):
+    def batch_norm_kernel(x_hbm, gamma_hbm, beta_hbm, eps, block_size_n):
         """Batch normalization with training-mode (batch) statistics.
 
         Mirrors ``F.batch_norm(x, None, None, gamma, beta, training=True, eps=eps)``:
@@ -60,7 +64,7 @@ if nki is not None:
         out_hbm = nl.ndarray((N, C), dtype=x_hbm.dtype, buffer=nl.shared_hbm)
 
         n_row_tiles = div_ceil(N, P_MAX)
-        n_col_tiles = div_ceil(C, MOVING_FMAX)
+        n_col_tiles = div_ceil(C, block_size_n)
 
         # ---- gamma / beta -> fp32, single partition -------------------------
         gamma_raw = nl.ndarray((1, C), dtype=gamma_hbm.dtype, buffer=nl.sbuf)
@@ -112,8 +116,8 @@ if nki is not None:
             total_sq = nl.ndarray((1, C), dtype=nl.float32, buffer=nl.sbuf)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * MOVING_FMAX
-                col_size = min(MOVING_FMAX, C - col_start)
+                col_start = col_tile * block_size_n
+                col_size = min(block_size_n, C - col_start)
                 col_end = col_start + col_size
 
                 psum_sum = nl.ndarray((1, col_size), dtype=nl.float32, buffer=nl.psum)
@@ -158,8 +162,8 @@ if nki is not None:
         shift_bcast = nl.ndarray((P_MAX, C), dtype=nl.float32, buffer=nl.sbuf)
 
         for col_tile in range(n_col_tiles):
-            col_start = col_tile * MOVING_FMAX
-            col_size = min(MOVING_FMAX, C - col_start)
+            col_start = col_tile * block_size_n
+            col_size = min(block_size_n, C - col_start)
             col_end = col_start + col_size
 
             psum_scale = nl.ndarray((P_MAX, col_size), dtype=nl.float32, buffer=nl.psum)
@@ -192,6 +196,12 @@ if nki is not None:
         return out_hbm
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size_n=MOVING_FMAX)
+_SEARCH_SPACE = [SimpleNamespace(block_size_n=b) for b in (128, 256, 512)]
+_tuner = NkiAutotuner(batch_norm_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         N: int, C: int, eps: float, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -199,8 +209,18 @@ def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
         raise NotImplementedError("batch_normalization NKI: int8 not supported")
     gamma_2d = gamma.reshape(1, -1)
     beta_2d = beta.reshape(1, -1)
-    return batch_norm_kernel(input, gamma_2d, beta_2d, float(eps))
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(input.shape), str(input.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (input, gamma_2d, beta_2d, float(eps), cfg.block_size_n),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    return batch_norm_kernel(input, gamma_2d, beta_2d, float(eps), cfg.block_size_n)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
