@@ -1,5 +1,6 @@
 import importlib
 import inspect
+import os
 
 import torch
 import yaml
@@ -9,10 +10,18 @@ from core.verifier import verify
 from data.tensors import expand_cases, get_generator, infer_problem_size
 
 
-# CUDA is required for the GPU backends (torch timing via Proton, Triton,
-# cuTile, TileLang). On non-CUDA hosts (e.g. AWS Trainium) those are skipped;
-# only the torch correctness reference + the NKI backend (timed via XLA) run.
+# CUDA is required for the GPU-only backends (Triton, cuTile, TileLang) and for
+# Proton-based torch timing. On non-CUDA hosts (e.g. AWS Trainium) those are
+# skipped; torch and NKI are instead both timed on the XLA (Neuron) device via
+# neuron-profile (see core/nki_timer.py).
 HAS_CUDA = torch.cuda.is_available()
+
+# On Neuron hosts every benchmark entry point (scripts/run_bench.py and
+# scripts/run_bench_all.py both go through this module) holds ONE logical
+# NeuronCore: the Trainium2 peak numbers in data/peak_performance are per
+# logical core. setdefault keeps an explicit user setting.
+if not HAS_CUDA:
+    os.environ.setdefault("NEURON_RT_NUM_CORES", "1")
 
 
 def _sync():
@@ -157,15 +166,42 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
-        # --- Torch (baseline) ---
-        # Proton-timed on CUDA; on non-CUDA hosts torch ran above only as the
-        # correctness reference (no GPU timer here), so torch_ms is nan.
+        # --- Torch (baseline) + NKI on non-CUDA hosts ---
+        # Proton-timed on CUDA. On non-CUDA hosts (e.g. Trainium), Proton can't
+        # observe the device; the torch baseline graph and (when selected) the
+        # NKI kernel graph are both hardware-timed with neuron-profile on the
+        # EXACT compiled NEFF, resolved with deterministic identity (private
+        # per-spec working dir + compile cache, exact autotune-winner replay in
+        # a fresh process, AwsNeuronCustomNativeKernel marker validation, and a
+        # per-spec manifest). See core/nki_orchestrator.py. Nothing here is
+        # timed by XLA wall-clock.
+        neuron_result = None
         if HAS_CUDA:
             torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
             torch_ms    = torch_stats["mean"]
         else:
-            torch_stats = None
-            torch_ms    = float("nan")
+            try:
+                from core.nki_orchestrator import profile_case_on_neuron
+
+                neuron_result = profile_case_on_neuron(
+                    operator=operator_name, params=params, dtype_str=dtype_str,
+                    inputs=inputs, ref_output=ref_output, impl_nki=impl_nki,
+                    block_size=block_size, autotune=autotune,
+                    verify_atol=verify_atol, verify_rtol=verify_rtol,
+                    warmup=warmup, repeat=repeat)
+                torch_stats = neuron_result["torch_stats"]
+                torch_ms    = neuron_result["torch_ms"]
+                if neuron_result.get("torch_err"):
+                    print(f"  Torch (Neuron) baseline FAILED: {neuron_result['torch_err']}")
+            except Exception as e:
+                print(f"  Neuron (torch+NKI) profiling FAILED: {e}")
+                neuron_result = {
+                    "torch_stats": None, "torch_ms": float("nan"),
+                    "nki_stats": None, "nki_ms": float("nan"),
+                    "nki_ok": False, "nki_err": str(e), "nki_cfg": None,
+                }
+                torch_stats = None
+                torch_ms    = float("nan")
 
         # --- Triton ---
         triton_cfg = None
@@ -262,7 +298,12 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                 tilelang_stats = None
                 print(f"  TileLang execution FAILED: {tilelang_err}")
 
-        # --- NKI (AWS Trainium; timed via XLA wall-clock, not Proton) ---
+        # --- NKI (AWS Trainium; exact-NEFF neuron-profile timing) ---
+        # The heavy lifting happened in the orchestrator call above (fresh
+        # selector + profile worker processes, exact winner replay, validated
+        # artifact identity). Here we only unpack its result. An identity
+        # failure is a benchmark failure: nki_ok=False, nki_ms=nan, detailed
+        # nki_err — never a latency from an uncertain artifact.
         nki_cfg = None
         if impl_nki is None:
             nki_ok = False
@@ -270,46 +311,23 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             nki_ms = float("nan")
             nki_stats = None
             print("  NKI skipped (not available)")
+        elif neuron_result is None:
+            # CUDA host: torch-xla/Neuron runtime is not present.
+            nki_ok = False
+            nki_err = "NKI timing requires a Neuron (non-CUDA) host"
+            nki_ms = float("nan")
+            nki_stats = None
+            print(f"  NKI skipped ({nki_err})")
         else:
-            try:
-                # Deferred import: GPU-only machines have no torch_xla installed.
-                from core.nki_timer import bench_nki, bench_xla_wallclock, to_cpu, to_xla_device
-
-                nki_kw = _run_kwargs(impl_nki.run, block_size)
-                nki_inputs = to_xla_device(inputs)
-
-                # torch-on-Neuron reference (torch_nki): on non-CUDA hosts the
-                # Proton torch timing above was skipped (torch_ms = nan), so
-                # time impl_torch on the XLA device here. This is what the
-                # --merge-csv nki mode writes into the torch_nki_ms column.
-                if not HAS_CUDA:
-                    try:
-                        torch_stats = bench_xla_wallclock(
-                            impl_torch.run, nki_inputs, warmup=warmup, repeat=repeat
-                        )
-                        torch_ms = torch_stats["mean"]
-                    except Exception as e:
-                        print(f"  torch-on-Neuron timing FAILED: {e}")
-                nki_output = impl_nki.run(*nki_inputs, **nki_kw)
-                # ref_output lives on the GPU/CPU, NKI output on the XLA device —
-                # compare on CPU.
-                nki_ok, nki_err = verify(to_cpu(nki_output), to_cpu(ref_output), atol=verify_atol, rtol=verify_rtol)
-                nki_cfg = getattr(impl_nki, "get_last_config", lambda: None)() if autotune else None
-                if nki_cfg:
-                    print(f"  NKI     autotune → {nki_cfg}")
-                if not nki_ok:
-                    print(f"  NKI verification FAILED: {nki_err}")
-                nki_stats = (
-                    bench_nki(impl_nki.run, nki_inputs, nki_kw, warmup=warmup, repeat=repeat)
-                    if nki_ok else None
-                )
-                nki_ms = nki_stats["mean"] if nki_stats is not None else float("nan")
-            except Exception as e:
-                nki_ok    = False
-                nki_err   = str(e)
-                nki_ms    = float("nan")
-                nki_stats = None
-                print(f"  NKI execution FAILED: {nki_err}")
+            nki_ok    = neuron_result["nki_ok"]
+            nki_err   = neuron_result["nki_err"]
+            nki_ms    = neuron_result["nki_ms"]
+            nki_stats = neuron_result["nki_stats"]
+            nki_cfg   = neuron_result["nki_cfg"] if autotune else None
+            if nki_cfg:
+                print(f"  NKI     autotune → {nki_cfg}")
+            if not nki_ok:
+                print(f"  NKI FAILED: {nki_err}")
 
         results.append({
             "params":                params,
