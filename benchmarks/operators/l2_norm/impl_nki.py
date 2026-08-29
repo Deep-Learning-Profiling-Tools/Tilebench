@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -58,7 +62,7 @@ if nki is not None:
             nisa.tensor_tensor(dst=dst, data1=dst, data2=correction, op=nl.multiply)
 
     @nki.jit
-    def l2_norm_kernel(a_input, eps):
+    def l2_norm_kernel(a_input, eps, free_cap, block_size):
         """Row-wise L2 normalization over the last (free) dimension.
 
         Mirrors ``x * torch.rsqrt(x.square().sum(-1, keepdim=True) + eps)``:
@@ -87,13 +91,12 @@ if nki is not None:
         """
         kernel_assert(len(a_input.shape) == 2, "input must be 2D [rows, n_cols]")
         n_rows, n_cols = a_input.shape
-        kernel_assert(min(n_cols, FALLBACK_TILE) <= nl.tile_size.sbuf_fmax,
+        kernel_assert(min(n_cols, block_size) <= nl.tile_size.sbuf_fmax,
                       "column block exceeds the SBUF free dimension")
 
         out_hbm = nl.ndarray((n_rows, n_cols), dtype=a_input.dtype, buffer=nl.shared_hbm)
         n_row_tiles = div_ceil(n_rows, PMAX)
 
-        free_cap = FP32_FREE_CAP if a_input.dtype == nl.float32 else FREE_CAP
 
         if n_cols <= free_cap:
             for row_tile in range(n_row_tiles):
@@ -123,7 +126,7 @@ if nki is not None:
 
             return out_hbm
 
-        n_col_tiles = div_ceil(n_cols, FALLBACK_TILE)
+        n_col_tiles = div_ceil(n_cols, block_size)
         for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
@@ -134,8 +137,8 @@ if nki is not None:
             nisa.memset(dst=sum_sq, value=0.0)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FALLBACK_TILE
-                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -156,8 +159,8 @@ if nki is not None:
 
             # ---- pass 2: y = x * rstd ---------------------------------------
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FALLBACK_TILE
-                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -171,6 +174,11 @@ if nki is not None:
         return out_hbm
 
 
+_SEARCH_SPACE = [SimpleNamespace(free_cap=fc, block_size=bs) for fc, bs in ((8192, 2048), (2048, 2048), (2048, 512), (256, 512), (256, 256))]
+_tuner = NkiAutotuner(l2_norm_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, eps: float = 1e-6, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("l2_norm NKI: int8 not supported")
@@ -180,9 +188,19 @@ def run(x: torch.Tensor, eps: float = 1e-6, block_size: int = 1024, autotune: bo
     if not x_2d.is_contiguous():
         x_2d = x_2d.contiguous()
 
-    out_2d = l2_norm_kernel(x_2d, float(eps))
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, float(eps), cfg.free_cap, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = SimpleNamespace(free_cap=FP32_FREE_CAP if x_2d.dtype == torch.float32 else FREE_CAP, block_size=FALLBACK_TILE)
+    out_2d = l2_norm_kernel(x_2d, float(eps), cfg.free_cap, cfg.block_size)
     return out_2d.reshape(orig_shape)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
