@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -128,6 +132,10 @@ if nki is not None:
         return output_hbm
 
 
+_tuner = NkiAutotuner(jacobi_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, rows: int, cols: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     kernel_assert(rows >= 1 and cols >= 1, "rows and cols must be >= 1")
@@ -136,8 +144,22 @@ def run(input: torch.Tensor, rows: int, cols: int, block_size: int = 1024,
 
     padded = torch.nn.functional.pad(input, (1, 1, 1, 1))
     col_block = _choose_col_block(input.element_size(), cols)
-    return jacobi_kernel(padded, rows, cols, col_block)
+    _default = SimpleNamespace(block_size_c=col_block)
+    if autotune:
+        _space = [SimpleNamespace(block_size_c=c) for c in (512, 1024, 2048, 4096) if c <= cols]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((rows, cols), str(input.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (padded, rows, cols, cfg.block_size_c),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
+    return jacobi_kernel(padded, rows, cols, cfg.block_size_c)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
