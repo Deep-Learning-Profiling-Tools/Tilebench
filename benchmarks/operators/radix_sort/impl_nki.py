@@ -73,7 +73,11 @@ this operator (its generator emits non-negative int32, where signed and unsigned
 coincide). Padding uses ``-1`` (0xFFFFFFFF), the largest unsigned key, so it always lands
 past the real data.
 """
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -424,6 +428,21 @@ def _pick_block(n: int) -> int:
     return block
 
 
+def _pass_args(keys: torch.Tensor, S: int) -> tuple:
+    """(work, n_blocks) laid out for block size ``S`` -- the tensors one radix pass consumes."""
+    N = keys.numel()
+    n_tiles = _div_ceil(N, PMAX * S)
+    n_blocks = n_tiles * PMAX
+    work_len = n_blocks * S + S     # + overhang guard for the fixed-length window writes
+    # 0xFFFFFFFF is the largest unsigned key, so padding always sorts past the real data.
+    tail = torch.full((work_len - N,), -1, dtype=torch.int32, device=keys.device)
+    return torch.cat([keys.to(torch.int32), tail]).reshape(work_len, 1), n_blocks
+
+
+_tuner = NkiAutotuner(radix_pass) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, N: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     _kernel_assert(nki is not None, "Neuron SDK is not available")
@@ -435,14 +454,19 @@ def run(input: torch.Tensor, N: int, block_size: int = 1024,
 
     device, dtype = keys.device, keys.dtype
     S = _pick_block(N)
-    n_tiles = _div_ceil(N, PMAX * S)
-    n_blocks = n_tiles * PMAX
-    n_pad = n_blocks * S
-    work_len = n_pad + S            # + overhang guard for the fixed-length window writes
-
-    # 0xFFFFFFFF is the largest unsigned key, so padding always sorts past the real data.
-    tail = torch.full((work_len - N,), -1, dtype=torch.int32, device=device)
-    work = torch.cat([keys.to(torch.int32), tail]).reshape(work_len, 1)
+    if autotune:
+        zero_shift = torch.full((PMAX, 1), 0, dtype=torch.int32, device=device)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((N,), str(keys.dtype)),
+            search_space=[SimpleNamespace(block_size=b) for b in (256, 512, 1024)
+                          if MIN_BLOCK <= b <= BLOCK],
+            args_fn=lambda cfg: (_pass_args(keys, cfg.block_size)[0], zero_shift,
+                                 cfg.block_size, _pass_args(keys, cfg.block_size)[1]),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+        S = cfg.block_size
+    work, n_blocks = _pass_args(keys, S)
 
     # One XLA graph per pass. Letting all 16 passes land in a single graph lets XLA's
     # buffer assignment reuse an HBM buffer that a later pass still reads, which
@@ -458,4 +482,4 @@ def run(input: torch.Tensor, N: int, block_size: int = 1024,
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
