@@ -105,7 +105,6 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
 
 
 def main():
-    os.environ["NEURON_RT_NUM_CORES"] = "1"
 
     parser = argparse.ArgumentParser(description="Run TileBench benchmarks")
     parser.add_argument("--operator", type=str, default="vector_add",
