@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -15,7 +19,7 @@ MAX8_MAX_ELEMS = 16384
 
 if nki is not None:
     @nki.jit
-    def moe_topk_kernel(logits):
+    def moe_topk_kernel(logits, block_size):
         """Top-2 MoE gating: per row, the 2 largest logits and their expert ids.
 
         Matches ``torch.topk(logits, k=2, dim=-1)`` followed by a softmax over the
@@ -35,7 +39,7 @@ if nki is not None:
         """
         M, E = logits.shape
 
-        num_par_blocks = (M + PMAX - 1) // PMAX
+        num_par_blocks = (M + block_size - 1) // block_size
 
         # max8/nc_find_index8 need >= 8 elements per partition. For a very narrow
         # expert dimension the tile is padded with -inf; because the padding sits
@@ -47,8 +51,8 @@ if nki is not None:
         hbm_idx = nl.ndarray((M, 2), dtype=nl.int32, buffer=nl.shared_hbm)
 
         for i in range(num_par_blocks):
-            p_start = i * PMAX
-            p_end = min(p_start + PMAX, M)
+            p_start = i * block_size
+            p_end = min(p_start + block_size, M)
             p_sz = p_end - p_start
 
             a_tile = nl.ndarray((p_sz, tile_sz), dtype=logits.dtype, buffer=nl.sbuf)
@@ -109,6 +113,12 @@ if nki is not None:
         return hbm_weights, hbm_idx
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=128)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
+_tuner = NkiAutotuner(moe_topk_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(logits: torch.Tensor, M: int, E: int, k: int, block_size: int = 1024,
         autotune: bool = False, **kwargs):
     if k != 2:
@@ -116,9 +126,19 @@ def run(logits: torch.Tensor, M: int, E: int, k: int, block_size: int = 1024,
     if E > MAX8_MAX_ELEMS:
         raise NotImplementedError(
             f"moe_topk_gating NKI: E={E} exceeds the max8 limit of {MAX8_MAX_ELEMS}")
-    weights, idx = moe_topk_kernel(logits)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(logits.shape), str(logits.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (logits, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    weights, idx = moe_topk_kernel(logits, cfg.block_size)
     return weights, idx.to(torch.int32)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
