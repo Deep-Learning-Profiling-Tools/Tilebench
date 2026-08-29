@@ -2,6 +2,7 @@ import torch
 
 from benchmarks.operators.matmul_fp32_fp16_fp8.impl_nki import (
     TILE_M, TILE_K, TILE_N, run as _matmul_run,
+    get_last_config as _matmul_get_last_config,
 )
 
 # NKI has no faithful Stream-K here -- this intentionally stays a plain-matmul
@@ -38,9 +39,9 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     if Kp > K or Np > N:
         b = torch.nn.functional.pad(b, (0, Np - N, 0, Kp - K))
 
-    out = _matmul_run(a, b)
+    out = _matmul_run(a, b, autotune=autotune)
     return out[:M, :N]
 
 
 def get_last_config() -> dict | None:
-    return None
+    return _matmul_get_last_config()
