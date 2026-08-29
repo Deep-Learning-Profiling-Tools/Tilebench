@@ -9,54 +9,18 @@ except ImportError:
     nki = None
     PMAX = 128
 
-# Per-partition SBUF spent on the input window + the output block (trn2 has 192KB).
-SBUF_BUDGET_BYTES = 100 * 1024
-
-# Output rows computed per block.  Larger amortises the window DMA over more taps
-# (the block overlap costs (kernel_size - stride) redundant rows per block) but
-# multiplies the SBUF footprint; capped so the emitted instruction count stays
-# small even for the largest sweep point.
-MAX_OH_BLOCK = 32
-
-
-def div_ceil(numerator: int, denominator: int) -> int:
-    return (numerator + denominator - 1) // denominator
-
-
-def kernel_assert(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(f"[2d_max_pooling NKI] {message}")
-
-
-def _sbuf_bytes(itemsize: int, kernel_size: int, stride: int, w_buf: int,
-                out_W: int, oh_block: int) -> int:
-    """Per-partition SBUF bytes for the input window + the output block."""
-    nh_buf = (oh_block - 1) * stride + kernel_size
-    return itemsize * (nh_buf * w_buf + oh_block * out_W)
-
-
-def _choose_oh_block(itemsize: int, kernel_size: int, stride: int, w_buf: int,
-                     out_W: int, out_H: int) -> int:
-    """Largest ``oh_block <= MAX_OH_BLOCK`` fitting the per-partition budget."""
-    oh_block = min(MAX_OH_BLOCK, max(1, out_H))
-    while oh_block > 1 and _sbuf_bytes(itemsize, kernel_size, stride, w_buf,
-                                       out_W, oh_block) > SBUF_BUDGET_BYTES:
-        oh_block //= 2
-    return oh_block
-
-
 if nki is not None:
 
     @nki.jit
     def max_pool2d_kernel(input_hbm, in_H, in_W, kernel_size, stride, padding,
-                          oh_block):
+                          itemsize):
         """2D max pooling over the trailing two axes of a flattened plane tensor.
 
         Args:
             input_hbm: (planes, in_H * in_W) -- ``planes`` is ``N * C``
             in_H, in_W: input spatial extents (compile-time constants)
             kernel_size, stride, padding: pooling parameters (compile-time constants)
-            oh_block: output rows computed per block
+            itemsize: bytes per element, for sizing the SBUF window buffer
 
         Returns:
             (planes, out_H * out_W)
@@ -67,8 +31,6 @@ if nki is not None:
         out_W = (in_W + 2 * padding - kernel_size) // stride + 1
         out_HW = out_H * out_W
 
-        # NKI kernels cannot `raise`; run() does the friendly validation, these
-        # are the in-kernel invariants.
         assert in_HW == in_H * in_W
         assert out_H >= 1 and out_W >= 1
 
@@ -76,11 +38,23 @@ if nki is not None:
         # of tap kw is the affine view [stride, out_W] at offset kw.
         w_buf = (out_W - 1) * stride + kernel_size
         n_valid_w = max(0, min(w_buf - padding, in_W))
+
+        # Largest oh_block (output rows per block) whose window + output
+        # buffers fit in the per-partition SBUF budget. sbuf_fmax_bytes only
+        # resolves inside an active trace, which is here -- not in run().
+        oh_block = max(1, out_H)
+        while oh_block > 1:
+            nh_buf = (oh_block - 1) * stride + kernel_size
+            sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+            if sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes:
+                break
+            oh_block //= 2
+
         nh_buf = (oh_block - 1) * stride + kernel_size
         win_pp = nh_buf * w_buf
 
-        n_plane_tiles = div_ceil(planes, PMAX)
-        n_row_blocks = div_ceil(out_H, oh_block)
+        n_plane_tiles = (planes + PMAX - 1) // PMAX
+        n_row_blocks = (out_H + oh_block - 1) // oh_block
 
         output_hbm = nl.ndarray((planes, out_HW), dtype=input_hbm.dtype,
                                 buffer=nl.shared_hbm)
@@ -158,22 +132,9 @@ if nki is not None:
 def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
         kernel_size: int, stride: int, padding: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    kernel_assert(stride >= 1 and kernel_size >= 1 and padding >= 0,
-                  "kernel_size/stride must be >= 1 and padding >= 0")
-    kernel_assert(2 * padding <= kernel_size,
-                  "padding must not exceed kernel_size / 2")
-    kernel_assert(H + 2 * padding >= kernel_size and W + 2 * padding >= kernel_size,
-                  "input (with padding) smaller than the pooling window")
-
-    out_H = (H + 2 * padding - kernel_size) // stride + 1
-    out_W = (W + 2 * padding - kernel_size) // stride + 1
-
-    w_buf = (out_W - 1) * stride + kernel_size
-    oh_block = _choose_oh_block(input.element_size(), kernel_size, stride, w_buf,
-                                out_W, out_H)
-
     x = input.view(N * C, H * W)
-    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding, oh_block)
+    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding,
+                               input.element_size())
     return result.reshape(-1)
 
 
