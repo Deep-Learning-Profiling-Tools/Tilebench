@@ -38,7 +38,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def softmax_online_kernel(a_input, free_cap, fallback_tile):
+    def softmax_online_kernel(a_input, free_cap, block_size):
         """Row-wise softmax over the last (free) dimension.
 
         Mirrors ``torch.softmax(x, dim=-1)`` in its numerically stable form:
@@ -70,7 +70,7 @@ if nki is not None:
         """
         kernel_assert(len(a_input.shape) == 2, "input must be 2D [rows, n_cols]")
         n_rows, n_cols = a_input.shape
-        kernel_assert(min(n_cols, fallback_tile) <= nl.tile_size.sbuf_fmax,
+        kernel_assert(min(n_cols, block_size) <= nl.tile_size.sbuf_fmax,
                       "column block exceeds the SBUF free dimension")
 
         out_hbm = nl.ndarray((n_rows, n_cols), dtype=a_input.dtype, buffer=nl.shared_hbm)
@@ -109,7 +109,7 @@ if nki is not None:
 
             return out_hbm
 
-        n_col_tiles = div_ceil(n_cols, fallback_tile)
+        n_col_tiles = div_ceil(n_cols, block_size)
         for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
@@ -120,8 +120,8 @@ if nki is not None:
             nisa.memset(dst=row_max, value=NEG_INF)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * fallback_tile
-                col_size = min(fallback_tile, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -137,8 +137,8 @@ if nki is not None:
             nisa.memset(dst=row_sum, value=0.0)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * fallback_tile
-                col_size = min(fallback_tile, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -158,8 +158,8 @@ if nki is not None:
 
             # ---- pass 3: y = exp(x - row_max) / row_sum ----------------------
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * fallback_tile
-                col_size = min(fallback_tile, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -177,7 +177,7 @@ if nki is not None:
         return out_hbm
 
 
-_SEARCH_SPACE = [SimpleNamespace(free_cap=fc, fallback_tile=ft)
+_SEARCH_SPACE = [SimpleNamespace(free_cap=fc, block_size=ft)
                  for fc, ft in ((8192, 2048), (2048, 2048), (2048, 512),
                                 (256, 512), (256, 256))]
 _tuner = NkiAutotuner(softmax_online_kernel) if nki is not None else None
@@ -189,16 +189,16 @@ def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> to
         cfg = _tuner.tune_or_cached(
             shape_key=(tuple(x.shape), str(x.dtype)),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (x, cfg.free_cap, cfg.fallback_tile),
+            args_fn=lambda cfg: (x, cfg.free_cap, cfg.block_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = SimpleNamespace(
             free_cap=FP32_FREE_CAP if x.dtype == torch.float32 else FREE_CAP,
-            fallback_tile=FALLBACK_TILE,
+            block_size=FALLBACK_TILE,
         )
-    return softmax_online_kernel(x, cfg.free_cap, cfg.fallback_tile)
+    return softmax_online_kernel(x, cfg.free_cap, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
