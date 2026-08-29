@@ -40,6 +40,21 @@ BACKENDS = ("torch", "triton", "cutile", "tilelang", "nki")
 NON_GPU_BACKENDS = ("nki",)
 
 
+def applicable_backends(peak_cfg: dict | None) -> tuple[str, ...]:
+    """Which backends' measured throughput may be compared against peak_cfg.
+
+    peak_cfg may declare "backends": [...] explicitly (e.g. Trainium2.json ->
+    ["torch", "nki"], since only those actually ran on the Trainium hardware
+    that peak_cfg describes). Peak files without this field (e.g. legacy
+    NVIDIA GPU datasheets) fall back to every backend except NON_GPU_BACKENDS,
+    preserving prior behavior.
+    """
+    declared = (peak_cfg or {}).get("backends")
+    if declared:
+        return tuple(declared)
+    return tuple(b for b in BACKENDS if b not in NON_GPU_BACKENDS)
+
+
 def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = None) -> dict[str, dict[str, float]]:
     """Return per-backend derived metrics dict."""
     params = result.get("params", {})
@@ -68,6 +83,7 @@ def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = Non
         torch_ms = None
 
     out: dict[str, dict[str, float]] = {}
+    applicable = applicable_backends(_peak)
 
     for backend in BACKENDS:
         raw_ms = result.get(f"{backend}_ms")
@@ -79,9 +95,9 @@ def compute_derived(result: dict, metrics_cfg: dict, peak_cfg: dict | None = Non
 
         d: dict[str, float] = {"latency_ms": ms}
 
-        # %-of-peak compares against the configured GPU peaks, so it is only
-        # meaningful for backends that run on that GPU.
-        gpu_peak_applies = backend not in NON_GPU_BACKENDS
+        # %-of-peak compares against the configured peak_cfg's hardware, so it
+        # is only meaningful for backends that actually ran on that hardware.
+        gpu_peak_applies = backend in applicable
 
         if bytes_transferred and bytes_transferred > 0:
             bw = bytes_transferred / (ms * 1e-3) / 1e9
