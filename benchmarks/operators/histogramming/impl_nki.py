@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -26,7 +30,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def histogram_kernel(values, num_bins):
+    def histogram_kernel(values, num_bins, block_size):
         """Count occurrences of each bin id in ``values``.
 
         Equivalent to ``torch.bincount(values, minlength=num_bins)`` for inputs whose
@@ -66,7 +70,7 @@ if nki is not None:
                       "values must be a [1, N] row")
         N = values.shape[1]
         num_bin_blocks = div_ceil(num_bins, PMAX)
-        num_chunks = div_ceil(N, CHUNK_SIZE)
+        num_chunks = div_ceil(N, block_size)
 
         hbm_result = nl.ndarray((num_bins, 1), dtype=nl.int32, buffer=nl.shared_hbm)
 
@@ -83,10 +87,10 @@ if nki is not None:
             nisa.memset(dst=count, value=0)
 
             for ci in range(num_chunks):
-                free_offset = ci * CHUNK_SIZE
+                free_offset = ci * block_size
                 # Clamp the tail chunk instead of masking: the tile is sized to the
                 # number of real elements, so no out-of-range value is ever compared.
-                sz = min(CHUNK_SIZE, N - free_offset)
+                sz = min(block_size, N - free_offset)
 
                 # Broadcasting load: partition stride 0 replicates the values row.
                 v_bcast = nl.ndarray((bin_sz, sz), dtype=nl.int32, buffer=nl.sbuf)
@@ -112,12 +116,28 @@ if nki is not None:
         return hbm_result
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=CHUNK_SIZE)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192)]
+_tuner = NkiAutotuner(histogram_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, N: int, num_bins: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     values_2d = input.reshape(1, -1).to(torch.int32)
-    hist = histogram_kernel(values_2d, num_bins)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(values_2d.shape), str(values_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (values_2d, num_bins, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    hist = histogram_kernel(values_2d, num_bins, cfg.block_size)
     return hist.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
