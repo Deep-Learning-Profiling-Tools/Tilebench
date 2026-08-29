@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -31,7 +35,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def flash_decode_kernel(mid_o_t, mid_o_lse, valid_blocks):
+    def flash_decode_kernel(mid_o_t, mid_o_lse, valid_blocks, block_size_seq):
         """Flash-decode stage-2 combine for a single (batch, head) pair.
 
         Merges the ``num_blocks`` partial attention outputs produced by stage 1
@@ -78,7 +82,7 @@ if nki is not None:
 
         out_hbm = nl.ndarray((head_dim, 1), dtype=mid_o_t.dtype, buffer=nl.shared_hbm)
 
-        n_blk_tiles = div_ceil(num_blocks, MOVING_FMAX)
+        n_blk_tiles = div_ceil(num_blocks, block_size_seq)
 
         # ---- block index row: 0, 1, ..., num_blocks - 1 (free axis) ---------
         block_iota = nl.ndarray((1, num_blocks), dtype=nl.int32, buffer=nl.sbuf)
@@ -148,8 +152,8 @@ if nki is not None:
         nisa.memset(dst=acc, value=0.0)
 
         for blk_tile in range(n_blk_tiles):
-            blk_start = blk_tile * MOVING_FMAX
-            blk_size = min(MOVING_FMAX, num_blocks - blk_start)
+            blk_start = blk_tile * block_size_seq
+            blk_size = min(block_size_seq, num_blocks - blk_start)
             blk_end = blk_start + blk_size
 
             # partition broadcast: [1, blk_size] -> [head_dim, blk_size]
@@ -178,8 +182,14 @@ if nki is not None:
         return out_hbm
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size_seq=MOVING_FMAX)
+_SEARCH_SPACE = [SimpleNamespace(block_size_seq=b) for b in (128, 256, 512)]
+_tuner = NkiAutotuner(flash_decode_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(mid_o: torch.Tensor, mid_o_lse: torch.Tensor, b_seqlen: torch.Tensor,
-        block_seq, block_size: int = None, **kwargs) -> torch.Tensor:
+        block_seq, block_size: int = None, autotune: bool = False, **kwargs) -> torch.Tensor:
     if isinstance(block_seq, torch.Tensor):
         block_seq = block_seq.item()
 
@@ -189,13 +199,23 @@ def run(mid_o: torch.Tensor, mid_o_lse: torch.Tensor, b_seqlen: torch.Tensor,
     mid_o_t = mid_o.permute(0, 1, 3, 2).contiguous()
     lse_2d = mid_o_lse.reshape(batch, heads, 1, num_blocks)
 
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(mid_o_t.shape), str(mid_o_t.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (mid_o_t[0, 0], lse_2d[0, 0], valid_blocks_count[0], cfg.block_size_seq),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
     out = torch.empty(batch, heads, head_dim, dtype=mid_o.dtype, device=mid_o.device)
     for b in range(batch):
         for h in range(heads):
-            res = flash_decode_kernel(mid_o_t[b, h], lse_2d[b, h], valid_blocks_count[b])
+            res = flash_decode_kernel(mid_o_t[b, h], lse_2d[b, h], valid_blocks_count[b], cfg.block_size_seq)
             out[b, h, :] = res.reshape(-1)
     return out
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
