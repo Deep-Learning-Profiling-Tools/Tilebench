@@ -4,7 +4,11 @@ import os
 import re
 import subprocess
 
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -177,7 +181,7 @@ if nki is not None:
                                   op1=nl.add, operand1=pv_psum)
 
     @nki.jit
-    def block_sparse_kernel(Q, K, V, mask, scale):
+    def block_sparse_kernel(Q, K, V, mask, scale, min_dynamic_iters):
         """Single (batch, head) slice of block-sparse causal attention.
 
         Args:
@@ -251,7 +255,7 @@ if nki is not None:
             # Only the very last key block can be partial; keep it off the
             # on-device loop so every dynamic iteration is identical.
             n_full = n_kj if kv_len % PMAX == 0 or n_kj < num_kv_blocks else n_kj - 1
-            n_dynamic = n_full if n_full >= MIN_DYNAMIC_ITERS else 0
+            n_dynamic = n_full if n_full >= min_dynamic_iters else 0
 
             if n_dynamic > 0:
                 k_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
@@ -301,6 +305,13 @@ def _build_dense_mask(H, M, N, layout_csr_row_indices, layout_csr_col_indices,
     return sparse_mask & causal_mask.unsqueeze(0)
 
 
+_DEFAULT_CONFIG = SimpleNamespace(min_dynamic_iters=MIN_DYNAMIC_ITERS)
+# 10**9 => the dynamic loop never fires: every kv block is unrolled at compile time.
+_SEARCH_SPACE = [SimpleNamespace(min_dynamic_iters=v) for v in (2, 3, 6, 10**9)]
+_tuner_holder: dict = {}   # lazy: wraps the LNC-indexed launcher (probes the instance)
+_last_autotune_config: dict = {}
+
+
 def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
         layout_csr_row_stride_h, layout_csr_col_stride_h,
         num_layout, softmax_scale, num_heads, num_kv_heads,
@@ -329,16 +340,30 @@ def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
     del dense_mask
     mask_padded = mask_padded.to(Q.device)
 
+    if autotune:
+        tuner = _tuner_holder.get("tuner")
+        if tuner is None:
+            tuner = _tuner_holder["tuner"] = NkiAutotuner(block_sparse_kernel[_lnc_degree()])
+        cfg = tuner.tune_or_cached(
+            shape_key=(tuple(Q.shape), tuple(K.shape), str(Q.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (Q[0, 0].contiguous(), K[0, 0].contiguous(), V[0, 0].contiguous(),
+                                 mask_padded[0], softmax_scale, cfg.min_dynamic_iters),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
     out = torch.empty(B, H, M, D, dtype=Q.dtype, device=Q.device)
     for b in range(B):
         for h in range(H):
             kv_h = h // head_groups
             res = block_sparse_kernel[_lnc_degree()](
                 Q[b, h].contiguous(), K[b, kv_h].contiguous(),
-                V[b, kv_h].contiguous(), mask_padded[h], softmax_scale)
+                V[b, kv_h].contiguous(), mask_padded[h], softmax_scale, cfg.min_dynamic_iters)
             out[b, h] = res
     return out
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
