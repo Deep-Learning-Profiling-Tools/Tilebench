@@ -3,7 +3,11 @@ import os
 import re
 import subprocess
 
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -179,6 +183,10 @@ if nki is not None:
         return result
 
 
+_tuner = NkiAutotuner(batched_matmul_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(A: torch.Tensor, B: torch.Tensor,
         BATCH: int, M: int, N: int, K: int,
         block_size: int = None, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -192,6 +200,23 @@ def run(A: torch.Tensor, B: torch.Tensor,
     tile_m = min(MAX_TILE_M, M)
     tile_k = min(MAX_TILE_K, K)
     tile_n = min(MAX_TILE_N, N)
+    _default = SimpleNamespace(block_size_m=tile_m, block_size_k=tile_k, block_size_n=tile_n)
+    if autotune:
+        _space = [SimpleNamespace(block_size_m=bm, block_size_k=bk, block_size_n=bn)
+                  for bm in (64, 128) for bk in (64, 128) for bn in (128, 256, 512)
+                  if bm <= M and bk <= K and bn <= N]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((BATCH, M, N, K), str(A.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (A3, B3, cfg.block_size_m, cfg.block_size_k, cfg.block_size_n, 1),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
+    tile_m, tile_k, tile_n = cfg.block_size_m, cfg.block_size_k, cfg.block_size_n
 
     # The SPMD grid degree and the batch-split factor are the same number: the
     # kernel derives its batch slice from nl.program_id(0), so a grid wider
@@ -210,4 +235,4 @@ def run(A: torch.Tensor, B: torch.Tensor,
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
