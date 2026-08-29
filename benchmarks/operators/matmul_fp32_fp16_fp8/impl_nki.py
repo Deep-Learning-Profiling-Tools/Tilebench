@@ -3,7 +3,11 @@ import os
 import re
 import subprocess
 
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -240,6 +244,10 @@ def _pick_tiles_in_block(dim: int, tile: int, preferred: int) -> int:
     return 1
 
 
+_tuner = NkiAutotuner(matmul_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     """NKI matmul. Output dtype matches input dtype (fp32 / fp16 / fp8)."""
@@ -265,6 +273,28 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     tib_m = _pick_tiles_in_block(M, TILE_M, 4)
     tib_n = _pick_tiles_in_block(N, TILE_N, 2)
     tib_k = _pick_tiles_in_block(K, TILE_K, 8)
+    _default = SimpleNamespace(block_size_m=TILE_M * tib_m, block_size_n=TILE_N * tib_n,
+                               block_size_k=TILE_K * tib_k)
+    if autotune:
+        _space = [SimpleNamespace(block_size_m=bm, block_size_n=bn, block_size_k=bk)
+                  for bm in (256, 512) for bn in (512, 1024) for bk in (512, 1024)
+                  if M % bm == 0 and N % bn == 0 and K % bk == 0]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((M, N, K), str(a.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (a, b, cfg.block_size_m // TILE_M, cfg.block_size_n // TILE_N,
+                                cfg.block_size_k // TILE_K, 1,
+                                a.dtype == torch.float8_e5m2 and (cfg.block_size_k // TILE_K) % 2 == 0
+                                and os.environ.get("NKI_MATMUL_DOUBLE_ROW", "1") == "1"),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
+    tib_m, tib_n, tib_k = (cfg.block_size_m // TILE_M, cfg.block_size_n // TILE_N,
+                           cfg.block_size_k // TILE_K)
 
     # The SPMD grid degree and the M-split factor are the same number: the
     # kernel derives its M blocks from nl.program_id(0), so a grid wider than
@@ -291,4 +321,4 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
