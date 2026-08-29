@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -20,7 +24,7 @@ def div_ceil(n: int, d: int) -> int:
 
 
 @nki.jit
-def dequantize_rowwise_kernel(x_input, state_x_input):
+def dequantize_rowwise_kernel(x_input, state_x_input, block_size):
     """Row-wise dequantization: ``out[r, c] = x[r, c] * state_x[r] / 127`` in fp16.
 
     Args:
@@ -49,7 +53,7 @@ def dequantize_rowwise_kernel(x_input, state_x_input):
     rows, cols = x_input.shape
     kernel_assert(state_x_input.shape[0] >= rows, "state_x has fewer rows than x")
 
-    free_tile_size = 8192
+    free_tile_size = block_size
 
     num_blocks = div_ceil(rows, PMAX)
     num_free_blocks = div_ceil(cols, free_tile_size)
@@ -88,6 +92,12 @@ def dequantize_rowwise_kernel(x_input, state_x_input):
     return hbm_result_tile
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=8192)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
+_tuner = NkiAutotuner(dequantize_rowwise_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, state_x: torch.Tensor, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     rows = x.shape[0]
@@ -95,8 +105,18 @@ def run(x: torch.Tensor, state_x: torch.Tensor, block_size: int = 1024,
     padded_rows = div_ceil(rows, PMAX) * PMAX
     if padded_rows > rows:
         state_x_2d = torch.nn.functional.pad(state_x_2d, (0, 0, 0, padded_rows - rows))
-    return dequantize_rowwise_kernel(x, state_x_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x.shape), str(x.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x, state_x_2d, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    return dequantize_rowwise_kernel(x, state_x_2d, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
