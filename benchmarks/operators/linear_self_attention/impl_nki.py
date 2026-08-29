@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -83,7 +87,7 @@ if nki is not None:
         return result
 
     @nki.jit
-    def stageA_kernel(phi_K, V_aug):
+    def stageA_kernel(phi_K, V_aug, block_size_m, block_size_d):
         """``S_aug = phi_K.T @ V_aug`` -- [D, D+1] linear-attention state.
 
         Args:
@@ -104,20 +108,20 @@ if nki is not None:
         kernel_assert(M == M_v, "phi_K and V_aug must have the same number of rows")
         kernel_assert(Dp1 <= nl.tile_size.psum_fmax, "D+1 exceeds the PSUM free dimension")
 
-        num_m_tiles = div_ceil(M, TILE)
-        num_d_tiles = div_ceil(D, TILE)
+        num_m_tiles = div_ceil(M, block_size_m)
+        num_d_tiles = div_ceil(D, block_size_d)
 
         S_aug = nl.ndarray((D, Dp1), dtype=nl.float32, buffer=nl.shared_hbm)
 
         for d_tile in range(num_d_tiles):
-            d_start = d_tile * TILE
-            d_size = min(TILE, D - d_start)
+            d_start = d_tile * block_size_d
+            d_size = min(block_size_d, D - d_start)
 
             psum = nl.ndarray((d_size, Dp1), dtype=nl.float32, buffer=nl.psum)
 
             for m_tile in range(num_m_tiles):
-                m_start = m_tile * TILE
-                m_size = min(TILE, M - m_start)
+                m_start = m_tile * block_size_m
+                m_size = min(block_size_m, M - m_start)
 
                 # Both operands are clamped to the valid extent on the partition (M)
                 # and free (D / D+1) axes, so there is no garbage to mask out.
@@ -146,7 +150,7 @@ if nki is not None:
         return S_aug
 
     @nki.jit
-    def stageB_kernel(phi_Q, S_aug, eps):
+    def stageB_kernel(phi_Q, S_aug, eps, block_size_m, block_size_d):
         """``out = (phi_Q @ S_aug)[:, :D] / ((phi_Q @ S_aug)[:, D] + eps)``.
 
         Args:
@@ -171,20 +175,20 @@ if nki is not None:
         kernel_assert(Dp1 == D + 1, "S_aug must have D+1 columns")
         kernel_assert(Dp1 <= nl.tile_size.psum_fmax, "D+1 exceeds the PSUM free dimension")
 
-        num_m_tiles = div_ceil(M, TILE)
-        num_d_tiles = div_ceil(D, TILE)
+        num_m_tiles = div_ceil(M, block_size_m)
+        num_d_tiles = div_ceil(D, block_size_d)
 
         out = nl.ndarray((M, D), dtype=nl.float32, buffer=nl.shared_hbm)
 
         for m_tile in range(num_m_tiles):
-            m_start = m_tile * TILE
-            m_size = min(TILE, M - m_start)
+            m_start = m_tile * block_size_m
+            m_size = min(block_size_m, M - m_start)
 
             psum = nl.ndarray((m_size, Dp1), dtype=nl.float32, buffer=nl.psum)
 
             for d_tile in range(num_d_tiles):
-                d_start = d_tile * TILE
-                d_size = min(TILE, D - d_start)
+                d_start = d_tile * block_size_d
+                d_size = min(block_size_d, D - d_start)
 
                 q_tile = nl.ndarray((m_size, d_size), dtype=nl.float32, buffer=nl.sbuf)
                 nisa.dma_copy(dst=q_tile,
@@ -224,6 +228,13 @@ if nki is not None:
         return out
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size_m=128, block_size_d=128)
+_SEARCH_SPACE = [SimpleNamespace(block_size_m=m, block_size_d=d) for m in (64, 128) for d in (64, 128)]
+_tuner_a = NkiAutotuner(stageA_kernel) if nki is not None else None
+_tuner_b = NkiAutotuner(stageB_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     M, D = Q.shape
@@ -233,10 +244,25 @@ def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6,
     phi_Q = phi_kernel(Q)
     phi_K = phi_kernel(K)
 
-    S_aug = stageA_kernel(phi_K, V_aug)
-    out = stageB_kernel(phi_Q, S_aug, float(eps))
+    if autotune:
+        cfg_a = _tuner_a.tune_or_cached(
+            shape_key=((M, D), str(Q.dtype)), search_space=_SEARCH_SPACE,
+            args_fn=lambda c: (phi_K, V_aug, c.block_size_m, c.block_size_d))
+    else:
+        cfg_a = _DEFAULT_CONFIG
+    S_aug = stageA_kernel(phi_K, V_aug, cfg_a.block_size_m, cfg_a.block_size_d)
+    if autotune:
+        cfg_b = _tuner_b.tune_or_cached(
+            shape_key=((M, D), str(Q.dtype)), search_space=_SEARCH_SPACE,
+            args_fn=lambda c: (phi_Q, S_aug, float(eps), c.block_size_m, c.block_size_d))
+        _last_autotune_config.clear()
+        _last_autotune_config.update({f"stageA_{k}": v for k, v in vars(cfg_a).items()})
+        _last_autotune_config.update({f"stageB_{k}": v for k, v in vars(cfg_b).items()})
+    else:
+        cfg_b = _DEFAULT_CONFIG
+    out = stageB_kernel(phi_Q, S_aug, float(eps), cfg_b.block_size_m, cfg_b.block_size_d)
     return out
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
