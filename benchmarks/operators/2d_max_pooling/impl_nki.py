@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import torch
 
 try:
@@ -10,10 +12,11 @@ except ImportError:
     PMAX = 128
 
 if nki is not None:
+    from core.nki_autotune import NkiAutotuner
 
     @nki.jit
     def max_pool2d_kernel(input_hbm, in_H, in_W, kernel_size, stride, padding,
-                          itemsize):
+                          itemsize, oh_block):
         """2D max pooling over the trailing two axes of a flattened plane tensor.
 
         Args:
@@ -21,6 +24,9 @@ if nki is not None:
             in_H, in_W: input spatial extents (compile-time constants)
             kernel_size, stride, padding: pooling parameters (compile-time constants)
             itemsize: bytes per element, for sizing the SBUF window buffer
+            oh_block: output rows per block; 0 picks the largest block that fits
+                the per-partition SBUF budget, a nonzero value (autotune
+                candidate) is used as-is once validated against that budget
 
         Returns:
             (planes, out_H * out_W)
@@ -39,18 +45,24 @@ if nki is not None:
         w_buf = (out_W - 1) * stride + kernel_size
         n_valid_w = max(0, min(w_buf - padding, in_W))
 
-        # Largest oh_block (output rows per block) whose window + output
-        # buffers fit in the per-partition SBUF budget. sbuf_fmax_bytes only
-        # resolves inside an active trace, which is here -- not in run().
-        oh_block = max(1, out_H)
-        while oh_block > 1:
-            nh_buf = (oh_block - 1) * stride + kernel_size
-            sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
-            if sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes:
-                break
-            oh_block //= 2
+        # oh_block == 0: largest block (output rows per block) whose window +
+        # output buffers fit the per-partition SBUF budget. sbuf_fmax_bytes
+        # only resolves inside an active trace, which is here -- not in
+        # run(). A nonzero oh_block (autotune candidate) is validated against
+        # the same budget below instead of trusted blindly, so a candidate
+        # that doesn't fit raises here and NkiAutotuner just skips it.
+        if oh_block == 0:
+            oh_block = max(1, out_H)
+            while oh_block > 1:
+                nh_buf = (oh_block - 1) * stride + kernel_size
+                sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+                if sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes:
+                    break
+                oh_block //= 2
 
         nh_buf = (oh_block - 1) * stride + kernel_size
+        sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+        assert sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes
         win_pp = nh_buf * w_buf
 
         n_plane_tiles = (planes + PMAX - 1) // PMAX
@@ -129,14 +141,37 @@ if nki is not None:
         return output_hbm
 
 
+_tuner = NkiAutotuner(max_pool2d_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
         kernel_size: int, stride: int, padding: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     x = input.view(N * C, H * W)
+    itemsize = input.element_size()
+
+    if autotune:
+        out_H = (H + 2 * padding - kernel_size) // stride + 1
+        search_space = [SimpleNamespace(oh_block=o)
+                        for o in (8, 16, 32, 64) if o <= out_H]
+        search_space.append(SimpleNamespace(oh_block=0))  # SBUF-fit fallback
+        cfg = _tuner.tune_or_cached(
+            shape_key=((N, C, H, W), kernel_size, stride, padding, str(input.dtype)),
+            search_space=search_space,
+            args_fn=lambda cfg: (x, H, W, kernel_size, stride, padding,
+                                 itemsize, cfg.oh_block),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+        oh_block = cfg.oh_block
+    else:
+        oh_block = 0
+
     result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding,
-                               input.element_size())
+                               itemsize, oh_block)
     return result.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) if _last_autotune_config else None
