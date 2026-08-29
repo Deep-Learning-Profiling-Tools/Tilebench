@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -101,21 +105,21 @@ def _next_pow2(n: int) -> int:
     return p
 
 
-def _plan(M: int, j: int):
+def _plan(M: int, j: int, span_cap: int = SPAN_CAP):
     """Tile geometry for one compare-exchange stage of an M-element buffer.
 
     Returns ``("local", span, P, n_blocks)`` or
     ``("stride", W, P, part_stride, n_outer, outer_stride, n_inner, inner_stride)``.
     M, j and SPAN_CAP are all powers of two, so every division below is exact.
     """
-    if 2 * j <= SPAN_CAP:
+    if 2 * j <= span_cap:
         # Per-partition span: at least one whole pair-group, at most the cap,
         # and no more than an even 128-way split of the buffer.
-        span = min(SPAN_CAP, max(2 * j, M // PMAX))
+        span = min(span_cap, max(2 * j, M // PMAX))
         P = min(PMAX, M // span)
         return ("local", span, P, M // (P * span))
 
-    W = SPAN_CAP
+    W = span_cap
     p_across_runs = min(PMAX, M // (2 * j))   # partition stride = 2j
     p_within_run = min(PMAX, j // W)          # partition stride = W
     if p_across_runs >= p_within_run:
@@ -125,7 +129,7 @@ def _plan(M: int, j: int):
     return ("stride", W, P, W, M // (2 * j), 2 * j, j // (W * P), P * W)
 
 
-def _bitonic_sort_1d(data: torch.Tensor) -> torch.Tensor:
+def _bitonic_sort_1d(data: torch.Tensor, span_cap: int = SPAN_CAP) -> torch.Tensor:
     N = data.numel()
     if N <= 1:
         return data.clone()
@@ -149,7 +153,7 @@ def _bitonic_sort_1d(data: torch.Tensor) -> torch.Tensor:
         j = k // 2
         log2k = k.bit_length() - 1
         while j > 0:
-            plan = _plan(M, j)
+            plan = _plan(M, j, span_cap)
             if plan[0] == "local":
                 _, span, P, n_blocks = plan
                 dst = bitonic_local_kernel(src, dst, k, log2k, j, span, P, n_blocks)
@@ -164,10 +168,35 @@ def _bitonic_sort_1d(data: torch.Tensor) -> torch.Tensor:
     return src[:N, 0].to(data.dtype)
 
 
+def _first_stage_args(data: torch.Tensor, span_cap: int) -> tuple:
+    """Arguments of the first (k=2, j=1) local stage -- the autotune timing proxy."""
+    N = data.numel()
+    M = max(_next_pow2(N), PMAX)
+    work_a = torch.full((M, 1), 1e30, dtype=torch.float32, device=data.device)
+    work_a[:N, 0] = data.float()
+    work_b = torch.empty_like(work_a)
+    _, span, P, n_blocks = _plan(M, 1, span_cap)
+    return (work_a, work_b, 2, 1, 1, span, P, n_blocks)
+
+
+_DEFAULT_CONFIG = SimpleNamespace(block_size=SPAN_CAP)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192)]
+_tuner = NkiAutotuner(bitonic_local_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(data: torch.Tensor, N: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    return _bitonic_sort_1d(data)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=((N,), str(data.dtype)), search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: _first_stage_args(data, cfg.block_size))
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    return _bitonic_sort_1d(data, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
