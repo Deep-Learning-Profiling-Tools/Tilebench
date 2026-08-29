@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -20,10 +24,10 @@ def div_ceil(numerator: int, denominator: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def reverse_kernel(a_input):
+    def reverse_kernel(a_input, block_size):
         total_rows, total_cols = a_input.shape
 
-        free_tile_size = min(FREE_TILE_SIZE, total_cols)
+        free_tile_size = min(block_size, total_cols)
         num_blocks = div_ceil(total_rows, PMAX)
         num_free_blocks = div_ceil(total_cols, free_tile_size)
 
@@ -67,6 +71,12 @@ if nki is not None:
         return hbm_result_tile
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=16384)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
+_tuner = NkiAutotuner(reverse_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     free_dim = div_ceil(n, PMAX)
     padded_size = PMAX * free_dim
@@ -75,7 +85,17 @@ def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwarg
         x = torch.nn.functional.pad(x, (0, padded_size - n))
 
     x_2d = x.reshape(PMAX, free_dim)
-    result = reverse_kernel(x_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = reverse_kernel(x_2d, cfg.block_size)
 
     pad_count = padded_size - n
 
@@ -83,4 +103,4 @@ def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwarg
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
