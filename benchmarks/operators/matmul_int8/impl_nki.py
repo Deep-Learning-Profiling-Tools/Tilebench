@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -145,6 +149,10 @@ def _largest_divisor(dim: int, candidates) -> int | None:
     return None
 
 
+_tuner = NkiAutotuner(matmul_int8_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     """A (M, K) int8 @ unpack(B (K/4, N) uint8) -> (M, N) int32."""
@@ -172,9 +180,25 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         )
 
     tiles_in_block_m //= TILE_M
-
-    return matmul_int8_kernel(a, b, tiles_in_block_m, block_kb, tile_n)
+    _default = SimpleNamespace(block_size_m=TILE_M * tiles_in_block_m, block_size_k=4 * block_kb,
+                               block_size_n=tile_n)
+    if autotune:
+        _space = [SimpleNamespace(block_size_m=bm, block_size_k=bk, block_size_n=bn)
+                  for bm in (128, 256, 512) for bk in (512, 1024, 2048) for bn in (128, 256, 512)
+                  if M % bm == 0 and K_b % (bk // 4) == 0 and N % bn == 0]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((M, N, K), str(a.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (a, b, cfg.block_size_m // TILE_M, cfg.block_size_k // 4, cfg.block_size_n),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
+    return matmul_int8_kernel(a, b, cfg.block_size_m // TILE_M, cfg.block_size_k // 4, cfg.block_size_n)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
