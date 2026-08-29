@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -155,6 +159,10 @@ if nki is not None:
         return output_hbm
 
 
+_tuner = NkiAutotuner(max_pool2d_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
         kernel_size: int, stride: int, padding: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -173,9 +181,23 @@ def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
                                 out_W, out_H)
 
     x = input.view(N * C, H * W)
-    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding, oh_block)
+    _default = SimpleNamespace(block_size_r=oh_block)
+    if autotune:
+        _space = [SimpleNamespace(block_size_r=o) for o in (8, 16, 32, 64) if o <= out_H]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=((N, C, H, W), kernel_size, stride, padding, str(input.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (x, H, W, kernel_size, stride, padding, cfg.block_size_r),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
+    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding, cfg.block_size_r)
     return result.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
