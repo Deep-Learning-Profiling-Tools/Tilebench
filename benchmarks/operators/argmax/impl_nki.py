@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -37,7 +41,7 @@ def _free_chunks(free_dim: int, max_chunk: int = MAX8_MAX_ELEMS):
 
 
 @nki.jit
-def argmax_kernel(a_input):
+def argmax_kernel(a_input, block_size_n):
     """Row-wise argmax of a 2D tensor: ``out[p] = argmax(a_input[p, :])``.
 
     Matches ``torch.argmax(x, dim=1)`` semantics, including tie-breaking on the
@@ -61,7 +65,7 @@ def argmax_kernel(a_input):
     P, F = a_input.shape
 
     num_par_blocks = (P + PMAX - 1) // PMAX
-    chunks = _free_chunks(F)
+    chunks = _free_chunks(F, block_size_n)
 
     hbm_result_tile = nl.ndarray((P, 1), dtype=nl.int32, buffer=nl.shared_hbm)
 
@@ -140,6 +144,12 @@ def argmax_kernel(a_input):
     return hbm_result_tile
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size_n=MAX8_MAX_ELEMS)
+_SEARCH_SPACE = [SimpleNamespace(block_size_n=b) for b in (4096, 8192, 16384)]
+_tuner = NkiAutotuner(argmax_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("argmax NKI: int8 not supported")
@@ -148,8 +158,18 @@ def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = 
     if dim != 1:
         raise NotImplementedError("argmax NKI: only dim=1 (row-wise) is supported")
 
-    result = argmax_kernel(x)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x.shape), str(x.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x, cfg.block_size_n),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = argmax_kernel(x, cfg.block_size_n)
     return result.reshape(-1).to(torch.int64)
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
