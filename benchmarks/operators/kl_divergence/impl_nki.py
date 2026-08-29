@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -52,7 +56,7 @@ if nki is not None:
         nisa.tensor_reduce(dst=part_sum, op=nl.add, data=term, axis=(1,))
 
     @nki.jit
-    def kl_divergence_kernel(log_y_pred_input, y_true_input):
+    def kl_divergence_kernel(log_y_pred_input, y_true_input, free_cap, block_size):
         """Row-wise KL divergence ``sum_j q[j] * (log(q[j]) - log_p[j])``.
 
         Mirrors ``(y_true * (torch.log(y_true) - log_y_pred)).sum(dim=-1)``.
@@ -79,13 +83,13 @@ if nki is not None:
                       "log_y_pred and y_true must have the same shape")
 
         n_rows, n_cols = log_y_pred_input.shape
-        kernel_assert(min(n_cols, FALLBACK_TILE) <= nl.tile_size.sbuf_fmax,
+        kernel_assert(min(n_cols, block_size) <= nl.tile_size.sbuf_fmax,
                       "column block exceeds the SBUF free dimension")
 
         out_hbm = nl.ndarray((n_rows, 1), dtype=nl.float32, buffer=nl.shared_hbm)
         n_row_tiles = div_ceil(n_rows, PMAX)
 
-        if n_cols <= FREE_CAP:
+        if n_cols <= free_cap:
             for row_tile in range(n_row_tiles):
                 row_start = row_tile * PMAX
                 row_size = min(PMAX, n_rows - row_start)
@@ -107,7 +111,7 @@ if nki is not None:
 
             return out_hbm
 
-        n_col_tiles = div_ceil(n_cols, FALLBACK_TILE)
+        n_col_tiles = div_ceil(n_cols, block_size)
         for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
             row_size = min(PMAX, n_rows - row_start)
@@ -117,8 +121,8 @@ if nki is not None:
             nisa.memset(dst=kl_sum, value=0.0)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FALLBACK_TILE
-                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 log_p_tile = nl.ndarray((row_size, col_size), dtype=log_y_pred_input.dtype,
@@ -140,6 +144,12 @@ if nki is not None:
         return out_hbm
 
 
+_DEFAULT_CONFIG = SimpleNamespace(free_cap=FREE_CAP, block_size=FALLBACK_TILE)
+_SEARCH_SPACE = [SimpleNamespace(free_cap=fc, block_size=bs) for fc, bs in ((8192, 2048), (2048, 2048), (2048, 512), (256, 512), (256, 256))]
+_tuner = NkiAutotuner(kl_divergence_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(log_y_pred: torch.Tensor, y_true: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if log_y_pred.dtype == torch.int8 or y_true.dtype == torch.int8:
         raise NotImplementedError("kl_divergence NKI: int8 not supported")
@@ -153,9 +163,19 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor, block_size: int = 1024, 
     if not q_2d.is_contiguous():
         q_2d = q_2d.contiguous()
 
-    result = kl_divergence_kernel(log_p_2d, q_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(log_p_2d.shape), str(log_p_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (log_p_2d, q_2d, cfg.free_cap, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = kl_divergence_kernel(log_p_2d, q_2d, cfg.free_cap, cfg.block_size)
     return result.reshape(orig_rows_shape)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
