@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -9,7 +13,7 @@ except ImportError:
     nki = None
 
 @nki.jit
-def interleave_kernel(a_input, b_input):
+def interleave_kernel(a_input, b_input, block_size):
     """Interleave two [P, F] tensors into a [P, 2*F] tensor.
 
     Output layout: out[p, 2*c] = a[p, c], out[p, 2*c + 1] = b[p, c].
@@ -27,7 +31,7 @@ def interleave_kernel(a_input, b_input):
     # Per free block SBUF footprint is (a_tile + b_tile + out_tile) =
     # 4 * free_tile_size elements per partition, so keep this well under the
     # per-partition SBUF budget for fp32.
-    free_tile_size = 4096
+    free_tile_size = block_size
     num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
     hbm_result_tile = nl.ndarray((P, 2 * F), dtype=a_input.dtype, buffer=nl.shared_hbm)
@@ -59,6 +63,12 @@ def interleave_kernel(a_input, b_input):
 
     return hbm_result_tile
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=4096)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (1024, 2048, 4096, 8192)]
+_tuner = NkiAutotuner(interleave_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(a: torch.Tensor, b: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     free_dim = (n + (PMAX - 1)) // PMAX
     padded_size = PMAX * free_dim
@@ -69,8 +79,18 @@ def run(a: torch.Tensor, b: torch.Tensor, n: int, block_size: int = 1024, autotu
 
     a_2d = a.reshape(PMAX, free_dim)
     b_2d = b.reshape(PMAX, free_dim)
-    result = interleave_kernel(a_2d, b_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(a_2d.shape), str(a_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (a_2d, b_2d, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = interleave_kernel(a_2d, b_2d, cfg.block_size)
     return result.reshape(-1)[:2 * n]
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
