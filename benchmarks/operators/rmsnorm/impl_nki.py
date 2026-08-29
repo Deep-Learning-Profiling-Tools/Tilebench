@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -80,7 +84,7 @@ if nki is not None:
                              src=psum_weight)
 
     @nki.jit
-    def rmsnorm_kernel(a_input, weight_input, eps):
+    def rmsnorm_kernel(a_input, weight_input, eps, free_cap, block_size):
         """Row-wise RMS normalization over the last (free) dimension.
 
         Mirrors ``F.rms_norm(x, (n_cols,), weight, eps)``:
@@ -117,7 +121,7 @@ if nki is not None:
         kernel_assert(len(weight_input.shape) == 2 and weight_input.shape[0] == 1
                       and weight_input.shape[1] == n_cols,
                       "weight must be [1, n_cols]")
-        kernel_assert(min(n_cols, FALLBACK_TILE) <= nl.tile_size.sbuf_fmax,
+        kernel_assert(min(n_cols, block_size) <= nl.tile_size.sbuf_fmax,
                       "column block exceeds the SBUF free dimension")
 
         out_hbm = nl.ndarray((n_rows, n_cols), dtype=a_input.dtype, buffer=nl.shared_hbm)
@@ -136,7 +140,6 @@ if nki is not None:
         # mean(x^2) == sum(x^2) * (1 / n_cols); ``n_cols`` is a compile-time int.
         inv_n_cols = 1.0 / float(n_cols)
 
-        free_cap = FP32_FREE_CAP if a_input.dtype == nl.float32 else FREE_CAP
 
         if n_cols <= free_cap:
             # The whole row fits in SBUF, so the broadcast weight row is hoisted
@@ -179,10 +182,10 @@ if nki is not None:
 
             return out_hbm
 
-        n_col_tiles = div_ceil(n_cols, FALLBACK_TILE)
+        n_col_tiles = div_ceil(n_cols, block_size)
         # A full [128, n_cols] fp32 broadcast would not fit in SBUF on this path,
         # so the weight block is broadcast inside the second pass instead.
-        weight_bcast = nl.ndarray((PMAX, FALLBACK_TILE), dtype=nl.float32, buffer=nl.sbuf)
+        weight_bcast = nl.ndarray((PMAX, block_size), dtype=nl.float32, buffer=nl.sbuf)
 
         for row_tile in range(n_row_tiles):
             row_start = row_tile * PMAX
@@ -194,8 +197,8 @@ if nki is not None:
             nisa.memset(dst=mean_sq, value=0.0)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FALLBACK_TILE
-                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -218,8 +221,8 @@ if nki is not None:
 
             # ---- pass 2: y = x * rstd * weight ------------------------------
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FALLBACK_TILE
-                col_size = min(FALLBACK_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 _broadcast_weight(weight_bcast, weight_row, ones_row, col_start, col_size)
@@ -241,6 +244,11 @@ if nki is not None:
         return out_hbm
 
 
+_SEARCH_SPACE = [SimpleNamespace(free_cap=fc, block_size=bs) for fc, bs in ((8192, 2048), (2048, 2048), (2048, 512), (256, 512), (256, 256))]
+_tuner = NkiAutotuner(rmsnorm_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("rmsnorm NKI: int8 not supported")
@@ -251,9 +259,19 @@ def run(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6, block_size: in
         x_2d = x_2d.contiguous()
 
     weight_2d = weight.reshape(1, -1)
-    out_2d = rmsnorm_kernel(x_2d, weight_2d, float(eps))
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, weight_2d, float(eps), cfg.free_cap, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = SimpleNamespace(free_cap=FP32_FREE_CAP if x_2d.dtype == torch.float32 else FREE_CAP, block_size=FALLBACK_TILE)
+    out_2d = rmsnorm_kernel(x_2d, weight_2d, float(eps), cfg.free_cap, cfg.block_size)
     return out_2d.reshape(orig_shape)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
