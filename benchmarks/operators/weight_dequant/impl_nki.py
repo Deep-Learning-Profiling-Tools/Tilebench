@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -21,7 +25,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def weight_dequant_kernel(X, S, TILE_SIZE):
+    def weight_dequant_kernel(X, S, TILE_SIZE, block_size):
         """Block-wise weight dequantization: ``out[m, n] = X[m, n] * S[m // T, n // T]``.
 
         ``S`` holds one scale per ``TILE_SIZE x TILE_SIZE`` block of ``X``.
@@ -77,9 +81,9 @@ if nki is not None:
             s_row_f32 = nl.ndarray((PMAX, s_cols), dtype=nl.float32, buffer=nl.sbuf)
             nisa.tensor_copy(dst=s_row_f32, src=s_row_bcast)
 
-            for rt in range(div_ceil(band_size, PMAX)):
-                row_start = band_start + rt * PMAX
-                row_size = min(PMAX, M - row_start)
+            for rt in range(div_ceil(band_size, block_size)):
+                row_start = band_start + rt * block_size
+                row_size = min(block_size, M - row_start)
 
                 for sc in range(s_cols):
                     col_start = sc * TILE_SIZE
@@ -107,14 +111,30 @@ if nki is not None:
         return hbm_result
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=128)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
+_tuner = NkiAutotuner(weight_dequant_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if TILE_SIZE % PMAX != 0:
         raise NotImplementedError(
             f"weight_dequant NKI: TILE_SIZE ({TILE_SIZE}) must be a multiple of {PMAX}"
         )
-    return weight_dequant_kernel(X, S, TILE_SIZE)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(X.shape), str(X.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (X, S, TILE_SIZE, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    return weight_dequant_kernel(X, S, TILE_SIZE, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
