@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -28,7 +32,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def layernorm_kernel(a_input, weight_input, bias_input, eps):
+    def layernorm_kernel(a_input, weight_input, bias_input, eps, block_size):
         """Row-wise layer normalization over the last (free) dimension.
 
         Mirrors ``F.layer_norm(x, (n_cols,), weight, bias, eps)``:
@@ -63,7 +67,7 @@ if nki is not None:
         out_hbm = nl.ndarray((n_rows, n_cols), dtype=a_input.dtype, buffer=nl.shared_hbm)
 
         n_row_tiles = div_ceil(n_rows, P_MAX)
-        n_col_tiles = div_ceil(n_cols, FREE_TILE)
+        n_col_tiles = div_ceil(n_cols, block_size)
         n_bcast_tiles = div_ceil(n_cols, MOVING_FMAX)
 
         # ---- weight / bias -> fp32, single partition ------------------------
@@ -112,8 +116,8 @@ if nki is not None:
             nisa.memset(dst=sum_x2, value=0.0)
 
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FREE_TILE
-                col_size = min(FREE_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -178,8 +182,8 @@ if nki is not None:
 
             # ---- pass 2: y = normalized * weight + bias ---------------------
             for col_tile in range(n_col_tiles):
-                col_start = col_tile * FREE_TILE
-                col_size = min(FREE_TILE, n_cols - col_start)
+                col_start = col_tile * block_size
+                col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
@@ -203,6 +207,12 @@ if nki is not None:
         return out_hbm
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=FREE_TILE)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (512, 1024, 2048, 4096)]
+_tuner = NkiAutotuner(layernorm_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
 
@@ -216,9 +226,19 @@ def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 
 
     weight_2d = weight.reshape(1, -1)
     bias_2d = bias.reshape(1, -1)
-    out_2d = layernorm_kernel(x_2d, weight_2d, bias_2d, float(eps))
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, weight_2d, bias_2d, float(eps), cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    out_2d = layernorm_kernel(x_2d, weight_2d, bias_2d, float(eps), cfg.block_size)
     return out_2d.reshape(orig_shape)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
