@@ -1,5 +1,6 @@
 import importlib
 import inspect
+import os
 
 import torch
 import yaml
@@ -13,6 +14,13 @@ from data.tensors import expand_cases, get_generator, infer_problem_size
 # cuTile, TileLang). On non-CUDA hosts (e.g. AWS Trainium) those are skipped;
 # only the torch correctness reference + the NKI backend (timed via XLA) run.
 HAS_CUDA = torch.cuda.is_available()
+
+# On Neuron hosts every benchmark entry point (scripts/run_bench.py and
+# scripts/run_bench_all.py both go through this module) holds ONE logical
+# NeuronCore: the Trainium2 peak numbers in data/peak_performance are per
+# logical core. setdefault keeps an explicit user setting.
+if not HAS_CUDA:
+    os.environ.setdefault("NEURON_RT_NUM_CORES", "1")
 
 
 def _sync():
