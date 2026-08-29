@@ -210,3 +210,14 @@ def test_replay_record_authoritative_over_inprocess_cache():
     got = tuner.tune_or_cached(shape_key=KEY, search_space=SPACE,
                                args_fn=lambda c: ("x", c.tile))
     assert got is SPACE[3]
+
+
+def test_list_and_dict_shape_keys_are_cacheable():
+    tuner = make_tuner(times={16: 5.0, 32: 1.0, 64: 2.0, 128: 3.0, 256: 4.0})
+    for key in ([[128, 8192], "torch.float16"], {"shape": [128, 8192], "dtype": "fp16"}):
+        first = tuner.tune_or_cached(shape_key=key, search_space=SPACE,
+                                     args_fn=lambda c: ("x", c.tile))
+        n = len(tuner._timer_calls)
+        assert tuner.tune_or_cached(shape_key=key, search_space=SPACE,
+                                    args_fn=lambda c: ("x", c.tile)) is first
+        assert len(tuner._timer_calls) == n  # cache hit, no re-timing

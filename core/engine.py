@@ -183,6 +183,8 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                     warmup=warmup, repeat=repeat)
                 torch_stats = neuron_result["torch_stats"]
                 torch_ms    = neuron_result["torch_ms"]
+                if neuron_result.get("torch_err"):
+                    print(f"  Torch (Neuron) baseline FAILED: {neuron_result['torch_err']}")
             except Exception as e:
                 print(f"  Neuron (torch+NKI) profiling FAILED: {e}")
                 neuron_result = {

@@ -308,7 +308,7 @@ class NkiAutotuner:
         self.warmup = int(warmup)
         self.iters = int(iters)
         self.quiet = quiet
-        self._tuned_cache: dict[Hashable, Any] = {}
+        self._tuned_cache: dict[str, Any] = {}  # canonical shape-key JSON -> config
 
     # ------------------------------------------------------------------
     # Candidate timing backends
@@ -410,6 +410,9 @@ class NkiAutotuner:
         in-process tuned cache.
         """
         key_c = canonical_shape_key(shape_key)
+        # Cache by the canonical JSON: every shape_key form canonical_shape_key
+        # accepts (including lists/dicts, which are unhashable) must work.
+        cache_key = _canon_json(key_c)
 
         if _REPLAY is not None:
             replayed = self._replay_lookup(key_c, search_space)
@@ -417,7 +420,7 @@ class NkiAutotuner:
                 return replayed
             # non-strict replay with no record for this tuner/key: tune normally.
 
-        cached = self._tuned_cache.get(shape_key)
+        cached = self._tuned_cache.get(cache_key)
         if cached is not None:
             _record_trace(self.name, key_c, canonical_config(cached))
             return cached
@@ -449,7 +452,7 @@ class NkiAutotuner:
         # Serializability is enforced at tune time so the winner is always
         # exactly replayable in a fresh process.
         _record_trace(self.name, key_c, canonical_config(best_cfg))
-        self._tuned_cache[shape_key] = best_cfg
+        self._tuned_cache[cache_key] = best_cfg
         return best_cfg
 
     def _replay_lookup(self, key_c, search_space: Sequence):

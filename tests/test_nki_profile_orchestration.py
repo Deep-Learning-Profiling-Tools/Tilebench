@@ -55,6 +55,7 @@ class FakeRunner:
         self.calls = []
         self.selector_verify_ok = selector_verify_ok
         self.profile_error = profile_error
+        self.torch_verify_ok = True
 
     def __call__(self, cmd, *, cwd, env_overrides):
         args = {cmd[i]: cmd[i + 1] for i in range(len(cmd) - 1)
@@ -75,7 +76,8 @@ class FakeRunner:
             with open(args["--spec"]) as f:
                 spec = json.load(f)
             result = {"ok": True, "mode": "profile",
-                      "torch": {"verify_ok": True, "verify_error": None,
+                      "torch": {"verify_ok": self.torch_verify_ok,
+                                "verify_error": None if self.torch_verify_ok else "xla mismatch",
                                 "artifact": artifact_record(wd, "MODULE_T", False)},
                       "nki": ({"verify_ok": True, "verify_error": None,
                                "replay_installed": bool(spec["autotune_replay"]),
@@ -200,3 +202,43 @@ def test_tampered_reused_artifact_triggers_rebuild_not_reuse(tmp_path):
     second = orchestrate(tmp_path, runner, autotune=False)
     assert [c["mode"] for c in runner.calls] == ["profile", "profile"]  # rebuilt
     assert second["identity_source"] == "private_debug_dump"
+
+
+def test_torch_verification_failure_is_not_published_as_baseline(tmp_path):
+    runner = FakeRunner()
+    runner.torch_verify_ok = False
+    calls = []
+
+    def spy_profiler(neff_path, *, warmup, out_dir, tag):
+        calls.append(tag)
+        return fake_profiler(neff_path, warmup=warmup, out_dir=out_dir, tag=tag)
+
+    inputs = (torch.zeros(8, dtype=torch.float16), torch.zeros(8, dtype=torch.float16))
+    res = profile_case_on_neuron(
+        operator="vector_add", params={"n": 8}, dtype_str="fp16",
+        inputs=inputs, ref_output=torch.zeros(8, dtype=torch.float16),
+        impl_nki=fake_impl_nki(), block_size=1024, autotune=False,
+        verify_atol=None, verify_rtol=None, warmup=2, repeat=3,
+        base_dir=str(tmp_path / "profiles"), index_path=str(tmp_path / "index.jsonl"),
+        runner=runner, profiler=spy_profiler)
+    assert res["torch_stats"] is None and res["torch_ms"] != res["torch_ms"]  # nan
+    assert "verification failed" in res["torch_err"]
+    assert "torch" not in calls          # never timed
+    assert res["nki_ok"] and calls == ["nki"]
+
+
+def test_explicit_override_is_reported_unverified(tmp_path, monkeypatch):
+    from core.nki_artifact import NEFF_PATH_ENV
+    override_dir = tmp_path / "override"
+    art = artifact_record(str(override_dir), "MODULE_OVERRIDE", True)
+    monkeypatch.setenv(NEFF_PATH_ENV, art["neff_path"])
+    runner = FakeRunner()
+    res = orchestrate(tmp_path, runner, autotune=False)
+    with open(runner.calls[0]["args"]["--spec"]) as f:
+        assert json.load(f)["nki_enabled"] is False   # worker timed torch only
+    assert res["identity_source"] == "explicit_override"
+    assert res["nki_ok"] is False and "NOT verified" in res["nki_err"]
+    assert res["nki_ms"] != res["nki_ms"]              # nan: never a benchmark number
+    assert res["nki_stats"]["verified"] is False and res["nki_stats"]["mean"] == pytest.approx(0.09)
+    with open(res["manifest_path"]) as f:
+        assert json.load(f)["targets"]["nki"]["verify_ok"] is None

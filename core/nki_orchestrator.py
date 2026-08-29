@@ -368,7 +368,10 @@ def profile_case_on_neuron(
                        "verify_error": entry["verify_error"],
                        "stats": None}
                 art = entry.get("artifact")
-                if art:
+                # A graph whose output failed verification is never timed: an
+                # invalid torch baseline would otherwise become the speedup
+                # denominator.
+                if art and entry["verify_ok"]:
                     pair = validate_pair(art["neff_path"],
                                          require_marker=(target == "nki"),
                                          allowed_roots=[spec_dir],
@@ -449,9 +452,18 @@ def profile_case_on_neuron(
              "identity_source": identity_source, "identity_status": "validated"}
 
     torch_rec = targets.get("torch")
-    torch_stats = dict(torch_rec["stats"], **audit,
-                       neff_sha256=torch_rec.get("neff_sha256"),
-                       hlo_sha256=torch_rec.get("hlo_sha256")) if torch_rec else None
+    torch_err = ""
+    if torch_rec is None:
+        torch_stats = None
+        torch_err = "profile worker produced no torch baseline"
+    elif not torch_rec.get("verify_ok") or not torch_rec.get("stats"):
+        torch_stats = None
+        torch_err = (f"torch-on-Neuron verification failed: {torch_rec.get('verify_error')}"
+                     if torch_rec.get("verify_ok") is False else "torch baseline not timed")
+    else:
+        torch_stats = dict(torch_rec["stats"], **audit,
+                           neff_sha256=torch_rec.get("neff_sha256"),
+                           hlo_sha256=torch_rec.get("hlo_sha256"))
     torch_ms = torch_stats["mean"] if torch_stats else float("nan")
 
     nki_rec = targets.get("nki")
@@ -463,15 +475,27 @@ def profile_case_on_neuron(
     elif nki_rec.get("verify_ok") is False:
         nki_ok, nki_err, nki_stats = False, \
             f"verification failed: {nki_rec.get('verify_error')}", None
+    elif nki_rec.get("verify_ok") is None:
+        # Explicit $NKI_NEFF_PATH override: the file was validated and timed,
+        # but it was never executed against this case's inputs, so it must
+        # not be reported as a verified result. The latency stays available
+        # in nki_stats / the manifest for audit only.
+        nki_ok = False
+        nki_err = ("explicit NKI_NEFF_PATH override: latency measured but "
+                   "correctness NOT verified for this case (see manifest)")
+        nki_stats = dict(nki_rec["stats"], **audit,
+                         neff_sha256=nki_rec.get("neff_sha256"),
+                         hlo_sha256=nki_rec.get("hlo_sha256"),
+                         verified=False)
     else:
         nki_ok, nki_err = True, ""
         nki_stats = dict(nki_rec["stats"], **audit,
                          neff_sha256=nki_rec.get("neff_sha256"),
                          hlo_sha256=nki_rec.get("hlo_sha256"))
-    nki_ms = nki_stats["mean"] if nki_stats else float("nan")
+    nki_ms = nki_stats["mean"] if (nki_stats and nki_ok) else float("nan")
 
     return {
-        "torch_stats": torch_stats, "torch_ms": torch_ms,
+        "torch_stats": torch_stats, "torch_ms": torch_ms, "torch_err": torch_err,
         "nki_stats": nki_stats, "nki_ms": nki_ms,
         "nki_ok": nki_ok, "nki_err": nki_err, "nki_cfg": nki_cfg,
         "spec_id": spec_id, "manifest_path": manifest_path,
