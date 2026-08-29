@@ -3,7 +3,11 @@ import os
 import re
 import subprocess
 
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -401,6 +405,10 @@ if nki is not None:
         return output_hbm
 
 
+_tuner = NkiAutotuner(conv2d_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, weight: torch.Tensor, stride: int = 1, padding: int = 1,
         groups: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
     if groups != 1:
@@ -430,10 +438,24 @@ def run(input: torch.Tensor, weight: torch.Tensor, stride: int = 1, padding: int
     x = input.reshape(batch, in_channels, H * W)
     w = weight.reshape(out_channels, in_channels_g, kernel_size * kernel_size_w)
 
+    _default = SimpleNamespace(block_size_oh=oh_block)
+    if autotune:
+        _space = [SimpleNamespace(block_size_oh=o) for o in (2, 4, 8, 16) if o <= out_H]
+        if not any(vars(c) == vars(_default) for c in _space):
+            _space.append(_default)
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(input.shape), tuple(weight.shape), stride, padding, str(input.dtype)),
+            search_space=_space,
+            args_fn=lambda cfg: (x, w, H, W, kernel_size, kernel_size_w, stride, padding, groups, cfg.block_size_oh),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _default
     result = conv2d_kernel[_lnc_degree()](x, w, H, W, kernel_size, kernel_size_w,
-                                          stride, padding, groups, oh_block)
+                                          stride, padding, groups, cfg.block_size_oh)
     return result.reshape(batch, out_channels, out_H, out_W)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
