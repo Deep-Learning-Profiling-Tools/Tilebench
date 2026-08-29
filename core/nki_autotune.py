@@ -47,27 +47,28 @@ argument tuple for the kernel, tunables included:
 
 Candidate timing (pluggable via ``timer=``, default ``"auto"``):
 
-  1. ``"benchmark"`` — ``nki.benchmark``: re-decorates the kernel and runs
-     it baremetal on a NeuronCore with numpy inputs; the reported
-     ``nc_latency`` percentile is true on-device time (the Trainium analog
-     of what Proton gives the GPU backends). Preferred.
+  1. ``"benchmark"`` — the standalone (baremetal) path of the ``nki``
+     package (>= 0.6): the ``@nki.jit`` kernel is compiled with numpy
+     inputs and timed with ``CompiledKernel.benchmark`` (device mode),
+     whose ``latency`` is true on-device time (the Trainium analog of what
+     Proton gives the GPU backends). Preferred. NOTE: the legacy
+     ``neuronxcc.nki.benchmark`` decorator this module originally called
+     predates the standalone ``nki`` package and rejects its Kernel
+     objects (``'Kernel' object has no attribute 'grid'`` on trn2) — do
+     not reintroduce it.
   2. ``"wallclock"`` — runs the ``@nki.jit`` kernel through torch_xla with
      the original (XLA-device) tensors and takes a host wall-clock median
-     around ``mark_step``/``wait_device_ops``. Includes dispatch overhead;
-     used only when (1) is unavailable, and still fine for RANKING
-     candidates of the same kernel.
+     around ``mark_step``/``wait_device_ops``. Includes dispatch overhead
+     (~1 ms host round-trip per launch), which drowns out sub-millisecond
+     kernels — for those, its ranking is unreliable; it remains a last
+     resort (e.g. bf16 inputs, which numpy cannot represent).
   ``"auto"`` tries (1) and falls back to (2).
 
-STATUS: written against the Neuron docs ("NKI performance guide",
-``nki.benchmark`` API) but NOT yet run on Neuron hardware — this machine has
-no trn1/trn2. Spots most likely to need adjustment on real hardware are
-marked ``# VERIFY ON TRN2`` (same convention as core/nki_timer.py):
-  - whether ``nki.benchmark`` accepts an already-``@nki.jit``-decorated
-    kernel or needs the undecorated function (we try both);
-  - the exact ``benchmark_result.nc_latency`` accessor and its unit
-    (docs: microseconds);
-  - whether failed candidates raise or hang (a per-candidate timeout is
-    passed through when supported).
+STATUS: verified on a trn2.3xlarge (nki 0.6.0, neuronx-cc 2.27): the
+benchmark path executes on-device and its latency agrees with the
+neuron-profile numbers from core/nki_timer.py; the wallclock fallback was
+also exercised (it ranks millisecond-scale kernels fine, sub-millisecond
+ones poorly — see above).
 """
 from __future__ import annotations
 
@@ -75,6 +76,7 @@ import math
 import time
 from typing import Any, Callable, Hashable, Sequence
 
+import numpy as np
 import torch
 
 
@@ -125,24 +127,44 @@ class NkiAutotuner:
     # Candidate timing backends
     # ------------------------------------------------------------------
     def _time_benchmark(self, args: Sequence) -> float:
-        """On-device latency (ms) via ``nki.benchmark`` (baremetal, numpy in).
+        """On-device latency (ms) via the standalone path of ``nki`` >= 0.6.
 
-        The decorator runs the kernel ``warmup + iters`` times on a
-        NeuronCore and records per-execution device latency; we return the
-        p50 in ms.  # VERIFY ON TRN2 (accessor name + microsecond unit)
+        The kernel is compiled baremetal with numpy inputs; a custom
+        executor swaps ``CompiledKernel.execute`` for
+        ``CompiledKernel.benchmark``, which runs ``warmup + iterations``
+        times on a NeuronCore and reports mean device latency in seconds.
         """
-        import neuronxcc.nki as nki
+        import dataclasses
+        import inspect
+
+        from nki.framework.compiled import StandaloneKernel
 
         np_args = _to_numpy_args(args)
-        bench = nki.benchmark(warmup=self.warmup, iters=self.iters)
-        try:
-            timed = bench(self.kernel)
-            timed(*np_args)
-        except TypeError:
-            timed = bench(_kernel_func(self.kernel))
-            timed(*np_args)
-        lat = timed.benchmark_result.nc_latency
-        return float(lat.get_latency_percentile(50)) / 1e3  # us -> ms
+        # benchmark() takes input arrays by kernel-parameter name.
+        param_names = list(inspect.signature(_kernel_func(self.kernel)).parameters)
+        tensor_inputs = {
+            name: a for name, a in zip(param_names, np_args)
+            if isinstance(a, np.ndarray)
+        }
+
+        holder: dict = {}
+
+        def _bench_executor(compiled, exec_inputs, output_arrays,
+                            rank_id=0, world_size=1):
+            res = compiled.benchmark(
+                warmup=self.warmup, iterations=self.iters,
+                rank_id=rank_id, world_size=world_size, **tensor_inputs,
+            )
+            holder["result"] = res
+            for name, arr in res.outputs.items():
+                if name in output_arrays:
+                    np.copyto(output_arrays[name], arr)
+
+        standalone = dataclasses.replace(
+            self.kernel._to_subclass(StandaloneKernel), _executor=_bench_executor
+        )
+        standalone(*np_args)
+        return float(holder["result"].latency) * 1e3  # seconds -> ms
 
     def _time_wallclock(self, args: Sequence) -> float:
         """Host wall-clock median (ms) through torch_xla for XLA-device args."""

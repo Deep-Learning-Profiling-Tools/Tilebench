@@ -48,7 +48,7 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import NON_GPU_BACKENDS, compute_derived, load_peak_config  # noqa: E402
+from core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # constants
@@ -259,10 +259,12 @@ def _plot_roofline(
 
     any_data_in_figure = False
 
-    # The roofline ceilings are GPU peaks; non-GPU backends (e.g. NKI on
-    # Trainium) must not be plotted against them — that would be a
-    # cross-hardware comparison (see PR #102 review).
-    roofline_backends = [b for b in BACKENDS if b not in NON_GPU_BACKENDS]
+    # Only plot backends that actually ran on the hardware metrics_cfg's
+    # peak_* values describe -- otherwise this would be a cross-hardware
+    # comparison (see PR #102 review). metrics_cfg here is the peak_cfg merged
+    # over the operator's metrics config, so a peak file's declared "backends"
+    # (e.g. Trainium2.json -> ["torch", "nki"]) takes effect automatically.
+    roofline_backends = [b for b in BACKENDS if b in applicable_backends(metrics_cfg)]
 
     for ax_idx, dtype in enumerate(dtypes):
         row, col = divmod(ax_idx, ncols)
