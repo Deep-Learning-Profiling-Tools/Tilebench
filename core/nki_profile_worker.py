@@ -126,24 +126,37 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
     pre_compute_stems = _snapshot_stems(cwd)
 
     # ---- torch baseline: exactly one new non-NKI graph ----------------------
-    torch_out = impl_torch.run(*xla_inputs)
-    xm.mark_step()
-    xm.wait_device_ops()
-    if expected.get("torch"):
-        torch_pair = resolve_expected(
-            [cwd], stem=expected["torch"], expect_marker=False,
-            pre_stems=pre_compute_stems, context=dict(ctx, target="torch"))
-    else:
-        torch_pair = resolve_unique(
-            [cwd], expect_marker=False, exclude_stems=pre_compute_stems,
-            context=dict(ctx, target="torch"))
-    torch_ok, torch_err = verify(to_cpu(torch_out), bundle["reference_output"],
-                                 atol=spec["verify_atol"], rtol=spec["verify_rtol"])
-    result["torch"] = {
-        "verify_ok": bool(torch_ok),
-        "verify_error": None if torch_ok else str(torch_err),
-        "artifact": _artifact_record(torch_pair),
-    }
+    # A failure here (multi-graph torch impl on XLA, identity ambiguity, XLA
+    # numeric mismatch) is recorded as the torch baseline's own error and must
+    # NOT abort the NKI phase: the NKI result stands on its own.
+    try:
+        torch_out = impl_torch.run(*xla_inputs)
+        xm.mark_step()
+        xm.wait_device_ops()
+        if expected.get("torch"):
+            torch_pair = resolve_expected(
+                [cwd], stem=expected["torch"], expect_marker=False,
+                pre_stems=pre_compute_stems, context=dict(ctx, target="torch"))
+        else:
+            torch_pair = resolve_unique(
+                [cwd], expect_marker=False, exclude_stems=pre_compute_stems,
+                context=dict(ctx, target="torch"))
+        torch_ok, torch_err = verify(to_cpu(torch_out), bundle["reference_output"],
+                                     atol=spec["verify_atol"], rtol=spec["verify_rtol"])
+        result["torch"] = {
+            "verify_ok": bool(torch_ok),
+            "verify_error": None if torch_ok else str(torch_err),
+            "artifact": _artifact_record(torch_pair),
+        }
+    except Exception as e:  # noqa: BLE001 — reported, never silently timed
+        result["torch"] = {
+            "verify_ok": False,
+            "verify_error": f"torch baseline phase failed: {type(e).__name__}: "
+                            f"{str(e).splitlines()[0][:300]}",
+            "artifact": None,
+        }
+        xm.mark_step()
+        xm.wait_device_ops()
 
     # ---- NKI: exact winner replay, exactly one marker-bearing graph ---------
     if spec["nki_enabled"]:

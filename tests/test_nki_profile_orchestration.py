@@ -56,6 +56,7 @@ class FakeRunner:
         self.selector_verify_ok = selector_verify_ok
         self.profile_error = profile_error
         self.torch_verify_ok = True
+        self.torch_artifact = True
         self.nki_verify_ok = True
 
     def __call__(self, cmd, *, cwd, env_overrides):
@@ -79,7 +80,8 @@ class FakeRunner:
             result = {"ok": True, "mode": "profile",
                       "torch": {"verify_ok": self.torch_verify_ok,
                                 "verify_error": None if self.torch_verify_ok else "xla mismatch",
-                                "artifact": artifact_record(wd, "MODULE_T", False)},
+                                "artifact": (artifact_record(wd, "MODULE_T", False)
+                                             if self.torch_artifact else None)},
                       "nki": ({"verify_ok": self.nki_verify_ok,
                                "verify_error": None if self.nki_verify_ok else "mismatch on new inputs",
                                "replay_installed": bool(spec["autotune_replay"]),
@@ -262,3 +264,14 @@ def test_explicit_override_is_reported_unverified(tmp_path, monkeypatch):
     assert res["nki_stats"]["verified"] is False and res["nki_stats"]["mean"] == pytest.approx(0.09)
     with open(res["manifest_path"]) as f:
         assert json.load(f)["targets"]["nki"]["verify_ok"] is None
+
+
+def test_torch_phase_failure_keeps_nki_result(tmp_path):
+    """A torch-baseline failure (e.g. multi-graph torch impl on XLA) is reported
+    as torch_err while the NKI target is still profiled."""
+    runner = FakeRunner()
+    runner.torch_verify_ok = False
+    runner.torch_artifact = False
+    res = orchestrate(tmp_path, runner, autotune=False)
+    assert res["torch_ms"] != res["torch_ms"] and res["torch_err"]
+    assert res["nki_ok"] and res["nki_ms"] == pytest.approx(0.09)
