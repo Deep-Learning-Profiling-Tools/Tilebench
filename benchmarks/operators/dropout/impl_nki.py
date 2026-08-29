@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -9,13 +13,13 @@ except ImportError:
     nki = None
 
 @nki.jit
-def dropout_kernel(x_input, x_keep_input, p):
+def dropout_kernel(x_input, x_keep_input, p, block_size):
     """Dropout scaling: out = (x / (1 - p)) * x_keep, tiled over partition and free dims."""
     P, F = x_input.shape
 
     num_blocks = (P + PMAX - 1) // PMAX
 
-    free_tile_size = 16384
+    free_tile_size = block_size
     num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
     # nl.divide is not a supported tensor_scalar operator, so scale by the reciprocal.
@@ -53,6 +57,12 @@ def dropout_kernel(x_input, x_keep_input, p):
 
     return hbm_result_tile
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=16384)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
+_tuner = NkiAutotuner(dropout_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, x_keep: torch.Tensor, p: float, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("dropout NKI: int8 not supported")
@@ -67,9 +77,19 @@ def run(x: torch.Tensor, x_keep: torch.Tensor, p: float, block_size: int = 1024,
 
     x_2d = x.reshape(PMAX, free_dim)
     x_keep_2d = x_keep.reshape(PMAX, free_dim)
-    result = dropout_kernel(x_2d, x_keep_2d, p)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, x_keep_2d, p, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = dropout_kernel(x_2d, x_keep_2d, p, cfg.block_size)
 
     return result.reshape(-1)[:n]
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
