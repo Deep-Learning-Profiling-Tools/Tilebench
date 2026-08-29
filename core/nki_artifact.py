@@ -1,0 +1,268 @@
+"""Deterministic NKI/torch NEFF artifact identity (fail-loud, mtime-free).
+
+With NEURON_FRAMEWORK_DEBUG=1 the Neuron compiler dumps, into the worker's
+private CWD, one pair per compiled XLA graph:
+
+    <stem>.neff             the compiled binary neuron-explorer replays
+    <stem>.hlo_module.pb    the post-optimization HLO for that graph
+
+Identity rules (see core/nki_profile_worker.py for the process design):
+
+- artifacts are searched ONLY inside explicitly allowed private roots
+  (the current spec's working directory), never in global locations;
+- a valid pair requires both regular files, same stem, same directory,
+  no symlink escape outside the allowed roots;
+- an NKI graph is recognized by the raw marker bytes
+  ``AwsNeuronCustomNativeKernel`` inside the HLO (validation marker — it does
+  NOT distinguish two autotune candidates; that distinction comes from exact
+  winner replay in a fresh process, which guarantees only ONE NKI graph is
+  ever compiled in the private root);
+- resolution requires EXACTLY ONE matching pair: zero and multiple both raise
+  :class:`NkiArtifactIdentityError`;
+- selection NEVER consults mtime, file size, sequence numbers, or glob order.
+"""
+from __future__ import annotations
+
+import dataclasses
+import os
+from typing import Iterable, Sequence
+
+from core.nki_profile_spec import sha256_file
+
+NKI_HLO_MARKER = b"AwsNeuronCustomNativeKernel"
+HLO_SUFFIX = ".hlo_module.pb"
+NEFF_SUFFIX = ".neff"
+
+# Expert escape hatch (validated, never silent): explicit NEFF path.
+NEFF_PATH_ENV = "NKI_NEFF_PATH"
+
+
+class NkiArtifactIdentityError(RuntimeError):
+    """Artifact identity could not be established unambiguously."""
+
+    def __init__(self, message: str, *, context: dict | None = None,
+                 roots: Sequence[str] = (), candidates: Sequence[dict] = ()):
+        self.context = dict(context or {})
+        self.roots = list(roots)
+        self.candidates = list(candidates)
+        lines = [message]
+        if self.context:
+            lines.append(f"  context: {self.context}")
+        lines.append(f"  searched roots: {self.roots or '(none)'}")
+        if self.candidates:
+            lines.append("  candidates:")
+            for c in self.candidates:
+                lines.append(f"    - {c}")
+        else:
+            lines.append("  candidates: (none found)")
+        super().__init__("\n".join(lines))
+
+
+@dataclasses.dataclass(frozen=True)
+class ArtifactPair:
+    stem: str
+    neff_path: str
+    hlo_path: str
+    neff_sha256: str
+    hlo_sha256: str
+    has_marker: bool
+
+
+def _is_inside(root: str, path: str) -> bool:
+    root_r = os.path.realpath(root)
+    path_r = os.path.realpath(path)
+    return path_r == root_r or path_r.startswith(root_r + os.sep)
+
+
+def _hlo_has_marker(hlo_path: str) -> bool:
+    with open(hlo_path, "rb") as f:
+        return NKI_HLO_MARKER in f.read()
+
+
+def discover_pairs(roots: Sequence[str]) -> tuple[list[ArtifactPair], list[dict]]:
+    """Enumerate NEFF/HLO stem-pairs strictly inside ``roots``.
+
+    Returns (valid_pairs, rejections). Never orders by, or even reads, mtime.
+    """
+    pairs: list[ArtifactPair] = []
+    rejections: list[dict] = []
+    seen_neffs: set[str] = set()
+    for root in roots:
+        if not os.path.isdir(root):
+            rejections.append({"root": root, "reason": "root does not exist"})
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+            for fn in sorted(filenames):
+                if not fn.endswith(NEFF_SUFFIX):
+                    continue
+                neff = os.path.join(dirpath, fn)
+                real = os.path.realpath(neff)
+                if real in seen_neffs:
+                    continue
+                seen_neffs.add(real)
+                stem = fn[: -len(NEFF_SUFFIX)]
+                hlo = os.path.join(dirpath, stem + HLO_SUFFIX)
+                reject_reason = None
+                if not os.path.isfile(neff):
+                    reject_reason = "NEFF is not a regular file"
+                elif not _is_inside(root, neff):
+                    reject_reason = "NEFF symlink escapes the allowed root"
+                elif not os.path.isfile(hlo):
+                    reject_reason = f"missing sibling {stem + HLO_SUFFIX}"
+                elif not _is_inside(root, hlo):
+                    reject_reason = "HLO symlink escapes the allowed root"
+                if reject_reason:
+                    rejections.append({"neff": neff, "reason": reject_reason})
+                    continue
+                pairs.append(ArtifactPair(
+                    stem=stem, neff_path=neff, hlo_path=hlo,
+                    neff_sha256=sha256_file(neff), hlo_sha256=sha256_file(hlo),
+                    has_marker=_hlo_has_marker(hlo)))
+    # Also fail loudly on marker-bearing HLOs whose NEFF is missing.
+    paired_hlos = {os.path.realpath(p.hlo_path) for p in pairs}
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root, followlinks=False):
+            for fn in sorted(filenames):
+                if not fn.endswith(HLO_SUFFIX):
+                    continue
+                hlo = os.path.join(dirpath, fn)
+                if os.path.realpath(hlo) in paired_hlos:
+                    continue
+                if os.path.isfile(hlo) and _is_inside(root, hlo) and _hlo_has_marker(hlo):
+                    rejections.append({
+                        "hlo": hlo,
+                        "reason": "NKI-marker HLO without a sibling NEFF"})
+    return pairs, rejections
+
+
+def resolve_unique(roots: Sequence[str], *, expect_marker: bool,
+                   exclude_stems: Iterable[str] = (),
+                   context: dict | None = None) -> ArtifactPair:
+    """Return the EXACTLY ONE valid pair with ``has_marker == expect_marker``
+    (after excluding ``exclude_stems``); raise NkiArtifactIdentityError for
+    zero or multiple, and when a marker-bearing HLO lacks its NEFF."""
+    excluded = set(exclude_stems)
+    pairs, rejections = discover_pairs(roots)
+    orphan_markers = [r for r in rejections
+                      if r.get("reason", "").startswith("NKI-marker HLO")]
+    if expect_marker and orphan_markers:
+        raise NkiArtifactIdentityError(
+            "NKI-marker HLO present without its NEFF — dump is incomplete",
+            context=context, roots=roots,
+            candidates=[dataclasses.asdict(p) for p in pairs] + rejections)
+    matching = [p for p in pairs
+                if p.has_marker == expect_marker and p.stem not in excluded]
+    if len(matching) == 1:
+        return matching[0]
+    described = [dict(dataclasses.asdict(p),
+                      rejected_because=(
+                          "excluded pre-existing stem" if p.stem in excluded
+                          else f"marker={p.has_marker}, expected {expect_marker}"
+                          if p.has_marker != expect_marker else "MATCH"))
+                 for p in pairs] + rejections
+    kind = "NKI (marker-bearing)" if expect_marker else "non-NKI (torch)"
+    if not matching:
+        raise NkiArtifactIdentityError(
+            f"zero valid {kind} NEFF/HLO pairs found — cannot establish "
+            f"artifact identity", context=context, roots=roots, candidates=described)
+    raise NkiArtifactIdentityError(
+        f"{len(matching)} valid {kind} NEFF/HLO pairs found — artifact "
+        f"identity is ambiguous", context=context, roots=roots, candidates=described)
+
+
+def validate_pair(neff_path: str, *, require_marker: bool,
+                  allowed_roots: Sequence[str] | None = None,
+                  context: dict | None = None) -> ArtifactPair:
+    """Validate one explicit NEFF + sibling HLO (used by override and reuse)."""
+    stem_dir = os.path.dirname(os.path.abspath(neff_path))
+    fn = os.path.basename(neff_path)
+    if not fn.endswith(NEFF_SUFFIX):
+        raise NkiArtifactIdentityError(
+            f"explicit NEFF {neff_path!r} does not end in {NEFF_SUFFIX}",
+            context=context, roots=allowed_roots or [])
+    stem = fn[: -len(NEFF_SUFFIX)]
+    hlo = os.path.join(stem_dir, stem + HLO_SUFFIX)
+    problems = []
+    if not os.path.isfile(neff_path):
+        problems.append("NEFF missing or not a regular file")
+    if not os.path.isfile(hlo):
+        problems.append(f"sibling HLO missing: {hlo}")
+    if allowed_roots is not None:
+        if not any(_is_inside(r, neff_path) for r in allowed_roots):
+            problems.append("NEFF outside the allowed roots")
+        if os.path.isfile(hlo) and not any(_is_inside(r, hlo) for r in allowed_roots):
+            problems.append("HLO outside the allowed roots")
+    if problems:
+        raise NkiArtifactIdentityError(
+            "explicit NEFF validation failed: " + "; ".join(problems),
+            context=context, roots=allowed_roots or [],
+            candidates=[{"neff": neff_path, "hlo": hlo}])
+    has_marker = _hlo_has_marker(hlo)
+    if require_marker and not has_marker:
+        raise NkiArtifactIdentityError(
+            f"explicit NEFF {neff_path!r}: sibling HLO lacks the NKI marker "
+            f"{NKI_HLO_MARKER!r}", context=context, roots=allowed_roots or [],
+            candidates=[{"neff": neff_path, "hlo": hlo, "marker": False}])
+    return ArtifactPair(stem=stem, neff_path=neff_path, hlo_path=hlo,
+                        neff_sha256=sha256_file(neff_path),
+                        hlo_sha256=sha256_file(hlo), has_marker=has_marker)
+
+
+def resolve_explicit_override(context: dict | None = None) -> ArtifactPair | None:
+    """Validated $NKI_NEFF_PATH override, or None when the env var is unset."""
+    path = os.environ.get(NEFF_PATH_ENV)
+    if not path:
+        return None
+    return validate_pair(path, require_marker=True, context=context)
+
+
+def validate_manifest_reuse(manifest: dict, *, spec_id: str,
+                            allowed_roots: Sequence[str],
+                            keys=("neff", "hlo")) -> dict[str, ArtifactPair]:
+    """Re-validate a previously written manifest for exact artifact reuse.
+
+    Checks (per profiled target recorded in the manifest): spec_id match, files
+    exist, SHA256s match the manifest, NKI marker still present where claimed,
+    paths still inside the allowed roots. Returns the re-validated pairs, or
+    raises NkiArtifactIdentityError. Never searches for a replacement.
+    """
+    ctx = {"spec_id": spec_id, "manifest": manifest.get("manifest_path", "")}
+    if manifest.get("spec_id") != spec_id:
+        raise NkiArtifactIdentityError(
+            f"manifest spec_id {manifest.get('spec_id')!r} != current {spec_id!r}",
+            context=ctx, roots=allowed_roots)
+    out: dict[str, ArtifactPair] = {}
+    for target in manifest.get("targets", {}):
+        rec = manifest["targets"][target]
+        if "neff_path" not in rec:
+            raise NkiArtifactIdentityError(
+                f"manifest target {target!r} has no recorded artifact — "
+                f"nothing to reuse", context=dict(ctx, target=target),
+                roots=allowed_roots)
+        pair = validate_pair(rec["neff_path"],
+                             require_marker=bool(rec.get("hlo_nki_marker")),
+                             allowed_roots=allowed_roots,
+                             context=dict(ctx, target=target))
+        problems = []
+        if pair.neff_sha256 != rec.get("neff_sha256"):
+            problems.append(f"NEFF sha256 changed ({pair.neff_sha256} != "
+                            f"{rec.get('neff_sha256')})")
+        if pair.hlo_sha256 != rec.get("hlo_sha256"):
+            problems.append(f"HLO sha256 changed ({pair.hlo_sha256} != "
+                            f"{rec.get('hlo_sha256')})")
+        if bool(rec.get("hlo_nki_marker")) != pair.has_marker:
+            problems.append("NKI marker presence changed")
+        if problems:
+            raise NkiArtifactIdentityError(
+                f"manifest reuse validation failed for target {target!r}: "
+                + "; ".join(problems), context=dict(ctx, target=target),
+                roots=allowed_roots,
+                candidates=[dataclasses.asdict(pair)])
+        out[target] = pair
+    if not out:
+        raise NkiArtifactIdentityError(
+            "manifest has no recorded targets to reuse", context=ctx,
+            roots=allowed_roots)
+    return out
