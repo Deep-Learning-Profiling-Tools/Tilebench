@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -9,13 +13,13 @@ except ImportError:
     nki = None
 
 @nki.jit
-def sigmoid_kernel(a_input):
+def sigmoid_kernel(a_input, block_size):
     """Element-wise sigmoid: out = 1 / (1 + exp(-x)), matching torch.sigmoid."""
     P, F = a_input.shape
 
     num_blocks = (P + PMAX - 1) // PMAX
 
-    free_tile_size = 16384
+    free_tile_size = block_size
     num_free_blocks = (F + free_tile_size - 1) // free_tile_size
 
     hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype, buffer=nl.shared_hbm)
@@ -40,6 +44,12 @@ def sigmoid_kernel(a_input):
 
     return hbm_result_tile
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=16384)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
+_tuner = NkiAutotuner(sigmoid_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
     if x.dtype == torch.int8:
         raise NotImplementedError("sigmoid NKI: int8 not supported")
@@ -51,8 +61,18 @@ def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwarg
         x = torch.nn.functional.pad(x, (0, padded_size - n))
 
     x_2d = x.reshape(PMAX, free_dim)
-    result = sigmoid_kernel(x_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (x_2d, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = sigmoid_kernel(x_2d, cfg.block_size)
     return result.reshape(-1)[:n]
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
