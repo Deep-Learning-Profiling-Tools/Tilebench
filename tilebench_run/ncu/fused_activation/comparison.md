@@ -13,12 +13,12 @@
 
 | dtype | Backend | Duration | Mem Tput % | DRAM % | L1 % | L2 % | Compute % | Mem BW | Block Sz | Regs | Static Shm | Dyn Shm | Blk Lim (R/S) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| fp32 | triton | 47.90 us | 84.14 % | 84.14 % | 29.05 % | 45.80 % | 21.48 % | 6.45 Tbyte/s | 64 | 35 register/thread | 0 byte/block | 0 byte/block | 24 block / 32 block |
-| fp32 | cutile | 47.42 us | 85.43 % | 85.43 % | 30.85 % | 46.24 % | 53.91 % | 6.55 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
+| fp32 | triton | 53.79 us | 85.01 % | 85.01 % | 24.82 % | 40.68 % | 19.13 % | 6.52 Tbyte/s | 64 | 35 register/thread | 0 byte/block | 0 byte/block | 24 block / 32 block |
+| fp32 | cutile | 54.62 us | 83.65 % | 83.65 % | 25.38 % | 40.05 % | 46.21 % | 6.41 Tbyte/s | 128 | 32 register/thread | 0 byte/block | 0 byte/block | 16 block / 32 block |
 
 ## Key findings (auto-derived)
 
-- **fp32**: cuTile is **1.01× faster** (47.4 µs vs 47.9 µs).
+- **fp32**: Triton is **1.02× faster** (53.8 µs vs 54.6 µs).
 
 ## NCU's own bottleneck verdict
 
