@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -21,7 +25,7 @@ def div_ceil(n: int, d: int) -> int:
 
 if nki is not None:
     @nki.jit
-    def cross_entropy_kernel(logits, targets):
+    def cross_entropy_kernel(logits, targets, block_size):
         """Per-row cross-entropy loss against a hard target class.
 
         Mirrors ``F.cross_entropy(logits, targets, reduction='none')`` in its
@@ -70,11 +74,11 @@ if nki is not None:
         kernel_assert(C <= nl.tile_size.sbuf_fmax, "class axis exceeds the SBUF free dimension")
 
         hbm_result = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.shared_hbm)
-        n_row_tiles = div_ceil(B, PMAX)
+        n_row_tiles = div_ceil(B, block_size)
 
         for row_tile in range(n_row_tiles):
-            row_start = row_tile * PMAX
-            row_size = min(PMAX, B - row_start)
+            row_start = row_tile * block_size
+            row_size = min(block_size, B - row_start)
             row_end = row_start + row_size
 
             # DMA cannot convert dtypes: load in the input dtype and let the
@@ -129,12 +133,28 @@ if nki is not None:
         return hbm_result
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size=128)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
+_tuner = NkiAutotuner(cross_entropy_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(logits: torch.Tensor, targets: torch.Tensor, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     targets_2d = targets.reshape(-1, 1).to(torch.int32)
-    result = cross_entropy_kernel(logits, targets_2d)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(logits.shape), str(logits.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (logits, targets_2d, cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    result = cross_entropy_kernel(logits, targets_2d, cfg.block_size)
     return result.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
