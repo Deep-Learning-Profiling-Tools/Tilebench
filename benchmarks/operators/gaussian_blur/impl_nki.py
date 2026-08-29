@@ -3,7 +3,11 @@ import os
 import re
 import subprocess
 
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -54,7 +58,7 @@ def div_ceil(numerator: int, denominator: int) -> int:
 if nki is not None:
 
     @nki.jit
-    def gaussian_blur_kernel(padded_input, kernel_bcast, rows, cols,
+    def gaussian_blur_kernel(padded_input, kernel_bcast, rows, cols, block_size_r,
                              kernel_rows, kernel_cols):
         """2D convolution of a zero-padded image with a (kernel_rows, kernel_cols) tap set.
 
@@ -71,7 +75,7 @@ if nki is not None:
         """
         padded_cols = padded_input.shape[1]
         row_span = cols + kernel_cols - 1
-        num_blocks = div_ceil(rows, PMAX)
+        num_blocks = div_ceil(rows, block_size_r)
 
         out = nl.ndarray((rows, cols), dtype=padded_input.dtype, buffer=nl.shared_hbm)
 
@@ -86,8 +90,8 @@ if nki is not None:
         tap_off = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
 
         for i in range(num_blocks):
-            base = i * PMAX
-            p_size = min(PMAX, rows - base)
+            base = i * block_size_r
+            p_size = min(block_size_r, rows - base)
 
             nisa.memset(dst=acc[0:p_size, :], value=0.0)
             # Row of padded_input feeding tap row kh=0 of this block, and the
@@ -125,6 +129,12 @@ if nki is not None:
         return out
 
 
+_DEFAULT_CONFIG = SimpleNamespace(block_size_r=128)
+_SEARCH_SPACE = [SimpleNamespace(block_size_r=b) for b in (32, 64, 128)]
+_tuner = NkiAutotuner(gaussian_blur_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, kernel: torch.Tensor, input_rows: int, input_cols: int,
         kernel_rows: int, kernel_cols: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
@@ -136,10 +146,20 @@ def run(input: torch.Tensor, kernel: torch.Tensor, input_rows: int, input_cols: 
     w_bcast = w.reshape(kernel_rows, 1, kernel_cols) \
                .expand(kernel_rows, PMAX, kernel_cols) \
                .reshape(kernel_rows * PMAX, kernel_cols)
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(tuple(padded.shape), str(padded.dtype)),
+            search_space=_SEARCH_SPACE,
+            args_fn=lambda cfg: (padded, w_bcast, input_rows, input_cols, cfg.block_size_r, kernel_rows, kernel_cols),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
     result = gaussian_blur_kernel[_lnc_degree()](
-        padded, w_bcast, input_rows, input_cols, kernel_rows, kernel_cols)
+        padded, w_bcast, input_rows, input_cols, cfg.block_size_r, kernel_rows, kernel_cols)
     return result.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return None
+    return dict(_last_autotune_config) or None
