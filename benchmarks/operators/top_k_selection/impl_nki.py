@@ -1,4 +1,8 @@
+from types import SimpleNamespace
+
 import torch
+
+from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
@@ -127,7 +131,7 @@ if nki is not None:
         return out
 
 
-def _level_block(n: int, K2: int) -> int:
+def _level_block(n: int, K2: int, max_block: int = MAX_BLOCK) -> int:
     """Block size (a power of two) for one hierarchy level of ``n`` elements.
 
     A block is sorted inside one partition, so ``B <= MAX_BLOCK``.  ``B`` must be
@@ -136,19 +140,19 @@ def _level_block(n: int, K2: int) -> int:
     those bounds the smallest block that still fills the 128 partitions is
     preferred, since a bitonic sort costs ``O(B log^2 B)`` per block.
     """
-    if 2 * K2 > MAX_BLOCK:
+    if 2 * K2 > max_block:
         raise ValueError(
             f"top-k with k'={K2} needs a block of at least {2 * K2} elements, "
-            f"but a block is capped at {MAX_BLOCK}."
+            f"but a block is capped at {max_block}."
         )
-    lo = min(max(MIN_BLOCK, 4 * K2), MAX_BLOCK)
+    lo = min(max(MIN_BLOCK, 4 * K2), max_block)
     if n <= lo:
         # Everything fits in one exactly-sized block: nothing has to be padded.
         return max(_next_pow2(n), K2, 2)
-    return min(MAX_BLOCK, max(lo, _next_pow2((n + PMAX - 1) // PMAX)))
+    return min(max_block, max(lo, _next_pow2((n + PMAX - 1) // PMAX)))
 
 
-def _hierarchical_topk(data: torch.Tensor, k: int) -> torch.Tensor:
+def _hierarchical_topk(data: torch.Tensor, k: int, max_block: int = MAX_BLOCK) -> torch.Tensor:
     """Repeated block-local top-k until a single block holds the answer."""
     K2 = _next_pow2(k)
     cur = data.reshape(-1, 1)
@@ -157,7 +161,7 @@ def _hierarchical_topk(data: torch.Tensor, k: int) -> torch.Tensor:
     first_block = None
 
     while True:
-        B = _level_block(n, K2)
+        B = _level_block(n, K2, max_block)
         nb = (n + B - 1) // B
         if nb * B != n:
             padded = torch.full((nb * B, 1), PAD_VALUE, dtype=torch.float32,
@@ -180,6 +184,26 @@ def _hierarchical_topk(data: torch.Tensor, k: int) -> torch.Tensor:
         n = nb * K2
 
 
+def _first_level_args(data: torch.Tensor, k: int, max_block: int) -> tuple:
+    """Kernel arguments of the first hierarchy level (the autotune timing proxy)."""
+    K2 = _next_pow2(k)
+    cur = data.reshape(-1, 1)
+    n = cur.shape[0]
+    B = _level_block(n, K2, max_block)
+    nb = (n + B - 1) // B
+    if nb * B != n:
+        padded = torch.full((nb * B, 1), PAD_VALUE, dtype=torch.float32, device=cur.device)
+        padded[:n] = cur
+        cur = padded
+    P = min(PMAX, nb)
+    return (cur, B, _log2(B), K2, P, (nb + P - 1) // P, nb)
+
+
+_DEFAULT_CONFIG = SimpleNamespace(block_size=MAX_BLOCK)
+_tuner = NkiAutotuner(block_topk_kernel) if nki is not None else None
+_last_autotune_config: dict = {}
+
+
 def run(input: torch.Tensor, N: int, k: int, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
     """The k largest values of a 1-D tensor, descending (matches torch.topk).
@@ -190,8 +214,21 @@ def run(input: torch.Tensor, N: int, k: int, block_size: int = 1024,
     """
     if k < 1 or k > N:
         raise ValueError(f"k={k} out of range for N={N}")
-    return _hierarchical_topk(input.contiguous(), int(k))
+    data = input.contiguous()
+    if autotune:
+        K2 = _next_pow2(int(k))
+        cfg = _tuner.tune_or_cached(
+            shape_key=((N, int(k)), str(data.dtype)),
+            search_space=[SimpleNamespace(block_size=b) for b in (1024, 2048, 4096) if b >= 2 * K2],
+            args_fn=lambda cfg: _first_level_args(data, int(k), cfg.block_size),
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update(vars(cfg))
+    else:
+        cfg = _DEFAULT_CONFIG
+    return _hierarchical_topk(data, int(k), cfg.block_size)
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_config) if _last_config else None
+    merged = {**_last_config, **_last_autotune_config}
+    return merged or None
