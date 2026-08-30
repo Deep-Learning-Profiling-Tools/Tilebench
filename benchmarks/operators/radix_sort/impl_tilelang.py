@@ -235,20 +235,9 @@ def run(input: torch.Tensor, N: int,
         threads=128,
     )
 
-    if autotune:
-        with set_autotune_inputs(work, output, hist, 0):
-            scatter_kernel = radix_scatter_kernel(
-                N,
-                K,
-                BLOCK_SIZE=BLOCK_SIZE,
-                RADIX=_RADIX,
-                FIELD_BITS=_FIELD_BITS,
-                FIELD_MASK=_FIELD_MASK,
-            )
-        _last_autotune_config.clear()
-        _last_autotune_config.update(dict(scatter_kernel.config or {}))
-    else:
-        _last_autotune_config.clear()
+    _last_autotune_config.clear()
+    scatter_kernel = None
+    if not autotune:
         scatter_kernel = radix_scatter_kernel(
             N,
             K,
@@ -264,6 +253,17 @@ def run(input: torch.Tensor, N: int,
         sum_chunks_kernel(hist, chunk_sums)
         scan_chunk_sums_kernel(chunk_sums)
         scan_chunks_kernel(hist, chunk_sums)
+        if scatter_kernel is None:
+            with set_autotune_inputs(work, output, hist, shift):
+                scatter_kernel = radix_scatter_kernel(
+                    N,
+                    K,
+                    BLOCK_SIZE=BLOCK_SIZE,
+                    RADIX=_RADIX,
+                    FIELD_BITS=_FIELD_BITS,
+                    FIELD_MASK=_FIELD_MASK,
+                )
+            _last_autotune_config.update(dict(scatter_kernel.config or {}))
         scatter_kernel(work, output, hist, shift)
         work, output = output, work
 
