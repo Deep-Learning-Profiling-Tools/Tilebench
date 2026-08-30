@@ -3,7 +3,8 @@
 With NEURON_FRAMEWORK_DEBUG=1 the Neuron compiler dumps, into the worker's
 private CWD, one pair per compiled XLA graph:
 
-    <stem>.neff             the compiled binary neuron-explorer replays
+    <stem>.neff             the compiled binary the runtime loads (byte-identical
+                            to the NEFF the runtime-inspect trace writes back)
     <stem>.hlo_module.pb    the post-optimization HLO for that graph
 
 Identity rules (see core/nki_profile_worker.py for the process design):
@@ -15,10 +16,15 @@ Identity rules (see core/nki_profile_worker.py for the process design):
 - an NKI graph is recognized by the raw marker bytes
   ``AwsNeuronCustomNativeKernel`` inside the HLO (validation marker — it does
   NOT distinguish two autotune candidates; that distinction comes from exact
-  winner replay in a fresh process, which guarantees only ONE NKI graph is
-  ever compiled in the private root);
-- resolution requires EXACTLY ONE matching pair: zero and multiple both raise
-  :class:`NkiArtifactIdentityError`;
+  winner replay in a fresh process, so the NKI phase compiles only the
+  winner's graph(s));
+- a phase (torch baseline / NKI run) owns EVERY pair that appeared during it —
+  an operator may legitimately compile several graphs per ``run()`` (e.g. one
+  per radix-sort pass). Which of them executed, how often and for how long
+  comes from the runtime trace (core/nki_timer.py), matched to these pairs by
+  NEFF SHA256; an executed NEFF that matches no pair is an identity error;
+- the NKI phase must contain at least one marker-bearing pair and the torch
+  phase none; zero pairs in a phase raises :class:`NkiArtifactIdentityError`;
 - selection NEVER consults mtime, file size, sequence numbers, or glob order.
 """
 from __future__ import annotations
@@ -27,7 +33,7 @@ import dataclasses
 import os
 from typing import Iterable, Sequence
 
-from core.nki_profile_spec import sha256_file
+from core.nki_profile_spec import MANIFEST_SCHEMA_VERSION, sha256_file
 
 NKI_HLO_MARKER = b"AwsNeuronCustomNativeKernel"
 HLO_SUFFIX = ".hlo_module.pb"
@@ -137,69 +143,84 @@ def discover_pairs(roots: Sequence[str]) -> tuple[list[ArtifactPair], list[dict]
     return pairs, rejections
 
 
-def resolve_unique(roots: Sequence[str], *, expect_marker: bool,
-                   exclude_stems: Iterable[str] = (),
-                   context: dict | None = None) -> ArtifactPair:
-    """Return the EXACTLY ONE valid pair with ``has_marker == expect_marker``
-    (after excluding ``exclude_stems``); raise NkiArtifactIdentityError for
-    zero or multiple, and when a marker-bearing HLO lacks its NEFF."""
+def _check_phase_markers(pairs: list[ArtifactPair], *, nki_phase: bool, context,
+                         roots, described) -> None:
+    marked = [p for p in pairs if p.has_marker]
+    if nki_phase and not marked:
+        raise NkiArtifactIdentityError(
+            "the NKI phase compiled no marker-bearing NEFF/HLO pair — the "
+            "operator's run() launched no NKI kernel", context=context,
+            roots=roots, candidates=described)
+    if not nki_phase and marked:
+        raise NkiArtifactIdentityError(
+            f"the torch baseline phase compiled {len(marked)} NKI (marker-bearing) "
+            f"pair(s) — the baseline must not launch NKI kernels", context=context,
+            roots=roots, candidates=described)
+
+
+def resolve_phase_pairs(roots: Sequence[str], *, nki_phase: bool,
+                        exclude_stems: Iterable[str] = (),
+                        context: dict | None = None) -> list[ArtifactPair]:
+    """Every valid pair that appeared during a phase (all pairs in ``roots``
+    minus ``exclude_stems``, sorted by stem). Raises for zero pairs, for a
+    marker-bearing HLO without its NEFF, and for marker/phase mismatches
+    (NKI phase without a marker pair; torch phase with one)."""
     excluded = set(exclude_stems)
     pairs, rejections = discover_pairs(roots)
     orphan_markers = [r for r in rejections
                       if r.get("reason", "").startswith("NKI-marker HLO")]
-    if expect_marker and orphan_markers:
+    if orphan_markers:
         raise NkiArtifactIdentityError(
             "NKI-marker HLO present without its NEFF — dump is incomplete",
             context=context, roots=roots,
             candidates=[dataclasses.asdict(p) for p in pairs] + rejections)
-    matching = [p for p in pairs
-                if p.has_marker == expect_marker and p.stem not in excluded]
-    if len(matching) == 1:
-        return matching[0]
+    new = sorted((p for p in pairs if p.stem not in excluded), key=lambda p: p.stem)
     described = [dict(dataclasses.asdict(p),
-                      rejected_because=(
-                          "excluded pre-existing stem" if p.stem in excluded
-                          else f"marker={p.has_marker}, expected {expect_marker}"
-                          if p.has_marker != expect_marker else "MATCH"))
+                      rejected_because=("excluded pre-existing stem" if p.stem in excluded
+                                        else "NEW"))
                  for p in pairs] + rejections
-    kind = "NKI (marker-bearing)" if expect_marker else "non-NKI (torch)"
-    if not matching:
+    if not new:
         raise NkiArtifactIdentityError(
-            f"zero valid {kind} NEFF/HLO pairs found — cannot establish "
-            f"artifact identity", context=context, roots=roots, candidates=described)
-    raise NkiArtifactIdentityError(
-        f"{len(matching)} valid {kind} NEFF/HLO pairs found — artifact "
-        f"identity is ambiguous", context=context, roots=roots, candidates=described)
+            "zero valid NEFF/HLO pairs appeared during this phase — cannot "
+            "establish artifact identity", context=context, roots=roots,
+            candidates=described)
+    _check_phase_markers(new, nki_phase=nki_phase, context=context, roots=roots,
+                         described=described)
+    return new
 
 
-def resolve_expected(roots: Sequence[str], *, stem: str, expect_marker: bool,
-                     pre_stems: Iterable[str], context: dict | None = None) -> ArtifactPair:
-    """Reuse-mode resolution: the previously validated pair ``stem`` must still
-    exist (with the expected marker class) and NO new pair of that class may
-    have appeared since ``pre_stems`` (a run that compiled a different graph
-    would have dumped a new pair — that is an identity error, not a silent
-    switch). Never selects by recency."""
+def resolve_expected_pairs(roots: Sequence[str], *, stems: Sequence[str], nki_phase: bool,
+                           pre_stems: Iterable[str],
+                           context: dict | None = None) -> list[ArtifactPair]:
+    """Reuse-mode resolution: every previously validated pair in ``stems`` must
+    still exist and NO new pair may have appeared since ``pre_stems`` (a run
+    that compiled a different graph would have dumped a new pair — that is an
+    identity error, not a silent switch). Never selects by recency."""
     pairs, rejections = discover_pairs(roots)
     by_stem = {p.stem: p for p in pairs}
     pre = set(pre_stems)
-    newcomers = [p for p in pairs if p.stem not in pre and p.has_marker == expect_marker]
+    newcomers = [p for p in pairs if p.stem not in pre]
     described = [dataclasses.asdict(p) for p in pairs] + rejections
     if newcomers:
         raise NkiArtifactIdentityError(
-            f"reuse of {stem!r} rejected: {len(newcomers)} new "
-            f"{'NKI' if expect_marker else 'non-NKI'} pair(s) appeared during this run "
-            f"({[p.stem for p in newcomers]}) — the executed graph is not the validated one",
-            context=context, roots=roots, candidates=described)
-    pair = by_stem.get(stem)
-    if pair is None:
+            f"reuse of {list(stems)} rejected: {len(newcomers)} new pair(s) appeared "
+            f"during this run ({[p.stem for p in newcomers]}) — the executed graph is "
+            f"not the validated one", context=context, roots=roots, candidates=described)
+    out = []
+    for stem in stems:
+        pair = by_stem.get(stem)
+        if pair is None:
+            raise NkiArtifactIdentityError(
+                f"reuse of {stem!r} rejected: validated pair no longer present",
+                context=context, roots=roots, candidates=described)
+        out.append(pair)
+    if not out:
         raise NkiArtifactIdentityError(
-            f"reuse of {stem!r} rejected: validated pair no longer present",
+            "reuse rejected: no expected pairs recorded for this phase",
             context=context, roots=roots, candidates=described)
-    if pair.has_marker != expect_marker:
-        raise NkiArtifactIdentityError(
-            f"reuse of {stem!r} rejected: marker={pair.has_marker}, expected {expect_marker}",
-            context=context, roots=roots, candidates=described)
-    return pair
+    _check_phase_markers(out, nki_phase=nki_phase, context=context, roots=roots,
+                         described=described)
+    return out
 
 
 def validate_pair(neff_path: str, *, require_marker: bool,
@@ -249,48 +270,54 @@ def resolve_explicit_override(context: dict | None = None) -> ArtifactPair | Non
 
 
 def validate_manifest_reuse(manifest: dict, *, spec_id: str,
-                            allowed_roots: Sequence[str],
-                            keys=("neff", "hlo")) -> dict[str, ArtifactPair]:
+                            allowed_roots: Sequence[str]) -> dict[str, list[ArtifactPair]]:
     """Re-validate a previously written manifest for exact artifact reuse.
 
-    Checks (per profiled target recorded in the manifest): spec_id match, files
-    exist, SHA256s match the manifest, NKI marker still present where claimed,
-    paths still inside the allowed roots. Returns the re-validated pairs, or
-    raises NkiArtifactIdentityError. Never searches for a replacement.
+    Checks: manifest schema version, spec_id match, and per profiled target
+    every recorded artifact (files exist, SHA256s match the manifest, NKI
+    marker still present where claimed, paths inside the allowed roots).
+    Targets that recorded no artifacts (a baseline that failed to compile or
+    verify) have nothing to reuse and are skipped — they are re-run fresh.
+    Returns the re-validated pairs per target, or raises
+    NkiArtifactIdentityError. Never searches for a replacement.
     """
     ctx = {"spec_id": spec_id, "manifest": manifest.get("manifest_path", "")}
+    if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+        raise NkiArtifactIdentityError(
+            f"manifest schema_version {manifest.get('schema_version')!r} != "
+            f"current {MANIFEST_SCHEMA_VERSION!r}", context=ctx, roots=allowed_roots)
     if manifest.get("spec_id") != spec_id:
         raise NkiArtifactIdentityError(
             f"manifest spec_id {manifest.get('spec_id')!r} != current {spec_id!r}",
             context=ctx, roots=allowed_roots)
-    out: dict[str, ArtifactPair] = {}
+    out: dict[str, list[ArtifactPair]] = {}
     for target in manifest.get("targets", {}):
-        rec = manifest["targets"][target]
-        if "neff_path" not in rec:
-            raise NkiArtifactIdentityError(
-                f"manifest target {target!r} has no recorded artifact — "
-                f"nothing to reuse", context=dict(ctx, target=target),
-                roots=allowed_roots)
-        pair = validate_pair(rec["neff_path"],
-                             require_marker=bool(rec.get("hlo_nki_marker")),
-                             allowed_roots=allowed_roots,
-                             context=dict(ctx, target=target))
-        problems = []
-        if pair.neff_sha256 != rec.get("neff_sha256"):
-            problems.append(f"NEFF sha256 changed ({pair.neff_sha256} != "
-                            f"{rec.get('neff_sha256')})")
-        if pair.hlo_sha256 != rec.get("hlo_sha256"):
-            problems.append(f"HLO sha256 changed ({pair.hlo_sha256} != "
-                            f"{rec.get('hlo_sha256')})")
-        if bool(rec.get("hlo_nki_marker")) != pair.has_marker:
-            problems.append("NKI marker presence changed")
-        if problems:
-            raise NkiArtifactIdentityError(
-                f"manifest reuse validation failed for target {target!r}: "
-                + "; ".join(problems), context=dict(ctx, target=target),
-                roots=allowed_roots,
-                candidates=[dataclasses.asdict(pair)])
-        out[target] = pair
+        records = manifest["targets"][target].get("artifacts")
+        if not records:
+            continue
+        pairs = []
+        for rec in records:
+            pair = validate_pair(rec["neff_path"],
+                                 require_marker=bool(rec.get("hlo_nki_marker")),
+                                 allowed_roots=allowed_roots,
+                                 context=dict(ctx, target=target))
+            problems = []
+            if pair.neff_sha256 != rec.get("neff_sha256"):
+                problems.append(f"NEFF sha256 changed ({pair.neff_sha256} != "
+                                f"{rec.get('neff_sha256')})")
+            if pair.hlo_sha256 != rec.get("hlo_sha256"):
+                problems.append(f"HLO sha256 changed ({pair.hlo_sha256} != "
+                                f"{rec.get('hlo_sha256')})")
+            if bool(rec.get("hlo_nki_marker")) != pair.has_marker:
+                problems.append("NKI marker presence changed")
+            if problems:
+                raise NkiArtifactIdentityError(
+                    f"manifest reuse validation failed for target {target!r}, "
+                    f"artifact {rec.get('stem')!r}: " + "; ".join(problems),
+                    context=dict(ctx, target=target), roots=allowed_roots,
+                    candidates=[dataclasses.asdict(pair)])
+            pairs.append(pair)
+        out[target] = pairs
     if not out:
         raise NkiArtifactIdentityError(
             "manifest has no recorded targets to reuse", context=ctx,

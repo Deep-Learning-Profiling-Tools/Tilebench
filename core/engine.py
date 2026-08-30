@@ -13,7 +13,7 @@ from data.tensors import expand_cases, get_generator, infer_problem_size
 # CUDA is required for the GPU-only backends (Triton, cuTile, TileLang) and for
 # Proton-based torch timing. On non-CUDA hosts (e.g. AWS Trainium) those are
 # skipped; torch and NKI are instead both timed on the XLA (Neuron) device via
-# neuron-profile (see core/nki_timer.py).
+# the Neuron runtime's execution trace (see core/nki_timer.py).
 HAS_CUDA = torch.cuda.is_available()
 
 # On Neuron hosts every benchmark entry point (scripts/run_bench.py and
@@ -168,11 +168,13 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         # --- Torch (baseline) + NKI on non-CUDA hosts ---
         # Proton-timed on CUDA. On non-CUDA hosts (e.g. Trainium), Proton can't
-        # observe the device; the torch baseline graph and (when selected) the
-        # NKI kernel graph are both hardware-timed with neuron-profile on the
-        # EXACT compiled NEFF, resolved with deterministic identity (private
-        # per-spec working dir + compile cache, exact autotune-winner replay in
-        # a fresh process, AwsNeuronCustomNativeKernel marker validation, and a
+        # observe the device; the torch baseline and (when selected) the NKI
+        # run() are both hardware-timed from the Neuron runtime's execution
+        # trace (real inputs, warmup + repeat iterations, multi-graph run()s
+        # summed), every executed NEFF matched by SHA256 to the compiled
+        # artifact resolved with deterministic identity (private per-spec
+        # working dir + compile cache, exact autotune-winner replay in a fresh
+        # process, AwsNeuronCustomNativeKernel marker validation, and a
         # per-spec manifest). See core/nki_orchestrator.py. Nothing here is
         # timed by XLA wall-clock.
         neuron_result = None

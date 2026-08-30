@@ -16,10 +16,14 @@ identity rules):
       |   else wipe the private space (fresh compile)
       |-- PROFILE subprocess (always — input values change per run, so
       |     correctness is re-verified every time): private CWD + private
-      |     compile cache, exact winner replay (no candidate timing),
-      |     exactly-one validated artifact per target; on reuse the
-      |     identified artifact must hash-match the prior manifest
-      |-- PARENT re-validates SHA256s, hardware-profiles the exact NEFFs
+      |     compile cache + private runtime-inspect dir, exact winner replay
+      |     (no candidate timing), verify, then warmup + repeat timed
+      |     iterations per target with wall-clock windows; every pair the
+      |     phase compiled is recorded (on reuse: must be the manifest's)
+      |-- PARENT re-validates SHA256s, ingests the runtime trace, sums the
+      |     device time of the executions inside each window, and matches
+      |     every executed NEFF (runtime-written, byte-identical to the
+      |     compiler dump) to a recorded pair by SHA256
       |-- write <spec_dir>/manifest.json (authoritative) + append the global
           audit index results/logs/nki_neff_manifest.jsonl
 
@@ -37,14 +41,14 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Any, Callable
+from typing import Callable
 
 from core.nki_artifact import (NkiArtifactIdentityError, resolve_explicit_override,
                                validate_manifest_reuse, validate_pair)
-from core.nki_profile_spec import (MANIFEST_SCHEMA_VERSION, NkiProfileSpec,
-                                   append_jsonl_locked, atomic_write_json,
-                                   describe_inputs, make_case_label, sha256_file,
-                                   spec_lock)
+from core.nki_profile_spec import (MANIFEST_SCHEMA_VERSION, RUNTIME_INSPECT_ENV,
+                                   NkiProfileSpec, append_jsonl_locked,
+                                   atomic_write_json, describe_inputs, make_case_label,
+                                   sha256_file, spec_lock)
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -154,13 +158,15 @@ def _read_result(path: str, phase: str) -> dict:
 
 def _launch_worker(runner: Callable, *, mode: str, spec_path: str, bundle_path: str,
                    result_path: str, workdir: str,
-                   cache_dir: str | None, python: str) -> dict:
+                   cache_dir: str | None, inspect_dir: str | None, python: str) -> dict:
     cmd = [python, "-m", "core.nki_profile_worker",
            "--mode", mode, "--spec", spec_path, "--bundle", bundle_path,
            "--result", result_path, "--workdir", workdir,
            "--repo-root", _REPO_ROOT]
     if cache_dir:
         cmd += ["--cache-dir", cache_dir]
+    if inspect_dir:
+        cmd += ["--inspect-dir", inspect_dir]
     env_overrides = {"PYTHONPATH": _REPO_ROOT + (
         os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")}
     rc = runner(cmd, cwd=_REPO_ROOT, env_overrides=env_overrides)
@@ -172,6 +178,11 @@ def _launch_worker(runner: Callable, *, mode: str, spec_path: str, bundle_path: 
 
 def dataclasses_asdict(pair) -> dict:
     return dataclasses.asdict(pair)
+
+
+def _executed_shas(rec: dict | None) -> list[str]:
+    """SHA256s of the NEFFs a target's timed iterations actually executed."""
+    return sorted(e["neff_sha256"] for e in ((rec or {}).get("executed") or []))
 
 
 def _utcnow() -> str:
@@ -197,19 +208,26 @@ def profile_case_on_neuron(
     python: str | None = None,
     runner: Callable | None = None,
     profiler: Callable | None = None,
+    executions_loader: Callable | None = None,
 ) -> dict:
     """Time the torch baseline (and, when available, the NKI backend) for one
     benchmark case on Trainium with exact artifact identity.
 
     Returns the fields core/engine.py consumes: torch_stats/torch_ms,
     nki_stats/nki_ms/nki_ok/nki_err/nki_cfg, plus spec_id/manifest_path.
+    ``profiler`` (capture/view of one NEFF) is used only for the explicit
+    $NKI_NEFF_PATH override; ``executions_loader`` ingests the runtime trace.
     """
     import torch  # parent needs plain torch only (bundle serialization)
+
+    from core.nki_timer import find_session_dir, session_neffs, time_windows
 
     runner = runner or _default_runner
     python = python or sys.executable
     if profiler is None:
         from core.nki_timer import profile_neff as profiler
+    if executions_loader is None:
+        from core.nki_timer import load_session_executions as executions_loader
 
     nki_enabled = impl_nki is not None
     case_label = make_case_label(params, dtype_str)
@@ -260,7 +278,7 @@ def profile_case_on_neuron(
             bundle_path=sel_bundle,
             result_path=os.path.join(sel_root, "selector_result.json"),
             workdir=os.path.join(sel_root, "work"),
-            cache_dir=None, python=python)
+            cache_dir=None, inspect_dir=None, python=python)
         if not selector_result.get("verify_ok"):
             raise NkiOrchestrationError(
                 f"selector verification failed for {operator}/{case_label}: "
@@ -298,6 +316,7 @@ def profile_case_on_neuron(
     spec_dir = os.path.abspath(os.path.join(case_root, spec_id[:16]))
     artifacts_dir = os.path.join(spec_dir, "artifacts")
     cache_dir = os.path.join(spec_dir, "cache")
+    inspect_dir = os.path.join(spec_dir, "inspect")
     profile_dir = os.path.join(spec_dir, "profile")
     manifest_path = os.path.join(spec_dir, "manifest.json")
     spec_extra = dict(spec.to_dict(), spec_id=spec_id)
@@ -338,6 +357,8 @@ def profile_case_on_neuron(
                       f"{spec_id[:16]}: {str(e).splitlines()[0]}")
                 os.remove(manifest_path)
                 reuse_pairs = None
+        # The runtime trace is per run: its dir is wiped in both modes.
+        shutil.rmtree(inspect_dir, ignore_errors=True)
         if reuse_pairs is not None:
             identity_source = "validated_manifest_reuse"
             shutil.rmtree(profile_dir, ignore_errors=True)
@@ -355,7 +376,8 @@ def profile_case_on_neuron(
             worker_spec = dict(spec_extra,
                                run_accepts_autotune=accepts_autotune,
                                nki_enabled=nki_enabled and override_pair is None,
-                               expected_stems=({t: p.stem for t, p in reuse_pairs.items()}
+                               expected_stems=({t: [p.stem for p in ps]
+                                                for t, ps in reuse_pairs.items()}
                                                if reuse_pairs is not None else {}))
             worker_spec_path = os.path.join(spec_dir, "worker_spec.json")
             atomic_write_json(worker_spec_path, worker_spec)
@@ -364,53 +386,105 @@ def profile_case_on_neuron(
                 bundle_path=bundle_path,
                 result_path=os.path.join(spec_dir, "worker_result.json"),
                 workdir=artifacts_dir,
-                cache_dir=cache_dir, python=python)
+                cache_dir=cache_dir, inspect_dir=inspect_dir, python=python)
 
-            # Hardware-time the exact identified NEFFs HERE, after the worker
-            # has exited and released the NeuronCores (neuron-explorer capture
-            # needs them; capturing while the worker's PJRT client was alive
-            # raced NRT allocation on trn2). Each artifact is re-validated
-            # against the worker-reported SHA256 (and, on reuse, against the
-            # prior manifest) before it is profiled.
+            # ---- re-validate every artifact the worker recorded --------------
+            # A graph whose output failed verification is never timed: an
+            # invalid torch baseline would otherwise become the speedup
+            # denominator.
+            pairs_by_sha: dict = {}
+            timed_targets = []
             for target in ("torch", "nki"):
                 entry = worker_result.get(target)
                 if not entry:
                     continue
                 rec = {"verify_ok": entry["verify_ok"],
                        "verify_error": entry["verify_error"],
-                       "stats": None}
-                art = entry.get("artifact")
-                # A graph whose output failed verification is never timed: an
-                # invalid torch baseline would otherwise become the speedup
-                # denominator.
-                if art and entry["verify_ok"]:
-                    pair = validate_pair(art["neff_path"],
-                                         require_marker=(target == "nki"),
+                       "artifacts": None, "executed": None, "stats": None}
+                targets[target] = rec
+                if not (entry.get("artifacts") and entry["verify_ok"]):
+                    continue
+                pairs = []
+                for art in entry["artifacts"]:
+                    pair = validate_pair(art["neff_path"], require_marker=False,
                                          allowed_roots=[spec_dir],
-                                         context=dict(ctx, spec_id=spec_id,
-                                                      target=target))
+                                         context=dict(ctx, spec_id=spec_id, target=target))
                     if pair.neff_sha256 != art["neff_sha256"] or \
-                            pair.hlo_sha256 != art["hlo_sha256"]:
+                            pair.hlo_sha256 != art["hlo_sha256"] or \
+                            pair.has_marker != bool(art["hlo_nki_marker"]):
                         raise NkiArtifactIdentityError(
-                            f"artifact changed between worker identification "
-                            f"and parent profiling for target {target!r}",
+                            f"artifact {art['stem']!r} changed between worker "
+                            f"identification and parent validation for target {target!r}",
                             context=dict(ctx, spec_id=spec_id, target=target),
                             roots=[spec_dir])
-                    if reuse_pairs is not None and target in reuse_pairs and (
-                            reuse_pairs[target].neff_sha256 != pair.neff_sha256
-                            or reuse_pairs[target].hlo_sha256 != pair.hlo_sha256):
+                    pairs.append(pair)
+                if reuse_pairs is not None and target in reuse_pairs:
+                    got = {(p.stem, p.neff_sha256, p.hlo_sha256) for p in pairs}
+                    want = {(p.stem, p.neff_sha256, p.hlo_sha256) for p in reuse_pairs[target]}
+                    if got != want:
                         raise NkiArtifactIdentityError(
-                            f"identical spec_id produced a different {target!r} "
-                            f"artifact than the validated manifest (non-deterministic "
-                            f"compile or environment drift)",
+                            f"identical spec_id produced different {target!r} artifacts "
+                            f"than the validated manifest (non-deterministic compile or "
+                            f"environment drift)",
                             context=dict(ctx, spec_id=spec_id, target=target),
                             roots=[spec_dir],
-                            candidates=[dataclasses_asdict(pair),
-                                        dataclasses_asdict(reuse_pairs[target])])
-                    rec.update(art)
-                    rec["stats"] = profiler(pair.neff_path, warmup=int(warmup),
-                                            out_dir=profile_dir, tag=target)
-                targets[target] = rec
+                            candidates=[dataclasses_asdict(p) for p in pairs]
+                            + [dataclasses_asdict(p) for p in reuse_pairs[target]])
+                rec["artifacts"] = [dict(a) for a in entry["artifacts"]]
+                for p in pairs:
+                    pairs_by_sha[p.neff_sha256] = p
+                timed_targets.append(target)
+
+            # ---- runtime trace: windows -> device time, executed NEFF -> pair --
+            session_dir = parquet_dir = None
+            if timed_targets:
+                session_dir = find_session_dir(inspect_dir)
+                executions, parquet_dir = executions_loader(
+                    session_dir, data_path=os.path.join(profile_dir, "ne"),
+                    display_name=f"{operator}-{case_label}-{spec_id[:16]}")
+                runtime_neffs = session_neffs(session_dir)
+                runtime_sha = {m: sha256_file(p) for m, p in runtime_neffs.items()}
+            for target in timed_targets:
+                rec = targets[target]
+                tctx = dict(ctx, spec_id=spec_id, target=target)
+                stats = time_windows(executions, worker_result[target]["windows"], tag=target)
+                per_model = stats.pop("per_model")
+                executed = []
+                for model_id, info in sorted(per_model.items()):
+                    if model_id not in runtime_sha:
+                        raise NkiArtifactIdentityError(
+                            f"executed model {model_id} has no runtime-written NEFF in "
+                            f"{session_dir} (NEURON_RT_INSPECT_DEVICE_PROFILE must be 1)",
+                            context=tctx, roots=[inspect_dir])
+                    pair = pairs_by_sha.get(runtime_sha[model_id])
+                    if pair is None:
+                        raise NkiArtifactIdentityError(
+                            f"executed NEFF (model {model_id}, sha256 {runtime_sha[model_id]}) "
+                            f"is not among the artifacts this run compiled",
+                            context=tctx, roots=[spec_dir, inspect_dir],
+                            candidates=[dataclasses_asdict(p) for p in pairs_by_sha.values()])
+                    ntff = os.path.join(session_dir, f"{model_id}_vnc_0.ntff")
+                    executed.append({
+                        "model_id": model_id, "stem": pair.stem,
+                        "neff_sha256": pair.neff_sha256, "hlo_sha256": pair.hlo_sha256,
+                        "hlo_nki_marker": pair.has_marker,
+                        "count_per_iteration": info["count_per_iteration"],
+                        "mean_ms": info["mean_ms"],
+                        "runtime_neff": runtime_neffs[model_id],
+                        "ntff": ntff if os.path.isfile(ntff) else None,
+                    })
+                marked = [e for e in executed if e["hlo_nki_marker"]]
+                if target == "nki" and not marked:
+                    raise NkiArtifactIdentityError(
+                        "the timed NKI iterations executed no marker-bearing (NKI) graph",
+                        context=tctx, roots=[spec_dir], candidates=executed)
+                if target == "torch" and marked:
+                    raise NkiArtifactIdentityError(
+                        "the torch baseline iterations executed an NKI graph",
+                        context=tctx, roots=[spec_dir], candidates=executed)
+                rec["executed"] = executed
+                rec["stats"] = dict(stats, warmup=int(warmup), session_dir=session_dir,
+                                    parquet_dir=parquet_dir)
 
             if override_pair is not None:
                 identity_source = "explicit_override"
@@ -419,13 +493,16 @@ def profile_case_on_neuron(
                 targets["nki"] = {
                     "verify_ok": None,
                     "verify_error": "verification skipped: explicit $NKI_NEFF_PATH override",
+                    "artifacts": [{
+                        "stem": override_pair.stem,
+                        "neff_path": override_pair.neff_path,
+                        "hlo_path": override_pair.hlo_path,
+                        "neff_sha256": override_pair.neff_sha256,
+                        "hlo_sha256": override_pair.hlo_sha256,
+                        "hlo_nki_marker": override_pair.has_marker,
+                    }],
+                    "executed": None,
                     "stats": stats,
-                    "stem": override_pair.stem,
-                    "neff_path": override_pair.neff_path,
-                    "hlo_path": override_pair.hlo_path,
-                    "neff_sha256": override_pair.neff_sha256,
-                    "hlo_sha256": override_pair.hlo_sha256,
-                    "hlo_nki_marker": override_pair.has_marker,
                 }
 
         manifest = {
@@ -443,9 +520,11 @@ def profile_case_on_neuron(
             "private_cwd": artifacts_dir,
             "private_cache_dir": cache_dir,
             "targets": targets,
+            "runtime_session_dir": session_dir,
+            "runtime_parquet_dir": parquet_dir,
             "profile_input_mode": next(
                 (t["stats"]["profile_input_mode"] for t in targets.values()
-                 if t.get("stats")), "tool_default"),
+                 if t.get("stats")), None),
             "input_bundle_sha256": bundle_sha,
             "software_versions": spec.software_versions,
             "compiler_environment": {
@@ -455,6 +534,8 @@ def profile_case_on_neuron(
                 "NEURON_RT_NUM_CORES": os.environ.get("NEURON_RT_NUM_CORES", ""),
                 "NEURON_COMPILE_CACHE_URL": cache_dir,
                 "NEURON_FRAMEWORK_DEBUG": "1",
+                **RUNTIME_INSPECT_ENV,
+                "NEURON_RT_INSPECT_OUTPUT_DIR": inspect_dir,
             },
             "created_at_utc": _utcnow(),
         }
@@ -463,8 +544,8 @@ def profile_case_on_neuron(
             "spec_id": spec_id, "operator": operator, "case_label": case_label,
             "dtype": dtype_str, "identity_source": identity_source,
             "manifest_path": manifest_path,
-            "nki_neff_sha256": targets.get("nki", {}).get("neff_sha256"),
-            "torch_neff_sha256": targets.get("torch", {}).get("neff_sha256"),
+            "nki_neff_sha256s": _executed_shas(targets.get("nki")),
+            "torch_neff_sha256s": _executed_shas(targets.get("torch")),
             "nki_ms": (targets.get("nki", {}).get("stats") or {}).get("mean"),
             "torch_ms": (targets.get("torch", {}).get("stats") or {}).get("mean"),
             "created_at_utc": manifest["created_at_utc"],
@@ -485,8 +566,7 @@ def profile_case_on_neuron(
                      if torch_rec.get("verify_ok") is False else "torch baseline not timed")
     else:
         torch_stats = dict(torch_rec["stats"], **audit,
-                           neff_sha256=torch_rec.get("neff_sha256"),
-                           hlo_sha256=torch_rec.get("hlo_sha256"))
+                           neff_sha256s=_executed_shas(torch_rec))
     torch_ms = torch_stats["mean"] if torch_stats else float("nan")
 
     nki_rec = targets.get("nki")
@@ -507,14 +587,12 @@ def profile_case_on_neuron(
         nki_err = ("explicit NKI_NEFF_PATH override: latency measured but "
                    "correctness NOT verified for this case (see manifest)")
         nki_stats = dict(nki_rec["stats"], **audit,
-                         neff_sha256=nki_rec.get("neff_sha256"),
-                         hlo_sha256=nki_rec.get("hlo_sha256"),
+                         neff_sha256s=[a["neff_sha256"] for a in nki_rec["artifacts"]],
                          verified=False)
     else:
         nki_ok, nki_err = True, ""
         nki_stats = dict(nki_rec["stats"], **audit,
-                         neff_sha256=nki_rec.get("neff_sha256"),
-                         hlo_sha256=nki_rec.get("hlo_sha256"))
+                         neff_sha256s=_executed_shas(nki_rec))
     nki_ms = nki_stats["mean"] if (nki_stats and nki_ok) else float("nan")
 
     return {

@@ -7,10 +7,10 @@ import os
 import pytest
 
 from core.nki_artifact import (NEFF_PATH_ENV, NKI_HLO_MARKER,
-                               NkiArtifactIdentityError, resolve_explicit_override,
-                               resolve_unique, validate_manifest_reuse,
-                               validate_pair)
-from core.nki_profile_spec import sha256_file
+                               NkiArtifactIdentityError, resolve_expected_pairs,
+                               resolve_explicit_override, resolve_phase_pairs,
+                               validate_manifest_reuse, validate_pair)
+from core.nki_profile_spec import MANIFEST_SCHEMA_VERSION, sha256_file
 
 
 def write_pair(root, stem, *, marker: bool, neff_bytes=b"NEFF-bytes"):
@@ -24,39 +24,49 @@ def write_pair(root, stem, *, marker: bool, neff_bytes=b"NEFF-bytes"):
     return neff, hlo
 
 
-def manifest_for(spec_id, target, neff, hlo, marker=True):
-    return {"spec_id": spec_id, "targets": {target: {
-        "neff_path": neff, "hlo_path": hlo,
-        "neff_sha256": sha256_file(neff), "hlo_sha256": sha256_file(hlo),
-        "hlo_nki_marker": marker}}}
+def manifest_for(spec_id, target, neff, hlo, marker=True, stem="MODULE_R"):
+    return {"schema_version": MANIFEST_SCHEMA_VERSION, "spec_id": spec_id,
+            "targets": {target: {"artifacts": [{
+                "stem": stem, "neff_path": neff, "hlo_path": hlo,
+                "neff_sha256": sha256_file(neff), "hlo_sha256": sha256_file(hlo),
+                "hlo_nki_marker": marker}]}}}
 
 
-def test_single_marker_pair_selected(tmp_path):
+def test_nki_phase_owns_every_new_pair(tmp_path):
     root = str(tmp_path)
-    neff, _hlo = write_pair(root, "MODULE_A", marker=True)
-    pair = resolve_unique([root], expect_marker=True)
-    assert pair.neff_path == neff and pair.has_marker
+    write_pair(root, "MODULE_PRE", marker=False)          # compiled before the phase
+    neff_k, _ = write_pair(root, "MODULE_KERNEL", marker=True)
+    neff_x, _ = write_pair(root, "MODULE_XLA_HELPER", marker=False)
+    pairs = resolve_phase_pairs([root], nki_phase=True, exclude_stems={"MODULE_PRE"})
+    assert [p.neff_path for p in pairs] == [neff_k, neff_x]   # sorted by stem, no mtime
+    assert [p.has_marker for p in pairs] == [True, False]
 
 
-def test_pure_torch_hlo_not_selected_as_nki(tmp_path):
+def test_two_nki_pairs_are_both_recorded(tmp_path):
     root = str(tmp_path)
-    write_pair(root, "MODULE_TORCH", marker=False)
-    neff, _ = write_pair(root, "MODULE_NKI", marker=True)
-    pair = resolve_unique([root], expect_marker=True)
-    assert pair.neff_path == neff
+    write_pair(root, "MODULE_A", marker=True)
+    write_pair(root, "MODULE_B", marker=True)
+    assert [p.stem for p in resolve_phase_pairs([root], nki_phase=True)] == ["MODULE_A", "MODULE_B"]
+
+
+def test_nki_phase_without_marker_pair_fails(tmp_path):
+    root = str(tmp_path)
+    write_pair(root, "MODULE_TORCH_ONLY", marker=False)
+    with pytest.raises(NkiArtifactIdentityError, match="launched no NKI kernel"):
+        resolve_phase_pairs([root], nki_phase=True)
+
+
+def test_torch_phase_with_marker_pair_fails(tmp_path):
+    root = str(tmp_path)
+    write_pair(root, "MODULE_T", marker=False)
+    write_pair(root, "MODULE_SNEAKY_NKI", marker=True)
+    with pytest.raises(NkiArtifactIdentityError, match="must not launch NKI"):
+        resolve_phase_pairs([root], nki_phase=False)
 
 
 def test_zero_valid_pairs_fails(tmp_path):
     with pytest.raises(NkiArtifactIdentityError, match="zero valid"):
-        resolve_unique([str(tmp_path)], expect_marker=True)
-
-
-def test_two_nki_pairs_fail_as_ambiguous(tmp_path):
-    root = str(tmp_path)
-    write_pair(root, "MODULE_A", marker=True)
-    write_pair(root, "MODULE_B", marker=True)
-    with pytest.raises(NkiArtifactIdentityError, match="ambiguous"):
-        resolve_unique([root], expect_marker=True)
+        resolve_phase_pairs([str(tmp_path)], nki_phase=True)
 
 
 def test_stale_neff_outside_private_root_ignored(tmp_path):
@@ -66,16 +76,8 @@ def test_stale_neff_outside_private_root_ignored(tmp_path):
     neff, _ = write_pair(str(private), "MODULE_MINE", marker=True)
     write_pair(str(stale), "MODULE_STALE1", marker=True)
     write_pair(str(stale), "MODULE_STALE2", marker=True)
-    pair = resolve_unique([str(private)], expect_marker=True)
-    assert pair.neff_path == neff
-
-
-def test_newer_torch_graph_inside_private_dir_ignored(tmp_path):
-    root = str(tmp_path)
-    neff, _ = write_pair(root, "MODULE_NKI", marker=True)
-    write_pair(root, "MODULE_TORCH_LATER", marker=False)  # created after
-    pair = resolve_unique([root], expect_marker=True)
-    assert pair.neff_path == neff
+    pairs = resolve_phase_pairs([str(private)], nki_phase=True)
+    assert [p.neff_path for p in pairs] == [neff]
 
 
 def test_missing_sibling_hlo_fails(tmp_path):
@@ -83,7 +85,7 @@ def test_missing_sibling_hlo_fails(tmp_path):
     with open(os.path.join(root, "MODULE_X.neff"), "wb") as f:
         f.write(b"neff")
     with pytest.raises(NkiArtifactIdentityError) as ei:
-        resolve_unique([root], expect_marker=True)
+        resolve_phase_pairs([root], nki_phase=True)
     assert "missing sibling" in str(ei.value)
 
 
@@ -93,7 +95,7 @@ def test_marker_hlo_without_neff_fails(tmp_path):
     with open(os.path.join(root, "MODULE_ORPHAN.hlo_module.pb"), "wb") as f:
         f.write(b"x" + NKI_HLO_MARKER)
     with pytest.raises(NkiArtifactIdentityError, match="without its NEFF"):
-        resolve_unique([root], expect_marker=True)
+        resolve_phase_pairs([root], nki_phase=True)
 
 
 def test_symlink_escape_fails(tmp_path):
@@ -104,7 +106,7 @@ def test_symlink_escape_fails(tmp_path):
     os.symlink(real_neff, root / "MODULE_E.neff")
     os.symlink(real_hlo, root / "MODULE_E.hlo_module.pb")
     with pytest.raises(NkiArtifactIdentityError) as ei:
-        resolve_unique([str(root)], expect_marker=True)
+        resolve_phase_pairs([str(root)], nki_phase=True)
     assert "escape" in str(ei.value)
 
 
@@ -113,7 +115,15 @@ def test_valid_manifest_reuse(tmp_path):
     neff, hlo = write_pair(root, "MODULE_R", marker=True)
     m = manifest_for("spec123", "nki", neff, hlo)
     pairs = validate_manifest_reuse(m, spec_id="spec123", allowed_roots=[root])
-    assert pairs["nki"].neff_path == neff
+    assert [p.neff_path for p in pairs["nki"]] == [neff]
+
+
+def test_manifest_reuse_rejects_other_schema_versions(tmp_path):
+    root = str(tmp_path)
+    neff, hlo = write_pair(root, "MODULE_R", marker=True)
+    m = dict(manifest_for("spec123", "nki", neff, hlo), schema_version=1)
+    with pytest.raises(NkiArtifactIdentityError, match="schema_version"):
+        validate_manifest_reuse(m, spec_id="spec123", allowed_roots=[root])
 
 
 def test_manifest_reuse_wrong_spec_id_fails(tmp_path):
@@ -176,24 +186,25 @@ def test_resolver_never_calls_getmtime(tmp_path, monkeypatch):
         raise AssertionError("artifact identity consulted mtime!")
 
     monkeypatch.setattr(os.path, "getmtime", boom)
-    pair = resolve_unique([root], expect_marker=True)
-    assert pair.neff_path == neff
+    pairs = resolve_phase_pairs([root], nki_phase=True)
+    assert {p.neff_path for p in pairs} == {neff, neff.replace("MODULE_A", "MODULE_T")}
     validate_pair(neff, require_marker=True, allowed_roots=[root])
     validate_manifest_reuse(manifest_for("s", "nki", neff, hlo),
                             spec_id="s", allowed_roots=[root])
 
 
-def test_resolve_expected_reuse_semantics(tmp_path):
-    from core.nki_artifact import resolve_expected
+def test_resolve_expected_pairs_reuse_semantics(tmp_path):
     root = str(tmp_path)
     neff, _ = write_pair(root, "MODULE_KEEP", marker=True)
     write_pair(root, "MODULE_TORCH", marker=False)
     pre = {"MODULE_KEEP", "MODULE_TORCH"}
-    assert resolve_expected([root], stem="MODULE_KEEP", expect_marker=True, pre_stems=pre).neff_path == neff
-    with pytest.raises(NkiArtifactIdentityError, match="marker="):
-        resolve_expected([root], stem="MODULE_TORCH", expect_marker=True, pre_stems=pre)
+    pairs = resolve_expected_pairs([root], stems=["MODULE_KEEP"], nki_phase=True, pre_stems=pre)
+    assert [p.neff_path for p in pairs] == [neff]
+    with pytest.raises(NkiArtifactIdentityError, match="launched no NKI kernel"):
+        resolve_expected_pairs([root], stems=["MODULE_TORCH"], nki_phase=True, pre_stems=pre)
     write_pair(root, "MODULE_NEWGRAPH", marker=True)   # graph changed during the run
-    with pytest.raises(NkiArtifactIdentityError, match="new NKI pair"):
-        resolve_expected([root], stem="MODULE_KEEP", expect_marker=True, pre_stems=pre)
+    with pytest.raises(NkiArtifactIdentityError, match="new pair"):
+        resolve_expected_pairs([root], stems=["MODULE_KEEP"], nki_phase=True, pre_stems=pre)
     with pytest.raises(NkiArtifactIdentityError, match="no longer present"):
-        resolve_expected([root], stem="MODULE_GONE", expect_marker=True, pre_stems=pre | {"MODULE_NEWGRAPH"})
+        resolve_expected_pairs([root], stems=["MODULE_GONE"], nki_phase=True,
+                               pre_stems=pre | {"MODULE_NEWGRAPH"})
