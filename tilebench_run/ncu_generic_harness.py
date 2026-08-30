@@ -13,7 +13,8 @@ Usage (under ncu):
     NCU_PARAMS_JSON='{"M":2048,"N":2048,"K":20480}' \
     NCU_CFG_JSON='{"tm":256,"tn":64,"tk":32,"group_size_m":8,"occupancy":8}' \
     NCU_DTYPE=int8 \
-    ncu --set full --import-source on --profile-from-start off \
+    ncu --set full --import-source yes --source-folders "$PWD,..." \
+        --profile-from-start off \
         --replay-mode application --cache-control none \
         --kernel-name regex:"matmul" --launch-skip 0 --launch-count 1 \
         -o out python ncu_generic_harness.py
@@ -23,7 +24,7 @@ import json
 import os
 import sys
 
-from ncu_common import apply_config_override, repo_root
+from ncu_common import apply_config_override, register_tilelang_source_capture, repo_root
 
 ROOT = repo_root()
 sys.path.insert(0, str(ROOT))
@@ -57,6 +58,7 @@ def main() -> None:
         if td is not None:
             params["dtype"] = td
 
+    register_tilelang_source_capture(op, backend, dtype or "unknown")
     impl = importlib.import_module(f"benchmarks.operators.{op}.impl_{backend}")
 
     if cfg_json:

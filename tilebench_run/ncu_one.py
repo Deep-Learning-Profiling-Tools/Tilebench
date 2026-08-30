@@ -25,7 +25,14 @@ import sys
 import time
 from pathlib import Path
 
-from ncu_common import BACKENDS, LEGACY_BACKENDS, ncu_bin, repo_root
+from ncu_common import (
+    BACKENDS,
+    LEGACY_BACKENDS,
+    ncu_bin,
+    ncu_profile_source_args,
+    prepare_profile_env,
+    repo_root,
+)
 import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
 
 ROOT = repo_root()
@@ -48,7 +55,7 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     env["NCU_PARAMS_JSON"] = json.dumps(params)
     if cfg is not None:
         env["NCU_CFG_JSON"] = json.dumps(cfg)
-    env["PYTHONPATH"] = str(ROOT)
+    env = prepare_profile_env(env, op=op, backend=backend, dtype=dtype)
     rgx = ks.kernel_regex(kernel_names)
     if rgx:
         count = ks.real_kernel_count(kernel_names) or n_kernels
@@ -61,7 +68,7 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
     # exactly ONE measured impl.run() inside it — nothing to skip.
     skip = 0
     cmd = [
-        NCU, "--set", "full", "--import-source", "on",
+        NCU, "--set", "full", *ncu_profile_source_args(),
         # Unified methodology (see ncu_driver.py): application replay + no NCU
         # cache control; the harness's manual eviction supplies the cold entry.
         "--replay-mode", "application", "--cache-control", "none",

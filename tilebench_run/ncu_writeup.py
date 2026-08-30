@@ -174,10 +174,11 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
         "**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  "
     )
     headline.append(
-        "**Profile method:** `--set full --import-source on`, "
-        "`--profile-from-start off`, `--replay-mode application`, "
-        "`--cache-control none`, name-filtered compute kernels at "
-        "sweep-max input.  "
+        "**Profile method:** `--set full --import-source yes "
+        "--source-folders <repo,ncu_source>`, `--profile-from-start off`, "
+        "`--replay-mode application`, `--cache-control none`, name-filtered "
+        "compute kernels at sweep-max input, with `-lineinfo` forced for "
+        "NVCC-generated code.  "
     )
     headline.append("")
 
@@ -333,9 +334,10 @@ def write_summary(ops: dict, catalogue: list) -> None:
         "",
         "**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  ",
         "**Profile method:** autotune-winner cfg at sweep-max input case, "
-        "`--set full --import-source on`, name-filtered compute kernels, "
-        "`--profile-from-start off`, `--replay-mode application`, "
-        "`--cache-control none`",
+        "`--set full --import-source yes --source-folders <repo,ncu_source>`, "
+        "name-filtered compute kernels, `--profile-from-start off`, "
+        "`--replay-mode application`, `--cache-control none`, and `-lineinfo` "
+        "forced for NVCC-generated code",
         "",
         "Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the "
         "`<backend>_<dtype>.ncu-rep` files in that directory.",

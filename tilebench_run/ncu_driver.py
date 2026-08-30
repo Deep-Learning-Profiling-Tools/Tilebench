@@ -21,7 +21,14 @@ import sys
 import time
 from pathlib import Path
 
-from ncu_common import BACKENDS, ncu_bin, parse_backends, repo_root
+from ncu_common import (
+    BACKENDS,
+    ncu_bin,
+    ncu_profile_source_args,
+    parse_backends,
+    prepare_profile_env,
+    repo_root,
+)
 import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
 
 ROOT = repo_root()
@@ -51,7 +58,7 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
     env["NCU_PARAMS_JSON"] = json.dumps(params)
     if cfg is not None:
         env["NCU_CFG_JSON"] = json.dumps(cfg)
-    env["PYTHONPATH"] = str(ROOT)
+    env = prepare_profile_env(env, op=op, backend=backend, dtype=dtype)
 
     # Harness structure: 3 warmups + 256 MB L2 eviction OUTSIDE the profiler
     # range, then exactly ONE measured impl.run() inside cudaProfilerStart/
@@ -67,7 +74,7 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
     skip = 0
 
     cmd = [
-        NCU, "--set", "full", "--import-source", "on",
+        NCU, "--set", "full", *ncu_profile_source_args(),
         # Unified methodology: application replay + no NCU cache control, so
         # each replay pass re-executes the whole harness (warmups + manual
         # eviction + one measured run) and intra-operator producer-consumer
