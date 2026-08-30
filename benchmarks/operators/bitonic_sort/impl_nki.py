@@ -135,11 +135,11 @@ def _bitonic_sort_1d(data: torch.Tensor, span_cap: int = SPAN_CAP) -> torch.Tens
         return data.clone()
 
     M = max(_next_pow2(N), PMAX)
-    # A large *finite* sentinel, not float("inf"): confirmed via
-    # temp/probe_bitonic_pad.py that literal +inf padding corrupts the sort
-    # on this hardware/SDK (exact-power-of-2 N, needing no padding, always
-    # sorted correctly; padded N did not -- switching the pad value from
-    # inf to 1e30 was the only change needed to fix it). Values in this
+    # A large *finite* sentinel, not float("inf"): literal +inf padding
+    # corrupts the sort on this hardware/SDK (verified on trn2: an
+    # exact-power-of-2 N, needing no padding, always sorted correctly;
+    # padded N did not -- switching the pad value from inf to 1e30 was the
+    # only change needed to fix it). Values in this
     # benchmark's generator are standard-normal, so 1e30 is safely larger
     # than anything real without risking inf-specific behavior.
     PAD_VALUE = 1e30
