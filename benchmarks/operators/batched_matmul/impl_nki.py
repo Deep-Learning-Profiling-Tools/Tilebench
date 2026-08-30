@@ -22,10 +22,6 @@ MAX_TILE_M = 128   # stationary free dim (output rows per PE tile)      <= 128
 MAX_TILE_K = 128   # contraction dim per matmul (== partition dim)       <= 128
 MAX_TILE_N = 512   # moving free dim == one fp32 PSUM bank (128 x 2KB)   <= 512
 
-# How many SPMD programs the batch dimension is split across.  Orthogonal to
-# the hardware LNC degree reported by _lnc_degree(); run() reconciles the two.
-NUM_CORES = int(os.environ.get("NKI_BMM_NUM_CORES", "2"))
-
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
@@ -219,15 +215,11 @@ def run(A: torch.Tensor, B: torch.Tensor,
     tile_m, tile_k, tile_n = cfg.block_size_m, cfg.block_size_k, cfg.block_size_n
 
     # The SPMD grid degree and the batch-split factor are the same number: the
-    # kernel derives its batch slice from nl.program_id(0), so a grid wider
-    # than the split would run off the end of the batch and a narrower one
-    # would drop elements.  NUM_CORES is the requested split; it is only
-    # usable when it divides BATCH *and* matches the LNC the module is
-    # compiled for.
+    # kernel derives its batch slice from nl.program_id(0).  The launch degree
+    # has to match the LNC the module is compiled for, so the batch is split
+    # across the LNC cores when it divides evenly, one core otherwise.
     lnc = _lnc_degree()
-    num_cores = NUM_CORES if BATCH % NUM_CORES == 0 else 1
-    if num_cores != lnc:
-        num_cores = lnc if BATCH % lnc == 0 else 1
+    num_cores = lnc if BATCH % lnc == 0 else 1
 
     C = batched_matmul_kernel[num_cores](A3, B3, tile_m, tile_k, tile_n,
                                          num_cores)
