@@ -9,6 +9,118 @@ _BACKEND_LABEL = {"triton": "Triton", "cutile": "cuTile", "tilelang": "TileLang"
 _SPEEDUP_CODE = {"triton": "T", "cutile": "C", "tilelang": "TL", "nki": "N"}
 
 
+def _parse_params_label(label: str) -> dict[str, str]:
+    parsed = {}
+    for part in label.split(","):
+        if "=" not in part:
+            return {}
+        key, value = part.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
+def _param_value_matches(actual, expected: str) -> bool:
+    if str(actual) == expected:
+        return True
+    try:
+        return float(actual) == float(expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def _label_matches_result(label: str, result: dict) -> bool:
+    parsed = _parse_params_label(label)
+    if not parsed:
+        return False
+    params = result["params"]
+    for key, expected in parsed.items():
+        if key == "n" and key not in params:
+            actual = result["problem_size"]
+        elif key in params:
+            actual = params[key]
+        else:
+            return False
+        if not _param_value_matches(actual, expected):
+            return False
+    return True
+
+
+def _csv_aware_param_formatter(csv_path: str, timing_results: list[dict], fallback):
+    """Reuse frozen CSV param labels when a filtered run has no varying keys."""
+    path = Path(csv_path)
+    if not path.exists():
+        return fallback
+
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        old_rows = list(reader)
+
+    preferred = {}
+    for r in timing_results:
+        matches = [
+            row["params"]
+            for row in old_rows
+            if row.get("dtype") == r["dtype"] and _label_matches_result(row["params"], r)
+        ]
+        if len(matches) == 1:
+            preferred[id(r)] = matches[0]
+
+    def _fmt_params(r):
+        return preferred.get(id(r), fallback(r))
+
+    return _fmt_params
+
+
+def _autotune_key(result: dict) -> tuple[str, int, str]:
+    return (
+        json.dumps(result["params"], sort_keys=True),
+        result["problem_size"],
+        result["dtype"],
+    )
+
+
+def _merge_into_autotune_log(log_path: str, autotune_results: list[dict],
+                             active: list[str]) -> bool:
+    """Merge active backend configs into an existing combined autotune log."""
+    cfg_keys = [f"{b}_autotune_cfg" for b in active]
+    if not cfg_keys or not any(k in r for r in autotune_results for k in cfg_keys):
+        return False
+
+    path = Path(log_path)
+    if not path.exists():
+        return False
+
+    with path.open() as f:
+        old_rows = json.load(f)
+    index = {_autotune_key(r): r for r in old_rows}
+
+    missing = [r for r in autotune_results if _autotune_key(r) not in index]
+    if missing:
+        examples = [
+            (r["params"], r["problem_size"], r["dtype"])
+            for r in missing[:5]
+        ]
+        raise SystemExit(
+            f"autotune log merge: {len(missing)} case(s) have no matching row "
+            f"in {log_path}, e.g. {examples} — refusing to merge"
+        )
+
+    updated = 0
+    for r in autotune_results:
+        old = index[_autotune_key(r)]
+        for key in cfg_keys:
+            if key in r:
+                old[key] = r[key]
+                updated += 1
+
+    with path.open("w") as f:
+        json.dump(old_rows, f, indent=4)
+        f.write("\n")
+
+    print(f"Merged {updated} autotune config(s) into {log_path}")
+    return True
+
+
 def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dict]]:
     """Keep only torch + the active backends' keys, so backends that were not
     run never appear (as nan) in the timing / autotune logs."""
@@ -223,9 +335,15 @@ def main():
         json.dump(timing_results, f, indent=4)
     print(f"Timing results  → {output_path}")
 
-    with open(autotune_path, "w") as f:
-        json.dump(autotune_results, f, indent=4)
-    print(f"Autotune log    → {autotune_path}")
+    merged_autotune_log = (
+        active
+        and set(active) <= {"tilelang", "nki"}
+        and _merge_into_autotune_log(autotune_path, autotune_results, active)
+    )
+    if not merged_autotune_log:
+        with open(autotune_path, "w") as f:
+            json.dump(autotune_results, f, indent=4)
+        print(f"Autotune log    → {autotune_path}")
 
     # Determine which param keys actually vary across ALL cases in this run.
     # Keys that are constant (same value in every case) are hidden to reduce noise.
@@ -234,12 +352,16 @@ def main():
     all_keys   = sorted({k for p in all_params for k in p})
     varying_keys = [k for k in all_keys if len({p.get(k) for p in all_params}) > 1]
 
-    def _fmt_params(r):
+    def _fallback_fmt_params(r):
         if varying_keys:
             return ", ".join(f"{k}={r['params'][k]}" for k in varying_keys if k in r["params"])
         return f"n={r['problem_size']}"
 
-    col_w = max((len(_fmt_params(r)) for r in timing_results), default=20) + 2
+    mode_suffix = "autotune" if args.autotune else "default"
+    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
+    fmt_params = _csv_aware_param_formatter(csv_path, timing_results, _fallback_fmt_params)
+
+    col_w = max((len(fmt_params(r)) for r in timing_results), default=20) + 2
 
     print("\nSummary:")
     header = f"{'Params':<{col_w}} | {'Dtype':>8} | {'Torch(ms)':>10}"
@@ -248,7 +370,7 @@ def main():
     print(header)
     print("-" * len(header))
     for r in timing_results:
-        line = f"{_fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f}"
+        line = f"{fmt_params(r):<{col_w}} | {r['dtype']:8s} | {r['torch_ms']:10.4f}"
         line += "".join(f" | {r[f'{b}_ms']:12.4f}" for b in active)
         line += "".join(f" | {r[f'speedup_{b}']:11.2f}" for b in active)
         print(line)
@@ -257,8 +379,6 @@ def main():
     # and autotune sweeps don't overwrite each other:
     #   results/csv/<op>_default.csv   (no --autotune)
     #   results/csv/<op>_autotune.csv  (--autotune)
-    mode_suffix = "autotune" if args.autotune else "default"
-    csv_path = f"results/csv/{args.operator}_{mode_suffix}.csv"
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
 
     # tilelang/nki runs never overwrite the frozen torch/triton/cutile CSV:
@@ -268,7 +388,7 @@ def main():
     # plain writer below only ever runs for triton/cutile sweeps or when
     # no summary CSV exists yet.
     if active and set(active) <= {"tilelang", "nki"} and Path(csv_path).exists():
-        _merge_into_csv(csv_path, timing_results, active, _fmt_params)
+        _merge_into_csv(csv_path, timing_results, active, fmt_params)
         return
     if active and set(active) <= {"tilelang", "nki"}:
         print(f"Note: {csv_path} does not exist yet — writing a fresh "
@@ -287,7 +407,7 @@ def main():
         )
         for r in timing_results:
             writer.writerow(
-                [_fmt_params(r), r["dtype"], f"{r['torch_ms']:.4f}"]
+                [fmt_params(r), r["dtype"], f"{r['torch_ms']:.4f}"]
                 + [f"{r[f'{b}_ms']:.4f}" for b in active]
                 + [f"{r[f'speedup_{b}']:.2f}" for b in active]
                 + ([f"{r['cutile_ms'] / r['triton_ms']:.4f}"] if ratio else [])
