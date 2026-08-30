@@ -5,6 +5,7 @@ from tilelang.autotuner import set_autotune_inputs
 
 _DEFAULT_CONFIG = {"ROPE_GROUP_SIZE": 16, "threads": 64}
 _last_autotune_config: dict = {}
+_compiled_autotune_cache: dict[tuple[int, int, int, int, str], object] = {}
 
 
 def rope_config():
@@ -64,14 +65,20 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
     sin_view = sin.view(seq_len, half_dim)
 
     if autotune:
-        tmp = output.clone()
-        tmp_view = tmp.view(batch * seq_len, n_heads, 2, half_dim)
-        with set_autotune_inputs(tmp_view, cos_view, sin_view):
-            kernel = rope_embedding.compile(
-                tmp_view, cos_view, sin_view,
-                dtype=dtype,
-                seq_len=seq_len,
-            )
+        cache_key = (batch, seq_len, n_heads, head_dim, dtype)
+        cached = _compiled_autotune_cache.get(cache_key)
+        if cached is None:
+            tmp = output.clone()
+            tmp_view = tmp.view(batch * seq_len, n_heads, 2, half_dim)
+            with set_autotune_inputs(tmp_view, cos_view, sin_view):
+                kernel = rope_embedding.compile(
+                    tmp_view, cos_view, sin_view,
+                    dtype=dtype,
+                    seq_len=seq_len,
+                )
+            _compiled_autotune_cache[cache_key] = kernel
+        else:
+            kernel = cached
         _last_autotune_config.clear()
         _last_autotune_config.update(dict(kernel.config or {}))
         kernel(output_view, cos_view, sin_view)
