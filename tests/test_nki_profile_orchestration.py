@@ -71,6 +71,9 @@ class FakeRunner:
         self.nki_graphs = {"MODULE_N": 90.0}
         # simulate dropped trace events / varying graph structure on iteration 2
         self.drop_second_iteration_graphs = False
+        # None -> the NKI phase raised before identity was established (artifacts: null);
+        # [] -> it compiled nothing (artifacts: [])
+        self.nki_phase_artifacts_override = "unset"
         self.clock = 1_000_000
 
     def __call__(self, cmd, *, cwd, env_overrides):
@@ -127,9 +130,12 @@ class FakeRunner:
             torch_entry = {"verify_ok": self.torch_verify_ok,
                            "verify_error": None if self.torch_verify_ok else "xla mismatch",
                            "windows": None, "artifacts": None}
+            if self.torch_artifact:
+                torch_entry["artifacts"] = artifacts([("MODULE_T", False)])
+            else:
+                torch_entry["artifacts"] = []          # compiled nothing (e.g. unsupported op)
             if self.torch_verify_ok and self.torch_artifact:
                 torch_entry["windows"] = phase({"MODULE_T": 30.0}, spec["repeat"])
-                torch_entry["artifacts"] = artifacts([("MODULE_T", False)])
             nki_entry = None
             if spec["nki_enabled"]:
                 nki_entry = {"verify_ok": self.nki_verify_ok,
@@ -138,17 +144,21 @@ class FakeRunner:
                              "replay_consumed": bool(spec["autotune_replay"]),
                              "executed_trace": spec["autotune_replay"],
                              "windows": None, "artifacts": None}
-                if self.nki_verify_ok:
+                nki_entry["artifacts"] = artifacts(
+                    [(stem, stem.startswith("MODULE_N")) for stem in self.nki_graphs])
+                if self.nki_phase_artifacts_override != "unset":
+                    nki_entry["artifacts"] = self.nki_phase_artifacts_override
+                    nki_entry["verify_ok"] = False
+                    nki_entry["verify_error"] = "phase failed: RuntimeError: boom"
+                elif self.nki_verify_ok:
                     nki_entry["windows"] = phase(self.nki_graphs, spec["repeat"],
                                                  self.drop_second_iteration_graphs)
-                    nki_entry["artifacts"] = artifacts(
-                        [(stem, stem.startswith("MODULE_N")) for stem in self.nki_graphs])
             with open(os.path.join(session, "ntrace.pb"), "wb") as f:
                 f.write(b"fake")
             with open(os.path.join(session, "fake_executions.json"), "w") as f:
                 json.dump(execs, f)
             result = {"ok": True, "mode": "profile", "torch": torch_entry, "nki": nki_entry}
-            if spec["nki_enabled"] and not self.nki_verify_ok:
+            if spec["nki_enabled"] and not nki_entry["verify_ok"]:
                 result["ok"] = False
         with open(args["--result"], "w") as f:
             json.dump(result, f)
@@ -331,6 +341,41 @@ def test_reuse_with_failing_reverification_is_not_published(tmp_path):
     assert second["identity_source"] == "validated_manifest_reuse"
     assert second["nki_ok"] is False and "verification failed" in second["nki_err"]
     assert second["nki_ms"] != second["nki_ms"]  # nan
+    with open(second["manifest_path"]) as f:
+        nki_t = json.load(f)["targets"]["nki"]
+    assert nki_t["stats"] is None and nki_t["executed"] is None
+    assert [a["stem"] for a in nki_t["artifacts"]] == ["MODULE_N"]   # identity still recorded
+    # ...so the spec recovers on the next run instead of being stuck forever (Codex P1)
+    runner.nki_verify_ok = True
+    third = orchestrate(tmp_path, runner, autotune=False)
+    assert third["identity_source"] == "validated_manifest_reuse"
+    assert third["nki_ok"] and third["nki_ms"] == pytest.approx(0.09)
+    with open(runner.calls[2]["args"]["--spec"]) as f:
+        assert json.load(f)["expected_stems"]["nki"] == ["MODULE_N"]
+
+
+def test_nki_phase_failure_without_identity_triggers_rebuild(tmp_path):
+    runner = FakeRunner()
+    orchestrate(tmp_path, runner, autotune=False)
+    runner.nki_phase_artifacts_override = None       # phase raised before identity
+    second = orchestrate(tmp_path, runner, autotune=False)
+    assert second["nki_ok"] is False
+    runner.nki_phase_artifacts_override = "unset"
+    third = orchestrate(tmp_path, runner, autotune=False)
+    assert third["identity_source"] == "private_debug_dump"          # rebuilt, not reused
+    assert third["nki_ok"] and third["nki_ms"] == pytest.approx(0.09)
+
+
+def test_nki_phase_that_compiled_nothing_triggers_rebuild(tmp_path):
+    runner = FakeRunner()
+    orchestrate(tmp_path, runner, autotune=False)
+    runner.nki_phase_artifacts_override = []         # e.g. kernel failed to compile
+    second = orchestrate(tmp_path, runner, autotune=False)
+    assert second["nki_ok"] is False
+    runner.nki_phase_artifacts_override = "unset"
+    third = orchestrate(tmp_path, runner, autotune=False)
+    assert third["identity_source"] == "private_debug_dump"
+    assert third["nki_ok"]
 
 
 def test_tampered_reused_artifact_triggers_rebuild_not_reuse(tmp_path):

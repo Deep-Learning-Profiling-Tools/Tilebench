@@ -118,6 +118,30 @@ def test_valid_manifest_reuse(tmp_path):
     assert [p.neff_path for p in pairs["nki"]] == [neff]
 
 
+def test_manifest_reuse_per_target_states(tmp_path):
+    root = str(tmp_path)
+    neff, hlo = write_pair(root, "MODULE_R", marker=True)
+    tneff, thlo = write_pair(root, "MODULE_T", marker=False)
+    m = manifest_for("s", "nki", neff, hlo)
+    torch_rec = manifest_for("s", "torch", tneff, thlo, marker=False, stem="MODULE_T")["targets"]["torch"]
+    # torch compiled nothing (unsupported op): skipped, nki reused
+    m["targets"]["torch"] = {"artifacts": []}
+    assert list(validate_manifest_reuse(m, spec_id="s", allowed_roots=[root])) == ["nki"]
+    # torch phase failed before identity: not reusable
+    m["targets"]["torch"] = {"artifacts": None}
+    with pytest.raises(NkiArtifactIdentityError, match="no artifact records"):
+        validate_manifest_reuse(m, spec_id="s", allowed_roots=[root])
+    # nki recorded only a non-marker pair: the kernel never compiled -> rebuild
+    m["targets"]["torch"] = torch_rec
+    m["targets"]["nki"] = {"artifacts": [dict(torch_rec["artifacts"][0])]}
+    with pytest.raises(NkiArtifactIdentityError, match="no marker-bearing"):
+        validate_manifest_reuse(m, spec_id="s", allowed_roots=[root])
+    # nki compiled nothing -> rebuild
+    m["targets"]["nki"] = {"artifacts": []}
+    with pytest.raises(NkiArtifactIdentityError, match="no marker-bearing|no reusable"):
+        validate_manifest_reuse(m, spec_id="s", allowed_roots=[root])
+
+
 def test_manifest_reuse_rejects_other_schema_versions(tmp_path):
     root = str(tmp_path)
     neff, hlo = write_pair(root, "MODULE_R", marker=True)

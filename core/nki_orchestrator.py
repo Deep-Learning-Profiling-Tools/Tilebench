@@ -400,7 +400,8 @@ def profile_case_on_neuron(
                     continue
                 rec = {"verify_ok": entry["verify_ok"],
                        "verify_error": entry["verify_error"],
-                       "artifacts": None, "executed": None, "stats": None}
+                       "artifacts": entry.get("artifacts"),   # identity even when not timed
+                       "executed": None, "stats": None}
                 targets[target] = rec
                 if not (entry.get("artifacts") and entry["verify_ok"]):
                     continue
@@ -430,7 +431,6 @@ def profile_case_on_neuron(
                             roots=[spec_dir],
                             candidates=[dataclasses_asdict(p) for p in pairs]
                             + [dataclasses_asdict(p) for p in reuse_pairs[target]])
-                rec["artifacts"] = [dict(a) for a in entry["artifacts"]]
                 for p in pairs:
                     pairs_by_sha[p.neff_sha256] = p
                 timed_targets.append(target)

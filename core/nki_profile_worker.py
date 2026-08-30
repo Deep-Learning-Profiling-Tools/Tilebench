@@ -115,9 +115,28 @@ def _timed_windows(run_once, *, warmup: int, repeat: int) -> list[list[int]]:
     return windows
 
 
+def _new_pair_records(cwd: str, pre_stems: set[str]) -> list[dict]:
+    """Every valid pair that appeared since ``pre_stems`` (no marker checks —
+    used to record what a FAILED phase still dumped, so a reuse run knows
+    those pairs exist)."""
+    from core.nki_artifact import discover_pairs
+
+    pairs, _rejections = discover_pairs([cwd])
+    return [_artifact_record(p) for p in sorted(pairs, key=lambda p: p.stem)
+            if p.stem not in pre_stems]
+
+
 def _run_phase(*, fn, kw, xla_inputs, reference, spec, expected_stems, nki_phase,
                cwd, ctx) -> dict:
-    """Verify one run(), time warmup+repeat iterations, record the phase's pairs."""
+    """Run one target: verify one run(), record the phase's pairs, time
+    warmup+repeat iterations when verification passed.
+
+    Artifact identity is recorded whether or not verification passes (it is a
+    compile fact, and a reuse run must know every pair this spec dumps); only
+    a verified run is timed. A run() that raises (unsupported op, compile
+    error) is reported in ``verify_error`` with whatever pairs it still dumped
+    (``[]`` when it compiled nothing).
+    """
     from core.nki_artifact import resolve_expected_pairs, resolve_phase_pairs
     from core.nki_timer import to_cpu
     from core.verifier import verify
@@ -129,16 +148,21 @@ def _run_phase(*, fn, kw, xla_inputs, reference, spec, expected_stems, nki_phase
         xm.wait_device_ops()
         return out
 
+    entry = {"verify_ok": False, "verify_error": None, "windows": None,
+             "artifacts": None, "phase_failed": False}
     pre_stems = _snapshot_stems(cwd)
-    out = run_once()
+    try:
+        out = run_once()
+    except Exception as e:  # noqa: BLE001 — reported, never silently timed
+        entry["phase_failed"] = True
+        entry["verify_error"] = (f"phase failed: {type(e).__name__}: "
+                                 f"{str(e).splitlines()[0][:300]}")
+        entry["artifacts"] = _new_pair_records(cwd, pre_stems)
+        return entry
     ok, err = verify(to_cpu(out), reference,
                      atol=spec["verify_atol"], rtol=spec["verify_rtol"])
-    entry = {"verify_ok": bool(ok), "verify_error": None if ok else str(err),
-             "windows": None, "artifacts": None}
-    if not ok:
-        return entry
-    entry["windows"] = _timed_windows(run_once, warmup=int(spec["warmup"]),
-                                      repeat=int(spec["repeat"]))
+    entry["verify_ok"] = bool(ok)
+    entry["verify_error"] = None if ok else str(err)
     if expected_stems:
         pairs = resolve_expected_pairs([cwd], stems=expected_stems, nki_phase=nki_phase,
                                        pre_stems=pre_stems, context=ctx)
@@ -146,6 +170,9 @@ def _run_phase(*, fn, kw, xla_inputs, reference, spec, expected_stems, nki_phase
         pairs = resolve_phase_pairs([cwd], nki_phase=nki_phase, exclude_stems=pre_stems,
                                     context=ctx)
     entry["artifacts"] = [_artifact_record(p) for p in pairs]
+    if ok:
+        entry["windows"] = _timed_windows(run_once, warmup=int(spec["warmup"]),
+                                          repeat=int(spec["repeat"]))
     return entry
 
 
@@ -180,24 +207,23 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
     # A failure here (unsupported op on trn2, XLA numeric mismatch, identity
     # ambiguity) is recorded as the torch baseline's own error and must NOT
     # abort the NKI phase: the NKI result stands on its own.
-    torch_failed = False
     try:
         result["torch"] = _run_phase(
             fn=impl_torch.run, kw={}, xla_inputs=xla_inputs, reference=reference, spec=spec,
             expected_stems=expected.get("torch"), nki_phase=False, cwd=cwd,
             ctx=dict(ctx, target="torch"))
-    except Exception as e:  # noqa: BLE001 — reported, never silently timed
-        torch_failed = True
+    except Exception as e:  # noqa: BLE001 — identity errors: reported, never timed
         result["torch"] = {
             "verify_ok": False,
             "verify_error": f"torch baseline phase failed: {type(e).__name__}: "
                             f"{str(e).splitlines()[0][:300]}",
-            "windows": None, "artifacts": None,
+            "windows": None, "artifacts": None, "phase_failed": True,
         }
-    if torch_failed:
-        # Drain the failed graph only AFTER the except block: its traceback kept
-        # the dead lazy tensors alive, and syncing those trips torch-xla's
-        # "Check failed: tensor_data" and would take the NKI phase down with it.
+    if not result["torch"]["verify_ok"]:
+        # Drain the failed graph only AFTER its except block has ended: the
+        # traceback kept the dead lazy tensors alive, and syncing those trips
+        # torch-xla's "Check failed: tensor_data" and would take the NKI phase
+        # down with it.
         gc.collect()
         try:
             xm.mark_step()
@@ -222,7 +248,7 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
             fn=impl_nki.run, kw=kw, xla_inputs=xla_inputs, reference=reference, spec=spec,
             expected_stems=expected.get("nki"), nki_phase=True, cwd=cwd,
             ctx=dict(ctx, target="nki"))
-        if replay:
+        if replay and not entry["phase_failed"]:
             na.assert_tuning_replay_consumed()
         entry.update({
             "replay_installed": bool(replay),

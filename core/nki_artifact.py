@@ -270,14 +270,27 @@ def resolve_explicit_override(context: dict | None = None) -> ArtifactPair | Non
 
 
 def validate_manifest_reuse(manifest: dict, *, spec_id: str,
-                            allowed_roots: Sequence[str]) -> dict[str, list[ArtifactPair]]:
+                            allowed_roots: Sequence[str],
+                            marker_targets: Sequence[str] = ("nki",)
+                            ) -> dict[str, list[ArtifactPair]]:
     """Re-validate a previously written manifest for exact artifact reuse.
 
     Checks: manifest schema version, spec_id match, and per profiled target
     every recorded artifact (files exist, SHA256s match the manifest, NKI
     marker still present where claimed, paths inside the allowed roots).
-    Targets that recorded no artifacts (a baseline that failed to compile or
-    verify) have nothing to reuse and are skipped — they are re-run fresh.
+    Artifacts are recorded whether or not the target verified, so a
+    data-dependent verification failure is re-tried on reuse. Per-target
+    state:
+
+    - ``artifacts`` missing/None (the phase failed before its pairs could be
+      established) -> not reusable: the private space is rebuilt, because a
+      stale dump + compile-cache hit would otherwise leave that target
+      unresolvable forever;
+    - ``artifacts == []`` (the phase compiled nothing, e.g. an op unsupported
+      on the target) -> nothing stale can exist: skipped, re-run fresh;
+    - a ``marker_targets`` entry whose artifacts hold no marker-bearing pair
+      -> not reusable (rebuild): the kernel graph never compiled.
+
     Returns the re-validated pairs per target, or raises
     NkiArtifactIdentityError. Never searches for a replacement.
     """
@@ -293,8 +306,18 @@ def validate_manifest_reuse(manifest: dict, *, spec_id: str,
     out: dict[str, list[ArtifactPair]] = {}
     for target in manifest.get("targets", {}):
         records = manifest["targets"][target].get("artifacts")
+        if records is None:
+            raise NkiArtifactIdentityError(
+                f"manifest target {target!r} has no artifact records (its phase "
+                f"failed before identity was established) — not reusable",
+                context=dict(ctx, target=target), roots=allowed_roots)
+        if target in marker_targets and not any(r.get("hlo_nki_marker") for r in records):
+            raise NkiArtifactIdentityError(
+                f"manifest target {target!r} recorded no marker-bearing (NKI) pair — "
+                f"not reusable", context=dict(ctx, target=target), roots=allowed_roots,
+                candidates=list(records))
         if not records:
-            continue
+            continue  # compiled nothing: no stale dump, re-run fresh
         pairs = []
         for rec in records:
             pair = validate_pair(rec["neff_path"],
@@ -320,6 +343,5 @@ def validate_manifest_reuse(manifest: dict, *, spec_id: str,
         out[target] = pairs
     if not out:
         raise NkiArtifactIdentityError(
-            "manifest has no recorded targets to reuse", context=ctx,
-            roots=allowed_roots)
+            "manifest has no reusable targets", context=ctx, roots=allowed_roots)
     return out
