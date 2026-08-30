@@ -2,10 +2,13 @@ import torch
 
 
 def run(input: torch.Tensor, N: int, **kwargs):
-    # torch.sort/torch.topk both lower to XLA's `sort` op, which Neuron does not
-    # support at all ([NCC_EVRF029] Operation sort is not supported on trn2) --
-    # so the honest baseline has to sort via only supported primitives (compare,
-    # gather, where), same approach as bitonic_sort's torch baseline.
+    if input.device.type != "xla":
+        # CPU / CUDA reference and GPU baseline: unchanged native sort.
+        return torch.sort(input).values
+    # XLA/Neuron only: torch.sort lowers to XLA's `sort` op, which neuronx-cc
+    # rejects ([NCC_EVRF029] Operation sort is not supported on trn2) -- so the
+    # on-device baseline sorts via supported primitives only (compare, gather,
+    # where), the same vectorised bitonic network as bitonic_sort's baseline.
     if N <= 1:
         return input.clone()
 

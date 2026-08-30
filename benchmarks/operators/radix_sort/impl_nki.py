@@ -471,8 +471,9 @@ def run(input: torch.Tensor, N: int, block_size: int = 1024,
     # One XLA graph per pass. Letting all 16 passes land in a single graph lets XLA's
     # buffer assignment reuse an HBM buffer that a later pass still reads, which
     # corrupts the result (reproducible on trn2 at N=1e6; each pass is bit-exact in
-    # isolation). Note the profiler consequence: neuron-profile times a single NEFF
-    # execution, so the reported latency covers one of the 16 passes, not the whole sort.
+    # isolation). The profiler sums the device time of every graph a timed run()
+    # iteration executes (the 16 passes + the output reshape), so NKI(ms) covers
+    # the whole sort.
     for shift in range(0, KEY_BITS, RADIX_BITS):
         shift_t = torch.full((PMAX, 1), shift, dtype=torch.int32, device=device)
         work = radix_pass(work, shift_t, S, n_blocks)
