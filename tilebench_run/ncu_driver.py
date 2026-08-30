@@ -4,25 +4,28 @@
 For each op/dtype:
   - Use autotune-winner cfg from catalogue if present; else use default
     (no _DEFAULT_CONFIG override).
-  - Run NCU on both backends.
+  - Run NCU on Triton, cuTile and TileLang.
   - Report under tilebench_run/ncu/<op>/{backend}_{dtype}.ncu-rep.
   - On failure: log and continue.
 
 Progress is appended to tilebench_run/ncu/sweep_log.json after each pair.
 Run with: PYTHONPATH=. python tilebench_run/ncu_driver.py
+Optional filters:
+  NCU_OPS=softmax,matmul_int8
+  NCU_BACKENDS=tilelang
 """
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from ncu_common import BACKENDS, ncu_bin, parse_backends, repo_root
 import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
-NCU = "/usr/local/cuda/bin/ncu"
+ROOT = repo_root()
+NCU = ncu_bin()
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
 CATALOGUE = ROOT / "tilebench_run" / "ncu_catalogue.json"
 NCU_DIR = ROOT / "tilebench_run" / "ncu"
@@ -142,6 +145,7 @@ def main() -> None:
                 kernel_names_map[key] = r["names"]
 
     ops_filter = {o.strip() for o in os.environ.get("NCU_OPS", "").split(",") if o.strip()}
+    backends = parse_backends(os.environ.get("NCU_BACKENDS"), default=BACKENDS)
     pairs = []
     for c in catalogue:
         op = c["op"]
@@ -150,7 +154,7 @@ def main() -> None:
         for dt in c["dtypes"]:
             params = c["default_params_per_dtype"][dt]
             winner = c["autotune_winner_per_dtype"].get(dt)
-            for backend in ("triton", "cutile"):
+            for backend in backends:
                 cfg = None
                 if winner is not None:
                     cfg = winner.get(backend)

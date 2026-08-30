@@ -14,11 +14,12 @@ import io
 import json
 import re
 import subprocess
-from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
-NCU = "/usr/local/cuda/bin/ncu"
+from ncu_common import BACKENDS, ncu_bin, repo_root
+
+ROOT = repo_root()
+NCU = ncu_bin()
 NCU_DIR = ROOT / "tilebench_run" / "ncu"
 
 WANTED = {
@@ -146,7 +147,7 @@ def collect_ops() -> dict:
         per_pair = {}
         for rep in reports:
             stem = rep.stem
-            m = re.match(r"^(triton|cutile)(?:_(.+))?$", stem)
+            m = re.match(r"^(triton|cutile|tilelang)(?:_(.+))?$", stem)
             if not m:
                 continue
             backend = m.group(1)
@@ -174,23 +175,25 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
     )
     headline.append(
         "**Profile method:** `--set full --import-source on`, "
-        "`--launch-skip 3 --launch-count 1`, autotune-winner cfg at "
+        "`--profile-from-start off`, `--replay-mode application`, "
+        "`--cache-control none`, name-filtered compute kernels at "
         "sweep-max input.  "
     )
     headline.append("")
 
     headline.append("## Test cases (sweep-max per dtype)")
     headline.append("")
-    headline.append("| dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) |")
-    headline.append("|---|---|---|---|")
+    headline.append("| dtype | params | autotune cfg (Triton) | autotune cfg (cuTile) | autotune cfg (TileLang) |")
+    headline.append("|---|---|---|---|---|")
     dtypes = catalogue_entry.get("dtypes", [])
     for dt in dtypes:
         params = catalogue_entry["default_params_per_dtype"].get(dt, {})
         winner = catalogue_entry["autotune_winner_per_dtype"].get(dt, {})
         t = winner.get("triton") if winner else None
         c = winner.get("cutile") if winner else None
+        tl = winner.get("tilelang") if winner else None
         headline.append(
-            f"| {dt} | `{params}` | `{t or '(default)'}` | `{c or '(default)'}` |"
+            f"| {dt} | `{params}` | `{t or '(default)'}` | `{c or '(default)'}` | `{tl or '(default)'}` |"
         )
     headline.append("")
 
@@ -215,7 +218,7 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
     headline.append("|" + "---|" * (len(cols) + 1))
 
     for dt in dtypes:
-        for backend in ("triton", "cutile"):
+        for backend in BACKENDS:
             metrics = per_pair.get((dt, backend))
             if not metrics:
                 continue
@@ -272,26 +275,23 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
     headline.append("")
     derived = []
     for dt in dtypes:
-        t = per_pair.get((dt, "triton"))
-        c = per_pair.get((dt, "cutile"))
-        if not t or not c or t.get("error") or c.get("error"):
+        durations = {}
+        for backend in BACKENDS:
+            metrics = per_pair.get((dt, backend))
+            if not metrics or metrics.get("error"):
+                continue
+            dur = duration_us(metrics)
+            if dur is not None and dur > 0:
+                durations[backend] = dur
+        if len(durations) < 2:
             continue
-        t_dur = duration_us(t)
-        c_dur = duration_us(c)
-        if t_dur is None or c_dur is None or t_dur <= 0 or c_dur <= 0:
-            continue
-        if t_dur < c_dur:
-            ratio = c_dur / t_dur
-            derived.append(
-                f"- **{dt}**: Triton is **{ratio:.2f}× faster** "
-                f"({t_dur:.1f} µs vs {c_dur:.1f} µs)."
-            )
-        else:
-            ratio = t_dur / c_dur
-            derived.append(
-                f"- **{dt}**: cuTile is **{ratio:.2f}× faster** "
-                f"({c_dur:.1f} µs vs {t_dur:.1f} µs)."
-            )
+        winner = min(durations, key=durations.get)
+        loser = max(durations, key=durations.get)
+        ratio = durations[loser] / durations[winner]
+        derived.append(
+            f"- **{dt}**: {winner} is **{ratio:.2f}x faster** than {loser} "
+            f"({durations[winner]:.1f} us vs {durations[loser]:.1f} us)."
+        )
     if derived:
         headline.extend(derived)
     else:
@@ -333,33 +333,44 @@ def write_summary(ops: dict, catalogue: list) -> None:
         "",
         "**Hardware:** NVIDIA B200 180GB (dgx003), CUDA 13, NCU 2026.1.1.0  ",
         "**Profile method:** autotune-winner cfg at sweep-max input case, "
-        "`--set full --import-source on`, `--launch-skip 3 --launch-count 1`",
+        "`--set full --import-source on`, name-filtered compute kernels, "
+        "`--profile-from-start off`, `--replay-mode application`, "
+        "`--cache-control none`",
         "",
         "Per-operator detail: `tilebench_run/ncu/<op>/comparison.md` and the "
         "`<backend>_<dtype>.ncu-rep` files in that directory.",
         "",
         "## Headline duration table (µs)",
         "",
-        "| op | dtype | Triton (µs) | cuTile (µs) | Triton:cuTile |",
-        "|---|---|---:|---:|---:|",
+        "| op | dtype | Triton (us) | cuTile (us) | TileLang (us) | fastest | slowest:fastest |",
+        "|---|---|---:|---:|---:|---|---:|",
     ]
     for op in sorted(ops):
         per_pair = ops[op]
         dtypes = cat_by_op.get(op, {}).get("dtypes", [])
         for dt in dtypes:
-            t = per_pair.get((dt, "triton"))
-            c = per_pair.get((dt, "cutile"))
-            td = duration_us(t); cd = duration_us(c)
-            if td is None and cd is None:
+            durations = {
+                backend: duration_us(per_pair.get((dt, backend)))
+                for backend in BACKENDS
+            }
+            durations = {k: v for k, v in durations.items() if v is not None and v > 0}
+            if not durations:
                 continue
-            if td and cd and cd > 0:
-                ratio = cd / td
-                ratio_str = f"{ratio:.2f}×"
-            else:
-                ratio_str = "—"
-            td_s = f"{td:.1f}" if td else "—"
-            cd_s = f"{cd:.1f}" if cd else "—"
-            lines.append(f"| {op} | {dt} | {td_s} | {cd_s} | {ratio_str} |")
+            fastest = min(durations, key=durations.get)
+            slowest = max(durations, key=durations.get)
+            ratio_str = (
+                f"{durations[slowest] / durations[fastest]:.2f}x"
+                if len(durations) > 1
+                else "-"
+            )
+            values = {
+                backend: f"{durations[backend]:.1f}" if backend in durations else "-"
+                for backend in BACKENDS
+            }
+            lines.append(
+                f"| {op} | {dt} | {values['triton']} | {values['cutile']} | "
+                f"{values['tilelang']} | {fastest} | {ratio_str} |"
+            )
     lines.append("")
 
     failures_path = NCU_DIR / "sweep_failures.md"

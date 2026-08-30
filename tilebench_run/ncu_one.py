@@ -1,14 +1,14 @@
 """Run NCU for one operator.
 
 Usage:
-  python tilebench_run/ncu_one.py <op> [<dtype>] [--backend triton|cutile|both]
+  python tilebench_run/ncu_one.py <op> [<dtype>] [--backend triton|cutile|tilelang|all|both]
 
 Reads autotune winners / kernel counts from the catalogue + kernel_counts.json
 and runs NCU at the sweep-max input case (the same case used by the global
 sweep). Outputs to tilebench_run/ncu/<op>/<backend>_<dtype>.ncu-rep.
 
 Examples:
-  # Both backends, all dtypes:
+  # All profiling backends, all dtypes:
   python tilebench_run/ncu_one.py matmul_int8
 
   # Single dtype, both backends:
@@ -25,10 +25,11 @@ import sys
 import time
 from pathlib import Path
 
+from ncu_common import BACKENDS, LEGACY_BACKENDS, ncu_bin, repo_root
 import ncu_kernel_select as ks  # sibling module in tilebench_run/ (on sys.path as a script)
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
-NCU = "/usr/local/cuda/bin/ncu"
+ROOT = repo_root()
+NCU = ncu_bin()
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
 CATALOGUE = ROOT / "tilebench_run" / "ncu_catalogue.json"
 KERNEL_COUNTS = ROOT / "tilebench_run" / "ncu" / "kernel_counts.json"
@@ -114,8 +115,8 @@ def main() -> None:
     ap.add_argument("op")
     ap.add_argument("dtype", nargs="?", default=None,
                     help="dtype (e.g. fp16, fp32). Omit for all dtypes.")
-    ap.add_argument("--backend", choices=["triton", "cutile", "both"],
-                    default="both")
+    ap.add_argument("--backend", choices=[*BACKENDS, "all", "both"],
+                    default="all")
     args = ap.parse_args()
 
     catalogue = json.loads(CATALOGUE.read_text())
@@ -133,7 +134,12 @@ def main() -> None:
                 kcn[key] = r["names"]
 
     dtypes = [args.dtype] if args.dtype else op_entry["dtypes"]
-    backends = ["triton", "cutile"] if args.backend == "both" else [args.backend]
+    if args.backend == "all":
+        backends = list(BACKENDS)
+    elif args.backend == "both":
+        backends = list(LEGACY_BACKENDS)
+    else:
+        backends = [args.backend]
 
     rc_total = 0
     for dt in dtypes:

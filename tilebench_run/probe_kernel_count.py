@@ -16,9 +16,10 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from types import SimpleNamespace
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
+from ncu_common import BACKENDS, apply_config_override, parse_backends, repo_root
+
+ROOT = repo_root()
 sys.path.insert(0, str(ROOT))
 
 import torch
@@ -39,16 +40,7 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
         params = {**params, "dtype": td}
 
     impl = importlib.import_module(f"benchmarks.operators.{op}.impl_{backend}")
-    if cfg:
-        existing = getattr(impl, "_DEFAULT_CONFIG", None)
-        if isinstance(existing, dict):
-            merged = dict(existing); merged.update(cfg)
-            impl._DEFAULT_CONFIG = merged
-        elif isinstance(existing, SimpleNamespace):
-            merged = vars(existing).copy(); merged.update(cfg)
-            impl._DEFAULT_CONFIG = SimpleNamespace(**merged)
-        else:
-            impl._DEFAULT_CONFIG = SimpleNamespace(**cfg)
+    apply_config_override(impl, cfg, params.get("dtype"))
 
     inputs = GENERATORS[op](**params)
     if not isinstance(inputs, tuple):
@@ -83,6 +75,7 @@ def main() -> None:
     counts: list[dict] = []
 
     only_op = os.environ.get("ONLY_OP")
+    backends = parse_backends(os.environ.get("NCU_BACKENDS"), default=BACKENDS)
 
     for entry in catalogue:
         op = entry["op"]
@@ -91,7 +84,7 @@ def main() -> None:
         for dt in entry["dtypes"]:
             params = entry["default_params_per_dtype"][dt]
             winner = entry["autotune_winner_per_dtype"].get(dt)
-            for backend in ("triton", "cutile"):
+            for backend in backends:
                 cfg = (winner or {}).get(backend)
                 try:
                     r = count_one(op, backend, dict(params), cfg, dt)

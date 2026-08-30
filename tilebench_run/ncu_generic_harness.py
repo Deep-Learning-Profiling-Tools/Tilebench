@@ -2,7 +2,7 @@
 
 Env:
   NCU_OP          operator name (e.g. "matmul_int8")
-  NCU_BACKEND     "triton" or "cutile"
+  NCU_BACKEND     "triton", "cutile" or "tilelang"
   NCU_PARAMS_JSON JSON dict of params passed to GENERATORS[op](**params)
   NCU_CFG_JSON    JSON dict for `_DEFAULT_CONFIG` override (optional)
   NCU_DTYPE       dtype string (e.g. "fp16"); converted to torch.dtype and
@@ -13,17 +13,20 @@ Usage (under ncu):
     NCU_PARAMS_JSON='{"M":2048,"N":2048,"K":20480}' \
     NCU_CFG_JSON='{"tm":256,"tn":64,"tk":32,"group_size_m":8,"occupancy":8}' \
     NCU_DTYPE=int8 \
-    ncu --set full --import-source on --launch-skip 3 --launch-count 1 \
-        --kernel-name regex:"matmul" -o out python ncu_generic_harness.py
+    ncu --set full --import-source on --profile-from-start off \
+        --replay-mode application --cache-control none \
+        --kernel-name regex:"matmul" --launch-skip 0 --launch-count 1 \
+        -o out python ncu_generic_harness.py
 """
 import importlib
 import json
 import os
-import re
 import sys
-from types import SimpleNamespace
 
-sys.path.insert(0, "/projects/kzhou6/bcui2/research/tilebench/Tilebench")
+from ncu_common import apply_config_override, repo_root
+
+ROOT = repo_root()
+sys.path.insert(0, str(ROOT))
 
 import torch
 from data.tensors import GENERATORS
@@ -36,53 +39,6 @@ DTYPE_MAP = {
     "fp8_e4m3fn": getattr(torch, "float8_e4m3fn", None),
     "fp8_e5m2":   getattr(torch, "float8_e5m2", None),
 }
-
-
-_PREFIXED_CONFIG_RE = re.compile(r"^_DEFAULT_([A-Z0-9]+)_CONFIG$")
-
-
-def _inject_prefixed(impl, cfg: dict) -> dict:
-    """Route prefixed winner keys into the per-kernel config dicts run() reads.
-
-    Operators with more than one tunable kernel keep their configs in
-    per-kernel dicts named `_DEFAULT_<PREFIX>_CONFIG` (linear_self_attention:
-    `_DEFAULT_KV_CONFIG` / `_DEFAULT_OUT_CONFIG`), and the catalogue prefixes
-    their winner keys to match (`kv_BLOCK_M`, `out_num_warps`, ...). Without
-    this routing the override lands on an unused `_DEFAULT_CONFIG` attribute
-    and NCU silently profiles the DEFAULT config instead of the winner.
-
-    Mutates the target dicts in place (never rebinds them, so a `run()` that
-    captured a reference still sees the update). Returns the unconsumed keys
-    for the caller's existing single-config handling.
-    """
-    targets = {}
-    for attr in dir(impl):
-        m = _PREFIXED_CONFIG_RE.match(attr)
-        if m:
-            targets[m.group(1).lower()] = (attr, getattr(impl, attr))
-    if not targets:
-        return cfg
-
-    leftover = {}
-    for key, val in cfg.items():
-        placed = False
-        for pref, (attr, target) in targets.items():
-            if not key.lower().startswith(pref + "_"):
-                continue
-            base = key[len(pref) + 1:]
-            if isinstance(target, dict) and base in target:
-                target[base] = val
-                placed = True
-            elif isinstance(target, SimpleNamespace) and hasattr(target, base):
-                setattr(target, base, val)
-                placed = True
-            if placed:
-                print(f"  cfg: {attr}[{base}] = {val}")
-                break
-        if not placed:
-            leftover[key] = val
-    return leftover
-
 
 def main() -> None:
     op       = os.environ["NCU_OP"]
@@ -104,37 +60,7 @@ def main() -> None:
     impl = importlib.import_module(f"benchmarks.operators.{op}.impl_{backend}")
 
     if cfg_json:
-        cfg = _inject_prefixed(impl, json.loads(cfg_json))
-
-    if cfg_json and cfg:
-        existing = getattr(impl, "_DEFAULT_CONFIG", None)
-        configs = getattr(impl, "_DEFAULT_CONFIGS", None)  # per-dtype dict, optional
-
-        if existing is None and configs is not None:
-            # Op uses per-dtype `_DEFAULT_CONFIGS[dtype]` (e.g. matmul_fp32_fp16_fp8).
-            # Override the entry for the dtype we're about to run so the kernel
-            # actually picks up `cfg`. Singular `_DEFAULT_CONFIG` is irrelevant
-            # to this impl, so don't bother setting it.
-            td = params.get("dtype")  # this is the torch.dtype already resolved
-            if td in configs:
-                cur = configs[td]
-                if isinstance(cur, dict):
-                    merged = dict(cur); merged.update(cfg)
-                    configs[td] = merged
-                else:
-                    merged = vars(cur).copy(); merged.update(cfg)
-                    configs[td] = SimpleNamespace(**merged)
-            else:
-                # No entry for this dtype — create one wholesale.
-                configs[td] = SimpleNamespace(**cfg)
-        elif isinstance(existing, dict):
-            merged = dict(existing); merged.update(cfg)
-            impl._DEFAULT_CONFIG = merged
-        elif isinstance(existing, SimpleNamespace):
-            merged = vars(existing).copy(); merged.update(cfg)
-            impl._DEFAULT_CONFIG = SimpleNamespace(**merged)
-        else:
-            impl._DEFAULT_CONFIG = SimpleNamespace(**cfg)
+        apply_config_override(impl, json.loads(cfg_json), params.get("dtype"))
 
     if op not in GENERATORS:
         raise RuntimeError(f"no GENERATORS entry for op={op}")

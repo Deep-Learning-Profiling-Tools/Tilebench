@@ -8,13 +8,14 @@ Catalogue all benchmark operators for the NCU sweep:
 Writes tilebench_run/ncu_catalogue.json for the driver to consume.
 """
 import json
-import os
 import sys
 from pathlib import Path
 
 import yaml
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
+from ncu_common import repo_root
+
+ROOT = repo_root()
 sys.path.insert(0, str(ROOT))
 
 OPS_DIR = ROOT / "benchmarks" / "operators"
@@ -54,6 +55,67 @@ def case_size(case: dict) -> int:
         if isinstance(v, (int, float)):
             size *= int(v)
     return size
+
+
+# Some ops write dtype="float32" / "float16" / "bfloat16" in the autotune
+# log even though config.yaml uses the short form. Normalise.
+DTYPE_ALIASES = {
+    "float32": "fp32", "float16": "fp16", "bfloat16": "bf16",
+}
+
+
+def _norm_dtype(s):
+    return DTYPE_ALIASES.get(s, s)
+
+
+def read_log(path: Path):
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        return None
+    return data if isinstance(data, list) else None
+
+
+def pick_sweep_max_entry(op_name: str, dt: str, entries: list[dict]):
+    entries = [
+        e for e in entries
+        if _norm_dtype(e.get("dtype")) == _norm_dtype(dt) and e.get("params")
+    ]
+    if not entries:
+        return None
+
+    # Sweep-max = the entry whose EVERY int-valued param equals that param's
+    # maximum across entries. For cross-product case grids (all current ops)
+    # this entry always exists and is unique. Float params (dropout's p, eps,
+    # etc.) are per-op constants and are ignored. The engine's scalar
+    # problem_size field is NOT used: it records a single dim, which ties
+    # across cases in multi-dim sweeps.
+    int_keys = sorted({
+        k for e in entries
+        for k, v in e["params"].items()
+        if isinstance(v, int) and not isinstance(v, bool)
+    })
+    dim_max = {
+        k: max(e["params"][k] for e in entries if k in e["params"])
+        for k in int_keys
+    }
+    best = next(
+        (e for e in entries
+         if all(e["params"].get(k) == dim_max[k] for k in int_keys)),
+        None,
+    )
+    if best is None:
+        # Non-cross-product sweep: the all-dims-max combination does not
+        # exist in the log. Fall back to max int-product, loudly.
+        best = max(entries, key=lambda e: case_size(
+            {k: v for k, v in e["params"].items()
+             if isinstance(v, int) and not isinstance(v, bool)}))
+        print(f"  WARNING {op_name}/{dt}: no all-dims-max case in "
+              f"autotune log (per-dim maxes {dim_max}); falling back "
+              f"to max int-product params={best['params']}")
+    return best
 
 
 def collect_op(op_name: str) -> dict:
@@ -99,61 +161,27 @@ def collect_op(op_name: str) -> dict:
         params.update(max_case)
         per_dtype[dt] = params
 
-    log_path = LOG_DIR / f"{op_name}_autotune.json"
-    autotune_data = None
-    if log_path.exists():
-        try:
-            with open(log_path) as f:
-                autotune_data = json.load(f)
-        except Exception:
-            autotune_data = None
-
-    # Some ops write dtype="float32" / "float16" / "bfloat16" in the autotune
-    # log even though the config.yaml dtype field uses the short form. Normalise.
-    DTYPE_ALIASES = {
-        "float32": "fp32", "float16": "fp16", "bfloat16": "bf16",
-    }
-    def _norm(s):
-        return DTYPE_ALIASES.get(s, s)
+    autotune_data = read_log(LOG_DIR / f"{op_name}_autotune.json")
+    tilelang_autotune_data = read_log(LOG_DIR / f"{op_name}_tilelang_autotune.json")
 
     autotune_by_dtype = {}
-    if isinstance(autotune_data, list):
-        for dt in dtypes:
-            entries = [e for e in autotune_data
-                       if _norm(e.get("dtype")) == _norm(dt) and e.get("params")]
-            if not entries:
-                continue
-            # Sweep-max = the entry whose EVERY int-valued param equals that
-            # param's maximum across entries. For cross-product case grids
-            # (all current ops) this entry always exists and is unique.
-            # Float params (dropout's p, eps, ...) are per-op constants and
-            # are ignored. The engine's scalar problem_size field is NOT
-            # used: it records a single dim, which ties across cases in
-            # multi-dim sweeps (top_k's N x k, streamk's m x n, ...) and the
-            # old first-tie-wins scan paired the params of one case with the
-            # winner of another. params and winner now come from ONE entry.
-            int_keys = sorted({k for e in entries
-                               for k, v in e["params"].items()
-                               if isinstance(v, int) and not isinstance(v, bool)})
-            dim_max = {k: max(e["params"][k] for e in entries
-                              if k in e["params"]) for k in int_keys}
-            best = next((e for e in entries
-                         if all(e["params"].get(k) == dim_max[k]
-                                for k in int_keys)), None)
-            if best is None:
-                # Non-cross-product sweep: the all-dims-max combination does
-                # not exist in the log. Fall back to max int-product, LOUDLY.
-                best = max(entries, key=lambda e: case_size(
-                    {k: v for k, v in e["params"].items()
-                     if isinstance(v, int) and not isinstance(v, bool)}))
-                print(f"  WARNING {op_name}/{dt}: no all-dims-max case in "
-                      f"autotune log (per-dim maxes {dim_max}); falling back "
-                      f"to max int-product params={best['params']}")
-            autotune_by_dtype[dt] = {
-                "params":  best.get("params", {}),
-                "triton":  best.get("triton_autotune_cfg"),
-                "cutile":  best.get("cutile_autotune_cfg"),
-            }
+    for dt in dtypes:
+        record = {}
+        best = pick_sweep_max_entry(op_name, dt, autotune_data or [])
+        if best is not None:
+            record.update({
+                "params": best.get("params", {}),
+                "triton": best.get("triton_autotune_cfg"),
+                "cutile": best.get("cutile_autotune_cfg"),
+            })
+
+        tl_best = pick_sweep_max_entry(op_name, dt, tilelang_autotune_data or [])
+        if tl_best is not None:
+            record.setdefault("params", tl_best.get("params", {}))
+            record["tilelang"] = tl_best.get("tilelang_autotune_cfg")
+
+        if record:
+            autotune_by_dtype[dt] = record
 
     return {
         "op": op_name,
@@ -161,6 +189,7 @@ def collect_op(op_name: str) -> dict:
         "default_params_per_dtype": per_dtype,
         "autotune_winner_per_dtype": autotune_by_dtype,
         "has_autotune_log": bool(autotune_data),
+        "has_tilelang_autotune_log": bool(tilelang_autotune_data),
     }
 
 
@@ -192,14 +221,20 @@ def main():
     no_log = [c["op"] for c in catalogue if not c.get("has_autotune_log")]
     if no_log:
         print(f"ops without autotune log: {no_log}")
+    no_tl_log = [c["op"] for c in catalogue if not c.get("has_tilelang_autotune_log")]
+    if no_tl_log:
+        print(f"ops without tilelang autotune log: {no_tl_log}")
     for c in catalogue:
         op = c["op"]
         dts = c["dtypes"]
         for dt in dts:
-            has_tune = dt in c["autotune_winner_per_dtype"]
+            winner = c["autotune_winner_per_dtype"].get(dt, {})
+            has_tune = bool(winner.get("triton") or winner.get("cutile"))
+            has_tl_tune = bool(winner.get("tilelang"))
             ps = c["default_params_per_dtype"][dt]
             print(f"  {op:30s}  dtype={dt:8s}  "
                   f"autotune={'yes' if has_tune else 'NO'}  "
+                  f"tilelang_autotune={'yes' if has_tl_tune else 'NO'}  "
                   f"params={ps}")
 
 

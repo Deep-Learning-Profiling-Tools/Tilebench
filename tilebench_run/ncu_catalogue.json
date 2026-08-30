@@ -79,7 +79,8 @@
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": false
   },
   {
     "op": "2d_conv",
@@ -133,7 +134,8 @@
           "block_in": 32,
           "block_out": 128,
           "occupancy": 4
-        }
+        },
+        "tilelang": null
       },
       "fp32": {
         "params": {
@@ -158,10 +160,18 @@
           "block_in": 32,
           "block_out": 128,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE_BATCH_HEIGHT_WIDTH": 64,
+          "BLOCK_SIZE_IN_FEAT": 16,
+          "BLOCK_SIZE_OUT_FEAT": 128,
+          "threads": 64,
+          "num_stages": 2
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "2d_max_pooling",
@@ -215,6 +225,11 @@
           "tile_r": 4,
           "tile_c": 128,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_R": 4,
+          "BLOCK_C": 128,
+          "threads": 128
         }
       },
       "bf16": {
@@ -235,6 +250,11 @@
           "tile_r": 4,
           "tile_c": 128,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_R": 4,
+          "BLOCK_C": 128,
+          "threads": 128
         }
       },
       "fp32": {
@@ -255,10 +275,16 @@
           "tile_r": 4,
           "tile_c": 128,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_R": 1,
+          "BLOCK_C": 512,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "3d_conv",
@@ -315,7 +341,8 @@
           "block_in": 16,
           "block_out": 64,
           "occupancy": 4
-        }
+        },
+        "tilelang": null
       },
       "fp32": {
         "params": {
@@ -341,10 +368,18 @@
           "block_in": 16,
           "block_out": 64,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE_BATCH_DHW": 128,
+          "BLOCK_SIZE_IN_FEAT": 16,
+          "BLOCK_SIZE_OUT_FEAT": 64,
+          "threads": 64,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "argmax",
@@ -376,6 +411,10 @@
         "cutile": {
           "block_n": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 128
         }
       },
       "fp32": {
@@ -391,10 +430,15 @@
         "cutile": {
           "block_n": 2048,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "batch_normalization",
@@ -434,6 +478,10 @@
         "cutile": {
           "rows": 16,
           "occupancy": 8
+        },
+        "tilelang": {
+          "ROWS": 8,
+          "threads": 256
         }
       },
       "bf16": {
@@ -449,6 +497,10 @@
         "cutile": {
           "rows": 16,
           "occupancy": 8
+        },
+        "tilelang": {
+          "ROWS": 8,
+          "threads": 256
         }
       },
       "fp32": {
@@ -464,10 +516,15 @@
         "cutile": {
           "rows": 8,
           "occupancy": 4
+        },
+        "tilelang": {
+          "ROWS": 8,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "batched_matmul",
@@ -555,7 +612,8 @@
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": false
   },
   {
     "op": "bitonic_sort",
@@ -583,6 +641,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK": 512,
+          "threads": 128
         }
       },
       "fp32": {
@@ -596,10 +658,15 @@
         "cutile": {
           "tile": 512,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK": 512,
+          "threads": 64
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "block_sparse_attention",
@@ -636,10 +703,15 @@
         },
         "cutile": {
           "occupancy": 32
+        },
+        "tilelang": {
+          "threads": 256,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "cross_entropy",
@@ -668,6 +740,9 @@
         },
         "cutile": {
           "occupancy": 32
+        },
+        "tilelang": {
+          "threads": 64
         }
       },
       "fp32": {
@@ -680,10 +755,14 @@
         },
         "cutile": {
           "occupancy": 8
+        },
+        "tilelang": {
+          "threads": 64
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "dequantize_rowwise",
@@ -709,10 +788,15 @@
         "cutile": {
           "chunk": 1024,
           "occupancy": 4
+        },
+        "tilelang": {
+          "CHUNK": 1024,
+          "threads": 64
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "destindex",
@@ -775,6 +859,26 @@
           "nope_occupancy": 4,
           "rope_block_size": 512,
           "rope_occupancy": 8
+        },
+        "tilelang": {
+          "nope": {
+            "shape": [
+              40960,
+              12,
+              128
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          },
+          "rope": {
+            "shape": [
+              40960,
+              1,
+              64
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          }
         }
       },
       "bf16": {
@@ -795,6 +899,26 @@
           "nope_occupancy": 4,
           "rope_block_size": 512,
           "rope_occupancy": 4
+        },
+        "tilelang": {
+          "nope": {
+            "shape": [
+              40960,
+              12,
+              128
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          },
+          "rope": {
+            "shape": [
+              40960,
+              1,
+              64
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          }
         }
       },
       "fp32": {
@@ -815,6 +939,26 @@
           "nope_occupancy": 4,
           "rope_block_size": 512,
           "rope_occupancy": 16
+        },
+        "tilelang": {
+          "nope": {
+            "shape": [
+              40960,
+              12,
+              128
+            ],
+            "BLOCK_SIZE": 512,
+            "threads": 64
+          },
+          "rope": {
+            "shape": [
+              40960,
+              1,
+              64
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          }
         }
       },
       "int8": {
@@ -835,10 +979,31 @@
           "nope_occupancy": 4,
           "rope_block_size": 512,
           "rope_occupancy": 4
+        },
+        "tilelang": {
+          "nope": {
+            "shape": [
+              40960,
+              12,
+              128
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          },
+          "rope": {
+            "shape": [
+              40960,
+              1,
+              64
+            ],
+            "BLOCK_SIZE": 1024,
+            "threads": 64
+          }
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "dropout",
@@ -874,6 +1039,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       },
       "bf16": {
@@ -888,6 +1057,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       },
       "fp32": {
@@ -902,10 +1075,15 @@
         "cutile": {
           "tile": 512,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "flash_attention",
@@ -940,10 +1118,17 @@
           "tile_m": 128,
           "tile_n": 128,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_M": 128,
+          "BLOCK_N": 128,
+          "threads": 256,
+          "num_stages": 2
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "flash_decode",
@@ -974,10 +1159,15 @@
         },
         "cutile": {
           "occupancy": 32
+        },
+        "tilelang": {
+          "threads": 128,
+          "num_stages": 4
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "fused_activation",
@@ -1002,10 +1192,15 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "gaussian_blur",
@@ -1041,6 +1236,11 @@
           "tile_r": 2,
           "tile_c": 128,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_R": 4,
+          "BLOCK_C": 256,
+          "threads": 128
         }
       },
       "fp32": {
@@ -1058,10 +1258,16 @@
           "tile_r": 2,
           "tile_c": 128,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_R": 4,
+          "BLOCK_C": 256,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "histogramming",
@@ -1094,10 +1300,18 @@
           "reduce_block_rows": 128,
           "reduce_block_bins": 64,
           "reduce_occupancy": 8
+        },
+        "tilelang": {
+          "partial_BLOCK_SIZE": 2048,
+          "partial_threads": 256,
+          "reduce_BLOCK_ROWS": 128,
+          "reduce_BLOCK_BINS": 64,
+          "reduce_threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "interleave",
@@ -1134,6 +1348,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "bf16": {
@@ -1148,6 +1366,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "fp32": {
@@ -1162,6 +1384,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "int8": {
@@ -1176,10 +1402,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 4096,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "jacobi_stencil_2d",
@@ -1213,6 +1444,11 @@
           "tile_r": 4,
           "tile_c": 512,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE_R": 2,
+          "BLOCK_SIZE_C": 512,
+          "threads": 256
         }
       },
       "bf16": {
@@ -1228,6 +1464,11 @@
           "tile_r": 4,
           "tile_c": 512,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE_R": 2,
+          "BLOCK_SIZE_C": 512,
+          "threads": 256
         }
       },
       "fp32": {
@@ -1243,10 +1484,16 @@
           "tile_r": 4,
           "tile_c": 512,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE_R": 2,
+          "BLOCK_SIZE_C": 512,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "kl_divergence",
@@ -1273,10 +1520,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 4096,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "l2_norm",
@@ -1321,6 +1573,11 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 128,
+          "num_stages": 4
         }
       },
       "bf16": {
@@ -1338,6 +1595,11 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 1024,
+          "threads": 256,
+          "num_stages": 4
         }
       },
       "fp32": {
@@ -1355,10 +1617,16 @@
         "cutile": {
           "tile_size": 512,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_N": 512,
+          "threads": 256,
+          "num_stages": 2
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "layernorm",
@@ -1399,6 +1667,11 @@
         "cutile": {
           "tile_size": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 1024,
+          "threads": 128,
+          "num_stages": 2
         }
       },
       "bf16": {
@@ -1415,6 +1688,11 @@
         "cutile": {
           "tile_size": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 1024,
+          "threads": 256,
+          "num_stages": 4
         }
       },
       "fp32": {
@@ -1431,10 +1709,16 @@
         "cutile": {
           "tile_size": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 256,
+          "num_stages": 4
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "leaky_relu",
@@ -1467,6 +1751,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "bf16": {
@@ -1481,6 +1769,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 4096,
+          "threads": 256
         }
       },
       "fp32": {
@@ -1495,10 +1787,15 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "linear_self_attention",
@@ -1540,10 +1837,23 @@
           "out_block_n": 32,
           "out_block_k": 64,
           "out_occupancy": 4
+        },
+        "tilelang": {
+          "kv_BLOCK_M": 32,
+          "kv_BLOCK_N": 32,
+          "kv_BLOCK_K": 64,
+          "kv_threads": 128,
+          "kv_num_stages": 3,
+          "out_BLOCK_M": 64,
+          "out_BLOCK_N": 128,
+          "out_BLOCK_K": 32,
+          "out_threads": 128,
+          "out_num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "matmul_fp32_fp16_fp8",
@@ -1590,6 +1900,14 @@
           "tk": 64,
           "group_size_m": 8,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 64,
+          "GROUP_SIZE_M": 8,
+          "threads": 128,
+          "num_stages": 2
         }
       },
       "fp16": {
@@ -1612,6 +1930,14 @@
           "tk": 64,
           "group_size_m": 8,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 256,
+          "BLOCK_SIZE_K": 64,
+          "GROUP_SIZE_M": 8,
+          "threads": 128,
+          "num_stages": 3
         }
       },
       "fp8_e4m3fn": {
@@ -1634,10 +1960,19 @@
           "tk": 128,
           "group_size_m": 8,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 256,
+          "BLOCK_SIZE_K": 128,
+          "GROUP_SIZE_M": 8,
+          "threads": 128,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "matmul_int8",
@@ -1672,10 +2007,19 @@
           "tk": 32,
           "group_size_m": 8,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE_M": 256,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 64,
+          "GROUP_SIZE_M": 8,
+          "threads": 512,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "matrix_copy",
@@ -1712,6 +2056,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "bf16": {
@@ -1726,6 +2074,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 4096,
+          "threads": 256
         }
       },
       "fp32": {
@@ -1740,6 +2092,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       },
       "int8": {
@@ -1754,10 +2110,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 4096,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "matrix_transpose",
@@ -1798,6 +2159,10 @@
         "cutile": {
           "tile": 128,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_TILE": 128,
+          "threads": 128
         }
       },
       "bf16": {
@@ -1812,6 +2177,10 @@
         "cutile": {
           "tile": 128,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_TILE": 128,
+          "threads": 128
         }
       },
       "fp32": {
@@ -1826,6 +2195,10 @@
         "cutile": {
           "tile": 64,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_TILE": 32,
+          "threads": 128
         }
       },
       "int8": {
@@ -1840,10 +2213,15 @@
         "cutile": {
           "tile": 128,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_TILE": 64,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "mean_reduction",
@@ -1880,6 +2258,11 @@
         "cutile": {
           "tile_size": 512,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_N": 512,
+          "threads": 256,
+          "num_stages": 2
         }
       },
       "bf16": {
@@ -1895,6 +2278,11 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 256,
+          "num_stages": 3
         }
       },
       "fp32": {
@@ -1910,10 +2298,16 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 1024,
+          "threads": 256,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "moe_topk_gating",
@@ -1951,6 +2345,9 @@
         },
         "cutile": {
           "occupancy": 8
+        },
+        "tilelang": {
+          "threads": 32
         }
       },
       "bf16": {
@@ -1964,6 +2361,9 @@
         },
         "cutile": {
           "occupancy": 32
+        },
+        "tilelang": {
+          "threads": 32
         }
       },
       "fp32": {
@@ -1977,10 +2377,14 @@
         },
         "cutile": {
           "occupancy": 16
+        },
+        "tilelang": {
+          "threads": 32
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "mul2",
@@ -2016,6 +2420,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "bf16": {
@@ -2029,6 +2437,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       },
       "fp32": {
@@ -2042,6 +2454,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       },
       "int8": {
@@ -2055,10 +2471,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "quantize_global",
@@ -2083,10 +2504,15 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "radix_sort",
@@ -2108,10 +2534,14 @@
         },
         "cutile": {
           "occupancy": 32
+        },
+        "tilelang": {
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "relu",
@@ -2147,6 +2577,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       },
       "bf16": {
@@ -2160,6 +2594,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2173,6 +2611,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       },
       "int8": {
@@ -2186,10 +2628,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "reverse_array",
@@ -2226,6 +2673,10 @@
         "cutile": {
           "tile": 8192,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "bf16": {
@@ -2240,6 +2691,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2254,6 +2709,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "int8": {
@@ -2268,10 +2727,15 @@
         "cutile": {
           "tile": 8192,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "rmsnorm",
@@ -2312,6 +2776,11 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 256,
+          "num_stages": 2
         }
       },
       "bf16": {
@@ -2328,6 +2797,11 @@
         "cutile": {
           "tile_size": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_N": 2048,
+          "threads": 256,
+          "num_stages": 2
         }
       },
       "fp32": {
@@ -2344,10 +2818,16 @@
         "cutile": {
           "tile_size": 1024,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_N": 1024,
+          "threads": 256,
+          "num_stages": 2
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "rope",
@@ -2385,6 +2865,10 @@
         "cutile": {
           "group_size": 16,
           "occupancy": 8
+        },
+        "tilelang": {
+          "ROPE_GROUP_SIZE": 16,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2402,10 +2886,15 @@
         "cutile": {
           "group_size": 16,
           "occupancy": 8
+        },
+        "tilelang": {
+          "ROPE_GROUP_SIZE": 16,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "sigmoid",
@@ -2438,6 +2927,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "bf16": {
@@ -2452,6 +2945,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2466,10 +2963,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "softmax",
@@ -2500,6 +3002,10 @@
         "cutile": {
           "block_size": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2514,10 +3020,15 @@
         "cutile": {
           "block_size": 2048,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "streamk_matmul",
@@ -2564,6 +3075,14 @@
           "tk": 64,
           "group_m": 8,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_M": 128,
+          "BLOCK_N": 256,
+          "BLOCK_K": 32,
+          "GROUP_M": 8,
+          "threads": 128,
+          "num_stages": 3
         }
       },
       "bf16": {
@@ -2586,6 +3105,14 @@
           "tk": 64,
           "group_m": 8,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_M": 128,
+          "BLOCK_N": 256,
+          "BLOCK_K": 32,
+          "GROUP_M": 8,
+          "threads": 128,
+          "num_stages": 3
         }
       },
       "fp32": {
@@ -2608,10 +3135,19 @@
           "tk": 32,
           "group_m": 8,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_M": 128,
+          "BLOCK_N": 128,
+          "BLOCK_K": 32,
+          "GROUP_M": 8,
+          "threads": 128,
+          "num_stages": 3
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "swiglu",
@@ -2647,6 +3183,10 @@
         "cutile": {
           "tile": 8192,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       },
       "bf16": {
@@ -2661,6 +3201,10 @@
         "cutile": {
           "tile": 8192,
           "occupancy": 8
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2675,10 +3219,15 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "top_k_selection",
@@ -2705,10 +3254,15 @@
           "block": 2048,
           "occupancy": 4,
           "K2": 1024
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "vector_add",
@@ -2744,6 +3298,10 @@
         "cutile": {
           "tile": 1024,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       },
       "bf16": {
@@ -2757,6 +3315,10 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 64
         }
       },
       "fp32": {
@@ -2770,6 +3332,10 @@
         "cutile": {
           "tile": 512,
           "occupancy": 16
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 1024,
+          "threads": 256
         }
       },
       "int8": {
@@ -2783,10 +3349,15 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 32
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 64
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   },
   {
     "op": "weight_dequant",
@@ -2822,6 +3393,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "bf16": {
@@ -2836,6 +3411,10 @@
         "cutile": {
           "tile": 4096,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 128
         }
       },
       "fp32": {
@@ -2850,9 +3429,14 @@
         "cutile": {
           "tile": 2048,
           "occupancy": 4
+        },
+        "tilelang": {
+          "BLOCK_SIZE": 2048,
+          "threads": 256
         }
       }
     },
-    "has_autotune_log": true
+    "has_autotune_log": true,
+    "has_tilelang_autotune_log": true
   }
 ]
