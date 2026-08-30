@@ -253,9 +253,11 @@ _last_autotune_config: dict = {}
   kernel; that distinction comes only from exact winner replay.
 - **Timing** comes from the Neuron runtime's inspect trace
   (`NEURON_RT_INSPECT_*`, private output dir per spec): the worker runs
-  `run()` `warmup` + `repeat` times on the case's real inputs with a wall-clock
-  window per timed iteration; the parent sums the device time of the
-  executions inside each window (multi-graph `run()`s are summed) and matches
+  `run()` `warmup` + `repeat` times on the case's real inputs and records, per
+  timed iteration, the range of XLA execution indices it covered; the parent
+  orders the trace's executions, checks their count against the worker's,
+  sums the device time inside each range (multi-graph `run()`s are summed —
+  no host clock is ever compared with the trace's timebase) and matches
   every executed NEFF — written back by the runtime, byte-identical to the
   compiler dump — to a recorded pair by SHA256. `NKI(ms)` is the mean over the
   timed iterations. The per-iteration graph pattern must be identical, NKI

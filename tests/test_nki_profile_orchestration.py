@@ -74,6 +74,8 @@ class FakeRunner:
         # None -> the NKI phase raised before identity was established (artifacts: null);
         # [] -> it compiled nothing (artifacts: [])
         self.nki_phase_artifacts_override = "unset"
+        # executions torch-xla submitted that the trace does not hold (or vice versa)
+        self.extra_xla_executions = 0
         self.clock = 1_000_000
 
     def __call__(self, cmd, *, cwd, env_overrides):
@@ -97,13 +99,13 @@ class FakeRunner:
             session = os.path.join(args["--inspect-dir"], "i-fake_pid_1", "123")
             os.makedirs(session, exist_ok=True)
             execs = []
+            self.xla_executions = 0
 
             def phase(graphs_us, repeat, drop_after_first=False):
-                """Timed windows + trace executions for one target."""
+                """Timed windows (XLA execution-index ranges) + trace executions."""
                 windows = []
                 for it in range(repeat):
-                    t0 = self.clock
-                    self.clock += 1000
+                    begin = len(execs)
                     for stem, us in graphs_us.items():
                         if drop_after_first and it > 0 and stem != next(iter(graphs_us)):
                             continue
@@ -111,9 +113,8 @@ class FakeRunner:
                                       "start_ns": self.clock,
                                       "end_ns": self.clock + int(us * 1000), "pcores": 2})
                         self.clock += int(us * 1000) + 1000
-                    t1 = self.clock
-                    self.clock += 1000
-                    windows.append([t0, t1])
+                    windows.append([begin, max(len(execs), begin + 1)])
+                self.xla_executions = len(execs)
                 return windows
 
             def artifacts(stems_marker):
@@ -157,7 +158,8 @@ class FakeRunner:
                 f.write(b"fake")
             with open(os.path.join(session, "fake_executions.json"), "w") as f:
                 json.dump(execs, f)
-            result = {"ok": True, "mode": "profile", "torch": torch_entry, "nki": nki_entry}
+            result = {"ok": True, "mode": "profile", "torch": torch_entry, "nki": nki_entry,
+                      "xla_executions": self.xla_executions + self.extra_xla_executions}
             if spec["nki_enabled"] and not nki_entry["verify_ok"]:
                 result["ok"] = False
         with open(args["--result"], "w") as f:
@@ -295,6 +297,15 @@ def test_nki_run_that_executes_no_kernel_graph_fails(tmp_path):
 
     with pytest.raises(Exception, match="executed no marker-bearing"):
         orchestrate(tmp_path, call, autotune=False)
+
+
+def test_execution_count_mismatch_is_not_published(tmp_path):
+    """The trace must hold exactly the executions torch-xla submitted, or the
+    index windows cannot be attributed (dropped trace events, foreign executions)."""
+    runner = FakeRunner()
+    runner.extra_xla_executions = 1
+    with pytest.raises(Exception, match="cannot be attributed"):
+        orchestrate(tmp_path, runner, autotune=False)
 
 
 def test_varying_execution_pattern_is_not_published(tmp_path):

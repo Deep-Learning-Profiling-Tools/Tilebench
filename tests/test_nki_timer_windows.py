@@ -15,7 +15,7 @@ def ex(model, start, end):
 def test_single_graph_per_window_mean():
     execs = [ex("A", 50, 60),                 # verification run: outside every window
              ex("A", 110, 130), ex("A", 210, 240), ex("A", 310, 320)]
-    stats = time_windows(execs, [[100, 200], [200, 300], [300, 400]], tag="nki")
+    stats = time_windows(execs, [[1, 2], [2, 3], [3, 4]], tag="nki")
     assert stats["repeat"] == 3
     assert stats["per_iteration_ms"] == pytest.approx([20e-6, 30e-6, 10e-6])
     assert stats["mean"] == pytest.approx(20e-6)
@@ -30,27 +30,27 @@ def test_multi_graph_iteration_is_summed():
     # radix-sort shape: two kernel passes + one XLA helper graph per run()
     execs = [ex("K", 110, 120), ex("K", 125, 135), ex("X", 140, 141),
              ex("K", 210, 220), ex("K", 225, 235), ex("X", 240, 241)]
-    stats = time_windows(execs, [[100, 200], [200, 300]], tag="nki")
+    stats = time_windows(execs, [[0, 3], [3, 6]], tag="nki")
     assert stats["executions_per_iteration"] == 3
     assert stats["mean"] == pytest.approx(21e-6)
     assert stats["per_model"]["K"]["count_per_iteration"] == 2
     assert stats["per_model"]["X"]["count_per_iteration"] == 1
 
 
+def test_window_outside_the_trace_fails():
+    with pytest.raises(NkiTraceError, match="trace holds 1 execution"):
+        time_windows([ex("A", 10, 20)], [[1, 2]], tag="torch")
+
+
 def test_empty_window_fails():
-    with pytest.raises(NkiTraceError, match="contains no"):
-        time_windows([ex("A", 10, 20)], [[100, 200]], tag="torch")
-
-
-def test_execution_straddling_a_window_boundary_fails():
-    with pytest.raises(NkiTraceError, match="cuts through"):
-        time_windows([ex("A", 150, 250), ex("A", 260, 270)], [[100, 200], [200, 300]])
+    with pytest.raises(NkiTraceError, match="trace holds"):
+        time_windows([ex("A", 10, 20)], [[0, 0]], tag="torch")
 
 
 def test_varying_graph_pattern_fails():
     execs = [ex("K", 110, 120), ex("X", 130, 131), ex("K", 210, 220)]  # X missing in iter 2
     with pytest.raises(NkiTraceError, match="pattern differs"):
-        time_windows(execs, [[100, 200], [200, 300]], tag="nki")
+        time_windows(execs, [[0, 2], [2, 3]], tag="nki")
 
 
 def test_no_windows_fails():

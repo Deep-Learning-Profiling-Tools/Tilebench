@@ -18,14 +18,15 @@ profile
     installs the selector's exact winner trace, and replays it (zero candidate
     timings — a replay mismatch fails before anything is timed). Per target
     (torch baseline, then NKI) it: runs ``run()`` once and verifies the output;
-    runs ``warmup`` untimed and ``repeat`` timed iterations, recording a
-    wall-clock window ``[t0_ns, t1_ns]`` around every timed iteration; and
+    runs ``warmup`` untimed and ``repeat`` timed iterations, recording the
+    range of XLA execution indices every timed iteration covered; and
     records EVERY NEFF/HLO pair the phase compiled (an operator may compile
     several graphs per run()) — see core/nki_artifact.py. The runtime writes
     the executed NEFFs + the per-execution system trace into the inspect dir.
     The worker then EXITS; the parent orchestrator (core/nki_orchestrator.py)
-    ingests the trace, sums the device time inside each window and matches
-    every executed NEFF to the recorded pairs by SHA256 (core/nki_timer.py).
+    ingests the trace, sums the device time of the executions inside each
+    range and matches every executed NEFF to the recorded pairs by SHA256
+    (core/nki_timer.py).
 
 Only stdlib is imported at module level; torch / torch-xla imports happen
 inside main() AFTER the Neuron debug + private-cache + inspect environment is
@@ -38,7 +39,6 @@ import gc
 import json
 import os
 import sys
-import time
 import traceback
 
 from core.nki_profile_spec import RUNTIME_INSPECT_ENV, atomic_write_json, sha256_file
@@ -100,18 +100,32 @@ def _run_selector(spec: dict, bundle: dict) -> dict:
     }
 
 
+def _xla_execution_count() -> int:
+    """Number of XLA graph executions this process has submitted so far
+    (torch-xla's ``ExecuteTime`` metric count). One per runtime execution, so
+    it indexes the runtime trace's execution list without any clock."""
+    import torch_xla.debug.metrics as met
+
+    data = met.metric_data("ExecuteTime")
+    return int(data[0]) if data else 0
+
+
 def _timed_windows(run_once, *, warmup: int, repeat: int) -> list[list[int]]:
     """``warmup`` untimed + ``repeat`` timed executions of one run(); each timed
-    iteration's wall-clock window (epoch ns, the clock of the runtime trace)
-    is what the parent uses to pick that iteration's executions."""
+    iteration is recorded as the half-open range ``[begin, end)`` of XLA
+    execution indices it covered — the parent slices the trace's execution
+    list (ordered by device start) with it, so no wall-clock is ever compared
+    against the trace's timebase."""
     for _ in range(warmup):
         run_once()
     windows = []
     for _ in range(repeat):
-        t0 = time.time_ns()
+        begin = _xla_execution_count()
         run_once()
-        t1 = time.time_ns()
-        windows.append([t0, t1])
+        end = _xla_execution_count()
+        if end <= begin:
+            raise RuntimeError("timed run() submitted no XLA execution")
+        windows.append([begin, end])
     return windows
 
 
@@ -259,6 +273,9 @@ def _run_profile(spec: dict, bundle: dict) -> dict:
             result["ok"] = False
         result["nki"] = entry
 
+    # The parent checks this against the number of executions in the runtime
+    # trace: the windows above are only meaningful if the two lists line up.
+    result["xla_executions"] = _xla_execution_count()
     return result
 
 

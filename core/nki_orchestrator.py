@@ -18,10 +18,12 @@ identity rules):
       |     correctness is re-verified every time): private CWD + private
       |     compile cache + private runtime-inspect dir, exact winner replay
       |     (no candidate timing), verify, then warmup + repeat timed
-      |     iterations per target with wall-clock windows; every pair the
-      |     phase compiled is recorded (on reuse: must be the manifest's)
-      |-- PARENT re-validates SHA256s, ingests the runtime trace, sums the
-      |     device time of the executions inside each window, and matches
+      |     iterations per target, each recorded as a range of XLA execution
+      |     indices; every pair the phase compiled is recorded (on reuse:
+      |     must be the manifest's)
+      |-- PARENT re-validates SHA256s, ingests the runtime trace (execution
+      |     count must equal the worker's), sums the device time of the
+      |     executions inside each range, and matches
       |     every executed NEFF (runtime-written, byte-identical to the
       |     compiler dump) to a recorded pair by SHA256
       |-- write <spec_dir>/manifest.json (authoritative) + append the global
@@ -220,7 +222,8 @@ def profile_case_on_neuron(
     """
     import torch  # parent needs plain torch only (bundle serialization)
 
-    from core.nki_timer import find_session_dir, session_neffs, time_windows
+    from core.nki_timer import (NkiTraceError, find_session_dir, session_neffs,
+                                time_windows)
 
     runner = runner or _default_runner
     python = python or sys.executable
@@ -442,6 +445,13 @@ def profile_case_on_neuron(
                 executions, parquet_dir = executions_loader(
                     session_dir, data_path=os.path.join(profile_dir, "ne"),
                     display_name=f"{operator}-{case_label}-{spec_id[:16]}")
+                if len(executions) != worker_result.get("xla_executions"):
+                    raise NkiTraceError(
+                        f"runtime trace holds {len(executions)} execution(s) but the worker "
+                        f"submitted {worker_result.get('xla_executions')} XLA execution(s) — "
+                        f"the timed windows cannot be attributed (trace incomplete: raise "
+                        f"NEURON_RT_INSPECT_SYS_TRACE_MAX_EVENTS_PER_NC; or executions the "
+                        f"framework did not submit)")
                 runtime_neffs = session_neffs(session_dir)
                 runtime_sha = {m: sha256_file(p) for m, p in runtime_neffs.items()}
             for target in timed_targets:

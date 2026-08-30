@@ -6,17 +6,20 @@ with the Neuron runtime's inspect facility (``NEURON_RT_INSPECT_*``, the same
 mechanism ``neuron-explorer inspect`` uses):
 
 * the profile worker (core/nki_profile_worker.py) runs the operator's
-  ``run()`` ``warmup`` + ``repeat`` times on the case's REAL inputs and records
-  a wall-clock window ``[t0, t1]`` (``time.time_ns()``) around every timed
-  iteration;
+  ``run()`` ``warmup`` + ``repeat`` times on the case's REAL inputs and records,
+  per timed iteration, the half-open range of XLA execution indices it covered
+  (torch-xla's ``ExecuteTime`` count before/after — one per runtime execution);
 * the runtime (``RUNTIME_INSPECT_ENV`` in core/nki_profile_spec.py) writes,
   per executed NEFF, the exact binary it loaded
   (``neff_<model_id>_vnc_0.neff``), a device trace of its first execution
   (``<model_id>_vnc_0.ntff``, for deep-dive analysis) and a system trace
   (``ntrace.pb``) with one ``nc_exec_running`` hardware event per execution;
 * after the worker exits, the parent ingests the session with
-  ``neuron-explorer view -d`` (parquet), sums the device time of every
-  execution inside each window, and maps every executed ``model_id`` to one of
+  ``neuron-explorer view -d`` (parquet), orders the executions by device start,
+  checks their count against the worker's execution count, slices them with
+  the recorded ranges (no wall-clock is ever compared against the trace's
+  timebase), sums the device time per iteration, and maps every executed
+  ``model_id`` to one of
   this run's compiler-dumped NEFF/HLO pairs by SHA256 (the runtime-written
   NEFF is byte-identical to the compiler output) — so multi-graph operators
   (e.g. radix_sort's per-pass graphs) are timed as the sum of their graphs,
@@ -130,9 +133,10 @@ def ingest_session(session_dir: str, *, data_path: str, display_name: str) -> st
 
 
 def load_executions(parquet_dir: str) -> list[dict]:
-    """Every hardware execution in the session: one record per ``flow_id``
-    (LNC>1 emits one ``nc_exec_running`` row per physical core; they are merged
-    into ``[min start, max end]``)."""
+    """Every hardware execution in the session, ordered by device start: one
+    record per ``flow_id`` (LNC>1 emits one ``nc_exec_running`` row per physical
+    core; they are merged into ``[min start, max end]``). Timestamps are only
+    used for ordering and durations, never compared with a host clock."""
     import pyarrow.parquet as pq  # Neuron-host dependency (see requirements.txt)
 
     table = pq.read_table(
@@ -173,34 +177,29 @@ def load_session_executions(session_dir: str, *, data_path: str,
 # --------------------------------------------------------------------------
 
 def time_windows(executions: list[dict], windows: list, *, tag: str = "") -> dict:
-    """Device time of the executions inside each ``[t0_ns, t1_ns]`` window.
+    """Device time of the executions inside each ``[begin, end)`` index range.
 
-    Every window is one timed ``run()`` iteration; its latency is the sum of
-    the device time of the executions it contains (several for multi-graph
-    operators). Fail-loud checks: every window holds >= 1 execution, no
-    execution straddles a window boundary, and every window holds the SAME
-    multiset of model_ids (a differing pattern means dropped trace events or a
-    graph structure that changes between calls — either way no single number
-    describes the operator).
+    ``executions`` is the session's execution list ordered by device start;
+    every window is one timed ``run()`` iteration and its latency is the sum
+    of the device time of the executions it covers (several for multi-graph
+    operators). Fail-loud checks: every range is non-empty and inside the
+    list, and every window covers the SAME multiset of model_ids (a differing
+    pattern means dropped trace events or a graph structure that changes
+    between calls — either way no single number describes the operator).
     """
     if not windows:
         raise NkiTraceError(f"[{tag}] no timed windows recorded")
+    n_exec = len(executions)
     per_iter_ms: list[float] = []
     patterns: list[tuple] = []
     per_model: dict[str, list[float]] = {}
-    for i, (t0, t1) in enumerate(windows):
-        inside = [e for e in executions if t0 <= e["start_ns"] and e["end_ns"] <= t1]
-        straddling = [e for e in executions
-                      if (e["start_ns"] < t0 < e["end_ns"]) or (e["start_ns"] < t1 < e["end_ns"])]
-        if straddling:
+    for i, (begin, end) in enumerate(windows):
+        if not (0 <= begin < end <= n_exec):
             raise NkiTraceError(
-                f"[{tag}] window {i} [{t0}, {t1}] cuts through execution(s) "
-                f"{[e['model_id'] for e in straddling]} — clock mismatch between the worker and the trace")
-        if not inside:
-            raise NkiTraceError(
-                f"[{tag}] window {i} [{t0}, {t1}] contains no {HW_EXEC_EVENT} execution "
-                f"({len(executions)} executions in the session) — the timed run() executed "
-                f"no graph, or the runtime trace is incomplete")
+                f"[{tag}] window {i} covers executions [{begin}, {end}) but the runtime "
+                f"trace holds {n_exec} execution(s) — the trace is incomplete or the "
+                f"worker's execution count and the trace do not line up")
+        inside = executions[begin:end]
         patterns.append(tuple(sorted(e["model_id"] for e in inside)))
         per_iter_ms.append(sum(e["end_ns"] - e["start_ns"] for e in inside) / 1e6)
         for e in inside:
