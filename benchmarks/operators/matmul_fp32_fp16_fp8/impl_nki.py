@@ -16,21 +16,13 @@ try:
 except ImportError:
     nki = None
 
-# --- Hardware constants (NeuronCore-v2/v3) ---------------------------------
-# nc_matmul: dst[M, N] = stationary[K, M].T @ moving[K, N]
-TILE_M = 128   # stationary free dim (output rows per PE tile)      <= 128
-TILE_K = 128   # contraction dim per matmul (== partition dim)       <= 128
-TILE_N = 512   # moving free dim == one fp32 PSUM bank (128 x 2KB)   <= 512
+TILE_M = 128
+TILE_K = 128
+TILE_N = 512
 
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel can be launched with.
-
-    The NKI launch degree has to be compatible with the LNC the XLA module is
-    compiled for; trn2/trn3 default to LNC=2 unless the compiler/runtime env
-    says otherwise.  Copied verbatim from ``3d_conv/impl_nki.py``.
-    """
     explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
     if explicit.strip().isdigit():
         return int(explicit.strip())
@@ -40,8 +32,6 @@ def _lnc_degree() -> int:
     target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
     if target in ("trn2", "gen3", "trn3", "gen4"):
         return 2
-    # NEURON_PLATFORM_TARGET_OVERRIDE is rarely set in practice, so the branch
-    # above rarely fires -- ask the instance directly rather than guessing LNC=1.
     try:
         out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
         lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
@@ -56,15 +46,6 @@ if nki is not None:
     @nki.jit
     def matmul_kernel(lhs, rhs, TILES_IN_BLOCK_M, TILES_IN_BLOCK_N, TILES_IN_BLOCK_K,
                       NUM_CORES=1):
-        """``lhs[M, K] @ rhs[K, N]`` -> ``[M, N]`` in the input dtype.
-
-        Args:
-            lhs: (M, K) HBM tensor.
-            rhs: (K, N) HBM tensor, same dtype as ``lhs``.
-            TILES_IN_BLOCK_M/N/K: blocking factors (compile-time ints).
-            NUM_CORES: SPMD programs the M blocks are split across; must equal
-                the launch degree the kernel is invoked with.
-        """
         M, K = lhs.shape
         K_rhs, N = rhs.shape
 
@@ -86,25 +67,16 @@ if nki is not None:
 
         result = nl.ndarray((M, N), dtype=lhs.dtype, buffer=nl.shared_hbm)
 
-        # The fp32 accumulator can be DMA'd straight out when the output dtype
-        # already is fp32; otherwise it is cast through a staging tile.
         cast_on_store = lhs.dtype != nl.float32
 
         core = nl.program_id(0)
         for mi in range(BLOCKS_PER_CORE):
             m_row0 = (core * BLOCKS_PER_CORE + mi) * BLOCK_M
 
-            # One fp32 accumulator per 128-row output tile, spanning all of N.
-            # nl.par_dim is gone, so the per-tile axis lives in the *free*
-            # dimension of one fused SBUF tile (partition axis stays first) --
-            # result_tiles[0:TILE_M, bm, :] is the bm-th 128-row accumulator.
             result_tiles = nl.ndarray((TILE_M, TILES_IN_BLOCK_M, N),
                                       dtype=nl.float32, buffer=nl.sbuf)
 
             for k in range(NUM_BLOCK_K):
-                # A block of lhs, transposed in place into lhsT form: within
-                # tile bm, columns [bk * TILE_M, (bk + 1) * TILE_M) hold
-                # lhsT for k tile bk and are a valid stationary operand.
                 lhsT_tiles = nl.ndarray((TILE_M, TILES_IN_BLOCK_M, BLOCK_K),
                                         dtype=lhs.dtype, buffer=nl.sbuf)
 
@@ -116,9 +88,6 @@ if nki is not None:
                     )
                     for bk in range(TILES_IN_BLOCK_K):
                         col0 = bk * TILE_M
-                        # nc_transpose writes to PSUM; stage back into the same
-                        # SBUF columns so the block stays one flat tile.  On
-                        # gen3+ the transpose dst dtype must match the input.
                         t_psum = nl.ndarray((TILE_K, TILE_M), dtype=lhs.dtype,
                                             buffer=nl.psum)
                         nisa.nc_transpose(
@@ -185,7 +154,6 @@ if nki is not None:
 
 
 def _pick_tiles_in_block(dim: int, tile: int, preferred: int) -> int:
-    """Largest t <= preferred with (tile * t) dividing dim. Falls back to 1."""
     for t in range(preferred, 0, -1):
         if dim % (tile * t) == 0:
             return t
@@ -198,7 +166,6 @@ _last_autotune_config: dict = {}
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    """NKI matmul. Output dtype matches input dtype (fp32 / fp16)."""
     if a.shape[1] != b.shape[0]:
         raise ValueError("Incompatible dimensions")
     if a.dtype != b.dtype:
@@ -243,10 +210,6 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     tib_m, tib_n, tib_k = (cfg.block_size_m // TILE_M, cfg.block_size_n // TILE_N,
                            cfg.block_size_k // TILE_K)
 
-    # The SPMD grid degree and the M-split factor are the same number: the
-    # kernel derives its M blocks from nl.program_id(0).  The launch degree has
-    # to match the LNC the module is compiled for, so the M blocks are split
-    # across the LNC cores when they divide evenly, one core otherwise.
     num_block_m = M // (TILE_M * tib_m)
     lnc = _lnc_degree()
     num_cores = lnc if num_block_m % lnc == 0 else 1
