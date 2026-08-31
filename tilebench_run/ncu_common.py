@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,9 +28,14 @@ def ncu_bin() -> str:
     return os.environ.get("NCU_BIN") or shutil.which("ncu") or "/usr/local/cuda/bin/ncu"
 
 
+def ncu_run_dir() -> Path:
+    """Directory containing NCU reports/logs for one profiling run."""
+    return Path(os.environ.get("NCU_RUN_DIR", repo_root() / "tilebench_run" / "ncu")).resolve()
+
+
 def ncu_source_dir() -> Path:
     """Persistent generated-source dump directory used during NCU captures."""
-    return Path(os.environ.get("NCU_SOURCE_DIR", repo_root() / "tilebench_run" / "ncu_source")).resolve()
+    return Path(os.environ.get("NCU_SOURCE_DIR", ncu_run_dir() / "ncu_source")).resolve()
 
 
 def ncu_json_dir() -> Path:
@@ -73,12 +79,15 @@ def prepare_profile_env(env: dict[str, str], *, op: str, backend: str, dtype: st
     # -lineinfo is for profiling; unlike -G it does not intentionally disable
     # device optimizations.
     flags = env.get("NVCC_PREPEND_FLAGS", "")
-    if "-lineinfo" not in flags and "--generate-line-info" not in flags:
-        env["NVCC_PREPEND_FLAGS"] = (flags + " -lineinfo").strip()
+    for flag in ("-lineinfo", "-allow-unsupported-compiler"):
+        if flag not in flags:
+            flags = (flags + " " + flag).strip()
+    env["NVCC_PREPEND_FLAGS"] = flags
     env["TILEBENCH_NCU_OP"] = op
     env["TILEBENCH_NCU_BACKEND"] = backend
     env["TILEBENCH_NCU_DTYPE"] = dtype
     env["TILEBENCH_NCU_SOURCE_DUMP_DIR"] = str(ncu_source_dir())
+    env.setdefault("TILEBENCH_NCU_CC_BIN", shutil.which("g++-13") or shutil.which("g++") or "")
     return env
 
 
@@ -162,6 +171,21 @@ def apply_config_override(impl, cfg: dict | None, dtype_key=None) -> None:
         impl._DEFAULT_CONFIG = SimpleNamespace(**cfg)
 
 
+def _write_tilelang_source(op: str, backend: str, dtype: str, code: str, counter: dict[str, int]) -> str:
+    dump_root = os.environ.get("TILEBENCH_NCU_SOURCE_DUMP_DIR")
+    if not dump_root:
+        return code
+    if code.lstrip().startswith("#line "):
+        return code
+    out_dir = Path(dump_root) / op
+    out_dir.mkdir(parents=True, exist_ok=True)
+    idx = counter["i"]
+    counter["i"] += 1
+    path = out_dir / f"{backend}_{dtype}_{idx:02d}.cu"
+    path.write_text(code)
+    return f'#line 1 "{path}"\n{code}'
+
+
 def register_tilelang_source_capture(op: str, backend: str, dtype: str) -> None:
     """Persist TileLang generated CUDA under a stable path before NVCC compiles it.
 
@@ -181,14 +205,61 @@ def register_tilelang_source_capture(op: str, backend: str, dtype: str) -> None:
         print(f"  WARNING: TileLang source capture unavailable: {exc}")
         return
 
-    out_dir = Path(dump_root) / op
-    out_dir.mkdir(parents=True, exist_ok=True)
     counter = {"i": 0}
 
     @register_cuda_postproc_callback
     def tilelang_callback_cuda_postproc(code, _target):
-        idx = counter["i"]
-        counter["i"] += 1
-        path = out_dir / f"{backend}_{dtype}_{idx:02d}.cu"
-        path.write_text(code)
-        return f'#line 1 "{path}"\n{code}'
+        return _write_tilelang_source(op, backend, dtype, code, counter)
+
+
+def register_tilelang_compile_hook(op: str, backend: str, dtype: str) -> None:
+    """Override TileLang CUDA compilation for profiling-only flags/source paths."""
+    if backend != "tilelang":
+        return
+    try:
+        import tvm_ffi
+        from tilelang.contrib import nvcc
+        from tilelang.env import CUTLASS_INCLUDE_DIR, TILELANG_TEMPLATE_PATH
+        from tilelang.transform import PassConfigKey
+    except Exception as exc:
+        print(f"  WARNING: TileLang compile hook unavailable: {exc}")
+        return
+
+    counter = {"i": 0}
+
+    @tvm_ffi.register_global_func("tilelang_callback_cuda_compile", override=True)
+    def tilebench_callback_cuda_compile(code, target, pass_config=None):
+        code = _write_tilelang_source(op, backend, dtype, code, counter)
+        target_arch = nvcc.get_target_arch(nvcc.get_target_compute_version(target))
+        arch = [f"-arch=sm_{target_arch}"]
+        cfg = pass_config or {}
+        options = [
+            "-std=c++20",
+            "-I" + TILELANG_TEMPLATE_PATH,
+            "-I" + CUTLASS_INCLUDE_DIR,
+            "-allow-unsupported-compiler",
+        ]
+        ccbin = os.environ.get("TILEBENCH_NCU_CC_BIN") or shutil.which("g++-13") or shutil.which("g++")
+        if ccbin:
+            options += ["-ccbin", ccbin]
+
+        extra_flags = cfg.get(PassConfigKey.TL_DEVICE_COMPILE_FLAGS, None)
+        if extra_flags:
+            tokens = shlex.split(extra_flags) if isinstance(extra_flags, str) else []
+            if not isinstance(extra_flags, str):
+                for flag in extra_flags:
+                    tokens.extend(shlex.split(flag) if isinstance(flag, str) else [str(flag)])
+            options += tokens
+
+        verbose = False
+        if bool(cfg.get(PassConfigKey.TL_ENABLE_FAST_MATH, False)):
+            options.append("--use_fast_math")
+        ptxas_usage_level = cfg.get(PassConfigKey.TL_PTXAS_REGISTER_USAGE_LEVEL, None)
+        if ptxas_usage_level is not None:
+            options.append(f"--ptxas-options=--register-usage-level={int(ptxas_usage_level)}")
+        if bool(cfg.get(PassConfigKey.TL_ENABLE_PTXAS_VERBOSE_OUTPUT, False)):
+            options.append("--ptxas-options=--verbose")
+            options.append("-w")
+            verbose = True
+
+        return nvcc.compile_cuda(code, "cubin", arch, options=options, verbose=verbose)

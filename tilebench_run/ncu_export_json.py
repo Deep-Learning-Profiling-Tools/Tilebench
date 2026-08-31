@@ -12,6 +12,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
 import hashlib
 import json
@@ -26,7 +27,7 @@ from ncu_common import ncu_bin, ncu_json_dir, repo_root
 
 ROOT = repo_root()
 NCU_DIR = ROOT / "tilebench_run" / "ncu"
-BACKENDS = ("triton", "cutile", "tilelang")
+BACKENDS = ("triton", "cutile", "tilelang", "torch")
 
 
 def _jsonable(value: Any) -> Any:
@@ -40,6 +41,11 @@ def _jsonable(value: Any) -> Any:
         return [_jsonable(v) for v in value]
     if isinstance(value, dict):
         return {str(k): _jsonable(v) for k, v in value.items()}
+    if hasattr(value, "items"):
+        try:
+            return {str(k): _jsonable(v) for k, v in value.items()}
+        except Exception:
+            pass
     return str(value)
 
 
@@ -100,17 +106,16 @@ def import_ncu_report():
 
 def parse_report_name(path: Path) -> dict[str, Any]:
     op = path.parent.name
+    if op == "reports" and path.parent.parent.name:
+        op = path.parent.parent.name
     stem = path.name.removesuffix(".ncu-rep").removesuffix(".ncu-repz")
     backend = None
     dtype = None
-    for be in BACKENDS:
-        if stem == be:
-            backend = be
-            dtype = None
-            break
-        if stem.startswith(be + "_"):
-            backend = be
-            dtype = stem[len(be) + 1:]
+    parts = stem.split("_")
+    for idx, part in enumerate(parts):
+        if part in BACKENDS:
+            backend = part
+            dtype = "_".join(parts[idx + 1:]) or None
             break
     return {"op": op, "backend": backend, "dtype": dtype, "stem": stem}
 
@@ -263,6 +268,47 @@ def export_cli_pages(rep_path: Path, out_dir: Path) -> dict[str, Any]:
     return outputs
 
 
+def parse_cli_rules(details_csv: Path) -> list[dict[str, Any]]:
+    try:
+        with details_csv.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+    except Exception:
+        return []
+    rules = []
+    for row in rows:
+        if not row.get("Rule Name"):
+            continue
+        rules.append({
+            "section": row.get("Section Name"),
+            "rule_name": row.get("Rule Name"),
+            "rule_type": row.get("Rule Type"),
+            "description": row.get("Rule Description"),
+            "estimated_speedup_type": row.get("Estimated Speedup Type"),
+            "estimated_speedup": row.get("Estimated Speedup"),
+        })
+    return rules
+
+
+def enrich_json_with_cli_pages(out_dir: Path, entry: dict[str, Any]) -> None:
+    report_json = out_dir / entry["json"]
+    try:
+        record = json.loads(report_json.read_text())
+    except Exception:
+        return
+    record["cli_pages"] = entry.get("cli_pages", {})
+    actions = record.get("actions") or []
+    details_rel = entry.get("cli_pages", {}).get("details", {}).get("path")
+    source_rel = entry.get("cli_pages", {}).get("source", {}).get("path")
+    rules = parse_cli_rules(out_dir / details_rel) if details_rel else []
+    if actions:
+        actions[0]["cli_details_page"] = details_rel
+        actions[0]["cli_source_page"] = source_rel
+        actions[0]["cli_rule_results"] = rules
+        if not actions[0].get("rule_results"):
+            actions[0]["rule_results"] = rules
+    report_json.write_text(json.dumps(record, indent=2, default=_jsonable))
+
+
 def iter_reports(args: argparse.Namespace) -> list[Path]:
     if args.reports:
         paths = []
@@ -297,6 +343,7 @@ def main() -> None:
         entry = export_report_json(rep_path, args.out_dir, ncu_report)
         if not args.no_cli_pages:
             entry["cli_pages"] = export_cli_pages(rep_path, args.out_dir)
+            enrich_json_with_cli_pages(args.out_dir, entry)
         manifest.append(entry)
 
     manifest_path = args.out_dir / "manifest.json"

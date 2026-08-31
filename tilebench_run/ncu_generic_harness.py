@@ -24,7 +24,12 @@ import json
 import os
 import sys
 
-from ncu_common import apply_config_override, register_tilelang_source_capture, repo_root
+from ncu_common import (
+    apply_config_override,
+    register_tilelang_compile_hook,
+    register_tilelang_source_capture,
+    repo_root,
+)
 
 ROOT = repo_root()
 sys.path.insert(0, str(ROOT))
@@ -59,6 +64,7 @@ def main() -> None:
             params["dtype"] = td
 
     register_tilelang_source_capture(op, backend, dtype or "unknown")
+    register_tilelang_compile_hook(op, backend, dtype or "unknown")
     impl = importlib.import_module(f"benchmarks.operators.{op}.impl_{backend}")
 
     if cfg_json:

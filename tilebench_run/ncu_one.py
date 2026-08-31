@@ -30,6 +30,7 @@ from ncu_common import (
     LEGACY_BACKENDS,
     ncu_bin,
     ncu_profile_source_args,
+    ncu_run_dir,
     prepare_profile_env,
     repo_root,
 )
@@ -39,8 +40,8 @@ ROOT = repo_root()
 NCU = ncu_bin()
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
 CATALOGUE = ROOT / "tilebench_run" / "ncu_catalogue.json"
-KERNEL_COUNTS = ROOT / "tilebench_run" / "ncu" / "kernel_counts.json"
-OUT_DIR = ROOT / "tilebench_run" / "ncu"
+OUT_DIR = ncu_run_dir()
+KERNEL_COUNTS = OUT_DIR / "kernel_counts.json"
 
 
 def run_one(op: str, backend: str, dtype: str, params: dict,

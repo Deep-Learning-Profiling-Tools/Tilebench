@@ -17,7 +17,16 @@ import sys
 import traceback
 from pathlib import Path
 
-from ncu_common import BACKENDS, apply_config_override, parse_backends, repo_root
+from ncu_common import (
+    BACKENDS,
+    apply_config_override,
+    ncu_run_dir,
+    parse_backends,
+    prepare_profile_env,
+    register_tilelang_compile_hook,
+    register_tilelang_source_capture,
+    repo_root,
+)
 
 ROOT = repo_root()
 sys.path.insert(0, str(ROOT))
@@ -35,6 +44,10 @@ DTYPE_MAP = {
 
 
 def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str) -> dict:
+    os.environ.update(prepare_profile_env(dict(os.environ), op=op, backend=backend, dtype=dtype))
+    register_tilelang_source_capture(op, backend, dtype)
+    register_tilelang_compile_hook(op, backend, dtype)
+
     td = DTYPE_MAP.get(dtype)
     if td is not None:
         params = {**params, "dtype": td}
@@ -71,7 +84,9 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
 
 def main() -> None:
     catalogue = json.loads((ROOT / "tilebench_run" / "ncu_catalogue.json").read_text())
-    out_path = ROOT / "tilebench_run" / "ncu" / "kernel_counts.json"
+    out_dir = ncu_run_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "kernel_counts.json"
     counts: list[dict] = []
 
     only_op = os.environ.get("ONLY_OP")

@@ -25,6 +25,7 @@ from ncu_common import (
     BACKENDS,
     ncu_bin,
     ncu_profile_source_args,
+    ncu_run_dir,
     parse_backends,
     prepare_profile_env,
     repo_root,
@@ -35,7 +36,7 @@ ROOT = repo_root()
 NCU = ncu_bin()
 HARNESS = ROOT / "tilebench_run" / "ncu_generic_harness.py"
 CATALOGUE = ROOT / "tilebench_run" / "ncu_catalogue.json"
-NCU_DIR = ROOT / "tilebench_run" / "ncu"
+NCU_DIR = ncu_run_dir()
 LOG_PATH = Path(os.environ.get("NCU_SWEEP_LOG", NCU_DIR / "sweep_log.json"))
 FAIL_PATH = NCU_DIR / "sweep_failures.md"
 
