@@ -2,8 +2,6 @@ from types import SimpleNamespace
 
 import torch
 
-from core.nki_autotune import NkiAutotuner
-
 try:
     import nki
     import nki.isa as nisa
@@ -13,54 +11,22 @@ except ImportError:
     nki = None
     PMAX = 128
 
-# Per-partition SBUF spent on the input window + the output block (trn2 has 192KB).
-SBUF_BUDGET_BYTES = 100 * 1024
-
-# Output rows computed per block.  Larger amortises the window DMA over more taps
-# (the block overlap costs (kernel_size - stride) redundant rows per block) but
-# multiplies the SBUF footprint; capped so the emitted instruction count stays
-# small even for the largest sweep point.
-MAX_OH_BLOCK = 32
-
-
-def div_ceil(numerator: int, denominator: int) -> int:
-    return (numerator + denominator - 1) // denominator
-
-
-def kernel_assert(condition: bool, message: str) -> None:
-    if not condition:
-        raise ValueError(f"[2d_max_pooling NKI] {message}")
-
-
-def _sbuf_bytes(itemsize: int, kernel_size: int, stride: int, w_buf: int,
-                out_W: int, oh_block: int) -> int:
-    """Per-partition SBUF bytes for the input window + the output block."""
-    nh_buf = (oh_block - 1) * stride + kernel_size
-    return itemsize * (nh_buf * w_buf + oh_block * out_W)
-
-
-def _choose_oh_block(itemsize: int, kernel_size: int, stride: int, w_buf: int,
-                     out_W: int, out_H: int) -> int:
-    """Largest ``oh_block <= MAX_OH_BLOCK`` fitting the per-partition budget."""
-    oh_block = min(MAX_OH_BLOCK, max(1, out_H))
-    while oh_block > 1 and _sbuf_bytes(itemsize, kernel_size, stride, w_buf,
-                                       out_W, oh_block) > SBUF_BUDGET_BYTES:
-        oh_block //= 2
-    return oh_block
-
-
 if nki is not None:
+    from core.nki_autotune import NkiAutotuner
 
     @nki.jit
     def max_pool2d_kernel(input_hbm, in_H, in_W, kernel_size, stride, padding,
-                          oh_block):
+                          itemsize, oh_block):
         """2D max pooling over the trailing two axes of a flattened plane tensor.
 
         Args:
             input_hbm: (planes, in_H * in_W) -- ``planes`` is ``N * C``
             in_H, in_W: input spatial extents (compile-time constants)
             kernel_size, stride, padding: pooling parameters (compile-time constants)
-            oh_block: output rows computed per block
+            itemsize: bytes per element, for sizing the SBUF window buffer
+            oh_block: output rows per block; 0 picks the largest block that fits
+                the per-partition SBUF budget, a nonzero value (autotune
+                candidate) is used as-is once validated against that budget
 
         Returns:
             (planes, out_H * out_W)
@@ -71,8 +37,6 @@ if nki is not None:
         out_W = (in_W + 2 * padding - kernel_size) // stride + 1
         out_HW = out_H * out_W
 
-        # NKI kernels cannot `raise`; run() does the friendly validation, these
-        # are the in-kernel invariants.
         assert in_HW == in_H * in_W
         assert out_H >= 1 and out_W >= 1
 
@@ -80,11 +44,29 @@ if nki is not None:
         # of tap kw is the affine view [stride, out_W] at offset kw.
         w_buf = (out_W - 1) * stride + kernel_size
         n_valid_w = max(0, min(w_buf - padding, in_W))
+
+        # oh_block == 0: largest block (output rows per block) whose window +
+        # output buffers fit the per-partition SBUF budget. sbuf_fmax_bytes
+        # only resolves inside an active trace, which is here -- not in
+        # run(). A nonzero oh_block (autotune candidate) is validated against
+        # the same budget below instead of trusted blindly, so a candidate
+        # that doesn't fit raises here and NkiAutotuner just skips it.
+        if oh_block == 0:
+            oh_block = max(1, out_H)
+            while oh_block > 1:
+                nh_buf = (oh_block - 1) * stride + kernel_size
+                sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+                if sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes:
+                    break
+                oh_block //= 2
+
         nh_buf = (oh_block - 1) * stride + kernel_size
+        sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+        assert sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes
         win_pp = nh_buf * w_buf
 
-        n_plane_tiles = div_ceil(planes, PMAX)
-        n_row_blocks = div_ceil(out_H, oh_block)
+        n_plane_tiles = (planes + PMAX - 1) // PMAX
+        n_row_blocks = (out_H + oh_block - 1) // oh_block
 
         output_hbm = nl.ndarray((planes, out_HW), dtype=input_hbm.dtype,
                                 buffer=nl.shared_hbm)
@@ -166,38 +148,30 @@ _last_autotune_config: dict = {}
 def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
         kernel_size: int, stride: int, padding: int,
         block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
-    kernel_assert(stride >= 1 and kernel_size >= 1 and padding >= 0,
-                  "kernel_size/stride must be >= 1 and padding >= 0")
-    kernel_assert(2 * padding <= kernel_size,
-                  "padding must not exceed kernel_size / 2")
-    kernel_assert(H + 2 * padding >= kernel_size and W + 2 * padding >= kernel_size,
-                  "input (with padding) smaller than the pooling window")
-
-    out_H = (H + 2 * padding - kernel_size) // stride + 1
-    out_W = (W + 2 * padding - kernel_size) // stride + 1
-
-    w_buf = (out_W - 1) * stride + kernel_size
-    oh_block = _choose_oh_block(input.element_size(), kernel_size, stride, w_buf,
-                                out_W, out_H)
-
     x = input.view(N * C, H * W)
-    _default = SimpleNamespace(block_size_r=oh_block)
+    itemsize = input.element_size()
+
     if autotune:
-        _space = [SimpleNamespace(block_size_r=o) for o in (8, 16, 32, 64) if o <= out_H]
-        if not any(vars(c) == vars(_default) for c in _space):
-            _space.append(_default)
+        out_H = (H + 2 * padding - kernel_size) // stride + 1
+        search_space = [SimpleNamespace(oh_block=o)
+                        for o in (8, 16, 32, 64) if o <= out_H]
+        search_space.append(SimpleNamespace(oh_block=0))  # SBUF-fit fallback
         cfg = _tuner.tune_or_cached(
             shape_key=((N, C, H, W), kernel_size, stride, padding, str(input.dtype)),
-            search_space=_space,
-            args_fn=lambda cfg: (x, H, W, kernel_size, stride, padding, cfg.block_size_r),
+            search_space=search_space,
+            args_fn=lambda cfg: (x, H, W, kernel_size, stride, padding,
+                                 itemsize, cfg.oh_block),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
+        oh_block = cfg.oh_block
     else:
-        cfg = _default
-    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding, cfg.block_size_r)
+        oh_block = 0
+
+    result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding,
+                               itemsize, oh_block)
     return result.reshape(-1)
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) or None
+    return dict(_last_autotune_config) if _last_autotune_config else None
