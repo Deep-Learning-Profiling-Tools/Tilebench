@@ -3,23 +3,25 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
-_DEFAULT_CONFIG = {"BLOCK_N": 256, "threads": 128}
+_DEFAULT_CONFIG = {"BLOCK_N": 256, "threads": 128, "num_stages": 2}
 _last_autotune_config: dict = {}
 
 
 def argmax_rowwise_config():
     BLOCK_N = [256, 512, 1024, 2048]
     threads = [128, 256, 512]
+    num_stages = [2, 3, 4]
     return [
-        dict(BLOCK_N=bn, threads=nt)
+        dict(BLOCK_N=bn, threads=nt, num_stages=ns)
         for bn in BLOCK_N
         for nt in threads
+        for ns in num_stages
     ]
 
 
 @tilelang.autotune(configs=argmax_rowwise_config(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
-def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128):
+def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128, num_stages: int = 2):
     M = T.dynamic("M")
     N = T.const("N")
     X: T.Tensor((M, N), dtype)
@@ -36,12 +38,14 @@ def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128)
         best_val[0] = -T.infinity("float32")
         best_idx[0] = 0
 
-        for start in T.serial(0, N, BLOCK_N):
-            end = T.min(start + BLOCK_N, N)
+        T.annotate_safe_value({X: -T.infinity(dtype)})
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
+            start = tile * BLOCK_N
 
             T.fill(x_tile, -T.infinity("float32"))
-            T.fill(idx_tile, N)
-            T.copy(X[row : row + 1, start : end], x_tile)
+            for i in T.Parallel(BLOCK_N):
+                col = start + i
+                x_tile[i] = T.Cast("float32", X[row, col])
             T.reduce_max(x_tile, tile_max, dim=0, clear=True)
 
             for i in T.Parallel(BLOCK_N):
@@ -91,6 +95,7 @@ def run(
             x2d, output, dtype,
             BLOCK_N=cfg["BLOCK_N"],
             threads=cfg["threads"],
+            num_stages=cfg["num_stages"],
         )
 
     return output
