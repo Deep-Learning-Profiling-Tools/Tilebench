@@ -114,7 +114,7 @@ def conv1d_kernel(
                     and in_l >= 0
                     and in_l < IN_L,
                     input[batch_ids[i], in_channel, in_l],
-                    0.0,
+                    T.cast(0.0, dtype),
                 )
 
             for i, j in T.Parallel(BLOCK_SIZE_IN_FEAT, BLOCK_SIZE_OUT_FEAT):
@@ -125,7 +125,7 @@ def conv1d_kernel(
                     feat_offsets[i] < total_in_feat
                     and out_channel_local < out_channels_per_group,
                     weight[out_channel, in_channel_locals[i], kernel_ls[i]],
-                    0.0,
+                    T.cast(0.0, dtype),
                 )
 
             if use_tmem:
