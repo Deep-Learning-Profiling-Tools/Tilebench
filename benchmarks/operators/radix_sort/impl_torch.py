@@ -3,12 +3,7 @@ import torch
 
 def run(input: torch.Tensor, N: int, **kwargs):
     if input.device.type != "xla":
-        # CPU / CUDA reference and GPU baseline: unchanged native sort.
         return torch.sort(input).values
-    # XLA/Neuron only: torch.sort lowers to XLA's `sort` op, which neuronx-cc
-    # rejects ([NCC_EVRF029] Operation sort is not supported on trn2) -- so the
-    # on-device baseline sorts via supported primitives only (compare, gather,
-    # where), the same vectorised bitonic network as bitonic_sort's baseline.
     if N <= 1:
         return input.clone()
 
@@ -29,8 +24,6 @@ def run(input: torch.Tensor, N: int, **kwargs):
 
             partner = work[ixj]
             cmp = torch.where(ascending, work > partner, work < partner)
-            # a pair (i, ixj[i]) must swap together; only the lower index's
-            # comparison is meaningful, so gather it for the upper index too.
             decision = torch.where(is_lower, cmp, cmp[ixj])
 
             work = torch.where(decision, partner, work)
