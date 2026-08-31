@@ -8,7 +8,7 @@ _last_autotune_config: dict = {}
 
 
 def layernorm_configs():
-    BLOCK_N = [512, 1024, 2048]
+    BLOCK_N = [512, 1024, 2048, 4096, 8192]
     threads = [64, 128, 256]
     num_stages = [2, 3, 4]
     return [
@@ -45,7 +45,8 @@ def layernorm_kernel(X, weight, bias, Y, dtype, eps,
         T.fill(sum_local, 0.0)
         T.fill(sumsq_local, 0.0)
 
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
+            off = tile * BLOCK_N
             for j in T.Parallel(BLOCK_N):
                 col = off + j
                 x_val = T.cast(X[row, col], accum_dtype)
@@ -59,7 +60,8 @@ def layernorm_kernel(X, weight, bias, Y, dtype, eps,
         variance = sumsq_row[0] / N - mean_row[0] * mean_row[0]
         rstd_row[0] = T.rsqrt(variance + T.cast(eps, accum_dtype))
 
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
+            off = tile * BLOCK_N
             for j in T.Parallel(BLOCK_N):
                 col = off + j
                 x_val = T.cast(X[row, col], accum_dtype)
