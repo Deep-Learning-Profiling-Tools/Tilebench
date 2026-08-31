@@ -16,21 +16,13 @@ try:
 except ImportError:
     nki = None
 
-# --- Hardware constants (NeuronCore-v2/v3) ---------------------------------
-# nc_matmul: dst[M, N] = stationary[K, M].T @ moving[K, N]
-MAX_TILE_M = 128   # stationary free dim (output rows per PE tile)      <= 128
-MAX_TILE_K = 128   # contraction dim per matmul (== partition dim)       <= 128
-MAX_TILE_N = 512   # moving free dim == one fp32 PSUM bank (128 x 2KB)   <= 512
+MAX_TILE_M = 128
+MAX_TILE_K = 128
+MAX_TILE_N = 512
 
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel can be launched with.
-
-    The NKI launch degree has to be compatible with the LNC the XLA module is
-    compiled for; trn2/trn3 default to LNC=2 unless the compiler/runtime env
-    says otherwise.
-    """
     explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
     if explicit.strip().isdigit():
         return int(explicit.strip())
@@ -53,34 +45,6 @@ def _lnc_degree() -> int:
 if nki is not None:
     @nki.jit
     def batched_matmul_kernel(lhs, rhs, TILE_M, TILE_K, TILE_N, NUM_CORES=1):
-        """``lhs[B, M, K] @ rhs[B, K, N]`` -> ``[B, M, N]`` in the input dtype.
-
-        The whole batch is handled by a *single* launch: the batch axis is
-        split across the ``NUM_CORES`` SPMD programs (``nl.program_id(0)``),
-        and each program walks its slice of the batch with a compile-time
-        unrolled Python loop.  Per batch element the kernel is the standard
-        3-level PE tiling:
-
-            lhsT_tiles[k, m] = transpose(lhs[b, m-tile, k-tile])   (stationary)
-            rhs_tiles[k]     = rhs[b, k-tile, :]                   (moving)
-            psum[m, n]       = sum_k lhsT_tiles[k, m].T @ rhs_tiles[k][:, n]
-
-        Tile sizes are compile-time ints; the trailing M/K/N tiles are simply
-        shorter (nc_matmul accepts any stationary/moving extent within the
-        hardware maxima), so no host-side padding is needed.
-
-        Args:
-            lhs: (B, M, K) HBM tensor.
-            rhs: (B, K, N) HBM tensor, same dtype as ``lhs``.
-            TILE_M: output rows per PE tile, <= 128.
-            TILE_K: contraction rows per matmul (partition dim), <= 128.
-            TILE_N: moving free dim / PSUM free dim, <= 512.
-            NUM_CORES: SPMD programs the batch is split across; must equal the
-                launch degree the kernel is invoked with.
-
-        Returns:
-            (B, M, N) HBM tensor in ``lhs.dtype``.
-        """
         B, M, K = lhs.shape
         B_rhs, K_rhs, N = rhs.shape
 
@@ -101,11 +65,6 @@ if nki is not None:
         for bl in range(BATCH_PER_CORE):
             bi = core * BATCH_PER_CORE + bl
 
-            # nl.par_dim is gone, so the per-tile axes live in the *free*
-            # dimensions of one fused SBUF tile (partition axis stays first):
-            # lhsT_tiles[0:k_size, m, k, 0:m_size] is the transposed lhs tile
-            # for output rows m and contraction rows k -- a valid stationary
-            # operand for nc_matmul.
             lhsT_tiles = nl.ndarray((TILE_K, NUM_M, NUM_K, TILE_M),
                                     dtype=lhs.dtype, buffer=nl.sbuf)
             for m in range(NUM_M):
@@ -117,9 +76,6 @@ if nki is not None:
                 for k in range(NUM_K):
                     k_row0 = k * TILE_K
                     k_size = min(TILE_K, K - k_row0)
-                    # nc_transpose writes PSUM; on gen3+ the destination dtype
-                    # has to match the input dtype.  Stage back into SBUF so
-                    # the whole transposed block stays one flat tile.
                     t_psum = nl.ndarray((TILE_K, TILE_M), dtype=lhs.dtype,
                                         buffer=nl.psum)
                     nisa.nc_transpose(
@@ -131,9 +87,6 @@ if nki is not None:
                         src=t_psum[0:k_size, 0:m_size],
                     )
 
-            # The rhs block is shared by every m tile of this batch element,
-            # so it is loaded once: rhs_tiles[0:k_size, k, :] is the moving
-            # operand for contraction rows k.
             rhs_tiles = nl.ndarray((TILE_K, NUM_K, N), dtype=rhs.dtype,
                                    buffer=nl.sbuf)
             for k in range(NUM_K):
@@ -149,8 +102,6 @@ if nki is not None:
                     n_col0 = n * TILE_N
                     n_size = min(TILE_N, N - n_col0)
 
-                    # Repeated nc_matmul writes into the same PSUM tile with
-                    # accumulate=True sum the contraction tiles in hardware.
                     res_psum = nl.ndarray((TILE_M, TILE_N), dtype=nl.float32,
                                           buffer=nl.psum)
                     for k in range(NUM_K):
@@ -164,8 +115,6 @@ if nki is not None:
                             accumulate=(k > 0),
                         )
 
-                    # PSUM cannot be DMA'd to HBM directly; stage through SBUF
-                    # (which is also where the fp32 accumulator is cast down).
                     out_tile = nl.ndarray((TILE_M, TILE_N), dtype=lhs.dtype,
                                           buffer=nl.sbuf)
                     nisa.tensor_copy(dst=out_tile[0:m_size, 0:n_size],
@@ -186,7 +135,6 @@ _last_autotune_config: dict = {}
 def run(A: torch.Tensor, B: torch.Tensor,
         BATCH: int, M: int, N: int, K: int,
         block_size: int = None, autotune: bool = False, **kwargs) -> torch.Tensor:
-    """Batched matmul on Trainium: one NKI launch covers all BATCH matmuls."""
     if A.dtype != B.dtype:
         raise ValueError("Incompatible dtypes")
 
@@ -214,10 +162,6 @@ def run(A: torch.Tensor, B: torch.Tensor,
         cfg = _default
     tile_m, tile_k, tile_n = cfg.block_size_m, cfg.block_size_k, cfg.block_size_n
 
-    # The SPMD grid degree and the batch-split factor are the same number: the
-    # kernel derives its batch slice from nl.program_id(0).  The launch degree
-    # has to match the LNC the module is compiled for, so the batch is split
-    # across the LNC cores when it divides evenly, one core otherwise.
     lnc = _lnc_degree()
     num_cores = lnc if BATCH % lnc == 0 else 1
 
