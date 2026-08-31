@@ -3,21 +3,23 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128, "num_stages": 3}
 _last_autotune_config: dict = {}
 
 def kl_divergence_config():
     BLOCK_SIZE = [512, 1024, 2048, 4096]
     threads = [64, 128, 256]
+    num_stages = [2, 3, 4]
     return [
-        dict(BLOCK_SIZE=bs, threads=nt)
+        dict(BLOCK_SIZE=bs, threads=nt, num_stages=ns)
         for bs in BLOCK_SIZE
         for nt in threads
+        for ns in num_stages
     ]
 @tilelang.autotune(configs=kl_divergence_config(), warmup = 20, rep = 100, timeout = 60)
 @tilelang.jit
 def kl_divergence_kernel(log_y_pred, y_true, loss, dtype,
-                         BLOCK_SIZE : int = 1024, threads : int = 128):
+                         BLOCK_SIZE : int = 1024, threads : int = 128, num_stages : int = 3):
     M = T.dynamic("M")
     N = T.const("N")
     log_y_pred : T.Tensor((M, N), dtype)
@@ -30,7 +32,8 @@ def kl_divergence_kernel(log_y_pred, y_true, loss, dtype,
         loss_local = T.alloc_fragment((1, ), "float32")
         loss_global = T.alloc_fragment((1, ), "float32")
         loss_global[0] = 0.0
-        for start in T.serial(0, N, BLOCK_SIZE):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_SIZE), num_stages=num_stages):
+            start = tile * BLOCK_SIZE
             end = T.min(start + BLOCK_SIZE, N)
             T.copy(y_true[row : row + 1, start : end], y_true_local)
             T.copy(log_y_pred[row : row + 1, start:end], local_log_y_pred)
@@ -69,6 +72,7 @@ def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
             log_y_pred, y_true, loss, dtype,
             BLOCK_SIZE=cfg["BLOCK_SIZE"],
             threads=cfg["threads"],
+            num_stages=cfg["num_stages"],
         )
 
     return loss
