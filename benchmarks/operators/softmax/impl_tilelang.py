@@ -24,6 +24,7 @@ def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 12
     x: T.Tensor((M, N), dtype)
     y: T.Tensor((M, N), dtype)
     with T.Kernel(M, threads=threads) as row:
+        T.annotate_safe_value({x: -T.infinity(dtype)})
         X_local = T.alloc_fragment((BLOCK_SIZE, ), "float32")
         Y_local = T.alloc_fragment((BLOCK_SIZE, ), dtype)
         x_exp_local = T.alloc_fragment((BLOCK_SIZE,) , "float32")
@@ -40,7 +41,9 @@ def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 12
             
             T.fill(X_local, -T.infinity("float32"))
             T.fill(x_exp_local, 0.0)
-            T.copy(x[row : row + 1, start : end], X_local)
+            for i in T.Parallel(BLOCK_SIZE):
+                col = start + i
+                X_local[i] = T.Cast("float32", x[row, col])
             T.reduce_max(X_local, tile_max, dim = 0)
             running_max[0] = T.max(running_max[0], tile_max[0])
 
