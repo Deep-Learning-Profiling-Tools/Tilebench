@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
-_DEFAULT_CONFIG = {"BLOCK_N": 1024, "threads": 256, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_N": 1024, "threads": 128, "num_stages": 3}
 _last_autotune_config: dict = {}
 
 
@@ -22,8 +22,8 @@ def l2_norm_fwd_configs():
 @tilelang.autotune(configs=l2_norm_fwd_configs(), warmup=20, rep=100, timeout=60)
 @tilelang.jit
 def l2_norm_fwd_kernel(X, Y, dtype, eps,
-                       BLOCK_N: int = 1024, threads: int = 256,
-                       num_stages: int = 2):
+                       BLOCK_N: int = 1024, threads: int = 128,
+                       num_stages: int = 3):
     M = T.dynamic("M")
     N = T.const("N")
     X: T.Tensor((M, N), dtype)
@@ -37,14 +37,16 @@ def l2_norm_fwd_kernel(X, Y, dtype, eps,
         inv_norm = T.alloc_fragment((1,), accum_dtype)
         Y_local = T.alloc_fragment((BLOCK_N,), dtype)
         T.fill(acc, 0.0)
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
+            off = tile * BLOCK_N
             for j in T.Parallel(BLOCK_N):
                 x_val = T.cast(X[row, off + j], accum_dtype)
                 acc[j] += x_val * x_val
-            
+
         T.reduce_sum(acc, row_sum, dim=0)
         inv_norm[0] = T.rsqrt(row_sum[0] + T.cast(eps, accum_dtype))
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
+            off = tile * BLOCK_N
             for j in T.Parallel(BLOCK_N):
                 x_val = T.cast(X[row, off + j], accum_dtype)
                 Y_local[j] = T.cast(x_val * inv_norm[0], dtype)
