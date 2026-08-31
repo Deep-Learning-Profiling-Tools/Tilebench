@@ -1,0 +1,17 @@
+{
+  "gpu": "AWS Trainium 2.3xl",
+  "backends": ["torch", "nki"],
+  "peak_bw_GBs": 577.7,
+  "peak_tflops": {
+    "fp64": 0,
+    "fp32": 40,
+    "tf32": 158,
+    "fp16": 158,
+    "bf16": 158,
+    "fp8_e4m3fn": 316,
+    "fp8_e5m2": 316,
+    "int8": 316
+  },
+  "source": "peak_bw_GBs measured via torch_xla-compiled mul2 reference, n=20,971,520 fp32, single logical core (NEURON_RT_NUM_CORES=1), on-device latency via neuron-profile (see core/nki_timer.py bench_nki). Stable across n=14.7M-21M (577-583 GB/s), taken at largest tested case for consistency with other reported metrics. Custom NKI kernel currently achieves ~98 GB/s on the same case (free_tile_size=16384, not yet autotuned).",
+  "peak_tflops_source": "Per-LOGICAL-NeuronCore. NEURON_RT_NUM_CORES=1 does NOT give one physical core on trn2: `neuron-ls` reports logical-neuroncore-config=2, so one logical core is TWO physical NeuronCore-v3s."
+}
