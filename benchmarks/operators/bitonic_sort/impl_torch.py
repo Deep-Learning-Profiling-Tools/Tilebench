@@ -21,8 +21,6 @@ def run(data: torch.Tensor, N: int, **kwargs):
 
             partner = work[ixj]
             cmp = torch.where(ascending, work > partner, work < partner)
-            # a pair (i, ixj[i]) must swap together; only the lower index's
-            # comparison is meaningful, so gather it for the upper index too.
             decision = torch.where(is_lower, cmp, cmp[ixj])
 
             work = torch.where(decision, partner, work)
