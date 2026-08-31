@@ -7,12 +7,12 @@ from . import impl_torch
 
 
 _DEFAULT_CONFIG = {
-    "BLOCK_SIZE_M": 128,
-    "BLOCK_SIZE_N": 128,
+    "BLOCK_SIZE_M": 256,
+    "BLOCK_SIZE_N": 64,
     "BLOCK_SIZE_K": 64,
     "GROUP_SIZE_M": 8,
     "threads": 128,
-    "num_stages": 2,
+    "num_stages": 4,
 }
 _last_autotune_config: dict = {}
 
@@ -87,12 +87,12 @@ def matmul_kernel(
     a,
     b,
     c,
-    BLOCK_SIZE_M: int = 128,
-    BLOCK_SIZE_N: int = 128,
+    BLOCK_SIZE_M: int = 256,
+    BLOCK_SIZE_N: int = 64,
     BLOCK_SIZE_K: int = 64,
     GROUP_SIZE_M: int = 8,
-    threads: int = 256,
-    num_stages: int = 2,
+    threads: int = 128,
+    num_stages: int = 4,
 ):
     M, K, K_b, N = T.const("M, K, K_b, N")
     a: T.Tensor((M, K), "int8")
