@@ -4,25 +4,12 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 
-_DEFAULT_CONFIG = {"threads": 256, "num_stages": 2}
+_DEFAULT_CONFIG = {"threads": 128}
 _last_autotune_config: dict = {}
 
 
-_HANG = frozenset({
-    (128, 2), (128, 3), (128, 4),
-})
-
-
 def block_sparse_attention_configs():
-    def runtime_timeout_prone(nt, ns):
-        return (nt, ns) in _HANG
-
-    return [
-        dict(threads=nt, num_stages=ns)
-        for nt in [64, 128, 256]
-        for ns in [2, 3, 4]
-        if not runtime_timeout_prone(nt, ns)
-    ]
+    return [dict(threads=nt) for nt in [64, 128, 256]]
 
 
 @tilelang.autotune(configs=block_sparse_attention_configs(), warmup=20, rep=100, timeout=60)
@@ -47,7 +34,6 @@ def block_sparse_attention_kernel(
     BLOCK_D: int = 128,
     NUM_D_BLOCKS: int = 1,
     threads: int = 128,
-    num_stages: int = 2,
 ):
     accum_dtype = "float32"
     csr_row_storage = num_layout * csr_row_len
@@ -135,6 +121,9 @@ def block_sparse_attention_kernel(
             end_l = row_indices[layout_h * csr_row_len + start_m + 1]
             l = start_l
 
+            # T.Pipelined cannot currently schedule this sparse loop: the
+            # start_n address calculation is staged after the K/V copies that
+            # consume it, so num_stages is not a valid tuning axis here.
             while l < end_l:
                 col_idx = col_indices[layout_h * csr_col_len + l]
                 start_n = col_idx * BLOCK_N
@@ -369,7 +358,6 @@ def run(
             BLOCK_D=int(BLOCK_D),
             NUM_D_BLOCKS=int(NUM_D_BLOCKS),
             threads=cfg["threads"],
-            num_stages=cfg["num_stages"],
         )
         kernel(Q, K, V, layout_csr_row_indices, layout_csr_col_indices, out)
 
