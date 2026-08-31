@@ -4,17 +4,16 @@ import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
 
-_DEFAULT_CONFIG = {"BLOCK_M": 128, "BLOCK_N": 64, "threads": 256, "num_stages": 3}
+_DEFAULT_CONFIG = {"BLOCK_M": 128, "BLOCK_N": 64, "threads": 256}
 _last_autotune_config: dict = {}
 
 
 def flash_attention_configs():
     return [
-        dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt, num_stages=ns)
+        dict(BLOCK_M=bm, BLOCK_N=bn, threads=nt)
         for bm in [64, 128]
         for bn in [32, 64, 128]
         for nt in [64, 128, 256]
-        for ns in [2, 3, 4]
     ]
 
 
@@ -34,7 +33,6 @@ def flash_attention_kernel(
     BLOCK_M: int = 64,
     BLOCK_N: int = 64,
     threads: int = 256,
-    num_stages: int = 4,
 ):
     qk_scale = (1.0 / dim) ** 0.5 * 1.44269504
     accum_dtype = "float32"
@@ -78,6 +76,8 @@ def flash_attention_kernel(
                 else T.ceildiv(seq_len, BLOCK_N)
             )
 
+            # T.Pipelined currently breaks this manual TMEM/barrier path in LowerSharedTmem:
+            # qk_tmem is 2D, but the pipelined lowering indexes it as 1D and fails.
             for k_tile in T.serial(loop_range):
                 T.copy(K[pid_b, pid_h, k_tile * BLOCK_N : (k_tile + 1) * BLOCK_N, :], k_shared)
                 T.gemm(
@@ -168,7 +168,6 @@ def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True,
             BLOCK_M=cfg["BLOCK_M"],
             BLOCK_N=cfg["BLOCK_N"],
             threads=cfg["threads"],
-            num_stages=cfg["num_stages"],
         )
         kernel(q, k, v, o)
 
