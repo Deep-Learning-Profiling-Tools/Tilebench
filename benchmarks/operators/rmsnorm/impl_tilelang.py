@@ -3,7 +3,7 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
-_DEFAULT_CONFIG = {"BLOCK_N": 1024, "threads": 256, "num_stages": 2}
+_DEFAULT_CONFIG = {"BLOCK_N": 1024, "threads": 128, "num_stages": 2}
 _last_autotune_config: dict = {}
 
 
@@ -23,7 +23,7 @@ def rmsnorm_configs():
 @tilelang.jit
 def rmsnorm_kernel(
     X, rms_w, Y, dtype, eps,
-    BLOCK_N: int = 1024, threads: int = 256, num_stages: int = 2,
+    BLOCK_N: int = 1024, threads: int = 128, num_stages: int = 2,
 ):
     M = T.dynamic("M")
     N = T.const("N")
@@ -40,9 +40,9 @@ def rmsnorm_kernel(
 
         T.fill(sumsq_local, 0.0)
 
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
             for j in T.Parallel(BLOCK_N):
-                col = off + j
+                col = tile * BLOCK_N + j
                 x_val = T.Cast(accum_dtype, X[row, col])
                 sumsq_local[j] += x_val * x_val
 
@@ -50,9 +50,9 @@ def rmsnorm_kernel(
 
         inv_rms[0] = T.rsqrt(row_sum[0] / N + T.Cast(accum_dtype, eps))
 
-        for off in T.serial(0, N, BLOCK_N):
+        for tile in T.Pipelined(T.ceildiv(N, BLOCK_N), num_stages=num_stages):
             for j in T.Parallel(BLOCK_N):
-                col = off + j
+                col = tile * BLOCK_N + j
                 x_val = T.Cast(accum_dtype, X[row, col])
                 weight = T.Cast(accum_dtype, rms_w[col])
                 Y[row, col] = T.Cast(dtype, x_val * inv_rms[0] * weight)
