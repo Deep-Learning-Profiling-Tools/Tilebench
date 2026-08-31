@@ -1,8 +1,9 @@
 """Export NCU .ncu-rep files to queryable JSON.
 
-The .ncu-rep file remains the source of truth. This script builds a structured
-index for dashboards and agents using NVIDIA's Python report interface, plus
-optional CLI page dumps for audit/debugging.
+The .ncu-rep file remains the offline source of truth. This script builds a
+structured index for dashboards and agents using NVIDIA's Python report
+interface, plus optional CLI page dumps for audit/debugging. Exported JSON keeps
+hash/size provenance but does not publish the original report path.
 
 Examples:
   python tilebench_run/ncu_export_json.py
@@ -225,7 +226,6 @@ def export_report_json(rep_path: Path, out_dir: Path, ncu_report: Any) -> dict[s
 
     record = {
         "schema_version": 1,
-        "source_report": str(rep_path.relative_to(ROOT) if rep_path.is_relative_to(ROOT) else rep_path),
         "source_report_sha256": _sha256(rep_path),
         "source_report_bytes": rep_path.stat().st_size,
         **meta,
@@ -242,7 +242,6 @@ def export_report_json(rep_path: Path, out_dir: Path, ncu_report: Any) -> dict[s
         "op": meta["op"],
         "backend": meta["backend"],
         "dtype": meta["dtype"],
-        "report": record["source_report"],
         "json": str(out_path.relative_to(out_dir)),
         "sha256": record["source_report_sha256"],
         "bytes": record["source_report_bytes"],
