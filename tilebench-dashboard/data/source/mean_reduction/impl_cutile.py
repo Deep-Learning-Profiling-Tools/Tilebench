@@ -1,0 +1,90 @@
+from types import SimpleNamespace
+
+import cuda.tile as ct
+import torch
+
+from core.cutile_autotune import CutileAutotuner
+
+ConstInt = ct.Constant[int]
+
+_last_autotune_config: dict = {}
+
+_DEFAULT_CONFIG = SimpleNamespace(tile_size=1024, occupancy=2)
+
+_SEARCH_SPACE = [
+    SimpleNamespace(tile_size=ts, occupancy=occ)
+    for ts in [512, 1024, 2048]
+    for occ in [4, 8, 16, 32]
+]
+
+
+@ct.kernel
+def mean_rowwise_kernel(x, out, N: ConstInt, TILE_SIZE: ConstInt):
+    row       = ct.bid(0)
+    num_tiles = ct.cdiv(N, TILE_SIZE)
+
+    _acc = ct.full((1, TILE_SIZE), 0.0, dtype=ct.float32)
+    for j in range(0, num_tiles):
+        xj = ct.astype(
+            ct.load(x, index=(row, j), shape=(1, TILE_SIZE),
+                    allow_tma=False, latency=1,
+                    padding_mode=ct.PaddingMode.ZERO),
+            ct.float32,
+        )
+        _acc = _acc + xj
+
+    mean = ct.sum(_acc, axis=1, keepdims=False) / N
+
+
+    out_tile = ct.full((1, 1), 0.0, dtype=ct.float32) + mean
+    ct.store(out, index=(row, 0), tile=out_tile, allow_tma=False, latency=1)
+
+
+_tuner = CutileAutotuner(mean_rowwise_kernel)
+
+
+def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+
+
+    if x.ndim == 2 and dim == 1:
+        x2d = x.contiguous()
+    else:
+        dims = list(range(x.ndim))
+        dims.remove(dim % x.ndim)
+        dims.append(dim % x.ndim)
+        x2d = x.permute(dims).contiguous().reshape(-1, x.shape[dim])
+
+    M, N = x2d.shape
+
+
+    out = torch.empty(M, 1, dtype=torch.float32, device=x.device)
+
+    stream = torch.cuda.current_stream()
+    grid   = (M, 1, 1)
+
+    if autotune:
+        cfg = _tuner.tune_or_cached(
+            shape_key=(M, N, str(x.dtype)),
+            search_space=_SEARCH_SPACE,
+            stream=stream,
+            grid_fn=lambda cfg: grid,
+            args_fn=lambda cfg: (x2d, out, N, cfg.tile_size),
+            hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+        )
+        _last_autotune_config.clear()
+        _last_autotune_config.update({
+            "tile_size": cfg.tile_size,
+            "occupancy": cfg.occupancy,
+        })
+    else:
+        cfg = _DEFAULT_CONFIG
+
+    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
+    ct.launch(stream, grid, kernel,
+              (x2d, out, N, cfg.tile_size))
+
+    return out.squeeze(1)
+
+
+def get_last_config() -> dict | None:
+    return dict(_last_autotune_config) if _last_autotune_config else None

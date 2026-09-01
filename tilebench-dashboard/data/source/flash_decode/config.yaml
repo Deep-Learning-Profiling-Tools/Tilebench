@@ -1,0 +1,25 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  batch: 2
+  heads: 8
+  head_dim: 128
+  block_seq: 128
+
+case_grid:
+  seq_len:
+    expr: "[2048 * i for i in range(1, 21)]"
+  dtype: ["fp32"]
+
+metrics:
+  flops_expr: "4 * batch * heads * (seq_len // block_seq) * head_dim"
+  bytes_expr: "batch * heads * (seq_len // block_seq) * head_dim * dtype_size"
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

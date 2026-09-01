@@ -1,0 +1,24 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  E: 128
+  k: 2
+
+case_grid:
+  M:
+    expr: "[1024 * i for i in range(1, 21)]"
+  dtype: ["fp16", "bf16", "fp32"]
+
+metrics:
+  flops_expr: "M * (4 * k * E + 3 * k)"
+  bytes_expr: "M * E * dtype_size + M * k * dtype_size + M * k * 4"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

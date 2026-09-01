@@ -1,0 +1,24 @@
+verify:
+  atol: 1e-3
+  rtol: 1e-3
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  rows: [512, 1024, 2048, 4096]
+  cols: [512, 1024, 2048, 4096, 8192]
+  dtype: ["int8"]
+
+metrics:
+  bytes_expr: "rows * cols * 1 + rows * 4 + rows * cols * 2"
+  flops_expr: "2 * rows * cols"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

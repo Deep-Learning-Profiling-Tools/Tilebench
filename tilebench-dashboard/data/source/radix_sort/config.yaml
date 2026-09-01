@@ -1,0 +1,24 @@
+verify:
+  atol: 0.0
+  rtol: 0.0
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  n:
+    expr: "[1000000 * i for i in range(1, 21)]"
+  dtype: ["int32"]
+
+metrics:
+  flops_expr: "n"
+  bytes_expr: "16 * 3 * n * dtype_size"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

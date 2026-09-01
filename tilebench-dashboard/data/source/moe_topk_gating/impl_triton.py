@@ -1,0 +1,91 @@
+import torch
+import triton
+import triton.language as tl
+
+_DEFAULT_CONFIG = {"num_warps": 4}
+
+
+@triton.jit
+def moe_topk_gating_kernel(
+    logits_ptr,
+    topk_w_ptr,
+    topk_idx_ptr,
+    E,
+    K: tl.constexpr,
+    BLOCK_SIZE_E: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    offsets_le = tl.arange(0, BLOCK_SIZE_E)
+    mask_le = offsets_le < E
+
+    logits = tl.load(logits_ptr + pid * E + offsets_le, mask=mask_le, other=float("-inf")).to(tl.float32)
+
+    offsets_k = tl.arange(0, BLOCK_SIZE_K)
+    mask_k = offsets_k < K
+
+    topk_vals = tl.full((BLOCK_SIZE_K,), value=float("-inf"), dtype=tl.float32)
+    topk_idxs = tl.full((BLOCK_SIZE_K,), value=0, dtype=tl.int32)
+
+    for i in range(K):
+        curr_max_val = tl.max(logits, axis=-1)
+        curr_max_idx = tl.argmax(logits, axis=-1)
+
+        topk_vals = tl.where(offsets_k == i, curr_max_val, topk_vals)
+        topk_idxs = tl.where(offsets_k == i, curr_max_idx, topk_idxs)
+
+        logits = tl.where(offsets_le == curr_max_idx, float("-inf"), logits)
+
+    mx = tl.max(topk_vals, axis=-1)
+    topk_vals = tl.exp(topk_vals - mx)
+    topk_vals = topk_vals / tl.sum(topk_vals, axis=-1)
+
+    tl.store(topk_w_ptr + pid * K + offsets_k, topk_vals.to(topk_w_ptr.dtype.element_ty), mask=mask_k)
+    tl.store(topk_idx_ptr + pid * K + offsets_k, topk_idxs, mask=mask_k)
+
+
+_moe_topk_gating_kernel_autotuned = triton.autotune(
+    configs=[
+        triton.Config({}, num_warps=nw)
+        for nw in [1, 2, 4]
+    ],
+    key=["E", "K"],
+    warmup=1,
+    rep=3,
+)(moe_topk_gating_kernel)
+
+
+def run(logits: torch.Tensor, M: int, E: int, k: int,
+        block_size: int = 1024, autotune: bool = False, **kwargs):
+    topk_weights = torch.empty(M, k, dtype=logits.dtype, device=logits.device)
+    topk_indices = torch.empty(M, k, dtype=torch.int32, device=logits.device)
+
+    block_size_e = triton.next_power_of_2(E)
+    block_size_k = triton.next_power_of_2(k)
+    grid = (M,)
+
+    if autotune:
+        _moe_topk_gating_kernel_autotuned[grid](
+            logits, topk_weights, topk_indices,
+            E, k,
+            BLOCK_SIZE_E=block_size_e,
+            BLOCK_SIZE_K=block_size_k,
+        )
+    else:
+        cfg = _DEFAULT_CONFIG
+        moe_topk_gating_kernel[grid](
+            logits, topk_weights, topk_indices,
+            E, k,
+            BLOCK_SIZE_E=block_size_e,
+            BLOCK_SIZE_K=block_size_k,
+            num_warps=cfg["num_warps"],
+        )
+
+    return (topk_weights, topk_indices)
+
+
+def get_last_config() -> dict | None:
+    cfg = getattr(_moe_topk_gating_kernel_autotuned, "best_config", None)
+    if cfg is None:
+        return None
+    return {"num_warps": cfg.num_warps}

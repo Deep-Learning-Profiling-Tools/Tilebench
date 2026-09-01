@@ -1,0 +1,100 @@
+{
+  "histogramming": [
+    {
+      "ts": 1787612186224,
+      "body": "tilelang exposes shared memory allocation making atomic adds cheaper"
+    }
+  ],
+  "linear_self_attention": [
+    {
+      "ts": 1787612206510,
+      "body": "only fp32 cases, no tilelang lowering to tcgen05.mma"
+    }
+  ],
+  "radix_sort": [
+    {
+      "ts": 1787612332952,
+      "body": "cumsum very slow see scan.h"
+    }
+  ],
+  "streamk_matmul": [
+    {
+      "ts": 1787612361850,
+      "body": "first CTA does not relinquish TMEM allocator, triton ends up have 2x CTAs per SM (verified on default)"
+    },
+    {
+      "ts": 1787615725265,
+      "body": "+ had gpt add relinquish, performance neared 0.85x of triton"
+    }
+  ],
+  "matrix_transpose": [
+    {
+      "ts": 1787612559851,
+      "body": "mostly INT8 SMEM bank conflicts, may have to look into why its mostly INT8?"
+    }
+  ],
+  "gaussian_blur": [
+    {
+      "ts": 1787612577771,
+      "body": "TileLang\u2019s CUDA codegen always emits __launch_bounds__(threads, 1). For Gaussian blur, that tells ptxas to optimize for only one resident block and causes aggressive load hoisting, 255 registers/thread, and\n  occupancy collapse. yes from gpt"
+    }
+  ],
+  "reverse_array": [
+    {
+      "ts": 1787612609362,
+      "body": "cant vectorize b/c of indexing, becomes scalar"
+    }
+  ],
+  "sigmoid": [
+    {
+      "ts": 1787612734526,
+      "body": "tilelang api T.sigmoid did very accurate IEEE with newton rhapisodian while triton did a less accurate version, ran benchmark with tilelang fast math to see if its better"
+    }
+  ],
+  "flash_decode": [
+    {
+      "ts": 1787612747770,
+      "body": "tilelang api T.sigmoid did very accurate IEEE with newton rhapisodian while triton did a less accurate version, ran benchmark with tilelang fast math to see if its better"
+    },
+    {
+      "ts": 1787615773541,
+      "body": "newton raphson"
+    }
+  ],
+  "block_sparse_attention": [
+    {
+      "ts": 1787613901580,
+      "body": "very iffy might be authoring gap because there is no T.pipelined, or it might be a tilelang lowering error with T.pipelined which is why I didnt use it in the first place."
+    }
+  ],
+  "flash_attention": [
+    {
+      "ts": 1787615153852,
+      "body": "T.pipelined error, according to claude, fix was commited on tilelang source. need to ask this question in meeting"
+    },
+    {
+      "ts": 1787615858600,
+      "body": "It is slow right now because it is all serial"
+    }
+  ],
+  "jacobi_stencil_2d": [
+    {
+      "ts": 1787617799779,
+      "body": "nvcc recognizes that left/right neighbors are already present in TileLang\u2019s center-vector load. It reduces 17 logical loads to 11.\n    Triton retains all 17"
+    },
+    {
+      "ts": 1787621600104,
+      "body": "agent interactive window"
+    }
+  ],
+  "2d_max_pooling": [
+    {
+      "ts": 1787617957312,
+      "body": "TileLang chooses a better lane layout. Triton\u2019s stride-2 stencil loads touch 26.67 L1 sectors/request versus TileLang\u2019s 8.06. This is a coalescing/layout win."
+    },
+    {
+      "ts": 1787621519161,
+      "body": "map to code"
+    }
+  ]
+}

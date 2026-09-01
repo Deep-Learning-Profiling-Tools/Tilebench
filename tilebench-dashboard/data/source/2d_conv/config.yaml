@@ -1,0 +1,40 @@
+verify:
+  atol: 1e-1
+  rtol: 1e-2
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  batch: 1
+  in_channels: 128
+  out_channels: 128
+  kernel_size: 3
+  stride: 1
+  padding: 1
+  groups: 1
+
+case_grid:
+  H:
+    expr: "[16 * i for i in range(1, 21)]"
+  dtype: ["fp16", "fp32"]
+
+metrics:
+  flops_expr: >
+    2 * batch * out_channels
+    * ((H + 2 * padding - kernel_size) // stride + 1) ** 2
+    * (in_channels // groups) * kernel_size ** 2
+
+  bytes_expr: >
+    batch * in_channels * H * H * dtype_size
+    + out_channels * (in_channels // groups) * kernel_size ** 2 * dtype_size
+    + batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup

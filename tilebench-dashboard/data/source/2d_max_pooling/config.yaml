@@ -1,0 +1,33 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  N: 4
+  C: 128
+  kernel_size: 3
+  stride: 2
+  padding: 1
+
+case_grid:
+  H:
+    expr: "[32 * i for i in range(1, 21)]"
+  dtype: ["fp16", "bf16", "fp32"]
+
+metrics:
+  flops_expr: >
+    N * C
+    * ((H + 2 * padding - kernel_size) // stride + 1) ** 2
+    * kernel_size ** 2
+
+  bytes_expr: >
+    N * C * H * H * dtype_size
+    + N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup

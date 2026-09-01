@@ -1,0 +1,20 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  n:
+    expr: "[500000 * i for i in range(1, 21)]"
+  dtype: ["fp16", "fp32"]
+
+metrics:
+  flops_expr: "n"
+  bytes_expr: "n * dtype_size * 2"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

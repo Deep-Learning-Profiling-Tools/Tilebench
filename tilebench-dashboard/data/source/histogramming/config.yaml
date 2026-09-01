@@ -1,0 +1,23 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_grid:
+  N: [262144, 1048576, 4194304, 16777216, 67108864]
+  num_bins: [64, 256, 1024, 4096]
+  dtype: ["int32"]
+
+verify:
+  atol: 0
+  rtol: 0
+
+metrics:
+  flops_expr: "N"
+  bytes_expr: "(N + num_bins) * dtype_size"
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

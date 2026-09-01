@@ -1,0 +1,27 @@
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  batch_size: 1
+  kv_nope_head_num: 12
+  kv_rope_head_num: 1
+  kv_nope_head_dim: 128
+  kv_rope_head_dim: 64
+
+case_grid:
+  seq_len:
+    expr: "[2048 * i for i in range(1, 21)]"
+  dtype: ["fp16", "bf16", "fp32", "int8"]
+
+metrics:
+  flops_expr: "n"
+  bytes_expr: "n * dtype_size * 2"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

@@ -1,0 +1,28 @@
+verify:
+  atol: 5.0
+  rtol: 0.1
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  M: 4096
+  N: 4096
+
+case_grid:
+  K:
+    expr: "[1024 * i for i in range(1, 21)]"
+  dtype: ["fp32", "fp16", "fp8_e4m3fn"]
+
+metrics:
+  bytes_expr: "(M * K + K * N + M * N) * dtype_size"
+  flops_expr: "2 * M * N * K"
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup
