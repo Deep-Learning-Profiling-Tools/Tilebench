@@ -22,9 +22,10 @@ OUTPUT = ROOT / "results" / "figures" / "comparison"
 MODES = ("default", "autotune")
 
 COMPARISONS = (
-    ("tilelang_vs_torch", "torch_ms", "TileLang speedup relative to Torch (x)"),
-    ("tilelang_vs_triton", "triton_ms", "TileLang speedup relative to Triton (x)"),
-    ("tilelang_vs_cutile", "cutile_ms", "TileLang speedup relative to cuTile (x)"),
+    ("tilelang_vs_torch", "torch_ms", "tilelang_ms", "TileLang speedup relative to Torch (x)"),
+    ("tilelang_vs_triton", "triton_ms", "tilelang_ms", "TileLang speedup relative to Triton (x)"),
+    ("tilelang_vs_cutile", "cutile_ms", "tilelang_ms", "TileLang speedup relative to cuTile (x)"),
+    ("triton_vs_cutile", "cutile_ms", "triton_ms", "Triton speedup relative to cuTile (x)"),
 )
 
 
@@ -50,17 +51,17 @@ def operator_names() -> list[str]:
     return sorted(path.name.removesuffix("_default.csv") for path in CSV_DIR.glob("*_default.csv"))
 
 
-def load_ratio(op: str, mode: str, baseline_key: str) -> float | None:
+def load_ratio(op: str, mode: str, numerator_key: str, denominator_key: str) -> float | None:
     path = CSV_DIR / f"{op}_{mode}.csv"
     if not path.exists():
         return None
     ratios = []
     with path.open(newline="") as handle:
         for row in csv.DictReader(handle):
-            baseline = parse_positive(row.get(baseline_key))
-            tilelang = parse_positive(row.get("tilelang_ms"))
-            if baseline is not None and tilelang is not None:
-                ratios.append(baseline / tilelang)
+            numerator = parse_positive(row.get(numerator_key))
+            denominator = parse_positive(row.get(denominator_key))
+            if numerator is not None and denominator is not None:
+                ratios.append(numerator / denominator)
     return geometric_mean(ratios)
 
 
@@ -77,12 +78,18 @@ def configure_matplotlib() -> None:
     })
 
 
-def plot_comparison(ops: list[str], stem: str, baseline_key: str, xlabel: str) -> None:
+def plot_comparison(
+    ops: list[str],
+    stem: str,
+    numerator_key: str,
+    denominator_key: str,
+    xlabel: str,
+) -> None:
     rows = [
         {
             "op": op,
-            "default": load_ratio(op, "default", baseline_key),
-            "autotune": load_ratio(op, "autotune", baseline_key),
+            "default": load_ratio(op, "default", numerator_key, denominator_key),
+            "autotune": load_ratio(op, "autotune", numerator_key, denominator_key),
         }
         for op in ops
     ]
