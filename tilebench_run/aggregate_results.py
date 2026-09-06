@@ -28,7 +28,7 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path("/projects/kzhou6/bcui2/research/tilebench/Tilebench")
+ROOT = Path(__file__).resolve().parents[1]
 CSV_DIR = ROOT / "results" / "csv"
 OUT_DIR = ROOT / "results" / "aggregate"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
