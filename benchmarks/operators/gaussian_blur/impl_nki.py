@@ -131,7 +131,7 @@ if nki is not None:
 
 _DEFAULT_CONFIG = SimpleNamespace(block_size_r=128)
 _SEARCH_SPACE = [SimpleNamespace(block_size_r=b) for b in (32, 64, 128)]
-_tuner = NkiAutotuner(gaussian_blur_kernel) if nki is not None else None
+_tuner = NkiAutotuner(gaussian_blur_kernel[_lnc_degree()]) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
