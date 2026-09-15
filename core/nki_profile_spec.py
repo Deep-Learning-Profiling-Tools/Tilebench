@@ -27,7 +27,18 @@ import tempfile
 from typing import Any
 
 SPEC_SCHEMA_VERSION = 1
-MANIFEST_SCHEMA_VERSION = 1
+MANIFEST_SCHEMA_VERSION = 2  # v2: per-target artifact LISTS + runtime-trace timing
+
+# Neuron runtime inspect facility, set by the profile worker before torch-xla is
+# imported: DEVICE_PROFILE=1 makes the runtime write every NEFF it executes
+# (identity: byte-identical to the compiler dump) plus one device trace per NEFF;
+# SYSTEM_PROFILE=1 writes the system trace with one hardware event per
+# execution (timing). The output dir is added per worker.
+RUNTIME_INSPECT_ENV = {
+    "NEURON_RT_INSPECT_ENABLE": "1",
+    "NEURON_RT_INSPECT_DEVICE_PROFILE": "1",
+    "NEURON_RT_INSPECT_SYSTEM_PROFILE": "1",
+}
 
 
 def canonical_json(obj: Any) -> str:

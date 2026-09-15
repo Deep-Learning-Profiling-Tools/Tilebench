@@ -245,16 +245,33 @@ _last_autotune_config: dict = {}
   replay mismatch (changed search space, stale winner) fails loudly before
   anything is profiled.
 - **Artifact identity** is a canonical launch spec (`spec_id`): the profile
-  worker runs in a private per-spec CWD with a private Neuron compile cache, and
-  the exactly-one validated NEFF/HLO pair there is what gets hardware-timed.
+  worker runs in a private per-spec CWD with a private Neuron compile cache and
+  records EVERY NEFF/HLO pair each phase (torch baseline, NKI) compiled — an
+  operator may compile several graphs per `run()` (one per radix-sort pass).
   The `AwsNeuronCustomNativeKernel` HLO marker validates *that a graph is an
   NKI graph* — it does NOT distinguish two autotune candidates of the same
   kernel; that distinction comes only from exact winner replay.
+- **Timing** comes from the Neuron runtime's inspect trace
+  (`NEURON_RT_INSPECT_*`, private output dir per spec): the worker runs
+  `run()` `warmup` + `repeat` times on the case's real inputs and records, per
+  timed iteration, the range of XLA execution indices it covered; the parent
+  orders the trace's executions, checks their count against the worker's,
+  sums the device time inside each range (multi-graph `run()`s are summed —
+  no host clock is ever compared with the trace's timebase) and matches
+  every executed NEFF — written back by the runtime, byte-identical to the
+  compiler dump — to a recorded pair by SHA256. `NKI(ms)` is the mean over the
+  timed iterations. The per-iteration graph pattern must be identical, NKI
+  iterations must execute a marker-bearing graph and the torch baseline none.
 - **Artifact selection must never depend on mtime**, sequence numbers, glob
-  order, or "most recent compile event". Zero or multiple matching artifacts is
+  order, or "most recent compile event". An execution that cannot be attributed
+  to this run's artifacts, a varying graph pattern, or a missing kernel graph is
   a benchmark failure (`nki_ok=False`), never a guess. Each profiled case
-  writes `results/logs/nki_profiles/<op>/<case>/<spec>/manifest.json` (exact
-  NEFF path + SHA256) and a line in `results/logs/nki_neff_manifest.jsonl`.
+  writes `results/logs/nki_profiles/<op>/<case>/<spec>/manifest.json`
+  (per-target `artifacts` with paths + SHA256s, `executed` graphs with
+  per-iteration counts, `stats.per_iteration_ms`) and a line in
+  `results/logs/nki_neff_manifest.jsonl`; the runtime session (`inspect/`:
+  executed NEFFs, one `.ntff` per NEFF, `ntrace.pb`) is kept for a
+  `neuron-explorer` deep-dive.
 
 ---
 
