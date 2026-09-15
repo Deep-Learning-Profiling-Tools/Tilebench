@@ -1,3 +1,28 @@
+"""NKI (AWS Trainium) implementation of dropout: ``y = x * x_keep / (1 - p)``.
+
+Design (mirrors the Triton / cuTile kernels):
+
+* The flat input is processed in fixed-size blocks. A Triton program handles
+  ``BLOCK_SIZE`` contiguous elements; the NKI analogue is one ``[128, BLOCK_SIZE]``
+  SBUF tile -- 128 partitions (the 128 parallel lanes of the Vector/Scalar
+  engines) times ``BLOCK_SIZE`` contiguous elements per partition. The default
+  and the autotune search space use the same ``BLOCK_SIZE`` values as
+  ``impl_triton.py`` / ``impl_cutile.py`` (default 1024; search 512/1024/2048).
+* Work is split across the NeuronCores of the logical core (LNC2 on trn2):
+  each program instance (``nl.program_id(0)``) owns a contiguous half of the
+  element range, so both physical cores' DMA engines are used.
+* Tails are handled inside the kernel: the last block of a core may cover fewer
+  than ``128 * BLOCK_SIZE`` elements, in which case it is processed as one
+  ``[128, q]`` tile plus one ``[1, r]`` tile (``r < 128``). No host-side
+  padding / reshape / slicing is needed -- those torch ops would be fused into
+  the same NEFF as the kernel and dominate its runtime.
+* The kernel reads and writes the flat ``(n,)`` HBM tensors directly through
+  ``.ap()`` access patterns, so the output is returned to the caller as-is.
+"""
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -6,90 +31,107 @@ from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
-    import nki.language as nl
     import nki.isa as nisa
+    import nki.language as nl
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
+    PMAX = 128
 
-@nki.jit
-def dropout_kernel(x_input, x_keep_input, p, block_size):
-    """Dropout scaling: out = (x / (1 - p)) * x_keep, tiled over partition and free dims."""
-    P, F = x_input.shape
 
-    num_blocks = (P + PMAX - 1) // PMAX
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
 
-    free_tile_size = block_size
-    num_free_blocks = (F + free_tile_size - 1) // free_tile_size
+    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
+    into an ``--lnc 1`` module silently computes only core 0's half.
+    """
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
-    # nl.divide is not a supported tensor_scalar operator, so scale by the reciprocal.
-    keep_scale = 1.0 / (1.0 - p)
 
-    hbm_result_tile = nl.ndarray(x_input.shape, dtype=x_input.dtype, buffer=nl.shared_hbm)
+if nki is not None:
+    @nki.jit
+    def dropout_kernel(x_input, keep_input, keep_scale, block_size):
+        """``out[i] = (x[i] * keep_scale) * keep[i]`` over flat ``(n,)`` HBM tensors.
 
-    for i in range(num_blocks):
-        p_start = i * PMAX
-        p_end = min(p_start + PMAX, P)
-        p_sz = p_end - p_start
+        Args:
+            x_input, keep_input: flat ``(n,)`` tensors in HBM (same dtype).
+            keep_scale: ``1 / (1 - p)`` (compile-time constant).
+            block_size: elements per partition per tile (compile-time constant).
+        """
+        n = x_input.shape[0]
+        out = nl.ndarray((n,), dtype=x_input.dtype, buffer=nl.shared_hbm)
 
-        for j in range(num_free_blocks):
-            f_start = j * free_tile_size
-            f_end = min(f_start + free_tile_size, F)
-            f_sz = f_end - f_start
+        # Contiguous element range owned by this program instance (NeuronCore).
+        num_programs = nl.num_programs()
+        per_core = (n + num_programs - 1) // num_programs
+        lo = nl.program_id(0) * per_core
+        hi = min(n, lo + per_core)
 
-            x_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=x_tile, src=x_input[p_start:p_end, f_start:f_end])
+        chunk = PMAX * block_size
+        for j in range(max(0, (hi - lo + chunk - 1) // chunk)):
+            start = lo + j * chunk
+            count = min(chunk, hi - start)
+            q = count // PMAX            # full partitions: [PMAX, q] tile
+            r = count - q * PMAX         # remaining < PMAX elements: [1, r] tile
+            if q > 0:
+                _tile_body(PMAX, q, start, x_input, keep_input, keep_scale, out)
+            if r > 0:
+                _tile_body(1, r, start + q * PMAX, x_input, keep_input, keep_scale, out)
+        return out
 
-            x_keep_tile = nl.ndarray((p_sz, f_sz), dtype=x_keep_input.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=x_keep_tile, src=x_keep_input[p_start:p_end, f_start:f_end])
+    def _tile_body(p, f, start, x_input, keep_input, keep_scale, out):
+        """y = x * x_keep / (1 - p) on the ``[p, f]`` tile at flat offset ``start``."""
+        x_tile = nl.ndarray((p, f), dtype=x_input.dtype, buffer=nl.sbuf)
+        nisa.dma_copy(dst=x_tile, src=x_input.ap(pattern=[[f, p], [1, f]], offset=start))
+        keep_tile = nl.ndarray((p, f), dtype=keep_input.dtype, buffer=nl.sbuf)
+        nisa.dma_copy(dst=keep_tile, src=keep_input.ap(pattern=[[f, p], [1, f]], offset=start))
+        # (x * scale) * keep in one fused Vector-engine instruction (keep is 0/1, so this
+        # equals the reference's (x * keep) * scale bit-for-bit).
+        nisa.scalar_tensor_tensor(dst=x_tile, data=x_tile, op0=nl.multiply, operand0=keep_scale,
+                                  op1=nl.multiply, operand1=keep_tile)
+        nisa.dma_copy(dst=out.ap(pattern=[[f, p], [1, f]], offset=start), src=x_tile)
 
-            # scaled = x / (1 - p)
-            scaled_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
-            nisa.tensor_scalar(dst=scaled_tile, data=x_tile, op0=nl.multiply,
-                               operand0=keep_scale)
 
-            # out = scaled * x_keep
-            result_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=result_tile, data1=scaled_tile, data2=x_keep_tile,
-                               op=nl.multiply)
 
-            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end], src=result_tile)
-
-    return hbm_result_tile
-
-_DEFAULT_CONFIG = SimpleNamespace(block_size=16384)
-_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
-_tuner = NkiAutotuner(dropout_kernel) if nki is not None else None
+# Same block sizes as impl_triton.py / impl_cutile.py (default 1024; search 512/1024/2048).
+_DEFAULT_CONFIG = SimpleNamespace(block_size=1024)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (512, 1024, 2048)]
+_kernel = dropout_kernel[_lnc_degree()] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
-def run(x: torch.Tensor, x_keep: torch.Tensor, p: float, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
-    if x.dtype == torch.int8:
-        raise NotImplementedError("dropout NKI: int8 not supported")
-
-    n = x.numel()
-    free_dim = (n + (PMAX - 1)) // PMAX
-    padded_size = PMAX * free_dim
-
-    if padded_size > n:
-        x = torch.nn.functional.pad(x, (0, padded_size - n))
-        x_keep = torch.nn.functional.pad(x_keep, (0, padded_size - n))
-
-    x_2d = x.reshape(PMAX, free_dim)
-    x_keep_2d = x_keep.reshape(PMAX, free_dim)
+def run(x: torch.Tensor, x_keep: torch.Tensor, p: float, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    x_flat, keep_flat = x.reshape(-1), x_keep.reshape(-1)
+    n = x_flat.numel()
+    keep_scale = 1.0 / (1.0 - p)
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            shape_key=(n, str(x_flat.dtype), keep_scale),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (x_2d, x_keep_2d, p, cfg.block_size),
+            args_fn=lambda cfg: (x_flat, keep_flat, keep_scale, cfg.block_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    result = dropout_kernel(x_2d, x_keep_2d, p, cfg.block_size)
+    result = _kernel(x_flat, keep_flat, keep_scale, cfg.block_size)
+    return result if x.dim() == 1 else result.reshape(x.shape)
 
-    return result.reshape(-1)[:n]
 
 def get_last_config() -> dict | None:
     return dict(_last_autotune_config) or None
