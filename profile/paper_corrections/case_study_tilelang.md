@@ -1,10 +1,3 @@
-# TileLang case study
-
-Paragraphs are verbatim. Only TileLang figures were corrected; Triton and cuTile
-numbers are PDF-sourced and left as written. TileLang latencies come from the raw
-autotune logs (`results/logs/time_measurement_logs/<op>_tilelang_*.json`), not the
-torch-rescaled `tilelang_ms` CSV column.
-
 ### 1d_conv, 2d_conv, 3d_conv
 
 In fp16, TileLang-Triton instruction count is 0.48x, 0.69x, 1.82x for 1D, 2D, 3D. In FP32, they are 1.01x, 0.77x, 0.88x. TileLang requires 6.69× and 4.66× the Triton latency (maximum input case) in 1D FP16 and FP32, 3.38× and 2.79× in 2D, and 5.03× and 2.82× in 3D.
@@ -45,6 +38,6 @@ CuTile requires 3.72x Triton's latency and 3.75x TileLang's latency (maximum inp
 
 ### streamk_matmul
 
-Using geomean latency on all cases, TileLang requires 1.54x latency than Triton and 0.78x than CuTile (geomean latency). However, the geomean latency hides patterns across input size and dtype. In fp32, similar to the basic matmul case, TileLang uses legacy HMMA and is only faster than CuTile in the five smallest input cases, all at or below 11.3M output elements; beyond that CuTile is ahead in every case, reaching 2.61x at the maximum input. In fp16/bf16, TileLang is faster than CuTile in 32 of 40 cases, but the gap closes as the output grows — from 0.24x at 5.2M elements to 0.88x at 58.7M — and CuTile overtakes TileLang above 90.2M elements, ending at 1.24x in the maximum input case.
+Using geomean latency on all cases, TileLang requires 1.54x latency than Triton and 0.78x than CuTile (geomean latency). However, the geomean latency hides patterns across input size and dtype. In fp32, similar to the basic matmul case, TileLang uses legacy HMMA and is only faster than CuTile in the five smallest input cases, all at or below 11.3M output elements; beyond that CuTile is ahead in every case, reaching 2.61x at the maximum input. In fp16/bf16, TileLang is faster than CuTile in 32 of 40 cases, but the gap closes as the output grows. Starting from 0.24x at 5.2M elements to 0.88x at 58.7M and CuTile overtakes TileLang above 90.2M elements, ending at 1.24x in the maximum input case.
 
-The two backends fail in different kernels, which is why they cross. CuTile's deficit is in first_wave, whose share of the output tiles falls from 54% at the smallest inputs to 1.9% at the largest, so CuTile improves monotonically with input size, from 3.16x Triton at m=1024 to 1.47x at m=8192 in fp16/bf16. TileLang's deficit is in full_tiles, which is an ordinary matmul and dominates as the input grows, so TileLang degrades monotonically, from 1.11x to 1.39x over the same range. In fp32 TileLang's curve is lifted to 2.02x-2.35x because the legacy HMMA fallback applies to every tile at every size, which moves the crossover down from 90.2M to 14.7M elements.
+The two backends fail in different kernels, which is why they cross. CuTile's deficit is in first_wave, whose share of the output tiles falls from 54% at the smallest inputs to 1.9% at the largest, so CuTile improves with input size, from 3.16x Triton at m=1024 to 1.47x at m=8192 in fp16/bf16. TileLang's deficit is in full_tiles, which is an ordinary matmul and dominates as the input grows, so TileLang degrades with input size, from 1.11x to 1.39x over the same range. In fp32 TileLang's curve is lifted to 2.02x (smallest case)-2.35x because the legacy HMMA fallback applies to every tile at every size, which moves the crossover down from 90.2M to 14.7M elements with CuTile.
