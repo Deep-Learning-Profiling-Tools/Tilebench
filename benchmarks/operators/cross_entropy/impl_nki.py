@@ -1,3 +1,29 @@
+"""NKI (AWS Trainium) implementation of cross_entropy: ``loss[r] = logsumexp(x[r]) - x[r, t[r]]``.
+
+Design (mirrors the Triton / cuTile kernels):
+
+* Triton runs one program per row over the whole class axis
+  (``BLOCK_CLASSES = next_pow2(C)``): row max, ``exp(x - max)``, sum, the target
+  logit, ``loss = -(x[t] - max - log(sum))``. NKI puts ``block_size`` rows
+  (<= 128, the SBUF partition count) on the partitions with the whole class axis
+  in the free dimension and does the same steps per row tile:
+  - ``max`` on the Vector engine;
+  - fused ``exp(x - max)`` + free-axis sum on the Scalar engine
+    (``activation_reduce``), then ``log`` of the sum;
+  - the target logit is a data-dependent gather, done with the one-hot trick:
+    a class-id iota compared against each row's target gives a mask, and a
+    masked ``select_reduce(max)`` returns ``x[t]`` in one Vector-engine
+    instruction;
+  - ``loss = log_sum + max - x[t]`` on ``[rows, 1]`` columns.
+  Triton autotunes only ``num_warps`` here; the NKI tunable is the rows per tile
+  (default 128 = all partitions; search 32/64/128).
+* Row tiles are split across the NeuronCores of the logical core (LNC2 on trn2)
+  by ``nl.program_id(0)``. Partial row tiles are clamped with ``min()``.
+"""
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -11,131 +37,107 @@ try:
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
+    PMAX = 128
+
+# Finite stand-in for -inf: the masked-out classes must never win the max-reduce.
+NEG_BIG = -3.0e38
 
 
-def kernel_assert(condition: bool, error_text: str):
-    """Assert with NKI-formatted error message."""
-    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
 
-
-def div_ceil(n: int, d: int) -> int:
-    """Ceiling division: smallest integer >= n/d."""
-    return (n + d - 1) // d
+    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
+    into an ``--lnc 1`` module silently computes only core 0's half.
+    """
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
 if nki is not None:
     @nki.jit
     def cross_entropy_kernel(logits, targets, block_size):
-        """Per-row cross-entropy loss against a hard target class.
-
-        Mirrors ``F.cross_entropy(logits, targets, reduction='none')`` in its
-        numerically stable form::
-
-            shifted[r, c] = logits[r, c] - max_c logits[r, c]
-            loss[r]       = log(sum_c exp(shifted[r, c])) - shifted[r, target[r]]
+        """Per-row cross-entropy of ``[B, C]`` logits against ``[B, 1]`` int32 targets.
 
         Args:
-            logits: [B, C] tensor in HBM (fp32 / bf16 / fp16).
-            targets: [B, 1] int32 tensor in HBM with the target class per row.
-
+            logits: ``[B, C]`` tensor in HBM (fp16 / bf16 / fp32).
+            targets: ``[B, 1]`` int32 tensor in HBM with the target class per row.
+            block_size: rows per tile (<= 128, compile-time constant).
         Returns:
-            [B, 1] tensor in HBM with the same dtype as ``logits``.
-
-        Notes:
-            * ``shifted[r, target[r]]`` is a gather at a *data-dependent* column,
-              which the vector engines cannot address directly. It is computed
-              with the standard one-hot trick instead: a free-axis iota row
-              ``0..C-1`` is compared against the row's target id, the resulting
-              one-hot predicate selects ``shifted`` (0 elsewhere) via
-              ``nisa.select_reduce``, and a free-axis sum extracts the single
-              surviving column exactly (all other addends are exactly +0.0).
-            * ``nisa.tensor_scalar``'s ``operand0`` must be fp32 when it is a
-              ``[P, 1]`` tile (an int32 ``operand0`` is rejected by the MLIR
-              verifier), so the int32 target ids are converted to fp32 by a
-              ``nisa.tensor_copy`` and compared against an fp32 iota. Class ids
-              are far below 2^24, so the compare is exact.
-            * ``nisa.select_reduce`` is the NKI 0.4.0 replacement for
-              ``np.where``; its ``on_false`` operand must be a scalar (or a
-              ``[P, 1]`` column), which the constant 0.0 satisfies directly, and
-              its ``predicate`` must be integer-typed, hence the ``uint8``
-              comparison result.
-            * Row blocks are clamped to ``B`` with ``min(...)``, so every tile is
-              allocated at its real extent and no load/store masking (nor any
-              ``-inf`` / zero padding fed to the max and sum reductions) is
-              required. The full class axis is loaded in one tile.
+            ``[B, 1]`` tensor in HBM with the dtype of ``logits``.
         """
-        kernel_assert(len(logits.shape) == 2, "logits must be 2D [B, C]")
-        kernel_assert(len(targets.shape) == 2 and targets.shape[1] == 1,
-                      "targets must be a [B, 1] column")
-        kernel_assert(logits.shape[0] == targets.shape[0],
-                      "logits and targets must agree on the batch dimension")
-
         B, C = logits.shape
-        kernel_assert(C <= nl.tile_size.sbuf_fmax, "class axis exceeds the SBUF free dimension")
+        out = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.shared_hbm)
+        rows_per_tile = min(block_size, PMAX)
 
-        hbm_result = nl.ndarray((B, 1), dtype=logits.dtype, buffer=nl.shared_hbm)
-        n_row_tiles = div_ceil(B, block_size)
+        # class_iota[r, c] = c on every partition (built once per launch).
+        class_iota = nl.ndarray((rows_per_tile, C), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.iota(dst=class_iota, pattern=[[1, C]], offset=0, channel_multiplier=0)
 
-        for row_tile in range(n_row_tiles):
-            row_start = row_tile * block_size
-            row_size = min(block_size, B - row_start)
-            row_end = row_start + row_size
+        n_tiles = (B + rows_per_tile - 1) // rows_per_tile
+        num_programs = nl.num_programs()
+        per_core = (n_tiles + num_programs - 1) // num_programs
+        pid = nl.program_id(0)
+        for ti in range(pid * per_core, min(n_tiles, (pid + 1) * per_core)):
+            r0 = ti * rows_per_tile
+            rs = min(rows_per_tile, B - r0)
+            x_tile = nl.ndarray((rs, C), dtype=logits.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=x_tile, src=logits[r0:r0 + rs, 0:C])
+            tgt_i32 = nl.ndarray((rs, 1), dtype=targets.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=tgt_i32, src=targets[r0:r0 + rs, 0:1])
+            # tensor_scalar's [P, 1] operand must be fp32 (class ids < 2^24: exact).
+            tgt_f32 = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=tgt_f32, src=tgt_i32)
 
-            # DMA cannot convert dtypes: load in the input dtype and let the
-            # Vector/Scalar engines widen to fp32 on their way out.
-            logits_tile = nl.ndarray((row_size, C), dtype=logits.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=logits_tile, src=logits[row_start:row_end, 0:C])
-
-            targets_tile = nl.ndarray((row_size, 1), dtype=targets.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=targets_tile, src=targets[row_start:row_end, 0:1])
-
-            targets_f32 = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_copy(dst=targets_f32, src=targets_tile)
-
-            # class_iota[r, c] = c on every partition (channel_multiplier=0).
-            class_iota = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.iota(dst=class_iota, pattern=[[1, C]], offset=0, channel_multiplier=0)
-
-            # ---- shifted = logits - row_max ------------------------------
-            row_max = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_reduce(dst=row_max, op=nl.maximum, data=logits_tile, axis=(1,))
-
-            shifted = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_scalar(dst=shifted, data=logits_tile, op0=nl.subtract, operand0=row_max)
-
-            # ---- log_sum = log(sum_c exp(shifted)) -----------------------
-            exp_tile = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.activation(dst=exp_tile, op=nl.exp, data=shifted)
-
-            row_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_reduce(dst=row_sum, op=nl.add, data=exp_tile, axis=(1,))
-
-            log_sum = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
+            # ---- row max, exp(x - max) + sum (fused), log(sum) ----
+            row_max = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=row_max, op=nl.maximum, data=x_tile, axis=(1,))
+            neg_max = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=neg_max, data=row_max, op0=nl.multiply, operand0=-1.0)
+            exp_tile = nl.ndarray((rs, C), dtype=nl.float32, buffer=nl.sbuf)
+            row_sum = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.activation_reduce(dst=exp_tile, op=nl.exp, data=x_tile, bias=neg_max,
+                                   reduce_op=nl.add, reduce_res=row_sum)
+            log_sum = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
             nisa.activation(dst=log_sum, op=nl.log, data=row_sum)
 
-            # ---- target_shifted = shifted[r, target[r]] (one-hot gather) --
-            target_mask = nl.ndarray((row_size, C), dtype=nl.uint8, buffer=nl.sbuf)
-            nisa.tensor_scalar(dst=target_mask, data=class_iota, op0=nl.equal,
-                               operand0=targets_f32)
+            # ---- x[r, t[r]] via one-hot mask + masked max-reduce ----
+            mask = nl.ndarray((rs, C), dtype=nl.uint8, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=mask, data=class_iota[0:rs, 0:C], op0=nl.equal, operand0=tgt_f32)
+            # select_reduce's dst must share on_true's dtype; the reduce result is fp32.
+            selected = nl.ndarray((rs, C), dtype=logits.dtype, buffer=nl.sbuf)
+            tgt_logit = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.select_reduce(dst=selected, predicate=mask, on_true=x_tile, on_false=NEG_BIG,
+                               reduce_res=tgt_logit, reduce_cmd=nisa.reduce_cmd.reset_reduce,
+                               reduce_op=nl.maximum)
 
-            target_only = nl.ndarray((row_size, C), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.select_reduce(dst=target_only, predicate=target_mask, on_true=shifted,
-                               on_false=0.0)
-
-            target_shifted = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_reduce(dst=target_shifted, op=nl.add, data=target_only, axis=(1,))
-
-            loss = nl.ndarray((row_size, 1), dtype=logits.dtype, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=loss, data1=log_sum, data2=target_shifted, op=nl.subtract)
-
-            nisa.dma_copy(dst=hbm_result[row_start:row_end, 0:1], src=loss)
-
-        return hbm_result
+            # ---- loss = log_sum + max - x[t] ----
+            loss = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_tensor(dst=loss, data1=log_sum, data2=row_max, op=nl.add)
+            nisa.tensor_tensor(dst=loss, data1=loss, data2=tgt_logit, op=nl.subtract)
+            loss_out = nl.ndarray((rs, 1), dtype=logits.dtype, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=loss_out, src=loss)
+            nisa.dma_copy(dst=out[r0:r0 + rs, 0:1], src=loss_out)
+        return out
 
 
+# Triton autotunes num_warps only (whole class axis per program); the NKI knob is rows per tile.
 _DEFAULT_CONFIG = SimpleNamespace(block_size=128)
 _SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
-_tuner = NkiAutotuner(cross_entropy_kernel) if nki is not None else None
+_kernel = cross_entropy_kernel[_lnc_degree()] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
@@ -152,8 +154,7 @@ def run(logits: torch.Tensor, targets: torch.Tensor, block_size: int = 1024,
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    result = cross_entropy_kernel(logits, targets_2d, cfg.block_size)
-    return result.reshape(-1)
+    return _kernel(logits, targets_2d, cfg.block_size).reshape(-1)
 
 
 def get_last_config() -> dict | None:
