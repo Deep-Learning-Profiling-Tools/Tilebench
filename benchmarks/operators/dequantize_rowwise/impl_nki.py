@@ -1,3 +1,29 @@
+"""NKI (AWS Trainium) implementation of dequantize_rowwise: ``out[r, c] = fp16(x[r, c] * state[r] / 127)``.
+
+Design (mirrors the Triton / cuTile kernels):
+
+* Triton launches one program per (row, ``CHUNK``-column block) and does
+  ``x * scale * (1/127)`` in fp32 before storing fp16. NKI walks the same
+  ``CHUNK``-column blocks, with the rows of each program's share laid out as
+  ``rows_per_partition`` consecutive rows per SBUF partition (partition ``p``
+  owns rows ``[p * rpp, (p + 1) * rpp)``): one ``[128, rpp, CHUNK]`` int8 DMA
+  brings ``rpp`` row segments per partition in a single transfer, one
+  Vector-engine ``tensor_tensor`` multiplies by the ``[128, rpp]`` fp32 scale
+  column (``state / 127``, broadcast along the columns) with the fp16 cast on
+  the way out, and one DMA stores the block. Keeping several rows per partition
+  makes every DMA large enough to run at HBM bandwidth on these small matrices.
+  ``CHUNK`` defaults / search space are those of ``impl_triton.py`` /
+  ``impl_cutile.py`` (default 512; search 256/512/1024).
+* Rows are split across the NeuronCores of the logical core (LNC2 on trn2) by
+  ``nl.program_id(0)``. If a program's share is not a multiple of 128 rows it
+  falls back to plain 128-row tiles (``[128, CHUNK]`` blocks, per-partition
+  scalar scale).
+* ``state_x`` is read as a ``[rows, 1]`` view -- nothing is padded on the host.
+"""
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -6,116 +32,126 @@ from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
-    import nki.language as nl
     import nki.isa as nisa
+    import nki.language as nl
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
+    PMAX = 128
 
 
-def kernel_assert(condition: bool, error_text: str):
-    """Assert with NKI-formatted error message."""
-    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
 
-
-def div_ceil(n: int, d: int) -> int:
-    """Ceiling division: smallest integer >= n/d."""
-    return (n + d - 1) // d
-
-
-@nki.jit
-def dequantize_rowwise_kernel(x_input, state_x_input, block_size):
-    """Row-wise dequantization: ``out[r, c] = x[r, c] * state_x[r] / 127`` in fp16.
-
-    Args:
-        x_input: [rows, cols] quantized values in HBM (typically int8).
-        state_x_input: [padded_rows, 1] per-row absmax scales in HBM (fp32).
-            ``padded_rows`` is a multiple of ``PMAX`` (padded host-side in ``run``).
-
-    Returns:
-        [rows, cols] fp16 tensor in HBM. The output dtype is always fp16,
-        independent of the input dtype (bitsandbytes rowwise-dequant semantics).
-
-    Notes:
-        * Tiled in two dimensions: ``PMAX`` rows by ``free_tile_size`` columns.
-          Boundary tiles are clamped to the surviving extent rather than masked,
-          so no out-of-range element is ever loaded, multiplied or stored.
-        * The scale is naturally one value per partition, so the [P, 1] scale
-          tile can be handed straight to ``nisa.tensor_scalar`` as ``operand0``,
-          which broadcasts it along the free axis in hardware -- no cross-partition
-          broadcast is needed.
-        * ``scale_tile`` is computed once per row block and reused across every
-          column block of that row block.
+    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
+    into an ``--lnc 1`` module silently computes only core 0's half.
     """
-    kernel_assert(len(x_input.shape) == 2, "x must be 2D [rows, cols]")
-    kernel_assert(len(state_x_input.shape) == 2, "state_x must be 2D [rows, 1]")
-
-    rows, cols = x_input.shape
-    kernel_assert(state_x_input.shape[0] >= rows, "state_x has fewer rows than x")
-
-    free_tile_size = block_size
-
-    num_blocks = div_ceil(rows, PMAX)
-    num_free_blocks = div_ceil(cols, free_tile_size)
-
-    hbm_result_tile = nl.ndarray((rows, cols), dtype=nl.float16, buffer=nl.shared_hbm)
-
-    for i in range(num_blocks):
-        p_start = i * PMAX
-        p_end = min(p_start + PMAX, rows)
-        p_sz = p_end - p_start
-
-        state_tile = nl.ndarray((p_sz, 1), dtype=state_x_input.dtype, buffer=nl.sbuf)
-        nisa.dma_copy(dst=state_tile, src=state_x_input[p_start:p_end, 0:1])
-
-        # scale = state_x / 127 (fp32: tensor_scalar operand0 must be fp32)
-        scale_tile = nl.ndarray((p_sz, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_scalar(dst=scale_tile, data=state_tile, op0=nl.multiply,
-                           operand0=1.0 / 127.0)
-
-        for j in range(num_free_blocks):
-            f_start = j * free_tile_size
-            f_end = min(f_start + free_tile_size, cols)
-            f_sz = f_end - f_start
-
-            x_tile = nl.ndarray((p_sz, f_sz), dtype=x_input.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=x_tile, src=x_input[p_start:p_end, f_start:f_end])
-
-            # out = x * scale, broadcast across the free axis, cast to fp16
-            result_tile = nl.ndarray((p_sz, f_sz), dtype=nl.float16, buffer=nl.sbuf)
-            nisa.tensor_scalar(dst=result_tile, data=x_tile, op0=nl.multiply,
-                               operand0=scale_tile)
-
-            nisa.dma_copy(dst=hbm_result_tile[p_start:p_end, f_start:f_end],
-                          src=result_tile)
-
-    return hbm_result_tile
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
-_DEFAULT_CONFIG = SimpleNamespace(block_size=8192)
-_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
-_tuner = NkiAutotuner(dequantize_rowwise_kernel) if nki is not None else None
+if nki is not None:
+    @nki.jit
+    def dequantize_rowwise_kernel(x_input, state_input, block_size):
+        """``out[r, c] = x[r, c] * state[r] / 127`` in fp16 over a ``[rows, cols]`` HBM tensor.
+
+        Args:
+            x_input: ``[rows, cols]`` quantized values in HBM (int8).
+            state_input: ``[rows, 1]`` per-row absmax scales in HBM (fp32).
+            block_size: columns per block (``CHUNK``, compile-time constant).
+        """
+        rows, cols = x_input.shape
+        out = nl.ndarray((rows, cols), dtype=nl.float16, buffer=nl.shared_hbm)
+        n_blocks = (cols + block_size - 1) // block_size
+
+        num_programs = nl.num_programs()
+        pid = nl.program_id(0)
+        per_core = (rows + num_programs - 1) // num_programs
+        r_lo = pid * per_core
+        r_hi = min(rows, r_lo + per_core)
+        my_rows = max(0, r_hi - r_lo)
+        if my_rows > 0 and my_rows % PMAX == 0:
+            _rows_per_partition(x_input, state_input, out, r_lo, my_rows // PMAX, cols, block_size, n_blocks)
+        else:
+            _row_tiles(x_input, state_input, out, r_lo, r_hi, cols, block_size, n_blocks)
+        return out
+
+    def _rows_per_partition(x_input, state_input, out, r_lo, rpp, cols, block_size, n_blocks):
+        """Partition ``p`` owns rows ``r_lo + p*rpp .. +rpp``; blocks are ``[128, rb, cs]`` tiles."""
+        # scale[p, i] = state[r_lo + p*rpp + i] / 127 (fp32)
+        state_tile = nl.ndarray((PMAX, rpp), dtype=state_input.dtype, buffer=nl.sbuf)
+        nisa.dma_copy(dst=state_tile, src=state_input.ap(pattern=[[rpp, PMAX], [1, rpp]], offset=r_lo))
+        scale = nl.ndarray((PMAX, rpp), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.tensor_scalar(dst=scale, data=state_tile, op0=nl.multiply, operand0=1.0 / 127.0)
+        rb = max(1, min(rpp, 16384 // block_size))       # rows per partition per block (SBUF budget)
+        for rb0 in range(0, rpp, rb):
+            rbn = min(rb, rpp - rb0)
+            for cb in range(n_blocks):
+                c0 = cb * block_size
+                cs = min(block_size, cols - c0)
+                base = (r_lo + rb0) * cols + c0
+                x_tile = nl.ndarray((PMAX, rbn, cs), dtype=x_input.dtype, buffer=nl.sbuf)
+                nisa.dma_copy(dst=x_tile, src=x_input.ap(pattern=[[rpp * cols, PMAX], [cols, rbn], [1, cs]], offset=base))
+                y_tile = nl.ndarray((PMAX, rbn, cs), dtype=nl.float16, buffer=nl.sbuf)
+                # int8 * per-row fp32 scale (broadcast along the columns) -> fp16
+                nisa.tensor_tensor(dst=y_tile, data1=x_tile,
+                                   data2=scale.ap(pattern=[[rpp, PMAX], [1, rbn], [0, cs]], offset=rb0),
+                                   op=nl.multiply)
+                nisa.dma_copy(dst=out.ap(pattern=[[rpp * cols, PMAX], [cols, rbn], [1, cs]], offset=base), src=y_tile)
+
+    def _row_tiles(x_input, state_input, out, r_lo, r_hi, cols, block_size, n_blocks):
+        """Fallback: plain 128-row tiles with a per-partition scalar scale."""
+        for r0 in range(r_lo, r_hi, PMAX):
+            rs = min(PMAX, r_hi - r0)
+            state_tile = nl.ndarray((rs, 1), dtype=state_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=state_tile, src=state_input[r0:r0 + rs, 0:1])
+            scale = nl.ndarray((rs, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=scale, data=state_tile, op0=nl.multiply, operand0=1.0 / 127.0)
+            for cb in range(n_blocks):
+                c0 = cb * block_size
+                cs = min(block_size, cols - c0)
+                x_tile = nl.ndarray((rs, cs), dtype=x_input.dtype, buffer=nl.sbuf)
+                nisa.dma_copy(dst=x_tile, src=x_input[r0:r0 + rs, c0:c0 + cs])
+                y_tile = nl.ndarray((rs, cs), dtype=nl.float16, buffer=nl.sbuf)
+                nisa.tensor_scalar(dst=y_tile, data=x_tile, op0=nl.multiply, operand0=scale)
+                nisa.dma_copy(dst=out[r0:r0 + rs, c0:c0 + cs], src=y_tile)
+
+
+# Same column block sizes as impl_triton.py / impl_cutile.py (CHUNK default 512; search 256/512/1024).
+_DEFAULT_CONFIG = SimpleNamespace(block_size=512)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (256, 512, 1024)]
+_kernel = dequantize_rowwise_kernel[_lnc_degree()] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
 def run(x: torch.Tensor, state_x: torch.Tensor, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    rows = x.shape[0]
-    state_x_2d = state_x.reshape(-1, 1)
-    padded_rows = div_ceil(rows, PMAX) * PMAX
-    if padded_rows > rows:
-        state_x_2d = torch.nn.functional.pad(state_x_2d, (0, 0, 0, padded_rows - rows))
+    state_2d = state_x.reshape(-1, 1)
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(tuple(x.shape), str(x.dtype)),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (x, state_x_2d, cfg.block_size),
+            args_fn=lambda cfg: (x, state_2d, cfg.block_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    return dequantize_rowwise_kernel(x, state_x_2d, cfg.block_size)
+    return _kernel(x, state_2d, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
