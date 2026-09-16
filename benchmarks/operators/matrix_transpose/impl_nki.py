@@ -1,3 +1,30 @@
+"""NKI (AWS Trainium) implementation of matrix_transpose: ``out[n, m] = in[m, n]``.
+
+Design (mirrors the Triton / cuTile kernels' tiled load / store):
+
+* Triton reads ``BLOCK_TILE x BLOCK_TILE`` blocks and writes them transposed.
+  NKI tiles the input into ``[BLOCK_SIZE rows, 128 cols]`` blocks: on Trainium2
+  the DMA engines can transpose 2-byte / 4-byte elements on the fly
+  (``nisa.dma_transpose``), so each block is one HBM -> SBUF transposing DMA
+  into a ``[128, BLOCK_SIZE]`` tile (128 output rows on the partitions, a
+  ``BLOCK_SIZE``-element contiguous run per row) followed by one contiguous
+  HBM store. No compute engine is involved, exactly like the Triton / cuTile
+  load-store kernels. ``BLOCK_SIZE`` default 2048; search 1024/2048/4096
+  (Triton's square 32/64/128 tiles map to the 128-partition x ``BLOCK_SIZE``
+  DMA tiles here).
+* 1-byte dtypes (int8) cannot be transposed by the DMA engines; they take the
+  Tensor-engine path: a ``[128, BLOCK_SIZE]`` input band is widened to bf16
+  (lossless for 8-bit integers), transposed 128x128 block by block with
+  ``nisa.nc_transpose`` into ``[128, BLOCK_SIZE]`` output bands, narrowed back
+  and stored with the same contiguous DMAs.
+* Column blocks of the input (= row blocks of the output) are split across the
+  NeuronCores of the logical core (LNC2 on trn2) by ``nl.program_id(0)``.
+  Boundary blocks are clamped with ``min()``; nothing is padded on the host.
+"""
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -6,95 +33,114 @@ from core.nki_autotune import NkiAutotuner
 
 try:
     import nki
-    import nki.language as nl
     import nki.isa as nisa
+    import nki.language as nl
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
+    PMAX = 128
 
 
-@nki.jit
-def transpose_kernel(a_input, tile):
-    """2D matrix transpose: out[n, m] = in[m, n].
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
 
-    Tiles the input into (<=128, <=128) blocks, transposes each block with
-    ``nisa.nc_transpose`` (Tensor Engine, SBUF -> PSUM), copies the result back to
-    SBUF and DMAs it into the transposed location of the output tensor.
-
-    Boundary tiles are handled by clamping the tile extents with ``min()`` (no
-    masking): a partial input tile of shape (m_sz, n_sz) yields an output tile of
-    shape (n_sz, m_sz) that is written to out[n_start:n_end, m_start:m_end].
-
-    Notes:
-        ``nc_transpose`` is lowered to ``nc_matmul`` against an identity matrix, which
-        does not accept 1-byte integer operands. For int8/uint8 inputs the tile is
-        widened to bfloat16 before the transpose and narrowed back afterwards. bfloat16
-        has 8 mantissa bits, so every 8-bit integer is represented exactly and the
-        round trip (including the fp32 PSUM accumulation of value * 1.0) is lossless.
+    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
+    into an ``--lnc 1`` module silently computes only core 0's half.
     """
-    m, n = a_input.shape
-
-    hbm_result_tile = nl.ndarray((n, m), dtype=a_input.dtype, buffer=nl.shared_hbm)
-
-    # dtypes the Tensor Engine cannot transpose natively -> transpose in bfloat16.
-    needs_widening = a_input.dtype in (nl.int8, nl.uint8)
-    transpose_dtype = nl.bfloat16 if needs_widening else a_input.dtype
-
-    num_m_blocks = (m + tile - 1) // tile
-    num_n_blocks = (n + tile - 1) // tile
-
-    for i in range(num_m_blocks):
-        m_start = i * tile
-        m_end = min(m_start + tile, m)
-        m_sz = m_end - m_start
-
-        for j in range(num_n_blocks):
-            n_start = j * tile
-            n_end = min(n_start + tile, n)
-            n_sz = n_end - n_start
-
-            a_tile = nl.ndarray((m_sz, n_sz), dtype=a_input.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=a_tile, src=a_input[m_start:m_end, n_start:n_end])
-
-            if needs_widening:
-                wide_tile = nl.ndarray((m_sz, n_sz), dtype=transpose_dtype, buffer=nl.sbuf)
-                nisa.tensor_copy(dst=wide_tile, src=a_tile)
-                source_tile = wide_tile
-            else:
-                source_tile = a_tile
-
-            # Partition/free axes swap: (m_sz, n_sz) -> (n_sz, m_sz)
-            psum_tile = nl.ndarray((n_sz, m_sz), dtype=transpose_dtype, buffer=nl.psum)
-            nisa.nc_transpose(dst=psum_tile, data=source_tile)
-
-            # PSUM cannot be DMA'd to HBM directly; stage through SBUF (this copy also
-            # narrows bfloat16 back to the 8-bit integer output dtype when widened).
-            result_tile = nl.ndarray((n_sz, m_sz), dtype=a_input.dtype, buffer=nl.sbuf)
-            nisa.tensor_copy(dst=result_tile, src=psum_tile)
-
-            nisa.dma_copy(dst=hbm_result_tile[n_start:n_end, m_start:m_end], src=result_tile)
-
-    return hbm_result_tile
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
-_DEFAULT_CONFIG = SimpleNamespace(tile=128)
-_SEARCH_SPACE = [SimpleNamespace(tile=t) for t in (32, 64, 128)]
-_tuner = NkiAutotuner(transpose_kernel) if nki is not None else None
+if nki is not None:
+    @nki.jit
+    def transpose_kernel(a_input, block_size):
+        """``out[n, m] = a_input[m, n]`` for a ``[m, n]`` HBM tensor.
+
+        Args:
+            a_input: ``[m, n]`` tensor in HBM (fp16 / bf16 / fp32 / int8).
+            block_size: input rows per block (compile-time constant).
+        """
+        m, n = a_input.shape
+        out = nl.ndarray((n, m), dtype=a_input.dtype, buffer=nl.shared_hbm)
+        n_col_blocks = (n + PMAX - 1) // PMAX          # 128 input cols = 128 output rows
+        n_row_blocks = (m + block_size - 1) // block_size
+        dma_path = a_input.dtype not in (nl.int8, nl.uint8)
+
+        num_programs = nl.num_programs()
+        per_core = (n_col_blocks + num_programs - 1) // num_programs
+        pid = nl.program_id(0)
+        for cb in range(pid * per_core, min(n_col_blocks, (pid + 1) * per_core)):
+            c0 = cb * PMAX
+            cs = min(PMAX, n - c0)
+            for rb in range(n_row_blocks):
+                r0 = rb * block_size
+                rs = min(block_size, m - r0)
+                if dma_path:
+                    # HBM [rs, cs] block -> transposed SBUF tile [cs, rs] in one DMA.
+                    t_tile = nl.ndarray((cs, rs), dtype=a_input.dtype, buffer=nl.sbuf)
+                    nisa.dma_transpose(dst=t_tile, src=a_input[r0:r0 + rs, c0:c0 + cs], axes=(1, 0))
+                    nisa.dma_copy(dst=out[c0:c0 + cs, r0:r0 + rs], src=t_tile)
+                else:
+                    _transpose_block_int8(a_input, out, r0, rs, c0, cs)
+        return out
+
+    def _transpose_block_int8(a_input, out, r0, rs, c0, cs):
+        """Tensor-engine transpose of the int8 block ``a_input[r0:r0+rs, c0:c0+cs]``.
+
+        The block is loaded as up-to-128-row bands (contiguous DMAs), widened to
+        bf16 (exact for 8-bit integers), transposed 128x128 sub-block by
+        sub-block on the Tensor engine and narrowed back into one ``[cs, rs]``
+        output tile that is stored with a single contiguous DMA.
+        """
+        t_tile = nl.ndarray((cs, rs), dtype=a_input.dtype, buffer=nl.sbuf)
+        for bb in range((rs + PMAX - 1) // PMAX):
+            b0 = bb * PMAX
+            bs = min(PMAX, rs - b0)
+            band = nl.ndarray((bs, cs), dtype=a_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=band, src=a_input[r0 + b0:r0 + b0 + bs, c0:c0 + cs])
+            wide = nl.ndarray((bs, cs), dtype=nl.bfloat16, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=wide, src=band)
+            ps = nl.ndarray((cs, bs), dtype=nl.bfloat16, buffer=nl.psum)
+            nisa.nc_transpose(dst=ps, data=wide)
+            nisa.tensor_copy(dst=t_tile[0:cs, b0:b0 + bs], src=ps)
+        nisa.dma_copy(dst=out[c0:c0 + cs, r0:r0 + rs], src=t_tile)
+
+
+# Rows per DMA block (contiguous run per output row): default 2048; search 1024/2048/4096.
+_DEFAULT_CONFIG = SimpleNamespace(block_size=2048)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (1024, 2048, 4096)]
+_kernel = transpose_kernel[_lnc_degree()] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
-def run(x: torch.Tensor, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
+def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    if x.dim() != 2:
+        raise ValueError("Input tensor for matrix_transpose must be 2D.")
     if autotune:
         cfg = _tuner.tune_or_cached(
             shape_key=(tuple(x.shape), str(x.dtype)),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (x, cfg.tile),
+            args_fn=lambda cfg: (x, cfg.block_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    return transpose_kernel(x, cfg.tile)
+    return _kernel(x, cfg.block_size)
 
 
 def get_last_config() -> dict | None:
