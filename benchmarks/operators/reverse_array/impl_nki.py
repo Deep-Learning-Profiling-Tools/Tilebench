@@ -1,3 +1,29 @@
+"""NKI (AWS Trainium) implementation of reverse_array: ``out[i] = x[n - 1 - i]``.
+
+Design (mirrors the Triton / cuTile kernels):
+
+* Triton handles ``BLOCK_SIZE`` contiguous output elements per program by
+  loading the mirrored input range. NKI processes ``[128, BLOCK_SIZE]`` tiles:
+  a contiguous ``[128, BLOCK_SIZE]`` load (partition ``p`` holds input elements
+  ``[start + p*B, start + (p+1)*B)``), an on-chip free-axis reversal
+  (``tensor_copy`` from a stride ``-1`` view), and a store in which partition
+  ``p`` lands at output offset ``n - start - (p+1)*B``. Partition order in the
+  output is the mirror image of the input's, and the DMA engines only accept
+  positive partition strides, so the store is one contiguous DMA per partition
+  row (``BLOCK_SIZE`` elements each) -- a large ``BLOCK_SIZE`` keeps those DMAs
+  efficient. ``BLOCK_SIZE`` search space is that of ``impl_triton.py`` /
+  ``impl_cutile.py`` (1024/2048/4096/8192); the default is 8192 (largest
+  per-row DMA).
+* Work is split across the NeuronCores of the logical core (LNC2 on trn2):
+  each program instance (``nl.program_id(0)``) owns a contiguous half of the
+  input range.
+* Tails are handled inside the kernel (``[128, q]`` + ``[1, r]`` tiles); no
+  host-side padding / reshape / slicing.
+"""
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -11,95 +37,97 @@ try:
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
-
-# Free-dimension tile size, in elements. Two SBUF buffers of this width are live
-# at once, so 16384 costs 64KB/partition at fp16 and 128KB/partition at fp32,
-# both within the 192KB per-partition SBUF budget.
-FREE_TILE_SIZE = 16384
+    PMAX = 128
 
 
-def div_ceil(numerator: int, denominator: int) -> int:
-    return (numerator + denominator - 1) // denominator
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
+
+    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
+    into an ``--lnc 1`` module silently computes only core 0's half.
+    """
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
 if nki is not None:
     @nki.jit
     def reverse_kernel(a_input, block_size):
-        total_rows, total_cols = a_input.shape
+        """``out[i] = a_input[n - 1 - i]`` over a flat ``(n,)`` HBM tensor.
 
-        free_tile_size = min(block_size, total_cols)
-        num_blocks = div_ceil(total_rows, PMAX)
-        num_free_blocks = div_ceil(total_cols, free_tile_size)
+        Args:
+            a_input: flat ``(n,)`` tensor in HBM (fp16 / bf16 / fp32 / int8).
+            block_size: elements per partition per tile (compile-time constant).
+        """
+        n = a_input.shape[0]
+        out = nl.ndarray((n,), dtype=a_input.dtype, buffer=nl.shared_hbm)
 
-        hbm_result_tile = nl.ndarray(a_input.shape, dtype=a_input.dtype,
-                                     buffer=nl.shared_hbm)
+        num_programs = nl.num_programs()
+        per_core = (n + num_programs - 1) // num_programs
+        lo = nl.program_id(0) * per_core
+        hi = min(n, lo + per_core)
 
-        for i in range(num_blocks):
-            p_offset = i * PMAX
-            p_size = min(PMAX, total_rows - p_offset)
+        chunk = PMAX * block_size
+        for j in range(max(0, (hi - lo + chunk - 1) // chunk)):
+            start = lo + j * chunk
+            count = min(chunk, hi - start)
+            q = count // PMAX
+            r = count - q * PMAX
+            if q > 0:
+                _tile_body(PMAX, q, start, n, a_input, out)
+            if r > 0:
+                _tile_body(1, r, start + q * PMAX, n, a_input, out)
+        return out
 
-            for j in range(num_free_blocks):
-                f_offset = j * free_tile_size
-                f_size = min(free_tile_size, total_cols - f_offset)
-
-                # Forward, fully contiguous load: one DMA for the whole tile.
-                a_tile = nl.ndarray((p_size, f_size), dtype=a_input.dtype, buffer=nl.sbuf)
-                nisa.dma_copy(
-                    dst=a_tile,
-                    src=a_input[p_offset:p_offset + p_size, f_offset:f_offset + f_size],
-                )
-
-                # Free-dim reversal on-chip: static step of -1 along the free
-                # axis. The partition step stays equal to the free-dim element
-                # count, as SBUF access patterns require.
-                rev_tile = nl.ndarray((p_size, f_size), dtype=a_input.dtype, buffer=nl.sbuf)
-
-                nisa.tensor_copy(
-                    dst=rev_tile,
-                    src=a_tile.ap(pattern=[[f_size, p_size], [-1, f_size]], offset=f_size - 1),
-                )
-
-                dst_c0 = total_cols - f_offset - f_size
-                for p in range(p_size):
-                    dst_row = total_rows - 1 - p_offset - p
-                    nisa.dma_copy(
-                        dst=hbm_result_tile[dst_row:dst_row + 1,
-                                            dst_c0:dst_c0 + f_size],
-                        src=rev_tile[p:p + 1, 0:f_size],
-                    )
-
-        return hbm_result_tile
+    def _tile_body(p, f, start, n, a_input, out):
+        """Reverse the ``[p, f]`` tile at flat input offset ``start``."""
+        tile = nl.ndarray((p, f), dtype=a_input.dtype, buffer=nl.sbuf)
+        nisa.dma_copy(dst=tile, src=a_input.ap(pattern=[[f, p], [1, f]], offset=start))
+        # Free-axis reversal on-chip: stride -1 along the free axis of the source view.
+        rev = nl.ndarray((p, f), dtype=a_input.dtype, buffer=nl.sbuf)
+        nisa.tensor_copy(dst=rev, src=tile.ap(pattern=[[f, p], [-1, f]], offset=f - 1))
+        # Partition p holds input [start + p*f, start + (p+1)*f) -> output [n - start - (p+1)*f, ...).
+        for pp in range(p):
+            dst0 = n - start - (pp + 1) * f
+            nisa.dma_copy(dst=out.ap(pattern=[[f, 1], [1, f]], offset=dst0), src=rev[pp:pp + 1, 0:f])
 
 
-_DEFAULT_CONFIG = SimpleNamespace(block_size=16384)
-_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (2048, 4096, 8192, 16384)]
-_tuner = NkiAutotuner(reverse_kernel) if nki is not None else None
+# Same block sizes as impl_triton.py / impl_cutile.py (search 1024/2048/4096/8192); default 8192.
+_DEFAULT_CONFIG = SimpleNamespace(block_size=8192)
+_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (1024, 2048, 4096, 8192)]
+_kernel = reverse_kernel[_lnc_degree()] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
-def run(x: torch.Tensor, n: int, block_size: int = 1024, autotune=False, **kwargs) -> torch.Tensor:
-    free_dim = div_ceil(n, PMAX)
-    padded_size = PMAX * free_dim
-
-    if padded_size > n:
-        x = torch.nn.functional.pad(x, (0, padded_size - n))
-
-    x_2d = x.reshape(PMAX, free_dim)
+def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+    x_flat = input.reshape(-1)
+    n = x_flat.numel()
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(tuple(x_2d.shape), str(x_2d.dtype)),
+            shape_key=(n, str(x_flat.dtype)),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (x_2d, cfg.block_size),
+            args_fn=lambda cfg: (x_flat, cfg.block_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    result = reverse_kernel(x_2d, cfg.block_size)
-
-    pad_count = padded_size - n
-
-    return result.reshape(-1)[pad_count:]
+    result = _kernel(x_flat, cfg.block_size)
+    return result if input.dim() == 1 else result.reshape(input.shape)
 
 
 def get_last_config() -> dict | None:
