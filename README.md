@@ -4,7 +4,7 @@ A modular GPU performance benchmarking framework for comparing **NVIDIA cuTile (
 
 ## Features
 
-- **Multi-backend**: PyTorch · Triton · cuTile (CUDA 13.1 / Blackwell) · TileLang (optional — skipped gracefully when `impl_tilelang.py` or the `tilelang` package is absent)
+- **Multi-backend**: PyTorch · Triton · cuTile (CUDA 13.2 / Blackwell) · TileLang (optional — skipped gracefully when `impl_tilelang.py` or the `tilelang` package is absent)
 - **Proton timing**: Mean latency via Triton Proton `data="tree"`, with optional CUDA graph replay
 - **Autotune**: `@triton.autotune` for Triton; `ct_experimental.autotune_launch` for cuTile; `@tilelang.autotune` for TileLang — runs before timing, results logged separately
 - **Correctness checks**: dtype-aware tolerance (`torch.testing.assert_close`) against PyTorch reference; unsupported dtypes skipped gracefully
