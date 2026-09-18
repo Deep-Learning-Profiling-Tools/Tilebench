@@ -59,13 +59,13 @@ def _read(path: Path) -> str:
 
 
 _SKILL_PATHS = {
-    "triton": _REPO_ROOT / ".claude" / "skills" / "triton-guide" / "SKILL.md",
-    "cutile": _REPO_ROOT / ".claude" / "skills" / "cutile-guide" / "SKILL.md",
+    "triton": _REPO_ROOT / "skills" / "triton-guide" / "SKILL.md",
+    "cutile": _REPO_ROOT / "skills" / "cutile-guide" / "SKILL.md",
 }
 
 
 def _read_skill(backend: str) -> str:
-    """Read .claude/skills/<backend>-guide/SKILL.md and strip Claude Code
+    """Read skills/<backend>-guide/SKILL.md and strip Claude Code
     frontmatter (YAML block at the very top) so the file reads as a plain
     programming guide for the LLM. Returns "" if the skill file is absent.
     """
