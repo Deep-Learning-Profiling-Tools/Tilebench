@@ -36,11 +36,11 @@ import sys
 
 import yaml
 
-# Allow running as: PYTHONPATH=. python scripts/visualize.py
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without requiring PYTHONPATH=.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import numpy as np                      # noqa: E402
 import matplotlib                       # noqa: E402
@@ -48,7 +48,8 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
+from tilebench.core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
+from tilebench.paths import operator_config  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # constants
@@ -86,7 +87,7 @@ _GPU_PEAK_METRICS = ["pct_peak_bw", "pct_peak_tflops", "roofline"]
 
 
 def _load_operator_config(operator: str) -> dict:
-    path = os.path.join("benchmarks", "operators", operator, "config.yaml")
+    path = operator_config(operator)
     if not os.path.exists(path):
         return {}
     with open(path) as f:
@@ -382,7 +383,7 @@ def main() -> None:
                              "(default: results/figures/<operator>/)")
     parser.add_argument("--gpu", type=str, default=None,
                         help="GPU short name (e.g. B200). Loads peak performance from "
-                             "data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
+                             "tilebench/data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
     args = parser.parse_args()
 
     # Resolve operator-bound default paths
@@ -406,7 +407,7 @@ def main() -> None:
         peak_cfg = load_peak_config(args.gpu)
         if not peak_cfg:
             print(f"Warning: no peak data found for GPU '{args.gpu}' at "
-                  f"data/peak_performance/{args.gpu}.json — "
+                  f"tilebench/data/peak_performance/{args.gpu}.json — "
                   f"roofline/pct_peak will be skipped")
 
     # Determine which metrics to plot

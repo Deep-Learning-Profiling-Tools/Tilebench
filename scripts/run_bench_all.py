@@ -8,7 +8,16 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.engine import run_benchmark_suite
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without requiring PYTHONPATH=.
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.core.engine import run_benchmark_suite  # noqa: E402
+from tilebench.paths import OPERATOR_ROOT  # noqa: E402
 
 
 def discover_operators(operators_root: Path) -> list[str]:
@@ -116,7 +125,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     os.chdir(repo_root)
 
-    operators_root = repo_root / "benchmarks" / "operators"
+    operators_root = OPERATOR_ROOT
     operators = args.operators if args.operators else discover_operators(operators_root)
     if not operators:
         print("No operators found to run.")

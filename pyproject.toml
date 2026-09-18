@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tilebench"
+version = "0.1.0"
+description = "Controlled performance evaluation and bottleneck diagnosis for tile-based programming models"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# Only the framework packages are installed. benchmarks.llm_generated holds the
+# archived LLM-track trajectories (~6k files); it is repository data, not code
+# that anything imports, so it is excluded from the distribution.
+[tool.setuptools.packages.find]
+include = ["tilebench*"]
+exclude = ["tilebench.benchmarks.llm_generated*"]
+
+[tool.setuptools.package-data]
+"tilebench.data" = ["peak_performance/*.json"]
+"tilebench.benchmarks" = ["operators/*/config.yaml"]
+"tilebench.llm_codegen" = ["*.md", "problems/*.md"]
+"tilebench.profiling" = ["*.json", "*.sh", "*.sbatch"]
