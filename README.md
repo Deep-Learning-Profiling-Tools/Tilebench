@@ -22,7 +22,7 @@ Autotuned latency of PyTorch, Triton and cuTile on one NVIDIA B200, at the large
 
 ## Software Versions
 
-Versions used for the results in this repository.
+Software stack of the current environment. The TileBench paper results were measured with `cuda-tile` 1.3.0; the follow-up work in this repository (TileBench++: TileLang and NKI backends) uses `cuda-tile` 1.5.0.
 
 | Component | Version |
 |---|---|
@@ -32,7 +32,7 @@ Versions used for the results in this repository.
 | Python | 3.10.19 |
 | PyTorch | 2.10.0+cu130 (bundles the CUDA 13.0 runtime, cuDNN 9.15.1, cuBLAS 13.1.0.3) |
 | Triton | 3.6.0 (includes the Proton profiler used for timing) |
-| cuTile | `cuda-tile` 1.5.0, `cuda-tile-experimental` 0.0.1, `cuda-bindings` 13.0.3 |
+| cuTile | `cuda-tile` 1.5.0 (1.3.0 for the TileBench paper), `cuda-tile-experimental` 0.0.1, `cuda-bindings` 13.0.3 |
 | TileLang | `tilelang` 0.1.11 with `apache-tvm-ffi` 0.1.11 (the pin is required: 0.1.12 crashes `import tilelang`) |
 | NKI | `nki` 0.6.0 with `neuronx-cc` 2.27 on an AWS trn2.3xlarge (Trainium2) |
 | Nsight Compute | 2026.1.1 (NCU profiling under `tilebench_run/`) |
@@ -63,7 +63,7 @@ results/logs/time_measurement_logs/mul2_results.json
 results/logs/autotune_logs/mul2_autotune.json
 ```
 
-`results/logs/` is git-ignored on `main`; only the summary CSVs under `results/csv/` are tracked. Raw-log snapshots live on the `archive/raw-logs-2026-09-18` branch, which is `main` plus `results/logs/`. Add a new snapshot with `scripts/archive_logs.sh --push`.
+`results/logs/` is git-ignored on `main`; only the summary CSVs under `results/csv/` are tracked. Raw logs live on the `archive/raw-logs-2026-09-18` branch, which is `main` plus every raw log archived so far. `run_bench.py` snapshots `results/logs/` onto the local copy of that branch after every run, without checking anything out (skip it with `--no-archive`). Publish the snapshots with `scripts/archive_logs.sh --push`.
 
 ### 3. Visualize results
 ```bash
@@ -107,7 +107,7 @@ Tilebench/
 │   ├── visualize.py         # Per-operator plots of derived metrics + Roofline
 │   ├── measure_peak.py      # Measure peak bandwidth / FLOPS on the current GPU
 │   ├── plot_sweep_max.py    # README figure: latency at each operator's sweep-max case
-│   └── archive_logs.sh      # Snapshot results/logs/ onto the raw-log archive branch
+│   └── archive_logs.sh      # Snapshot results/logs/ onto the raw-log archive branch (run_bench.py calls it)
 │
 ├── benchmarks/
 │   ├── operators/<name>/    # 45 operators: config.yaml + impl_{torch,triton,cutile,tilelang}.py
@@ -115,6 +115,8 @@ Tilebench/
 │
 ├── tools/
 │   └── llm_codegen/         # Iterative LLM kernel-generation pipeline; problems/ holds the per-operator task descriptions
+│
+├── skills/                  # Triton and cuTile programming guides embedded in the LLM prompts as API references
 │
 ├── tilebench_run/           # Batch launchers + Nsight Compute (NCU) profiling harness and reports
 ├── tests/                   # Unit tests for the NKI profiling flow
@@ -158,6 +160,7 @@ Tilebench/
 | `--flush-l2` | from config | Flush L2 before each iteration |
 | `--autotune` | from config | Run every backend's autotune path; writes `results/csv/<op>_autotune.csv` instead of `<op>_default.csv` |
 | `--tile-language` | all | Comma-separated backends to run: `triton`, `cutile`, `tilelang`, `nki` (PyTorch always runs as the baseline) |
+| `--no-archive` | false | Do not snapshot `results/logs/` onto the raw-log archive branch after the run |
 | `--case-indices` | all | e.g. `0,1,3` to run subset |
 | `--keep-proton-files` | false | Keep `.hatchet` files for inspection |
 | `--proton-output-dir` | system temp | Directory for Proton files |
