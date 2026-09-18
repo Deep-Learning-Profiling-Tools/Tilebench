@@ -1,10 +1,18 @@
 import argparse
 import csv
 import json
-import os
 import subprocess
 from pathlib import Path
-from core.engine import run_benchmark_suite
+
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without requiring PYTHONPATH=.
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.core.engine import run_benchmark_suite  # noqa: E402
 
 def _archive_logs() -> None:
     """Snapshot results/logs/ onto the raw-log archive branch (local commit only;

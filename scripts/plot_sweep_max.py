@@ -2,7 +2,7 @@
 README figure: PyTorch / Triton / cuTile latency at each operator's sweep-max case.
 
 For every operator this takes the largest swept case, the one recorded in
-tilebench_run/ncu_catalogue.json (`default_params_per_dtype`), so the figure
+tilebench/profiling/ncu_catalogue.json (`default_params_per_dtype`), so the figure
 uses the same inputs as the NCU profiles. The dtype is fp16 when the operator
 sweeps it, otherwise the operator's first dtype (shown after the name).
 Latencies are the autotuned Proton means from results/csv/<op>_autotune.csv.
@@ -21,7 +21,17 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-CATALOGUE = "tilebench_run/ncu_catalogue.json"
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without requiring PYTHONPATH=.
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.paths import NCU_CATALOGUE  # noqa: E402
+
+CATALOGUE = NCU_CATALOGUE
 OUT = "assets/sweep_max_latency.png"
 
 # label, CSV column, color
