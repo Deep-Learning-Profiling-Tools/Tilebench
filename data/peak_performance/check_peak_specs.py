@@ -1,19 +1,14 @@
 """Quick sanity-check: print B200 roofline numbers for mul2.
 
+Peak values are read from B200.json next to this file (measured peak
+bandwidth + per-dtype peak TFLOPS), the same file the metrics code uses.
+
 Run from Tilebench/:
-    python check_peak_specs.py
+    python data/peak_performance/check_peak_specs.py
 """
 
-# ── Hardware specs (B200) ────────────────────────────────────────────────────
-PEAK_BW_GBs   = 8000.0   # HBM3e peak bandwidth  (GB/s)
-PEAK_BW_TBps  = PEAK_BW_GBs / 1000  # = 8.0 TB/s
-
-PEAK_TFLOPS = {
-    "fp16": 400.0,
-    "bf16": 400.0,
-    "fp32":  80.0,
-    "int8": 800.0,
-}
+import json
+from pathlib import Path
 
 # ── dtype element sizes ──────────────────────────────────────────────────────
 DTYPE_BYTES = {
@@ -23,13 +18,19 @@ DTYPE_BYTES = {
     "int8": 1,
 }
 
+# ── Hardware specs (B200) ────────────────────────────────────────────────────
+_PEAK = json.loads((Path(__file__).parent / "B200.json").read_text())
+PEAK_BW_GBs   = _PEAK["peak_bw_GBs"]   # measured HBM peak bandwidth  (GB/s)
+PEAK_BW_TBps  = PEAK_BW_GBs / 1000
+PEAK_TFLOPS   = {dt: _PEAK["peak_tflops"][dt] for dt in DTYPE_BYTES}
+
 # ── mul2 memory access pattern ───────────────────────────────────────────────
 #   1 read + 1 write  →  bytes = n * dtype_size * 2
 #   1 multiply        →  flops = n
 
 print("=" * 65)
 print(f"{'B200 specs':}")
-print(f"  Peak HBM bandwidth : {PEAK_BW_GBs:.0f} GB/s  ({PEAK_BW_TBps:.1f} TB/s)")
+print(f"  Peak HBM bandwidth : {PEAK_BW_GBs:.1f} GB/s  ({PEAK_BW_TBps:.2f} TB/s, measured)")
 print()
 
 print("=" * 65)
@@ -61,7 +62,7 @@ for dtype, ds in DTYPE_BYTES.items():
 
 print()
 print("=" * 65)
-print("Bandwidth efficiency reference (% of 8000 GB/s):")
+print(f"Bandwidth efficiency reference (% of {PEAK_BW_GBs:.1f} GB/s):")
 print()
 
 # For a given n (problem size) and latency, bandwidth = bytes / latency
