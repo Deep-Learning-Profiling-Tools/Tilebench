@@ -1,0 +1,128 @@
+{
+  "op": "quantize_global",
+  "model": "gpt-5.5",
+  "effort": "high",
+  "threshold": 0.8,
+  "max_iters": 10,
+  "backends": [
+    "triton",
+    "cutile"
+  ],
+  "history": [
+    {
+      "iter": 0,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.8803224468588337,
+          "report_mean": 0.8803224468588337,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "BLOCK_SIZE": 2048,
+            "num_warps": 4,
+            "num_stages": 2
+          },
+          "speedup_vs_torch": 0.9769370309115157
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 159.73005437850952,
+      "llm_usage": {
+        "elapsed_s": 155.40286087989807,
+        "ttft_s": 148.73209834098816,
+        "input_tokens": 32975,
+        "cached_input_tokens": 0,
+        "output_tokens": 6339,
+        "reasoning_tokens": 5696,
+        "response_chars": 2254
+      }
+    },
+    {
+      "iter": 1,
+      "active_backends": [
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": true,
+          "frozen_at": 0
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.8008845540826037,
+          "report_mean": 0.8008845540826037,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE": 2048,
+            "occupancy": 8
+          },
+          "speedup_vs_torch": 0.8937797469776967
+        }
+      },
+      "iter_total_s": 31.259220600128174,
+      "llm_usage": {
+        "elapsed_s": 27.044540405273438,
+        "ttft_s": 24.1996431350708,
+        "input_tokens": 16113,
+        "cached_input_tokens": 0,
+        "output_tokens": 1335,
+        "reasoning_tokens": 1034,
+        "response_chars": 1075
+      }
+    }
+  ],
+  "frozen": {
+    "triton": 0,
+    "cutile": 1
+  },
+  "best_clean": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.8803224468588337,
+      "report_mean": 0.8803224468588337
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8008845540826037,
+      "report_mean": 0.8008845540826037
+    }
+  },
+  "best_any": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.8803224468588337,
+      "report_mean": 0.8803224468588337
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8008845540826037,
+      "report_mean": 0.8008845540826037
+    }
+  },
+  "promotion": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.8803224468588337,
+      "verify_clean": true
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8008845540826037,
+      "verify_clean": true
+    }
+  }
+}

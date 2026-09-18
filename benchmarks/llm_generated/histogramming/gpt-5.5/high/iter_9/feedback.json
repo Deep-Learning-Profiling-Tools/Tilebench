@@ -1,0 +1,110 @@
+{
+  "op": "histogramming",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/histogramming/gpt-5.5/high/iter_9",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "int32",
+      "params": {
+        "N": 67108864,
+        "num_bins": 4096,
+        "dtype": "int32"
+      },
+      "problem_size": 67108864,
+      "latency_ms": 0.08924439999999999,
+      "torch_latency_ms": 0.6264993000000001,
+      "speedup_vs_torch": 7.020040473127728,
+      "cfg": {
+        "MODE": "atomic_partition_reduce_loop_nomask",
+        "TILE": 1024,
+        "PARTITIONS": 128,
+        "ZERO_BLOCK": 1024,
+        "BIN_TILE": 16,
+        "zero_num_warps": 4,
+        "hist_num_warps": 8,
+        "reduce_num_warps": 4,
+        "num_stages": 2,
+        "atomic_scope": "gpu",
+        "atomic_sem": "relaxed",
+        "assume_N_multiple_of_TILE": true
+      },
+      "flops": 67108864.0,
+      "bytes": 268451840.0,
+      "AI": 0.24998474214220323,
+      "measured_bw_GBs": 3008.0524940500472,
+      "measured_perf_TFLOPS": 0.7519672270753124,
+      "ceiling_TFLOPS": 1.634750222764724,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.45998906536533124,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "int32",
+      "params": {
+        "N": 67108864,
+        "num_bins": 4096,
+        "dtype": "int32"
+      },
+      "problem_size": 67108864,
+      "latency_ms": 0.08453085,
+      "torch_latency_ms": 0.6244834499999999,
+      "speedup_vs_torch": 7.387639542249959,
+      "cfg": {
+        "MODE": "atomic_partition_reduce_nomask",
+        "TILE": 1024,
+        "PARTITIONS": 128,
+        "ZERO_TILE": 4096,
+        "BIN_TILE": 16,
+        "occupancy": 8,
+        "atomic_check_bounds": false,
+        "atomic_scope": "device",
+        "atomic_order": "relaxed",
+        "assume_N_multiple_of_TILE": true
+      },
+      "flops": 67108864.0,
+      "bytes": 268451840.0,
+      "AI": 0.24998474214220323,
+      "measured_bw_GBs": 3175.7854085224503,
+      "measured_perf_TFLOPS": 0.7938978964484563,
+      "ceiling_TFLOPS": 1.634750222764724,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.4856386531673319,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.45998906536533124,
+  "report_arith_mean_cutile": 0.4856386531673319,
+  "stop_score_triton": 0.45998906536533124,
+  "stop_score_cutile": 0.4856386531673319,
+  "timing_breakdown": {
+    "evaluator_total_s": 7.856042861938477,
+    "iter_total_s": 271.09107208251953
+  },
+  "elapsed_s": 11.019504070281982,
+  "llm_usage": {
+    "elapsed_s": 260.0265576839447,
+    "ttft_s": 236.9616801738739,
+    "input_tokens": 37626,
+    "cached_input_tokens": 0,
+    "output_tokens": 11617,
+    "reasoning_tokens": 9391,
+    "response_chars": 8185
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

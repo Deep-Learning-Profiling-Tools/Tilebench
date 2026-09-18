@@ -1,0 +1,104 @@
+{
+  "op": "flash_decode",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_decode/gpt-5.5/high/iter_9",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "batch": 2,
+        "heads": 8,
+        "head_dim": 128,
+        "block_seq": 128,
+        "seq_len": 40960,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/backends/nvidia/compiler.py\", line 494, in make_cubin\n    subprocess.run(ptxas_cmd, check=True, close_fds=False, stderr=flog)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/subprocess.py\", line 526, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/backends/nvidia/bin/ptxas-blackwell', '-lineinfo', '-v', '--gpu-name=sm_100a', '/tmp/tmppym5y69z.ptx', '-o', '/tmp/tmppym5y69z.ptx.o']' returned non-zero exit status 255.\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    outp"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "batch": 2,
+        "heads": 8,
+        "head_dim": 128,
+        "block_seq": 128,
+        "seq_len": 40960,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/backends/nvidia/compiler.py\", line 494, in make_cubin\n    subprocess.run(ptxas_cmd, check=True, close_fds=False, stderr=flog)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/subprocess.py\", line 526, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/backends/nvidia/bin/ptxas-blackwell', '-lineinfo', '-v', '--gpu-name=sm_100a', '/tmp/tmppym5y69z.ptx', '-o', '/tmp/tmppym5y69z.ptx.o']' returned non-zero exit status 255.\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    outp"
+    }
+  ],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "batch": 2,
+        "heads": 8,
+        "head_dim": 128,
+        "block_seq": 128,
+        "seq_len": 40960,
+        "dtype": "fp32"
+      },
+      "problem_size": 83886080,
+      "latency_ms": 0.0091185,
+      "torch_latency_ms": 0.0448641,
+      "speedup_vs_torch": 4.920118440532982,
+      "cfg": {
+        "BLOCK_K": 16,
+        "BLOCK_D": 128,
+        "BLOCK_G": 32,
+        "num_groups": 20,
+        "num_dchunks": 1,
+        "vectorized_reduce": 1,
+        "exp2_merge": 1,
+        "k16_retry_no_hints": 1,
+        "block_seq": 128
+      },
+      "flops": 2621440.0,
+      "bytes": 2621440.0,
+      "AI": 1.0,
+      "measured_bw_GBs": 287.4858803531283,
+      "measured_perf_TFLOPS": 0.2874858803531283,
+      "ceiling_TFLOPS": 6.5394,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.04396211890282416,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.0,
+  "report_arith_mean_cutile": 0.04396211890282416,
+  "stop_score_triton": 0.0,
+  "stop_score_cutile": 0.04396211890282416,
+  "timing_breakdown": {
+    "evaluator_total_s": 8.384248495101929,
+    "iter_total_s": 355.50373101234436
+  },
+  "elapsed_s": 10.622964859008789,
+  "llm_usage": {
+    "elapsed_s": 344.8350121974945,
+    "ttft_s": 309.5332667827606,
+    "input_tokens": 42824,
+    "cached_input_tokens": 0,
+    "output_tokens": 15091,
+    "reasoning_tokens": 11555,
+    "response_chars": 11974
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

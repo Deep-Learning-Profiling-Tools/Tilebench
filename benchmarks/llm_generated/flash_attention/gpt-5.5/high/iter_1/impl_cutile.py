@@ -1,246 +1,144 @@
-from types import SimpleNamespace
-import math
 import torch
 import cuda.tile as ct
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
-from core.cutile_autotune import CutileAutotuner
-
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
 
-_last_autotune_config: dict = {}
+_LAST_CFG: dict = {}
 
 
-@ct.kernel
-def _flash_attention_kernel(
-    q,
-    k,
-    v,
-    out,
-    scale_log2: float,
-    H: ConstInt,
-    N: ConstInt,
-    D: ConstInt,
+@ct.kernel(occupancy=2)
+def _flash_attention_fwd_kernel(
+    q, k, v, output,
+    qk_scale: float,
+    SEQLEN: ConstInt,
+    N_HEADS: ConstInt,
+    BLOCK_M: ConstInt,
+    BLOCK_N: ConstInt,
+    BLOCK_D: ConstInt,
     CAUSAL: ConstBool,
-    BM: ConstInt,
-    BN: ConstInt,
-    BD: ConstInt,
 ):
     bid_m = ct.bid(0)
     bid_bh = ct.bid(1)
-    b = bid_bh // H
-    h = bid_bh % H
 
-    offs_m = (bid_m * BM + ct.arange(BM, dtype=np.int32))[:, None]
-    offs_n_base = ct.arange(BN, dtype=np.int32)[None, :]
+    batch = bid_bh // N_HEADS
+    head = bid_bh - batch * N_HEADS
 
     q_tile = ct.load(
         q,
-        index=(b, h, bid_m, 0),
-        shape=(1, 1, BM, BD),
-    ).reshape((BM, BD))
+        index=(batch, head, bid_m, 0),
+        shape=(1, 1, BLOCK_M, BLOCK_D),
+        padding_mode=ct.PaddingMode.ZERO,
+    ).reshape((BLOCK_M, BLOCK_D))
 
-    m_i = ct.full((BM, 1), -np.inf, dtype=np.float32)
-    l_i = ct.full((BM, 1), 0.0, dtype=np.float32)
-    acc = ct.full((BM, BD), 0.0, dtype=np.float32)
+    m_i = ct.full((BLOCK_M, 1), -np.inf, dtype=np.float32)
+    l_i = ct.full((BLOCK_M, 1), 0.0, dtype=np.float32)
+    acc = ct.full((BLOCK_M, BLOCK_D), 0.0, dtype=np.float32)
+
+    offs_m = bid_m * BLOCK_M + ct.arange(BLOCK_M, dtype=np.int32)[:, None]
+    offs_n_base = ct.arange(BLOCK_N, dtype=np.int32)[None, :]
 
     if CAUSAL:
-        for j in range(0, ct.cdiv(N, BN)):
-            if (j + 1) * BN <= bid_m * BM:
-                k_tile = ct.load(
-                    k,
-                    index=(b, h, 0, j),
-                    shape=(1, 1, BD, BN),
-                    order=(0, 1, 3, 2),
-                ).reshape((BD, BN))
-
-                qk = ct.mma(
-                    q_tile,
-                    k_tile,
-                    ct.full((BM, BN), 0.0, dtype=np.float32),
-                )
-                qk = qk * scale_log2
-
-                m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-                p = ct.exp2(qk - m_ij, flush_to_zero=True)
-                alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
-
-                l_i = l_i * alpha + ct.sum(p, axis=1, keepdims=True)
-                acc = acc * alpha
-
-                v_tile = ct.load(
-                    v,
-                    index=(b, h, j, 0),
-                    shape=(1, 1, BN, BD),
-                ).reshape((BN, BD))
-
-                acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
-                m_i = m_ij
-            elif j * BN <= bid_m * BM + (BM - 1):
-                offs_n = j * BN + offs_n_base
-
-                k_tile = ct.load(
-                    k,
-                    index=(b, h, 0, j),
-                    shape=(1, 1, BD, BN),
-                    order=(0, 1, 3, 2),
-                ).reshape((BD, BN))
-
-                qk = ct.mma(
-                    q_tile,
-                    k_tile,
-                    ct.full((BM, BN), 0.0, dtype=np.float32),
-                )
-                qk = qk * scale_log2
-                qk = ct.where(offs_m >= offs_n, qk, -np.inf)
-
-                m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-                p = ct.exp2(qk - m_ij, flush_to_zero=True)
-                alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
-
-                l_i = l_i * alpha + ct.sum(p, axis=1, keepdims=True)
-                acc = acc * alpha
-
-                v_tile = ct.load(
-                    v,
-                    index=(b, h, j, 0),
-                    shape=(1, 1, BN, BD),
-                ).reshape((BN, BD))
-
-                acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
-                m_i = m_ij
+        n_tiles = ct.cdiv((bid_m + 1) * BLOCK_M, BLOCK_N)
     else:
-        for j in range(0, ct.cdiv(N, BN)):
-            k_tile = ct.load(
-                k,
-                index=(b, h, 0, j),
-                shape=(1, 1, BD, BN),
-                order=(0, 1, 3, 2),
-            ).reshape((BD, BN))
+        n_tiles = ct.cdiv(SEQLEN, BLOCK_N)
 
-            qk = ct.mma(
-                q_tile,
-                k_tile,
-                ct.full((BM, BN), 0.0, dtype=np.float32),
-            )
-            qk = qk * scale_log2
+    for j in range(0, n_tiles):
+        k_tile = ct.load(
+            k,
+            index=(batch, head, 0, j),
+            shape=(1, 1, BLOCK_D, BLOCK_N),
+            order=(0, 1, 3, 2),
+            padding_mode=ct.PaddingMode.ZERO,
+        ).reshape((BLOCK_D, BLOCK_N))
 
-            m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-            p = ct.exp2(qk - m_ij, flush_to_zero=True)
-            alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
+        qk = ct.mma(
+            q_tile,
+            k_tile,
+            ct.full((BLOCK_M, BLOCK_N), 0.0, dtype=np.float32),
+        )
+        qk = qk * qk_scale
 
-            l_i = l_i * alpha + ct.sum(p, axis=1, keepdims=True)
-            acc = acc * alpha
+        offs_n = j * BLOCK_N + offs_n_base
+        valid = ct.broadcast_to(offs_n < SEQLEN, (BLOCK_M, BLOCK_N))
+        if CAUSAL:
+            valid = valid & (offs_m >= offs_n)
 
-            v_tile = ct.load(
-                v,
-                index=(b, h, j, 0),
-                shape=(1, 1, BN, BD),
-            ).reshape((BN, BD))
+        qk = ct.where(valid, qk, -np.inf)
 
-            acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
-            m_i = m_ij
+        m_new = ct.maximum(m_i, ct.max(qk, axis=-1, keepdims=True))
+        p = ct.exp2(qk - m_new, flush_to_zero=True)
+        alpha = ct.exp2(m_i - m_new, flush_to_zero=True)
 
-    out_tile = ct.truediv(
-        acc,
-        l_i,
-        flush_to_zero=True,
-        rounding_mode=RMd.APPROX,
-    )
-    out_tile = ct.astype(out_tile, q.dtype)
+        l_i = l_i * alpha + ct.sum(p, axis=-1, keepdims=True)
+        acc = acc * alpha
+
+        v_tile = ct.load(
+            v,
+            index=(batch, head, j, 0),
+            shape=(1, 1, BLOCK_N, BLOCK_D),
+            padding_mode=ct.PaddingMode.ZERO,
+        ).reshape((BLOCK_N, BLOCK_D))
+
+        acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
+        m_i = m_new
+
+    out_tile = ct.truediv(acc, l_i, flush_to_zero=True, rounding_mode=RMd.APPROX)
+    out_tile = ct.astype(out_tile, q.dtype).reshape((1, 1, BLOCK_M, BLOCK_D))
+
     ct.store(
-        out,
-        index=(b, h, bid_m, 0),
-        tile=ct.reshape(out_tile, (1, 1, BM, BD)),
+        output,
+        index=(batch, head, bid_m, 0),
+        tile=out_tile,
     )
 
 
-_SEARCH_SPACE = [
-    SimpleNamespace(tm=64, tn=128, occupancy=1),
-    SimpleNamespace(tm=64, tn=128, occupancy=2),
-    SimpleNamespace(tm=128, tn=64, occupancy=1),
-    SimpleNamespace(tm=128, tn=64, occupancy=2),
-    SimpleNamespace(tm=128, tn=128, occupancy=1),
-]
-
-_tuner = CutileAutotuner(_flash_attention_kernel)
-
-
-def _next_power_of_2(x: int) -> int:
-    return 1 << (x - 1).bit_length()
-
-
-def run(q, k, v, causal=True, autotune: bool = False, **kwargs):
-    B, H, N, D = q.shape
+def run(q, k, v, causal=True, **kwargs):
     output = torch.empty_like(q)
 
-    bd = max(32, _next_power_of_2(int(D)))
-    scale_log2 = (1.0 / math.sqrt(float(D))) * 1.4426950408889634
-    causal = bool(causal)
+    batch_size = q.shape[0]
+    n_heads = q.shape[1]
+    seq_len = q.shape[2]
+    head_dim = q.shape[3]
+
+    BLOCK_M = 64
+    BLOCK_N = 64
+    BLOCK_D = 128
+    occupancy = 2
+
+    sm_scale_log2 = (head_dim ** -0.5) * 1.4426950408889634
 
     stream = torch.cuda.current_stream()
+    grid = (ct.cdiv(seq_len, BLOCK_M), batch_size * n_heads, 1)
 
-    cfg = _tuner.tune_or_cached(
-        shape_key=(B, H, N, D, causal, str(q.dtype)),
-        search_space=_SEARCH_SPACE,
-        stream=stream,
-        grid_fn=lambda cfg: (ct.cdiv(N, cfg.tm), B * H, 1),
-        args_fn=lambda cfg: (
-            q,
-            k,
-            v,
-            output,
-            scale_log2,
-            H,
-            N,
-            D,
-            causal,
-            cfg.tm,
-            cfg.tn,
-            bd,
-        ),
-        hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-    )
-
-    _last_autotune_config.clear()
-    _last_autotune_config.update(
-        {
-            "tm": cfg.tm,
-            "tn": cfg.tn,
-            "bd": bd,
-            "occupancy": cfg.occupancy,
-        }
-    )
-
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
         stream,
-        (ct.cdiv(N, cfg.tm), B * H, 1),
-        kernel,
+        grid,
+        _flash_attention_fwd_kernel,
         (
-            q,
-            k,
-            v,
-            output,
-            scale_log2,
-            H,
-            N,
-            D,
-            causal,
-            cfg.tm,
-            cfg.tn,
-            bd,
+            q, k, v, output,
+            sm_scale_log2,
+            seq_len,
+            n_heads,
+            BLOCK_M,
+            BLOCK_N,
+            BLOCK_D,
+            bool(causal),
         ),
     )
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({
+        "BLOCK_M": BLOCK_M,
+        "BLOCK_N": BLOCK_N,
+        "BLOCK_D": BLOCK_D,
+        "occupancy": occupancy,
+        "causal": bool(causal),
+    })
     return output
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) if _last_autotune_config else None
+    return dict(_LAST_CFG) if _LAST_CFG else None

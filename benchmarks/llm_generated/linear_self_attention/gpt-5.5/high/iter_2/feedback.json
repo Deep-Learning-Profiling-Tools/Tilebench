@@ -1,0 +1,86 @@
+{
+  "op": "linear_self_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/linear_self_attention/gpt-5.5/high/iter_2",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 0,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "eps": 1e-06,
+        "M": 10000,
+        "D": 256,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 1814738 / 2560000 (70.9%)\nGreatest absolute difference: 7.409974932670593e-05 at index (1145, 146) (up to 1e-05 allowed)\nGreatest relative difference: 0.010900723747909069 at index (2957, 49) (up to 1.3e-06 allowed)"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "eps": 1e-06,
+        "M": 10000,
+        "D": 256,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/linear_self_attention/gpt-5.5/high/iter_2/impl_cutile.py\", line 212, in run\n    partial_kernel = _partial_kv_kernel.with_hints(occupancy=PARTIAL_OCCUPANCY)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "eps": 1e-06,
+        "M": 10000,
+        "D": 256,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 1814738 / 2560000 (70.9%)\nGreatest absolute difference: 7.409974932670593e-05 at index (1145, 146) (up to 1e-05 allowed)\nGreatest relative difference: 0.010900723747909069 at index (2957, 49) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "eps": 1e-06,
+        "M": 10000,
+        "D": 256,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/linear_self_attention/gpt-5.5/high/iter_2/impl_cutile.py\", line 212, in run\n    partial_kernel = _partial_kv_kernel.with_hints(occupancy=PARTIAL_OCCUPANCY)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [],
+  "report_arith_mean_triton": 0.0,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.0,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 2.9202232360839844,
+    "iter_total_s": 359.14746475219727
+  },
+  "elapsed_s": 5.626515865325928,
+  "llm_usage": {
+    "elapsed_s": 353.4723973274231,
+    "ttft_s": 312.9755229949951,
+    "input_tokens": 38989,
+    "cached_input_tokens": 0,
+    "output_tokens": 18580,
+    "reasoning_tokens": 13953,
+    "response_chars": 15476
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

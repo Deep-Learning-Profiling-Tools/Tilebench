@@ -1,0 +1,110 @@
+```python title="impl_cutile.py"
+import torch
+import cuda.tile as ct
+import numpy as np
+
+ConstInt = ct.Constant[int]
+
+_LAST_CFG: dict = {}
+
+
+@ct.kernel
+def _layernorm_kernel(
+    x,
+    weight,
+    bias,
+    output,
+    eps,
+    K: ConstInt,
+    ROWS: ConstInt,
+    TILE: ConstInt,
+):
+    row_blk = ct.bid(0)
+    num_tiles = ct.cdiv(K, TILE)
+
+    sum_acc = ct.full((ROWS, TILE), 0.0, dtype=np.float32)
+    sumsq_acc = ct.full((ROWS, TILE), 0.0, dtype=np.float32)
+
+    for j in range(0, num_tiles):
+        xj = ct.load(
+            x,
+            index=(row_blk, j),
+            shape=(ROWS, TILE),
+            latency=1,
+            allow_tma=False,
+        )
+        xj_f32 = ct.astype(xj, np.float32)
+        sum_acc = sum_acc + xj_f32
+        sumsq_acc = sumsq_acc + xj_f32 * xj_f32
+
+    inv_k = 1.0 / K
+    mean = ct.sum(sum_acc, axis=1, keepdims=True) * inv_k
+    var = ct.sum(sumsq_acc, axis=1, keepdims=True) * inv_k - mean * mean
+    var = ct.maximum(var, 0.0)
+    rstd = ct.rsqrt(var + eps)
+
+    for j in range(0, num_tiles):
+        xj = ct.load(
+            x,
+            index=(row_blk, j),
+            shape=(ROWS, TILE),
+            latency=1,
+            allow_tma=False,
+        )
+        wj = ct.load(
+            weight,
+            index=(j,),
+            shape=(TILE,),
+            latency=1,
+            allow_tma=False,
+        )
+        bj = ct.load(
+            bias,
+            index=(j,),
+            shape=(TILE,),
+            latency=1,
+            allow_tma=False,
+        )
+
+        xj_f32 = ct.astype(xj, np.float32)
+        wj_f32 = ct.reshape(ct.astype(wj, np.float32), (1, TILE))
+        bj_f32 = ct.reshape(ct.astype(bj, np.float32), (1, TILE))
+
+        y = (xj_f32 - mean) * rstd * wj_f32 + bj_f32
+        ct.store(
+            output,
+            index=(row_blk, j),
+            tile=ct.astype(y, x.dtype),
+            allow_tma=False,
+        )
+
+
+def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
+    output = torch.empty_like(x)
+
+    K = x.shape[-1]
+    n_rows = x.numel() // K
+    x2d = x.reshape(n_rows, K)
+    out2d = output.reshape(n_rows, K)
+
+    ROWS = 4
+    TILE = 512
+    occupancy = 4
+
+    stream = torch.cuda.current_stream()
+    grid = (ct.cdiv(n_rows, ROWS), 1, 1)
+    kernel = _layernorm_kernel.with_hints(occupancy=occupancy)
+    ct.launch(stream, grid, kernel, (x2d, weight, bias, out2d, eps, K, ROWS, TILE))
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({
+        "ROWS": ROWS,
+        "TILE": TILE,
+        "occupancy": occupancy,
+    })
+    return output
+
+
+def get_last_config() -> dict | None:
+    return dict(_LAST_CFG) if _LAST_CFG else None
+```

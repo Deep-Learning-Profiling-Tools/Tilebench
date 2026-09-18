@@ -1,0 +1,113 @@
+{
+  "op": "block_sparse_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/gpt-5.5/high/iter_2",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/gpt-5.5/high/iter_2/impl_cutile.py\", line 146, in run\n    kernel = _block_sparse_attention_local3_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/block_sparse_attention/gpt-5.5/high/iter_2/impl_cutile.py\", line 146, in run\n    kernel = _block_sparse_attention_local3_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "B": 2,
+        "H": 8,
+        "H_kv": 2,
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_D": 128,
+        "D": 128,
+        "M": 10240,
+        "dtype": "fp16"
+      },
+      "problem_size": 20971520,
+      "latency_ms": 0.0855023,
+      "torch_latency_ms": 39.001610899999996,
+      "speedup_vs_torch": 456.1469211939327,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 64,
+        "BLOCK_N_MERGED": 128,
+        "BLOCK_D": 128,
+        "MERGE_PREV_BLOCKS": 2,
+        "EDGE_ROWS": 2,
+        "grid_bh_major": 1,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "flops": 16005464064.0,
+      "bytes": 104857600.0,
+      "AI": 152.64,
+      "measured_bw_GBs": 1226.3716882469826,
+      "measured_perf_TFLOPS": 187.19337449401945,
+      "ceiling_TFLOPS": 998.1740159999998,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.18753581188595023,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.18753581188595023,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.18753581188595023,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 7.39174222946167,
+    "iter_total_s": 297.129599571228
+  },
+  "elapsed_s": 9.751535177230835,
+  "llm_usage": {
+    "elapsed_s": 287.34347343444824,
+    "ttft_s": 251.66548657417297,
+    "input_tokens": 38023,
+    "cached_input_tokens": 0,
+    "output_tokens": 16841,
+    "reasoning_tokens": 12519,
+    "response_chars": 14401
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}
