@@ -2,8 +2,23 @@ import argparse
 import csv
 import json
 import os
+import subprocess
 from pathlib import Path
 from core.engine import run_benchmark_suite
+
+def _archive_logs() -> None:
+    """Snapshot results/logs/ onto the raw-log archive branch (local commit only;
+    publish it with `scripts/archive_logs.sh --push`). Never fails the benchmark."""
+    proc = subprocess.run(["bash", str(Path(__file__).with_name("archive_logs.sh"))],
+                          capture_output=True, text=True)
+    def last(text):
+        return (text.strip().splitlines() or ["no output"])[-1]
+    if proc.returncode == 0:
+        print(f"Raw-log archive → {last(proc.stdout)}")
+    else:
+        print(f"Warning: raw-log archive skipped ({last(proc.stderr)}); "
+              f"benchmark results are unaffected")
+
 
 # Display labels for the tile-language backends (torch is the implicit baseline).
 _BACKEND_LABEL = {"triton": "Triton", "cutile": "cuTile", "tilelang": "TileLang", "nki": "NKI"}
@@ -249,6 +264,8 @@ def main():
                         help="Comma-separated tile-language backends to run: "
                              "triton, cutile, tilelang, nki (or 'all'). torch "
                              "always runs as the speedup baseline. Default: all.")
+    parser.add_argument("--no-archive", action="store_true",
+                        help="Do not snapshot results/logs/ onto the raw-log archive branch")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
@@ -346,6 +363,8 @@ def main():
         with open(autotune_path, "w") as f:
             json.dump(autotune_results, f, indent=4)
         print(f"Autotune log    → {autotune_path}")
+    if not args.no_archive:
+        _archive_logs()
 
     # Determine which param keys actually vary across ALL cases in this run.
     # Keys that are constant (same value in every case) are hidden to reduce noise.
