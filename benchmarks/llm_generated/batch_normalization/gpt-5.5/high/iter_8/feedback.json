@@ -1,0 +1,271 @@
+{
+  "op": "batch_normalization",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/batch_normalization/gpt-5.5/high/iter_8",
+  "n_cases": 3,
+  "n_combos_attempted": 6,
+  "n_combos_succeeded": 5,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 18701587 / 20480000 (91.3%)\nGreatest absolute difference: 0.004582405090332031 at index (14362, 782) (up to 1e-05 allowed)\nGreatest relative difference: 10201.328125 at index (16316, 16) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 18701587 / 20480000 (91.3%)\nGreatest absolute difference: 0.004582405090332031 at index (14362, 782) (up to 1e-05 allowed)\nGreatest relative difference: 10201.328125 at index (16316, 16) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "fp16"
+      },
+      "problem_size": 20480000,
+      "latency_ms": 0.047464,
+      "torch_latency_ms": 0.4338153,
+      "speedup_vs_torch": 9.139880751727626,
+      "cfg": {
+        "REDUCE_BLOCK_N": 128,
+        "REDUCE_BLOCK_C": 16,
+        "STAT_BLOCK_P": 256,
+        "STAT_BLOCK_C": 16,
+        "APPLY_BLOCK_M": 64,
+        "APPLY_BLOCK_C": 64,
+        "partial_num_warps": 4,
+        "stats_num_warps": 8,
+        "apply_num_warps": 8,
+        "num_stages": 4,
+        "partial_grid_c_major": true,
+        "apply_grid_c_major": true,
+        "precompute_scale_bias": true,
+        "partial_keep_input_l2": true,
+        "apply_streaming_store": true,
+        "partial_tc_sumsq": true,
+        "apply_lazy_x_cast": true
+      },
+      "flops": 81920000.0,
+      "bytes": 122884096.0,
+      "AI": 0.6666444451851605,
+      "measured_bw_GBs": 2588.9957862801284,
+      "measured_perf_TFLOPS": 1.7259396595314342,
+      "ceiling_TFLOPS": 4.359454684843839,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.3959072370982243,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "triton",
+      "dtype": "bf16",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "bf16"
+      },
+      "problem_size": 20480000,
+      "latency_ms": 0.04723025,
+      "torch_latency_ms": 0.42503045,
+      "speedup_vs_torch": 8.999114973983835,
+      "cfg": {
+        "REDUCE_BLOCK_N": 128,
+        "REDUCE_BLOCK_C": 16,
+        "STAT_BLOCK_P": 256,
+        "STAT_BLOCK_C": 16,
+        "APPLY_BLOCK_M": 64,
+        "APPLY_BLOCK_C": 64,
+        "partial_num_warps": 4,
+        "stats_num_warps": 8,
+        "apply_num_warps": 8,
+        "num_stages": 4,
+        "partial_grid_c_major": true,
+        "apply_grid_c_major": true,
+        "precompute_scale_bias": true,
+        "partial_keep_input_l2": true,
+        "apply_streaming_store": true,
+        "partial_tc_sumsq": true,
+        "apply_lazy_x_cast": true
+      },
+      "flops": 81920000.0,
+      "bytes": 122884096.0,
+      "AI": 0.6666444451851605,
+      "measured_bw_GBs": 2601.8091371525666,
+      "measured_perf_TFLOPS": 1.7344816087147537,
+      "ceiling_TFLOPS": 4.359454684843839,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.39786664482254736,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "fp16"
+      },
+      "problem_size": 20480000,
+      "latency_ms": 0.21276915,
+      "torch_latency_ms": 0.4228425,
+      "speedup_vs_torch": 1.9873299301143987,
+      "cfg": {
+        "REDUCE_BLOCK_N": 128,
+        "REDUCE_BLOCK_C": 16,
+        "STAT_BLOCK_P": 256,
+        "STAT_BLOCK_C": 16,
+        "APPLY_BLOCK_M": 64,
+        "APPLY_BLOCK_C": 64,
+        "partial_occupancy": 4,
+        "stats_occupancy": 4,
+        "apply_occupancy": 2,
+        "partial_grid_c_major": true,
+        "apply_grid_c_major": true,
+        "precompute_scale_bias": true,
+        "partial_no_tma": true,
+        "apply_no_tma": true,
+        "partial_tc_sumsq": true,
+        "apply_lazy_x_cast": true
+      },
+      "flops": 81920000.0,
+      "bytes": 122884096.0,
+      "AI": 0.6666444451851605,
+      "measured_bw_GBs": 577.5465851134903,
+      "measured_perf_TFLOPS": 0.3850182228015669,
+      "ceiling_TFLOPS": 4.359454684843839,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.08831797796640217,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "bf16",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "bf16"
+      },
+      "problem_size": 20480000,
+      "latency_ms": 0.22055465,
+      "torch_latency_ms": 0.4585109,
+      "speedup_vs_torch": 2.078899266009581,
+      "cfg": {
+        "REDUCE_BLOCK_N": 128,
+        "REDUCE_BLOCK_C": 16,
+        "STAT_BLOCK_P": 256,
+        "STAT_BLOCK_C": 16,
+        "APPLY_BLOCK_M": 64,
+        "APPLY_BLOCK_C": 64,
+        "partial_occupancy": 4,
+        "stats_occupancy": 4,
+        "apply_occupancy": 2,
+        "partial_grid_c_major": true,
+        "apply_grid_c_major": true,
+        "precompute_scale_bias": true,
+        "partial_no_tma": true,
+        "apply_no_tma": true,
+        "partial_tc_sumsq": true,
+        "apply_lazy_x_cast": true
+      },
+      "flops": 81920000.0,
+      "bytes": 122884096.0,
+      "AI": 0.6666444451851605,
+      "measured_bw_GBs": 557.1593979088631,
+      "measured_perf_TFLOPS": 0.37142721769865206,
+      "ceiling_TFLOPS": 4.359454684843839,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.08520038503667966,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "C": 1024,
+        "eps": 1e-05,
+        "N": 20000,
+        "dtype": "fp32"
+      },
+      "problem_size": 20480000,
+      "latency_ms": 0.36584275,
+      "torch_latency_ms": 0.2456254,
+      "speedup_vs_torch": 0.6713961121274099,
+      "cfg": {
+        "REDUCE_BLOCK_N": 128,
+        "REDUCE_BLOCK_C": 16,
+        "STAT_BLOCK_P": 256,
+        "STAT_BLOCK_C": 16,
+        "APPLY_BLOCK_M": 64,
+        "APPLY_BLOCK_C": 64,
+        "partial_occupancy": 4,
+        "stats_occupancy": 4,
+        "apply_occupancy": 2,
+        "partial_grid_c_major": true,
+        "apply_grid_c_major": true,
+        "precompute_scale_bias": true,
+        "partial_no_tma": true,
+        "apply_no_tma": true,
+        "partial_tc_sumsq": true,
+        "apply_lazy_x_cast": true
+      },
+      "flops": 81920000.0,
+      "bytes": 245768192.0,
+      "AI": 0.33332222259258026,
+      "measured_bw_GBs": 671.7864218984796,
+      "measured_perf_TFLOPS": 0.22392134325471805,
+      "ceiling_TFLOPS": 2.1797273424219195,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.10272906106041527,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.3968869409603858,
+  "report_arith_mean_cutile": 0.09208247468783237,
+  "stop_score_triton": 0.3968869409603858,
+  "stop_score_cutile": 0.09208247468783237,
+  "timing_breakdown": {
+    "evaluator_total_s": 22.824906826019287,
+    "iter_total_s": 350.9463460445404
+  },
+  "elapsed_s": 26.175356149673462,
+  "llm_usage": {
+    "elapsed_s": 324.7198317050934,
+    "ttft_s": 292.5421447753906,
+    "input_tokens": 41246,
+    "cached_input_tokens": 0,
+    "output_tokens": 16459,
+    "reasoning_tokens": 12947,
+    "response_chars": 11827
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

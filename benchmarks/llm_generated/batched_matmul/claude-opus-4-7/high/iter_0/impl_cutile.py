@@ -1,0 +1,56 @@
+import torch
+import cuda.tile as ct
+import numpy as np
+
+ConstInt = ct.Constant[int]
+
+_LAST_CFG: dict = {}
+
+
+@ct.kernel
+def _bmm_kernel(A, B, C,
+                M: ConstInt, N: ConstInt, K: ConstInt,
+                TM: ConstInt, TN: ConstInt, TK: ConstInt):
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    batch = ct.bid(2)
+
+    acc = ct.full((TM, TN), 0.0, dtype=np.float32)
+    num_k = ct.cdiv(K, TK)
+    for k in range(0, num_k):
+        a = ct.load(A, index=(batch, pid_m, k),
+                    shape=(1, TM, TK),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TM, TK))
+        b = ct.load(B, index=(batch, k, pid_n),
+                    shape=(1, TK, TN),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TK, TN))
+        acc = ct.mma(a, b, acc)
+
+    out = ct.astype(acc, A.dtype).reshape((1, TM, TN))
+    ct.store(C, index=(batch, pid_m, pid_n), tile=out)
+
+
+def run(A: torch.Tensor, B: torch.Tensor,
+        BATCH: int, M: int, N: int, K: int, **kwargs):
+    A3 = A.view(BATCH, M, K).contiguous()
+    B3 = B.view(BATCH, K, N).contiguous()
+    C3 = torch.empty((BATCH, M, N), dtype=A.dtype, device=A.device)
+
+    TM = 64
+    TN = 64
+    TK = 32
+    occupancy = 4
+
+    stream = torch.cuda.current_stream()
+    grid = (ct.cdiv(M, TM), ct.cdiv(N, TN), BATCH)
+    kernel = _bmm_kernel.with_hints(occupancy=occupancy)
+    ct.launch(stream, grid, kernel,
+              (A3, B3, C3, M, N, K, TM, TN, TK))
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({"TM": TM, "TN": TN, "TK": TK, "occupancy": occupancy})
+    return C3.view(-1)
+
+
+def get_last_config() -> dict | None:
+    return dict(_LAST_CFG) if _LAST_CFG else None

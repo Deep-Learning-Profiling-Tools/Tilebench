@@ -1,0 +1,190 @@
+{
+  "op": "batched_matmul",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/batched_matmul/gpt-5.5/high/iter_7",
+  "n_cases": 3,
+  "n_combos_attempted": 6,
+  "n_combos_succeeded": 4,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {
+    "cutile": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 473, in run\n    subprocess.run(command + flags, env=env, check=True, capture_output=True,\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/subprocess.py\", line 526, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['/usr/local/cuda/bin/tileiras', '/tmp/tmp6egd6ucn/_batched_matmul_kernel4z5j2id3.bytecode', '-o', '/tmp/tmp6egd6ucn/_batched_matmul_kernel4z5j2id3.cubin', '--gpu-name', 'sm_100', '-O3', '--lineinfo']' returned non-zero exit status 5.\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/batched_matmul/gpt-5.5/high/iter_7/impl_cutile.py\", line 132, in run\n    ct.launch(\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_execution.py\", line 114, in _compile\n    result = compile_tile(self._annotated_function, (signature,),\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 85, in wrapper\n    return func(*args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 429, in compile_tile\n    raise e\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 418, in compile_tile\n    cubin_file = compile_cubin(f.name, compiler_options, sm_arch,\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 682, in compile_cubin\n    binary.run(args, flags, timeout_sec)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 476, in run\n    raise TileCompilerExecutionError(e.returncode, e.stderr.decode(), ' '.join(flags),\ncuda.tile._exception.TileCompilerExecutionError: Return code 5\nfailed to compile Tile IR program\nUnknown location\n"
+  },
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 8104394 / 13107200 (61.8%)\nGreatest absolute difference: 0.000457763671875 at index (8692155,) (up to 1e-05 allowed)\nGreatest relative difference: 16.7453670501709 at index (151217,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 8104394 / 13107200 (61.8%)\nGreatest absolute difference: 0.000457763671875 at index (8692155,) (up to 1e-05 allowed)\nGreatest relative difference: 16.7453670501709 at index (151217,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "fp16"
+      },
+      "problem_size": 16777216000,
+      "latency_ms": 0.04002865,
+      "torch_latency_ms": 0.3985081,
+      "speedup_vs_torch": 9.95557182168272,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 128,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 3,
+        "input_precision": "ieee",
+        "fp32_mode": "fp16_2chunk_4term",
+        "USE_FP32_DECOMP": false
+      },
+      "flops": 16777216000.0,
+      "bytes": 78643200.0,
+      "AI": 213.33333333333334,
+      "measured_bw_GBs": 1964.6728031047762,
+      "measured_perf_TFLOPS": 419.13019799568553,
+      "ceiling_TFLOPS": 1395.072,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.3004362484486002,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "triton",
+      "dtype": "bf16",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "bf16"
+      },
+      "problem_size": 16777216000,
+      "latency_ms": 0.0392498,
+      "torch_latency_ms": 0.3989805,
+      "speedup_vs_torch": 10.165160077248801,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 128,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 3,
+        "input_precision": "ieee",
+        "fp32_mode": "fp16_2chunk_4term",
+        "USE_FP32_DECOMP": false
+      },
+      "flops": 16777216000.0,
+      "bytes": 78643200.0,
+      "AI": 213.33333333333334,
+      "measured_bw_GBs": 2003.658617368751,
+      "measured_perf_TFLOPS": 427.4471717053336,
+      "ceiling_TFLOPS": 1395.072,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.30639792907128344,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "fp16"
+      },
+      "problem_size": 16777216000,
+      "latency_ms": 0.02910875,
+      "torch_latency_ms": 0.3982056,
+      "speedup_vs_torch": 13.679927856744106,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 128,
+        "TILE_K": 32,
+        "occupancy": 2,
+        "fp32_precision": "tf32_4chunk_16term",
+        "USE_FP32_PRECISE": false
+      },
+      "flops": 16777216000.0,
+      "bytes": 78643200.0,
+      "AI": 213.33333333333334,
+      "measured_bw_GBs": 2701.7030961480655,
+      "measured_perf_TFLOPS": 576.363327178254,
+      "ceiling_TFLOPS": 1395.072,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.4131423519203697,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "bf16",
+      "params": {
+        "BATCH": 32,
+        "M": 640,
+        "dtype": "bf16"
+      },
+      "problem_size": 16777216000,
+      "latency_ms": 0.0289504,
+      "torch_latency_ms": 0.39888525,
+      "speedup_vs_torch": 13.77822931634796,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 128,
+        "TILE_K": 32,
+        "occupancy": 2,
+        "fp32_precision": "tf32_4chunk_16term",
+        "USE_FP32_PRECISE": false
+      },
+      "flops": 16777216000.0,
+      "bytes": 78643200.0,
+      "AI": 213.33333333333334,
+      "measured_bw_GBs": 2716.4806013043,
+      "measured_perf_TFLOPS": 579.515861611584,
+      "ceiling_TFLOPS": 1395.072,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.41540211660156895,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.3034170887599418,
+  "report_arith_mean_cutile": 0.4142722342609693,
+  "stop_score_triton": 0.3034170887599418,
+  "stop_score_cutile": 0.4142722342609693,
+  "timing_breakdown": {
+    "evaluator_total_s": 21.668038845062256,
+    "iter_total_s": 288.1898398399353
+  },
+  "elapsed_s": 24.910263299942017,
+  "llm_usage": {
+    "elapsed_s": 263.2242023944855,
+    "ttft_s": 241.12143182754517,
+    "input_tokens": 37585,
+    "cached_input_tokens": 0,
+    "output_tokens": 14226,
+    "reasoning_tokens": 11554,
+    "response_chars": 8622
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

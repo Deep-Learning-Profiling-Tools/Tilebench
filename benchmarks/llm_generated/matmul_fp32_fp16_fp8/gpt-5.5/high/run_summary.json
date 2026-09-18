@@ -1,0 +1,539 @@
+{
+  "op": "matmul_fp32_fp16_fp8",
+  "model": "gpt-5.5",
+  "effort": "high",
+  "threshold": 0.8,
+  "max_iters": 10,
+  "backends": [
+    "triton",
+    "cutile"
+  ],
+  "history": [
+    {
+      "iter": 0,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.38576079669716284,
+          "report_mean": 0.38576079669716284,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3
+          },
+          "speedup_vs_torch": 0.6726078974814421
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 141.66447973251343,
+      "llm_usage": {
+        "elapsed_s": 135.38924717903137,
+        "ttft_s": 121.87302088737488,
+        "input_tokens": 33574,
+        "cached_input_tokens": 0,
+        "output_tokens": 7217,
+        "reasoning_tokens": 5696,
+        "response_chars": 4940
+      }
+    },
+    {
+      "iter": 1,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.3020594864628443,
+          "report_mean": 0.3020594864628443,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3,
+            "input_precision": "tf32x3"
+          },
+          "speedup_vs_torch": 0.5890077019634274
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.3791757807081365,
+          "report_mean": 0.3791757807081365,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE_M": 128,
+            "TILE_N": 128,
+            "TILE_K": 64,
+            "occupancy": 8
+          },
+          "speedup_vs_torch": 0.013850966552565716
+        }
+      },
+      "iter_total_s": 265.6750569343567,
+      "llm_usage": {
+        "elapsed_s": 222.0153398513794,
+        "ttft_s": 205.6020336151123,
+        "input_tokens": 36726,
+        "cached_input_tokens": 0,
+        "output_tokens": 9716,
+        "reasoning_tokens": 8148,
+        "response_chars": 5082
+      }
+    },
+    {
+      "iter": 2,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.12376491621368493,
+          "report_mean": 0.12376491621368493,
+          "verify_clean": false,
+          "verify_fail_count": 2,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 32,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3,
+            "loop_unroll_factor": 2,
+            "input_precision": "tf32x3"
+          },
+          "speedup_vs_torch": 9.082730868056622
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 426.35320115089417,
+      "llm_usage": {
+        "elapsed_s": 418.1139919757843,
+        "ttft_s": 399.71704030036926,
+        "input_tokens": 36419,
+        "cached_input_tokens": 0,
+        "output_tokens": 17013,
+        "reasoning_tokens": 15317,
+        "response_chars": 5619
+      }
+    },
+    {
+      "iter": 3,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.17718288078202415,
+          "report_mean": 0.17718288078202415,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 256,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 2,
+            "input_precision": "tf32x3",
+            "EVEN_M": true,
+            "EVEN_N": true,
+            "EVEN_K": true
+          },
+          "speedup_vs_torch": 0.3673424793370498
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.46862204343346336,
+          "report_mean": 0.46862204343346336,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE_M": 128,
+            "TILE_N": 256,
+            "TILE_K": 64,
+            "occupancy": 4
+          },
+          "speedup_vs_torch": 0.008084096198220384
+        }
+      },
+      "iter_total_s": 389.84110045433044,
+      "llm_usage": {
+        "elapsed_s": 322.4613981246948,
+        "ttft_s": 303.9429066181183,
+        "input_tokens": 39090,
+        "cached_input_tokens": 0,
+        "output_tokens": 13783,
+        "reasoning_tokens": 12022,
+        "response_chars": 5698
+      }
+    },
+    {
+      "iter": 4,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.3077927597412982,
+          "report_mean": 0.3077927597412982,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3,
+            "input_precision": "tf32x3",
+            "EVEN_M": true,
+            "EVEN_N": true,
+            "EVEN_K": true
+          },
+          "speedup_vs_torch": 0.6015384934368929
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 277.49244260787964,
+      "llm_usage": {
+        "elapsed_s": 269.428994178772,
+        "ttft_s": 248.83318161964417,
+        "input_tokens": 38277,
+        "cached_input_tokens": 0,
+        "output_tokens": 13595,
+        "reasoning_tokens": 11549,
+        "response_chars": 6852
+      }
+    },
+    {
+      "iter": 5,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.47079750916996577,
+          "report_mean": 0.47079750916996577,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE_M": 128,
+            "TILE_N": 256,
+            "TILE_K": 64,
+            "occupancy": 4,
+            "load_latency": 10
+          },
+          "speedup_vs_torch": 0.008187926873536892
+        }
+      },
+      "iter_total_s": 386.6382269859314,
+      "llm_usage": {
+        "elapsed_s": 313.0392723083496,
+        "ttft_s": 293.10141348838806,
+        "input_tokens": 38268,
+        "cached_input_tokens": 0,
+        "output_tokens": 12857,
+        "reasoning_tokens": 11034,
+        "response_chars": 6241
+      }
+    },
+    {
+      "iter": 6,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.18781604735238924,
+          "report_mean": 0.18781604735238924,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": {
+            "BLOCK_M": 64,
+            "BLOCK_N": 256,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 2,
+            "input_precision": "tf32x3",
+            "b_eviction_policy": "evict_last",
+            "EVEN_M": true,
+            "EVEN_N": true,
+            "EVEN_K": true
+          },
+          "speedup_vs_torch": 0.3817854473323486
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 240.00094151496887,
+      "llm_usage": {
+        "elapsed_s": 233.09360265731812,
+        "ttft_s": 217.20938634872437,
+        "input_tokens": 39342,
+        "cached_input_tokens": 0,
+        "output_tokens": 12268,
+        "reasoning_tokens": 10358,
+        "response_chars": 6309
+      }
+    },
+    {
+      "iter": 7,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.3078467732717987,
+          "report_mean": 0.3078467732717987,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3,
+            "input_precision": "tf32x3",
+            "b_eviction_policy": "evict_last",
+            "offset_hints": true,
+            "EVEN_M": true,
+            "EVEN_N": true,
+            "EVEN_K": true
+          },
+          "speedup_vs_torch": 0.6015484775059979
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.6262316184819161,
+          "report_mean": 0.6262316184819161,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": {
+            "TILE_M": 128,
+            "TILE_N": 256,
+            "TILE_K": 64,
+            "occupancy": 4,
+            "load_latency": 10,
+            "fp32_mma_input": "tfloat32"
+          },
+          "speedup_vs_torch": 0.8491533348748342
+        }
+      },
+      "iter_total_s": 203.44445872306824,
+      "llm_usage": {
+        "elapsed_s": 188.84421348571777,
+        "ttft_s": 172.21159887313843,
+        "input_tokens": 39975,
+        "cached_input_tokens": 0,
+        "output_tokens": 10364,
+        "reasoning_tokens": 8386,
+        "response_chars": 6525
+      }
+    },
+    {
+      "iter": 8,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.49807799654120055,
+          "report_mean": 0.49807799654120055,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE_M": 128,
+            "TILE_N": 256,
+            "TILE_K": 64,
+            "occupancy": 4,
+            "load_latency": 10,
+            "fp32_mma_input": "manual_tf32x3"
+          },
+          "speedup_vs_torch": 1.9543866133089534
+        }
+      },
+      "iter_total_s": 206.49574184417725,
+      "llm_usage": {
+        "elapsed_s": 192.68379545211792,
+        "ttft_s": 176.85189962387085,
+        "input_tokens": 38281,
+        "cached_input_tokens": 0,
+        "output_tokens": 11335,
+        "reasoning_tokens": 9322,
+        "response_chars": 6970
+      }
+    },
+    {
+      "iter": 9,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.17191552079357544,
+          "report_mean": 0.17191552079357544,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": {
+            "BLOCK_M": 128,
+            "BLOCK_N": 128,
+            "BLOCK_K": 64,
+            "GROUP_SIZE_M": 8,
+            "num_warps": 8,
+            "num_stages": 3,
+            "input_precision": "tf32x3",
+            "block_ptr_load": true,
+            "tensor_ptr_store": true,
+            "warp_specialize": true,
+            "b_eviction_policy": "evict_last",
+            "EVEN_M": true,
+            "EVEN_N": true,
+            "EVEN_K": true
+          },
+          "speedup_vs_torch": 0.35128728873205517
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 4,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 312.4951882362366,
+      "llm_usage": {
+        "elapsed_s": 305.5176217556,
+        "ttft_s": 287.96594071388245,
+        "input_tokens": 39986,
+        "cached_input_tokens": 0,
+        "output_tokens": 15547,
+        "reasoning_tokens": 13466,
+        "response_chars": 7108
+      }
+    }
+  ],
+  "frozen": {
+    "triton": null,
+    "cutile": null
+  },
+  "best_clean": {
+    "triton": {
+      "iter": 7,
+      "stop_score": 0.3078467732717987,
+      "report_mean": 0.3078467732717987
+    },
+    "cutile": {
+      "iter": 8,
+      "stop_score": 0.49807799654120055,
+      "report_mean": 0.49807799654120055
+    }
+  },
+  "best_any": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.38576079669716284,
+      "report_mean": 0.38576079669716284
+    },
+    "cutile": {
+      "iter": 7,
+      "stop_score": 0.6262316184819161,
+      "report_mean": 0.6262316184819161
+    }
+  },
+  "promotion": {
+    "triton": {
+      "iter": 7,
+      "stop_score": 0.3078467732717987,
+      "verify_clean": true
+    },
+    "cutile": {
+      "iter": 8,
+      "stop_score": 0.49807799654120055,
+      "verify_clean": true
+    }
+  }
+}

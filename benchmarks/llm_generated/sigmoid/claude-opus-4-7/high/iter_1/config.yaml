@@ -1,0 +1,29 @@
+# Sigmoid Activation — element-wise y = 1 / (1 + exp(-x))
+# Pure memory-bound operation; per-dtype defaults are sufficient for verify.
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep n across 20 points. Max n = 50M matches the LeetGPU performance-measured size.
+case_grid:
+  n: [50000000] # 2.5M, 5M, ..., 50M (20 points)
+  dtype: ["fp16", "bf16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   Sigmoid is pure memory-bound (1 exp + 1 add + 1 div per element);
+#   count element count as FLOP proxy.
+#   1 read + 1 write per element.
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "n"
+  bytes_expr: "n * dtype_size * 2"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

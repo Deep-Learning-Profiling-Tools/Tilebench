@@ -1,503 +1,618 @@
 ```python title="impl_triton.py"
-import math
 import torch
 import triton
 import triton.language as tl
 
+_LAST_CFG: dict = {}
+
 
 @triton.jit
 def _flash_attention_fwd_kernel(
-    q_ptr,
-    k_ptr,
-    v_ptr,
-    o_ptr,
-    scale_log2,
-    N_CTX: tl.constexpr,
-    D_HEAD: tl.constexpr,
+    q_ptr, k_ptr, v_ptr, o_ptr,
+    stride_qb, stride_qh, stride_qs, stride_qd,
+    stride_kb, stride_kh, stride_ks, stride_kd,
+    stride_vb, stride_vh, stride_vs, stride_vd,
+    stride_ob, stride_oh, stride_os, stride_od,
+    sm_scale,
+    N_HEADS: tl.constexpr,
+    N_CTX,
+    HEAD_DIM,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_D: tl.constexpr,
-    CAUSAL: tl.constexpr,
+    IS_CAUSAL: tl.constexpr,
+    NUM_STAGES: tl.constexpr,
     WARP_SPECIALIZE: tl.constexpr,
+    EVEN_Q: tl.constexpr,
+    EVEN_KV: tl.constexpr,
+    EVEN_D: tl.constexpr,
+    USE_CACHE_HINTS: tl.constexpr,
 ):
-    pid_m_raw = tl.program_id(0)
+    pid_m = tl.program_id(0)
     pid_bh = tl.program_id(1)
 
-    n_m_blocks = tl.cdiv(N_CTX, BLOCK_M)
-    pid_m = tl.where((pid_bh % 2) == 1, n_m_blocks - 1 - pid_m_raw, pid_m_raw)
+    off_b = pid_bh // N_HEADS
+    off_h = pid_bh - off_b * N_HEADS
 
-    base = pid_bh * N_CTX * D_HEAD
+    tl.assume(stride_qd == 1)
+    tl.assume(stride_kd == 1)
+    tl.assume(stride_vd == 1)
+    tl.assume(stride_od == 1)
+
+    q_base = q_ptr + off_b * stride_qb + off_h * stride_qh
+    k_base = k_ptr + off_b * stride_kb + off_h * stride_kh
+    v_base = v_ptr + off_b * stride_vb + off_h * stride_vh
+    o_base = o_ptr + off_b * stride_ob + off_h * stride_oh
+
+    q_block = tl.make_block_ptr(
+        base=q_base,
+        shape=(N_CTX, HEAD_DIM),
+        strides=(stride_qs, stride_qd),
+        offsets=(pid_m * BLOCK_M, 0),
+        block_shape=(BLOCK_M, BLOCK_D),
+        order=(1, 0),
+    )
+
+    k_block = tl.make_block_ptr(
+        base=k_base,
+        shape=(HEAD_DIM, N_CTX),
+        strides=(stride_kd, stride_ks),
+        offsets=(0, 0),
+        block_shape=(BLOCK_D, BLOCK_N),
+        order=(0, 1),
+    )
+
+    v_block = tl.make_block_ptr(
+        base=v_base,
+        shape=(N_CTX, HEAD_DIM),
+        strides=(stride_vs, stride_vd),
+        offsets=(0, 0),
+        block_shape=(BLOCK_N, BLOCK_D),
+        order=(1, 0),
+    )
 
     offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    offs_d = tl.arange(0, BLOCK_D)
+    offs_n = tl.arange(0, BLOCK_N)
 
-    q = tl.load(
-        q_ptr
-        + base
-        + offs_m[:, None] * D_HEAD
-        + offs_d[None, :]
-    )
-
-    m_i = tl.full((BLOCK_M,), -float("inf"), tl.float32)
-    l_i = tl.full((BLOCK_M,), 0.0, tl.float32)
-    acc = tl.zeros((BLOCK_M, BLOCK_D), tl.float32)
-
-    if CAUSAL:
-        full_end = (pid_m * BLOCK_M // BLOCK_N) * BLOCK_N
-
-        for start_n in tl.range(0, full_end, BLOCK_N, warp_specialize=WARP_SPECIALIZE):
-            start_n = tl.multiple_of(start_n, BLOCK_N)
-            offs_n = start_n + tl.arange(0, BLOCK_N)
-
-            k = tl.load(
-                k_ptr
-                + base
-                + offs_d[:, None]
-                + offs_n[None, :] * D_HEAD,
-                eviction_policy="evict_last",
-            )
-
-            qk = tl.dot(q, k, out_dtype=tl.float32) * scale_log2
-
-            m_ij = tl.maximum(m_i, tl.max(qk, axis=1))
-            p = tl.exp2(qk - m_ij[:, None])
-            p_h = p.to(tl.float16)
-            alpha = tl.exp2(m_i - m_ij)
-
-            v = tl.load(
-                v_ptr
-                + base
-                + offs_n[:, None] * D_HEAD
-                + offs_d[None, :],
-                eviction_policy="evict_last",
-            )
-
-            acc = acc * alpha[:, None]
-            acc = tl.dot(p_h, v, acc, out_dtype=tl.float32)
-            l_i = l_i * alpha + tl.sum(p_h, axis=1)
-            m_i = m_ij
-
-        hi = tl.minimum((pid_m + 1) * BLOCK_M, N_CTX)
-
-        for start_n in tl.range(full_end, hi, BLOCK_N, warp_specialize=WARP_SPECIALIZE):
-            start_n = tl.multiple_of(start_n, BLOCK_N)
-            offs_n = start_n + tl.arange(0, BLOCK_N)
-
-            k = tl.load(
-                k_ptr
-                + base
-                + offs_d[:, None]
-                + offs_n[None, :] * D_HEAD,
-                eviction_policy="evict_last",
-            )
-
-            qk = tl.dot(q, k, out_dtype=tl.float32) * scale_log2
-            qk = tl.where(offs_n[None, :] <= offs_m[:, None], qk, -float("inf"))
-
-            m_ij = tl.maximum(m_i, tl.max(qk, axis=1))
-            p = tl.exp2(qk - m_ij[:, None])
-            p_h = p.to(tl.float16)
-            alpha = tl.exp2(m_i - m_ij)
-
-            v = tl.load(
-                v_ptr
-                + base
-                + offs_n[:, None] * D_HEAD
-                + offs_d[None, :],
-                eviction_policy="evict_last",
-            )
-
-            acc = acc * alpha[:, None]
-            acc = tl.dot(p_h, v, acc, out_dtype=tl.float32)
-            l_i = l_i * alpha + tl.sum(p_h, axis=1)
-            m_i = m_ij
+    if EVEN_Q:
+        if USE_CACHE_HINTS:
+            q = tl.load(q_block, eviction_policy="evict_first")
+        else:
+            q = tl.load(q_block)
     else:
-        for start_n in tl.range(0, N_CTX, BLOCK_N, warp_specialize=WARP_SPECIALIZE):
-            start_n = tl.multiple_of(start_n, BLOCK_N)
-            offs_n = start_n + tl.arange(0, BLOCK_N)
-
-            k = tl.load(
-                k_ptr
-                + base
-                + offs_d[:, None]
-                + offs_n[None, :] * D_HEAD,
-                eviction_policy="evict_last",
+        if USE_CACHE_HINTS:
+            q = tl.load(
+                q_block,
+                boundary_check=(0, 1),
+                padding_option="zero",
+                eviction_policy="evict_first",
             )
+        else:
+            q = tl.load(q_block, boundary_check=(0, 1), padding_option="zero")
 
-            qk = tl.dot(q, k, out_dtype=tl.float32) * scale_log2
+    m_i = tl.full((BLOCK_M,), -float("inf"), dtype=tl.float32)
+    l_i = tl.zeros((BLOCK_M,), dtype=tl.float32)
+    acc = tl.zeros((BLOCK_M, BLOCK_D), dtype=tl.float32)
 
-            m_ij = tl.maximum(m_i, tl.max(qk, axis=1))
-            p = tl.exp2(qk - m_ij[:, None])
-            p_h = p.to(tl.float16)
-            alpha = tl.exp2(m_i - m_ij)
+    qk_scale = sm_scale * 1.4426950408889634
 
-            v = tl.load(
-                v_ptr
-                + base
-                + offs_n[:, None] * D_HEAD
-                + offs_d[None, :],
-                eviction_policy="evict_last",
-            )
+    if IS_CAUSAL:
+        row_start = pid_m * BLOCK_M
+        row_end = tl.minimum(N_CTX, (pid_m + 1) * BLOCK_M)
+
+        full_end = ((row_start + 1) // BLOCK_N) * BLOCK_N
+        full_end = tl.minimum(full_end, N_CTX)
+
+        for start_n in tl.range(
+            0, full_end, BLOCK_N,
+            num_stages=NUM_STAGES,
+            warp_specialize=WARP_SPECIALIZE,
+        ):
+            if EVEN_D:
+                if USE_CACHE_HINTS:
+                    k = tl.load(k_block, eviction_policy="evict_last")
+                    v = tl.load(v_block, eviction_policy="evict_last")
+                else:
+                    k = tl.load(k_block)
+                    v = tl.load(v_block)
+            else:
+                if USE_CACHE_HINTS:
+                    k = tl.load(
+                        k_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                    v = tl.load(
+                        v_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                else:
+                    k = tl.load(k_block, boundary_check=(0, 1), padding_option="zero")
+                    v = tl.load(v_block, boundary_check=(0, 1), padding_option="zero")
+
+            qk = tl.dot(q, k)
+            qk = qk * qk_scale
+
+            m_new = tl.maximum(m_i, tl.max(qk, axis=1))
+            alpha = tl.math.exp2(m_i - m_new)
+            p = tl.math.exp2(qk - m_new[:, None])
 
             acc = acc * alpha[:, None]
-            acc = tl.dot(p_h, v, acc, out_dtype=tl.float32)
-            l_i = l_i * alpha + tl.sum(p_h, axis=1)
-            m_i = m_ij
+            acc = tl.dot(p.to(tl.float16), v, acc)
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            m_i = m_new
 
-    out = acc / l_i[:, None]
+            k_block = tl.advance(k_block, (0, BLOCK_N))
+            v_block = tl.advance(v_block, (BLOCK_N, 0))
 
-    tl.store(
-        o_ptr
-        + base
-        + offs_m[:, None] * D_HEAD
-        + offs_d[None, :],
-        out,
+        for start_n in tl.range(
+            full_end, row_end, BLOCK_N,
+            num_stages=NUM_STAGES,
+            warp_specialize=WARP_SPECIALIZE,
+        ):
+            if EVEN_KV:
+                if USE_CACHE_HINTS:
+                    k = tl.load(k_block, eviction_policy="evict_last")
+                    v = tl.load(v_block, eviction_policy="evict_last")
+                else:
+                    k = tl.load(k_block)
+                    v = tl.load(v_block)
+            else:
+                if USE_CACHE_HINTS:
+                    k = tl.load(
+                        k_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                    v = tl.load(
+                        v_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                else:
+                    k = tl.load(k_block, boundary_check=(0, 1), padding_option="zero")
+                    v = tl.load(v_block, boundary_check=(0, 1), padding_option="zero")
+
+            qk = tl.dot(q, k)
+            qk = qk * qk_scale
+
+            cols = start_n + offs_n
+            if EVEN_KV:
+                valid = offs_m[:, None] >= cols[None, :]
+            else:
+                valid = (cols[None, :] < N_CTX) & (offs_m[:, None] >= cols[None, :])
+            qk = tl.where(valid, qk, -float("inf"))
+
+            m_new = tl.maximum(m_i, tl.max(qk, axis=1))
+            alpha = tl.math.exp2(m_i - m_new)
+            p = tl.math.exp2(qk - m_new[:, None])
+
+            acc = acc * alpha[:, None]
+            acc = tl.dot(p.to(tl.float16), v, acc)
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            m_i = m_new
+
+            k_block = tl.advance(k_block, (0, BLOCK_N))
+            v_block = tl.advance(v_block, (BLOCK_N, 0))
+    else:
+        for start_n in tl.range(
+            0, N_CTX, BLOCK_N,
+            num_stages=NUM_STAGES,
+            warp_specialize=WARP_SPECIALIZE,
+        ):
+            if EVEN_KV:
+                if USE_CACHE_HINTS:
+                    k = tl.load(k_block, eviction_policy="evict_last")
+                    v = tl.load(v_block, eviction_policy="evict_last")
+                else:
+                    k = tl.load(k_block)
+                    v = tl.load(v_block)
+            else:
+                if USE_CACHE_HINTS:
+                    k = tl.load(
+                        k_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                    v = tl.load(
+                        v_block,
+                        boundary_check=(0, 1),
+                        padding_option="zero",
+                        eviction_policy="evict_last",
+                    )
+                else:
+                    k = tl.load(k_block, boundary_check=(0, 1), padding_option="zero")
+                    v = tl.load(v_block, boundary_check=(0, 1), padding_option="zero")
+
+            qk = tl.dot(q, k)
+            qk = qk * qk_scale
+
+            if not EVEN_KV:
+                cols = start_n + offs_n
+                qk = tl.where(cols[None, :] < N_CTX, qk, -float("inf"))
+
+            m_new = tl.maximum(m_i, tl.max(qk, axis=1))
+            alpha = tl.math.exp2(m_i - m_new)
+            p = tl.math.exp2(qk - m_new[:, None])
+
+            acc = acc * alpha[:, None]
+            acc = tl.dot(p.to(tl.float16), v, acc)
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            m_i = m_new
+
+            k_block = tl.advance(k_block, (0, BLOCK_N))
+            v_block = tl.advance(v_block, (BLOCK_N, 0))
+
+    acc = acc / l_i[:, None]
+
+    o_block = tl.make_block_ptr(
+        base=o_base,
+        shape=(N_CTX, HEAD_DIM),
+        strides=(stride_os, stride_od),
+        offsets=(pid_m * BLOCK_M, 0),
+        block_shape=(BLOCK_M, BLOCK_D),
+        order=(1, 0),
     )
+    if EVEN_Q:
+        tl.store(o_block, acc.to(tl.float16))
+    else:
+        tl.store(o_block, acc.to(tl.float16), boundary_check=(0, 1))
 
 
-_flash_attention_fwd_autotuned = triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "WARP_SPECIALIZE": False}, num_warps=4, num_stages=3),
-        triton.Config({"BLOCK_M": 64, "BLOCK_N": 256, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "WARP_SPECIALIZE": False}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 128, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 128, "BLOCK_N": 256, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=4),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 64, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=3),
-        triton.Config({"BLOCK_M": 256, "BLOCK_N": 128, "WARP_SPECIALIZE": True}, num_warps=8, num_stages=3),
-    ],
-    key=["N_CTX", "D_HEAD", "CAUSAL"],
-)(_flash_attention_fwd_kernel)
-
-
-def _next_power_of_2(x: int) -> int:
-    return 1 << (x - 1).bit_length()
-
-
-def run(q, k, v, causal=True, autotune: bool = False, **kwargs):
-    B, H, N_CTX, D_HEAD = q.shape
+def run(q, k, v, causal=True, **kwargs):
     output = torch.empty_like(q)
 
-    block_d = max(32, _next_power_of_2(int(D_HEAD)))
-    scale_log2 = (1.0 / math.sqrt(float(D_HEAD))) * 1.4426950408889634
-    causal = bool(causal)
+    batch_size = q.shape[0]
+    n_heads = q.shape[1]
+    seq_len = q.shape[2]
+    head_dim = q.shape[3]
 
-    grid = lambda meta: (triton.cdiv(N_CTX, meta["BLOCK_M"]), B * H)
+    BLOCK_M = 128
+    BLOCK_N = 64
+    BLOCK_D = 128
+    num_warps = 8
+    num_stages = 3
+    warp_specialize = True
+    use_cache_hints = True
 
-    _flash_attention_fwd_autotuned[grid](
-        q,
-        k,
-        v,
-        output,
-        scale_log2,
-        N_CTX=N_CTX,
-        D_HEAD=D_HEAD,
-        BLOCK_D=block_d,
-        CAUSAL=causal,
+    even_q = (seq_len % BLOCK_M == 0) and (head_dim == BLOCK_D)
+    even_kv = (seq_len % BLOCK_N == 0) and (head_dim == BLOCK_D)
+    even_d = head_dim == BLOCK_D
+
+    sm_scale = head_dim ** -0.5
+    grid = (triton.cdiv(seq_len, BLOCK_M), batch_size * n_heads)
+
+    _flash_attention_fwd_kernel[grid](
+        q, k, v, output,
+        q.stride(0), q.stride(1), q.stride(2), q.stride(3),
+        k.stride(0), k.stride(1), k.stride(2), k.stride(3),
+        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
+        output.stride(0), output.stride(1), output.stride(2), output.stride(3),
+        sm_scale,
+        N_HEADS=n_heads,
+        N_CTX=seq_len,
+        HEAD_DIM=head_dim,
+        BLOCK_M=BLOCK_M,
+        BLOCK_N=BLOCK_N,
+        BLOCK_D=BLOCK_D,
+        IS_CAUSAL=bool(causal),
+        NUM_STAGES=num_stages,
+        WARP_SPECIALIZE=warp_specialize,
+        EVEN_Q=even_q,
+        EVEN_KV=even_kv,
+        EVEN_D=even_d,
+        USE_CACHE_HINTS=use_cache_hints,
+        num_warps=num_warps,
+        num_stages=num_stages,
     )
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({
+        "BLOCK_M": BLOCK_M,
+        "BLOCK_N": BLOCK_N,
+        "BLOCK_D": BLOCK_D,
+        "num_warps": num_warps,
+        "num_stages": num_stages,
+        "warp_specialize": warp_specialize,
+        "causal": bool(causal),
+        "EVEN_Q": even_q,
+        "EVEN_KV": even_kv,
+        "USE_CACHE_HINTS": use_cache_hints,
+        "KV_EVICTION": "evict_last",
+    })
     return output
 
 
 def get_last_config() -> dict | None:
-    cfg = getattr(_flash_attention_fwd_autotuned, "best_config", None)
-    if cfg is None:
-        return None
-    out = dict(cfg.kwargs)
-    out["num_warps"] = cfg.num_warps
-    out["num_stages"] = cfg.num_stages
-    return out
+    return dict(_LAST_CFG) if _LAST_CFG else None
 ```
 
 ```python title="impl_cutile.py"
-from types import SimpleNamespace
-import math
 import torch
 import cuda.tile as ct
 import numpy as np
 from cuda.tile import RoundingMode as RMd
 
-try:
-    import cuda.tile_experimental as ct_experimental
-except ImportError:
-    ct_experimental = None
-
-from core.cutile_autotune import CutileAutotuner
-
 ConstInt = ct.Constant[int]
 ConstBool = ct.Constant[bool]
 
-_last_autotune_config: dict = {}
+_LAST_CFG: dict = {}
 
 
-@ct.kernel
-def _flash_attention_kernel(
-    q,
-    k,
-    v,
-    out,
-    scale_log2: float,
-    N: ConstInt,
-    D: ConstInt,
+@ct.kernel(occupancy=1)
+def _flash_attention_fwd_kernel(
+    q, k, v, output,
+    qk_scale: float,
+    SEQLEN: ConstInt,
+    N_HEADS: ConstInt,
+    BLOCK_M: ConstInt,
+    BLOCK_N: ConstInt,
+    BLOCK_D: ConstInt,
     CAUSAL: ConstBool,
-    BM: ConstInt,
-    BN: ConstInt,
-    BD: ConstInt,
+    USE_LATENCY_HINTS: ConstBool,
 ):
-    bid_m_raw = ct.bid(0)
+    bid_m = ct.bid(0)
     bid_bh = ct.bid(1)
 
-    bid_m = bid_m_raw
-    if bid_bh % 2 == 1:
-        bid_m = ct.cdiv(N, BM) - 1 - bid_m_raw
+    batch = bid_bh // N_HEADS
+    head = bid_bh - batch * N_HEADS
 
-    offs_m = (bid_m * BM + ct.arange(BM, dtype=np.int32))[:, None]
-    offs_n_base = ct.arange(BN, dtype=np.int32)[None, :]
+    if USE_LATENCY_HINTS:
+        q_tile = ct.load(
+            q,
+            index=(batch, head, bid_m, 0),
+            shape=(1, 1, BLOCK_M, BLOCK_D),
+            padding_mode=ct.PaddingMode.ZERO,
+            latency=1,
+        ).reshape((BLOCK_M, BLOCK_D))
+    else:
+        q_tile = ct.load(
+            q,
+            index=(batch, head, bid_m, 0),
+            shape=(1, 1, BLOCK_M, BLOCK_D),
+            padding_mode=ct.PaddingMode.ZERO,
+        ).reshape((BLOCK_M, BLOCK_D))
 
-    q_tile = ct.load(
-        q,
-        index=(bid_bh, bid_m, 0),
-        shape=(1, BM, BD),
-        latency=10,
-    ).reshape((BM, BD))
+    m_i = ct.full((BLOCK_M, 1), -np.inf, dtype=np.float32)
+    l_i = ct.full((BLOCK_M, 1), 0.0, dtype=np.float32)
+    acc = ct.full((BLOCK_M, BLOCK_D), 0.0, dtype=np.float32)
 
-    m_i = ct.full((BM, 1), -np.inf, dtype=np.float32)
-    l_i = ct.full((BM, 1), 0.0, dtype=np.float32)
-    acc = ct.full((BM, BD), 0.0, dtype=np.float32)
+    offs_m = bid_m * BLOCK_M + ct.arange(BLOCK_M, dtype=np.int32)[:, None]
+    offs_n_base = ct.arange(BLOCK_N, dtype=np.int32)[None, :]
 
     if CAUSAL:
-        for j in range(0, ct.cdiv(N, BN)):
-            if (j + 1) * BN <= bid_m * BM:
+        full_tiles = ((bid_m * BLOCK_M + 1) // BLOCK_N)
+        total_tiles = ct.cdiv((bid_m + 1) * BLOCK_M, BLOCK_N)
+
+        for j in range(0, full_tiles):
+            if USE_LATENCY_HINTS:
                 k_tile = ct.load(
                     k,
-                    index=(bid_bh, 0, j),
-                    shape=(1, BD, BN),
-                    order=(0, 2, 1),
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
                     latency=10,
-                ).reshape((BD, BN))
-
-                qk = ct.mma(
-                    q_tile,
-                    k_tile,
-                    ct.full((BM, BN), 0.0, dtype=np.float32),
-                )
-                qk = qk * scale_log2
-
-                m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-                p = ct.exp2(qk - m_ij, flush_to_zero=True)
-                p_h = ct.astype(p, q.dtype)
-                alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
-
-                l_i = l_i * alpha + ct.sum(p_h, axis=1, keepdims=True)
-                acc = acc * alpha
-
-                v_tile = ct.load(
-                    v,
-                    index=(bid_bh, j, 0),
-                    shape=(1, BN, BD),
-                    latency=10,
-                ).reshape((BN, BD))
-
-                acc = ct.mma(p_h, v_tile, acc)
-                m_i = m_ij
-            elif j * BN <= bid_m * BM + (BM - 1):
-                offs_n = j * BN + offs_n_base
-
+                ).reshape((BLOCK_D, BLOCK_N))
+            else:
                 k_tile = ct.load(
                     k,
-                    index=(bid_bh, 0, j),
-                    shape=(1, BD, BN),
-                    order=(0, 2, 1),
-                    latency=10,
-                ).reshape((BD, BN))
-
-                qk = ct.mma(
-                    q_tile,
-                    k_tile,
-                    ct.full((BM, BN), 0.0, dtype=np.float32),
-                )
-                qk = qk * scale_log2
-                qk = ct.where(offs_m >= offs_n, qk, -np.inf)
-
-                m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-                p = ct.exp2(qk - m_ij, flush_to_zero=True)
-                p_h = ct.astype(p, q.dtype)
-                alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
-
-                l_i = l_i * alpha + ct.sum(p_h, axis=1, keepdims=True)
-                acc = acc * alpha
-
-                v_tile = ct.load(
-                    v,
-                    index=(bid_bh, j, 0),
-                    shape=(1, BN, BD),
-                    latency=10,
-                ).reshape((BN, BD))
-
-                acc = ct.mma(p_h, v_tile, acc)
-                m_i = m_ij
-    else:
-        for j in range(0, ct.cdiv(N, BN)):
-            k_tile = ct.load(
-                k,
-                index=(bid_bh, 0, j),
-                shape=(1, BD, BN),
-                order=(0, 2, 1),
-                latency=10,
-            ).reshape((BD, BN))
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
+                ).reshape((BLOCK_D, BLOCK_N))
 
             qk = ct.mma(
                 q_tile,
                 k_tile,
-                ct.full((BM, BN), 0.0, dtype=np.float32),
+                ct.full((BLOCK_M, BLOCK_N), 0.0, dtype=np.float32),
             )
-            qk = qk * scale_log2
+            qk = qk * qk_scale
 
-            m_ij = ct.maximum(m_i, ct.max(qk, axis=1, keepdims=True))
-            p = ct.exp2(qk - m_ij, flush_to_zero=True)
-            p_h = ct.astype(p, q.dtype)
-            alpha = ct.exp2(m_i - m_ij, flush_to_zero=True)
+            m_new = ct.maximum(m_i, ct.max(qk, axis=-1, keepdims=True))
+            p = ct.exp2(qk - m_new, flush_to_zero=True)
+            alpha = ct.exp2(m_i - m_new, flush_to_zero=True)
 
-            l_i = l_i * alpha + ct.sum(p_h, axis=1, keepdims=True)
+            l_i = l_i * alpha + ct.sum(p, axis=-1, keepdims=True)
             acc = acc * alpha
 
-            v_tile = ct.load(
-                v,
-                index=(bid_bh, j, 0),
-                shape=(1, BN, BD),
-                latency=10,
-            ).reshape((BN, BD))
+            if USE_LATENCY_HINTS:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                    latency=10,
+                ).reshape((BLOCK_N, BLOCK_D))
+            else:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                ).reshape((BLOCK_N, BLOCK_D))
 
-            acc = ct.mma(p_h, v_tile, acc)
-            m_i = m_ij
+            acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
+            m_i = m_new
 
-    out_tile = ct.truediv(
-        acc,
-        l_i,
-        flush_to_zero=True,
-        rounding_mode=RMd.APPROX,
-    )
-    out_tile = ct.astype(out_tile, q.dtype)
+        for j in range(full_tiles, total_tiles):
+            if USE_LATENCY_HINTS:
+                k_tile = ct.load(
+                    k,
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=10,
+                ).reshape((BLOCK_D, BLOCK_N))
+            else:
+                k_tile = ct.load(
+                    k,
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
+                    padding_mode=ct.PaddingMode.ZERO,
+                ).reshape((BLOCK_D, BLOCK_N))
+
+            qk = ct.mma(
+                q_tile,
+                k_tile,
+                ct.full((BLOCK_M, BLOCK_N), 0.0, dtype=np.float32),
+            )
+            qk = qk * qk_scale
+
+            offs_n = j * BLOCK_N + offs_n_base
+            valid = ct.broadcast_to(offs_n < SEQLEN, (BLOCK_M, BLOCK_N))
+            valid = valid & (offs_m >= offs_n)
+            qk = ct.where(valid, qk, -np.inf)
+
+            m_new = ct.maximum(m_i, ct.max(qk, axis=-1, keepdims=True))
+            p = ct.exp2(qk - m_new, flush_to_zero=True)
+            alpha = ct.exp2(m_i - m_new, flush_to_zero=True)
+
+            l_i = l_i * alpha + ct.sum(p, axis=-1, keepdims=True)
+            acc = acc * alpha
+
+            if USE_LATENCY_HINTS:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=10,
+                ).reshape((BLOCK_N, BLOCK_D))
+            else:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                    padding_mode=ct.PaddingMode.ZERO,
+                ).reshape((BLOCK_N, BLOCK_D))
+
+            acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
+            m_i = m_new
+    else:
+        n_tiles = ct.cdiv(SEQLEN, BLOCK_N)
+
+        for j in range(0, n_tiles):
+            if USE_LATENCY_HINTS:
+                k_tile = ct.load(
+                    k,
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=10,
+                ).reshape((BLOCK_D, BLOCK_N))
+            else:
+                k_tile = ct.load(
+                    k,
+                    index=(batch, head, 0, j),
+                    shape=(1, 1, BLOCK_D, BLOCK_N),
+                    order=(0, 1, 3, 2),
+                    padding_mode=ct.PaddingMode.ZERO,
+                ).reshape((BLOCK_D, BLOCK_N))
+
+            qk = ct.mma(
+                q_tile,
+                k_tile,
+                ct.full((BLOCK_M, BLOCK_N), 0.0, dtype=np.float32),
+            )
+            qk = qk * qk_scale
+
+            offs_n = j * BLOCK_N + offs_n_base
+            valid = ct.broadcast_to(offs_n < SEQLEN, (BLOCK_M, BLOCK_N))
+            qk = ct.where(valid, qk, -np.inf)
+
+            m_new = ct.maximum(m_i, ct.max(qk, axis=-1, keepdims=True))
+            p = ct.exp2(qk - m_new, flush_to_zero=True)
+            alpha = ct.exp2(m_i - m_new, flush_to_zero=True)
+
+            l_i = l_i * alpha + ct.sum(p, axis=-1, keepdims=True)
+            acc = acc * alpha
+
+            if USE_LATENCY_HINTS:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                    padding_mode=ct.PaddingMode.ZERO,
+                    latency=10,
+                ).reshape((BLOCK_N, BLOCK_D))
+            else:
+                v_tile = ct.load(
+                    v,
+                    index=(batch, head, j, 0),
+                    shape=(1, 1, BLOCK_N, BLOCK_D),
+                    padding_mode=ct.PaddingMode.ZERO,
+                ).reshape((BLOCK_N, BLOCK_D))
+
+            acc = ct.mma(ct.astype(p, q.dtype), v_tile, acc)
+            m_i = m_new
+
+    out_tile = ct.truediv(acc, l_i, flush_to_zero=True, rounding_mode=RMd.APPROX)
+    out_tile = ct.astype(out_tile, q.dtype).reshape((1, 1, BLOCK_M, BLOCK_D))
+
     ct.store(
-        out,
-        index=(bid_bh, bid_m, 0),
-        tile=ct.reshape(out_tile, (1, BM, BD)),
-        latency=1,
+        output,
+        index=(batch, head, bid_m, 0),
+        tile=out_tile,
     )
 
 
-_SEARCH_SPACE = [
-    SimpleNamespace(tm=64, tn=128, occupancy=1),
-    SimpleNamespace(tm=64, tn=128, occupancy=2),
-    SimpleNamespace(tm=64, tn=128, occupancy=4),
-    SimpleNamespace(tm=64, tn=256, occupancy=1),
-    SimpleNamespace(tm=64, tn=256, occupancy=2),
-    SimpleNamespace(tm=64, tn=256, occupancy=4),
-    SimpleNamespace(tm=128, tn=64, occupancy=1),
-    SimpleNamespace(tm=128, tn=64, occupancy=2),
-    SimpleNamespace(tm=128, tn=64, occupancy=4),
-    SimpleNamespace(tm=128, tn=128, occupancy=1),
-    SimpleNamespace(tm=128, tn=128, occupancy=2),
-    SimpleNamespace(tm=128, tn=128, occupancy=4),
-    SimpleNamespace(tm=128, tn=256, occupancy=1),
-    SimpleNamespace(tm=128, tn=256, occupancy=2),
-    SimpleNamespace(tm=128, tn=256, occupancy=4),
-    SimpleNamespace(tm=256, tn=64, occupancy=1),
-    SimpleNamespace(tm=256, tn=64, occupancy=2),
-    SimpleNamespace(tm=256, tn=128, occupancy=1),
-    SimpleNamespace(tm=256, tn=128, occupancy=2),
-]
-
-_tuner = CutileAutotuner(_flash_attention_kernel)
-
-
-def _next_power_of_2(x: int) -> int:
-    return 1 << (x - 1).bit_length()
-
-
-def run(q, k, v, causal=True, autotune: bool = False, **kwargs):
-    B, H, N, D = q.shape
+def run(q, k, v, causal=True, **kwargs):
     output = torch.empty_like(q)
 
-    q3 = q.view(B * H, N, D)
-    k3 = k.view(B * H, N, D)
-    v3 = v.view(B * H, N, D)
-    out3 = output.view(B * H, N, D)
+    batch_size = q.shape[0]
+    n_heads = q.shape[1]
+    seq_len = q.shape[2]
+    head_dim = q.shape[3]
 
-    bd = max(32, _next_power_of_2(int(D)))
-    scale_log2 = (1.0 / math.sqrt(float(D))) * 1.4426950408889634
-    causal = bool(causal)
+    BLOCK_M = 64
+    BLOCK_N = 128
+    BLOCK_D = 128
+    occupancy = 1
+    use_latency_hints = True
+    kv_latency = 10
+
+    sm_scale_log2 = (head_dim ** -0.5) * 1.4426950408889634
 
     stream = torch.cuda.current_stream()
+    grid = (ct.cdiv(seq_len, BLOCK_M), batch_size * n_heads, 1)
 
-    cfg = _tuner.tune_or_cached(
-        shape_key=(B, H, N, D, causal, str(q.dtype)),
-        search_space=_SEARCH_SPACE,
-        stream=stream,
-        grid_fn=lambda cfg: (ct.cdiv(N, cfg.tm), B * H, 1),
-        args_fn=lambda cfg: (
-            q3,
-            k3,
-            v3,
-            out3,
-            scale_log2,
-            N,
-            D,
-            causal,
-            cfg.tm,
-            cfg.tn,
-            bd,
-        ),
-        hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
-    )
-
-    _last_autotune_config.clear()
-    _last_autotune_config.update(
-        {
-            "tm": cfg.tm,
-            "tn": cfg.tn,
-            "bd": bd,
-            "occupancy": cfg.occupancy,
-        }
-    )
-
-    kernel = _tuner.kernel_with_hints(occupancy=cfg.occupancy)
     ct.launch(
         stream,
-        (ct.cdiv(N, cfg.tm), B * H, 1),
-        kernel,
+        grid,
+        _flash_attention_fwd_kernel,
         (
-            q3,
-            k3,
-            v3,
-            out3,
-            scale_log2,
-            N,
-            D,
-            causal,
-            cfg.tm,
-            cfg.tn,
-            bd,
+            q, k, v, output,
+            sm_scale_log2,
+            seq_len,
+            n_heads,
+            BLOCK_M,
+            BLOCK_N,
+            BLOCK_D,
+            bool(causal),
+            use_latency_hints,
         ),
     )
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({
+        "BLOCK_M": BLOCK_M,
+        "BLOCK_N": BLOCK_N,
+        "BLOCK_D": BLOCK_D,
+        "occupancy": occupancy,
+        "causal": bool(causal),
+        "USE_LATENCY_HINTS": use_latency_hints,
+        "KV_LATENCY": kv_latency,
+    })
     return output
 
 
 def get_last_config() -> dict | None:
-    return dict(_last_autotune_config) if _last_autotune_config else None
+    return dict(_LAST_CFG) if _LAST_CFG else None
 ```

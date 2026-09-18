@@ -1,0 +1,184 @@
+{
+  "op": "2d_conv",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/2d_conv/claude-opus-4-7/high/iter_7",
+  "n_cases": 2,
+  "n_combos_attempted": 4,
+  "n_combos_succeeded": 3,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 921565 / 13107200 (7.0%)\nGreatest absolute difference: 0.00030517578125 at index (0, 54, 3, 311) (up to 1e-05 allowed)\nGreatest relative difference: 5.809032917022705 at index (0, 122, 248, 281) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 921565 / 13107200 (7.0%)\nGreatest absolute difference: 0.00030517578125 at index (0, 54, 3, 311) (up to 1e-05 allowed)\nGreatest relative difference: 5.809032917022705 at index (0, 122, 248, 281) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320,
+        "dtype": "fp16"
+      },
+      "problem_size": 30198988800,
+      "latency_ms": 0.277253,
+      "torch_latency_ms": 1.8320739,
+      "speedup_vs_torch": 6.60794977872196,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 128,
+        "BLOCK_K": 32,
+        "GROUP_M": 8,
+        "num_warps": 4,
+        "num_stages": 4,
+        "PRECISION": "ieee"
+      },
+      "flops": 30198988800.0,
+      "bytes": 52723712.0,
+      "AI": 572.7781230577999,
+      "measured_bw_GBs": 190.16462220426828,
+      "measured_perf_TFLOPS": 108.92213537815641,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.048409837945847294,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320,
+        "dtype": "fp32"
+      },
+      "problem_size": 30198988800,
+      "latency_ms": 2.59317435,
+      "torch_latency_ms": 1.808479,
+      "speedup_vs_torch": 0.6973996947023635,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 128,
+        "BLOCK_K": 32,
+        "GROUP_M": 8,
+        "num_warps": 4,
+        "num_stages": 4,
+        "PRECISION": "ieee"
+      },
+      "flops": 30198988800.0,
+      "bytes": 105447424.0,
+      "AI": 286.38906152889996,
+      "measured_bw_GBs": 40.663453269156385,
+      "measured_perf_TFLOPS": 11.645568220277976,
+      "ceiling_TFLOPS": 1100.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.010586880200252707,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch": 1,
+        "in_channels": 128,
+        "out_channels": 128,
+        "kernel_size": 3,
+        "stride": 1,
+        "padding": 1,
+        "groups": 1,
+        "H": 320,
+        "dtype": "fp16"
+      },
+      "problem_size": 30198988800,
+      "latency_ms": 0.0937803,
+      "torch_latency_ms": 1.84155995,
+      "speedup_vs_torch": 19.636959468033265,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 128,
+        "BLOCK_C": 64,
+        "NUM_C_BLOCKS": 2,
+        "occupancy": 2,
+        "path": "mma_v2_unified"
+      },
+      "flops": 30198988800.0,
+      "bytes": 52723712.0,
+      "AI": 572.7781230577999,
+      "measured_bw_GBs": 562.204556820569,
+      "measured_perf_TFLOPS": 322.01847083022767,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.14311932036899008,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.02949835907305,
+  "report_arith_mean_cutile": 0.14311932036899008,
+  "stop_score_triton": 0.02949835907305,
+  "stop_score_cutile": 0.14311932036899008,
+  "timing_breakdown": {
+    "evaluator_total_s": 53.0435094833374,
+    "iter_total_s": 242.81632137298584
+  },
+  "elapsed_s": 56.346317529678345,
+  "llm_usage": {
+    "elapsed_s": 186.4133186340332,
+    "ttft_s": 143.93192410469055,
+    "input_tokens": 65658,
+    "cached_input_tokens": 0,
+    "output_tokens": 15051,
+    "reasoning_tokens": null,
+    "response_chars": 8970
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

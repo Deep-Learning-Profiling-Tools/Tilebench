@@ -1,0 +1,173 @@
+{
+  "op": "bitonic_sort",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/bitonic_sort/gpt-5.5/high/iter_9",
+  "n_cases": 2,
+  "n_combos_attempted": 4,
+  "n_combos_succeeded": 3,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "n": 10000000,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/bitonic_sort/gpt-5.5/high/iter_9/impl_cutile.py\", line 457, in run\n    return _run_radix_keys_f32(data, n_int)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/bitonic_sort/gpt-5.5/high/iter_9/impl_cutile.py\", line 410, in _run_radix_keys_f32\n    ct.launch(\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_execution.py\", line 114, in _compile\n    result = compile_tile(self._annotated_function, (signature,),\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 85, in wrapper\n    return func(*args, **kwargs)\n  File \"/projects/kzhou6/bcui2/"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "n": 10000000,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/bitonic_sort/gpt-5.5/high/iter_9/impl_cutile.py\", line 457, in run\n    return _run_radix_keys_f32(data, n_int)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/bitonic_sort/gpt-5.5/high/iter_9/impl_cutile.py\", line 410, in _run_radix_keys_f32\n    ct.launch(\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_execution.py\", line 114, in _compile\n    result = compile_tile(self._annotated_function, (signature,),\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/cuda/tile/_compile.py\", line 85, in wrapper\n    return func(*args, **kwargs)\n  File \"/projects/kzhou6/bcui2/"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "n": 10000000,
+        "dtype": "fp16"
+      },
+      "problem_size": 10000000,
+      "latency_ms": 0.30741855,
+      "torch_latency_ms": 253.49076895,
+      "speedup_vs_torch": 824.578637008079,
+      "cfg": {
+        "algorithm": 9,
+        "fp16_counting_cdf_runs": 1,
+        "KEY_BITS": 16,
+        "KEY_SPACE": 65536,
+        "PREFIX_CHUNK": 1024,
+        "PREFIX_CHUNKS": 64,
+        "HIST_BLOCK": 512,
+        "EMIT_BLOCK": 512,
+        "hist_num_warps": 8,
+        "prefix_num_warps": 8,
+        "emit_num_warps": 8,
+        "num_stages": 2,
+        "passes": 1,
+        "copy_kernel": 0
+      },
+      "flops": 10000000.0,
+      "bytes": 40000000.0,
+      "AI": 0.25,
+      "measured_bw_GBs": 130.11576562312194,
+      "measured_perf_TFLOPS": 0.032528941405780484,
+      "ceiling_TFLOPS": 1.63485,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.019897202438009902,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "n": 10000000,
+        "dtype": "fp32"
+      },
+      "problem_size": 10000000,
+      "latency_ms": 2.38158825,
+      "torch_latency_ms": 264.97648395,
+      "speedup_vs_torch": 111.26040949773748,
+      "cfg": {
+        "algorithm": 9,
+        "fp16_counting_cdf_runs": 0,
+        "DATA_BLOCK": 2048,
+        "RADIX_BITS": 3,
+        "RADIX": 8,
+        "KEY_BITS": 32,
+        "KEY_STORAGE_BITS": 32,
+        "passes": 11,
+        "data_num_warps": 8,
+        "prefix_num_warps": 8,
+        "num_stages": 2,
+        "num_blocks": 4883,
+        "HIST_BLOCK": 8192,
+        "key_sort": 1,
+        "fused_make_hist": 1,
+        "base_kernel": 1,
+        "last_scatter_to_value": 1,
+        "copy_kernel": 0
+      },
+      "flops": 10000000.0,
+      "bytes": 80000000.0,
+      "AI": 0.125,
+      "measured_bw_GBs": 33.59102901183696,
+      "measured_perf_TFLOPS": 0.0041988786264796196,
+      "ceiling_TFLOPS": 0.817425,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.005136714226356693,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "n": 10000000,
+        "dtype": "fp16"
+      },
+      "problem_size": 10000000,
+      "latency_ms": 0.4941867,
+      "torch_latency_ms": 253.45987495,
+      "speedup_vs_torch": 512.8828334514061,
+      "cfg": {
+        "algorithm": 9,
+        "fp16_counting_cdf_scatter": 1,
+        "KEY_BITS": 16,
+        "KEY_SPACE": 65536,
+        "PREFIX_CHUNK": 1024,
+        "PREFIX_CHUNKS": 64,
+        "HIST_TILE": 1024,
+        "SCATTER_TILE": 1024,
+        "ZERO_TILE": 1024,
+        "occupancy": 8,
+        "passes": 1,
+        "copy_kernel": 0
+      },
+      "flops": 10000000.0,
+      "bytes": 40000000.0,
+      "AI": 0.25,
+      "measured_bw_GBs": 80.941069437927,
+      "measured_perf_TFLOPS": 0.02023526735948175,
+      "ceiling_TFLOPS": 1.63485,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.01237744585710111,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.012516958332183296,
+  "report_arith_mean_cutile": 0.01237744585710111,
+  "stop_score_triton": 0.012516958332183296,
+  "stop_score_cutile": 0.01237744585710111,
+  "timing_breakdown": {
+    "evaluator_total_s": 52.12334322929382,
+    "iter_total_s": 347.73749470710754
+  },
+  "elapsed_s": 55.271743297576904,
+  "llm_usage": {
+    "elapsed_s": 292.4234437942505,
+    "ttft_s": 207.61839699745178,
+    "input_tokens": 47832,
+    "cached_input_tokens": 0,
+    "output_tokens": 16976,
+    "reasoning_tokens": 8276,
+    "response_chars": 30282
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

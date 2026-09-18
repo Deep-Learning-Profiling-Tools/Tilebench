@@ -1,0 +1,93 @@
+import torch
+import cuda.tile as ct
+import numpy as np
+
+ConstInt = ct.Constant[int]
+
+_LAST_CFG: dict = {}
+
+
+@ct.kernel(occupancy=2)
+def _bmm_kernel_lp(A, B, C,
+                   M: ConstInt, N: ConstInt, K: ConstInt,
+                   TM: ConstInt, TN: ConstInt, TK: ConstInt):
+    """fp16/bf16 path: fp32 accumulator."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    batch = ct.bid(2)
+
+    acc = ct.full((TM, TN), 0.0, dtype=np.float32)
+    num_k = ct.cdiv(K, TK)
+    for k in range(0, num_k):
+        a = ct.load(A, index=(batch, pid_m, k),
+                    shape=(1, TM, TK),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TM, TK))
+        b = ct.load(B, index=(batch, k, pid_n),
+                    shape=(1, TK, TN),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TK, TN))
+        acc = ct.mma(a, b, acc)
+
+    out = ct.astype(acc, A.dtype).reshape((1, TM, TN))
+    ct.store(C, index=(batch, pid_m, pid_n), tile=out)
+
+
+@ct.kernel(occupancy=1)
+def _bmm_kernel_fp64(A, B, C,
+                     M: ConstInt, N: ConstInt, K: ConstInt,
+                     TM: ConstInt, TN: ConstInt, TK: ConstInt):
+    """fp64 path: used as IEEE-exact emulation for fp32 inputs (cast on host)."""
+    pid_m = ct.bid(0)
+    pid_n = ct.bid(1)
+    batch = ct.bid(2)
+
+    acc = ct.full((TM, TN), 0.0, dtype=np.float64)
+    num_k = ct.cdiv(K, TK)
+    for k in range(0, num_k):
+        a = ct.load(A, index=(batch, pid_m, k),
+                    shape=(1, TM, TK),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TM, TK))
+        b = ct.load(B, index=(batch, k, pid_n),
+                    shape=(1, TK, TN),
+                    padding_mode=ct.PaddingMode.ZERO).reshape((TK, TN))
+        acc = ct.mma(a, b, acc)
+
+    out = acc.reshape((1, TM, TN))
+    ct.store(C, index=(batch, pid_m, pid_n), tile=out)
+
+
+def run(A: torch.Tensor, B: torch.Tensor,
+        BATCH: int, M: int, N: int, K: int, **kwargs):
+    A3 = A.view(BATCH, M, K).contiguous()
+    B3 = B.view(BATCH, K, N).contiguous()
+    is_fp32 = (A.dtype == torch.float32)
+
+    stream = torch.cuda.current_stream()
+
+    if is_fp32:
+        # Route fp32 through fp64 to guarantee IEEE-equivalent precision
+        # (TF32 / 3xTF32 emulation can't hit the harness's effective tolerance).
+        A64 = A3.to(torch.float64)
+        B64 = B3.to(torch.float64)
+        C64 = torch.empty((BATCH, M, N), dtype=torch.float64, device=A.device)
+        TM, TN, TK = 64, 64, 32
+        grid = (ct.cdiv(M, TM), ct.cdiv(N, TN), BATCH)
+        ct.launch(stream, grid, _bmm_kernel_fp64,
+                  (A64, B64, C64, M, N, K, TM, TN, TK))
+        C = C64.to(torch.float32).view(-1)
+    else:
+        C3 = torch.empty((BATCH, M, N), dtype=A.dtype, device=A.device)
+        TM, TN, TK = 128, 128, 64
+        grid = (ct.cdiv(M, TM), ct.cdiv(N, TN), BATCH)
+        ct.launch(stream, grid, _bmm_kernel_lp,
+                  (A3, B3, C3, M, N, K, TM, TN, TK))
+        C = C3.view(-1)
+
+    _LAST_CFG.clear()
+    _LAST_CFG.update({"TM": TM, "TN": TN, "TK": TK,
+                      "occupancy": 1 if is_fp32 else 2,
+                      "IS_FP32": is_fp32})
+    return C
+
+
+def get_last_config() -> dict | None:
+    return dict(_LAST_CFG) if _LAST_CFG else None

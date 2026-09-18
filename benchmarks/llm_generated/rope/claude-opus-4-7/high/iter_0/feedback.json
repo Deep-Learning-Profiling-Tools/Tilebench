@@ -1,0 +1,145 @@
+{
+  "op": "rope",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/rope/claude-opus-4-7/high/iter_0",
+  "n_cases": 2,
+  "n_combos_attempted": 4,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 13171 / 83886080 (0.0%)\nGreatest absolute difference: 0.0078125 at index (0, 2042, 17, 28) (up to 0.001 allowed)\nGreatest relative difference: inf at index (0, 23, 11, 97) (up to 0.001 allowed)"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/rope/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 43, in run\n    kernel = _rope_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/rope/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 43, in run\n    kernel = _rope_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 13171 / 83886080 (0.0%)\nGreatest absolute difference: 0.0078125 at index (0, 2042, 17, 28) (up to 0.001 allowed)\nGreatest relative difference: inf at index (0, 23, 11, 97) (up to 0.001 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/rope/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 43, in run\n    kernel = _rope_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/rope/claude-opus-4-7/high/iter_0/impl_cutile.py\", line 43, in run\n    kernel = _rope_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "batch_size": 1,
+        "n_heads": 32,
+        "head_dim": 128,
+        "seq_len": 20480,
+        "dtype": "fp32"
+      },
+      "problem_size": 83886080,
+      "latency_ms": 0.10211680000000001,
+      "torch_latency_ms": 0.7623184000000001,
+      "speedup_vs_torch": 7.465161462168811,
+      "cfg": {
+        "BLOCK_H": 32,
+        "BLOCK_D": 64,
+        "num_warps": 4,
+        "num_stages": 2
+      },
+      "flops": 251658240.0,
+      "bytes": 671088640.0,
+      "AI": 0.375,
+      "measured_bw_GBs": 6571.775065415288,
+      "measured_perf_TFLOPS": 2.4644156495307334,
+      "ceiling_TFLOPS": 2.452275,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 1.004950770011819,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 1.0,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 1.0,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 2.262779951095581,
+    "iter_total_s": 81.4386510848999
+  },
+  "elapsed_s": 4.9562742710113525,
+  "llm_usage": {
+    "elapsed_s": 76.42150115966797,
+    "ttft_s": 55.70957541465759,
+    "input_tokens": 53891,
+    "cached_input_tokens": 0,
+    "output_tokens": 7071,
+    "reasoning_tokens": null,
+    "response_chars": 4355
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

@@ -1,0 +1,41 @@
+# Batch Normalization (training-mode statistics, per-channel)
+# 3-kernel pipeline: per-block partial sums → finish reduction → element-wise apply.
+# BN involves rsqrt + cross-pass numerical accumulation; loose tolerances cover fp16/bf16.
+
+verify:
+  atol: 1.0e-2
+  rtol: 1.0e-2
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep N (batch size) across 20 points; C=1024 features, eps=1e-5.
+# Max N=20K, C=1024, fp32: ~80MB input — exceeds B200 L2 (50MB).
+case_defaults:
+  C: 1024
+  eps: 1.0e-5
+
+case_grid:
+  N: [20000] # 1K, 2K, ..., 20K (20 points)
+  dtype: ["fp16", "bf16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   FLOPs (apply pass dominates): N*C * (sub + mul + mul + add) ≈ 4 * N * C
+#   Bytes:
+#     Read  input:  2 * N * C * dtype_size (read in pass 1 + pass 3)
+#     Read  gamma + beta: 2 * C * dtype_size
+#     Write output: N * C * dtype_size
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: "4 * N * C"
+  bytes_expr: "3 * N * C * dtype_size + 2 * C * dtype_size"
+
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup
