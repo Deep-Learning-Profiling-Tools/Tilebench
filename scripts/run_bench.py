@@ -217,7 +217,6 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
 
 
 def main():
-
     parser = argparse.ArgumentParser(description="Run TileBench benchmarks")
     parser.add_argument("--operator", type=str, default="vector_add",
                         help="Operator to benchmark")
