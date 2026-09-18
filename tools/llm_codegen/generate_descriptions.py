@@ -1,6 +1,6 @@
 """One-time tool to auto-generate problem descriptions from impl_torch.py.
 
-Writes `benchmarks/problems/current/<op>_current.md` for ops that lack one.
+Writes `tools/llm_codegen/problems/<op>_current.md` for ops that lack one.
 The format mirrors the LeetGPU-style descriptions already present in the repo:
 problem statement, input/output spec, mathematical definition, examples,
 constraints.
@@ -23,7 +23,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from tools.llm_codegen.llm_client import LLMClient
 
-PROBLEMS_DIR = _REPO_ROOT / "benchmarks" / "problems" / "current"
+PROBLEMS_DIR = _THIS_DIR / "problems"
 
 _DESC_SYSTEM = """\
 You are a technical writer documenting GPU kernel benchmarks. Your job: take the

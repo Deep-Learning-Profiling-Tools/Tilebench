@@ -141,9 +141,9 @@ def _backend_ref_sections(backend: str) -> list[str]:
 
 def _problem_desc_path(op: str) -> Path:
     """Resolve the canonical problem-description path:
-    benchmarks/problems/current/<op>_current.md (no fallback — only "current" is used).
+    tools/llm_codegen/problems/<op>_current.md (no fallback — only "current" is used).
     """
-    return _REPO_ROOT / "benchmarks" / "problems" / "current" / f"{op}_current.md"
+    return _THIS_DIR / "problems" / f"{op}_current.md"
 
 
 def build_initial_prompt(
