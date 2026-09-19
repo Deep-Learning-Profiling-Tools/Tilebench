@@ -151,7 +151,7 @@ def fake_results(enabled, torch_ms=2.0):
 @pytest.fixture
 def run_bench(results, tmp_path, monkeypatch):
     mod = load_script("run_bench")
-    calls = {"backends": [], "archived": [], "logs_dir": [], "torch_ms": 2.0}
+    calls = {"backends": [], "logs_dir": [], "torch_ms": 2.0}
 
     def engine(operator, benchmark_overrides=None, enabled_backends=None, logs_dir=None):
         calls["backends"].append(set(enabled_backends))
@@ -159,7 +159,6 @@ def run_bench(results, tmp_path, monkeypatch):
         return fake_results(enabled_backends, calls["torch_ms"])
 
     monkeypatch.setattr(mod, "run_benchmark_suite", engine)
-    monkeypatch.setattr(mod, "_archive_logs", lambda gpu: calls["archived"].append(gpu))
     monkeypatch.setattr(mod, "_detected_device", lambda: None)
 
     def run(*argv):
@@ -189,13 +188,12 @@ def test_run_bench_requires_gpu_and_has_no_default(run_bench, results, capsys):
     assert not results.exists() and run_bench.calls["backends"] == []
 
 
-def test_run_bench_writes_into_the_gpu_namespace_and_archives_only_that_gpu(run_bench, results, capsys):
+def test_run_bench_writes_only_into_the_gpu_namespace(run_bench, results, capsys):
     run_bench("--gpu", "B200", "--operator", "mul2")
     assert (results / "B200/csv/mul2_default.csv").is_file()
     assert (results / "B200/logs/time_measurement_logs/mul2_default_triton-cutile-tilelang.json").is_file()
     assert (results / "B200/logs/autotune_logs/mul2_default_triton-cutile-tilelang.json").is_file()
     assert sorted(p.name for p in results.iterdir()) == ["B200"]
-    assert run_bench.calls["archived"] == ["B200"]
     assert "GPU/result namespace: B200" in capsys.readouterr().out
     # the default backend set is the GPU one: NKI is not part of it
     assert run_bench.calls["backends"] == [{"triton", "cutile", "tilelang"}]
@@ -203,11 +201,27 @@ def test_run_bench_writes_into_the_gpu_namespace_and_archives_only_that_gpu(run_
     assert "nki" not in header and "tilelang_ms" in header       # NKI only runs when named
 
 
+def test_a_benchmark_run_only_writes_results(run_bench, results, monkeypatch, capsys):
+    """The runner produces files under results/<gpu>/ and does nothing else: it
+    starts no process and performs no Git operation. Backing results up is not
+    part of running a benchmark."""
+    def forbidden(*args, **kwargs):
+        raise AssertionError(f"run_bench.py started a process: {args}")
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    run_bench("--gpu", "B200", "--operator", "mul2")
+    assert (results / "B200/csv/mul2_default.csv").is_file()
+    for flag in ("--no-archive", "--archive"):                     # removed, not kept as a no-op
+        with pytest.raises(SystemExit) as e:
+            run_bench("--gpu", "B200", "--operator", "mul2", flag)
+        assert e.value.code == 2 and "unrecognized arguments" in capsys.readouterr().err
+
+
 def test_same_operator_on_two_gpus_does_not_collide(run_bench, results):
-    run_bench("--gpu", "B200", "--operator", "mul2", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2")
     b200 = results / "B200/csv/mul2_default.csv"
     before = b200.read_bytes()
-    run_bench("--gpu", "GH200", "--operator", "mul2", "--autotune", "--no-archive")
+    run_bench("--gpu", "GH200", "--operator", "mul2", "--autotune")
     assert b200.read_bytes() == before
     assert (results / "GH200/csv/mul2_autotune.csv").is_file()
     assert (results / "GH200/logs/time_measurement_logs/mul2_autotune_triton-cutile-tilelang.json").is_file()
@@ -216,7 +230,7 @@ def test_same_operator_on_two_gpus_does_not_collide(run_bench, results):
 
 def test_explicit_output_paths_win_but_the_csv_stays_in_the_namespace(run_bench, results, tmp_path):
     out, tune = tmp_path / "custom/t.json", tmp_path / "custom/a.json"
-    run_bench("--gpu", "B200", "--operator", "mul2", "--no-archive",
+    run_bench("--gpu", "B200", "--operator", "mul2",
               "--output", str(out), "--autotune-log", str(tune))
     assert out.is_file() and tune.is_file()
     assert not (results / "B200/logs").exists()
@@ -225,12 +239,12 @@ def test_explicit_output_paths_win_but_the_csv_stays_in_the_namespace(run_bench,
 
 def test_tilelang_merge_touches_only_the_current_gpu(run_bench, results):
     for gpu in ("B200", "GH200"):
-        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
+        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "triton,cutile")
     b200, gh200 = (results / g / "csv/mul2_default.csv" for g in ("B200", "GH200"))
     gh200_before = gh200.read_bytes()
     frozen = [r["triton_ms"] for r in csv.DictReader(b200.open())]
 
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
 
     rows = list(csv.DictReader(b200.open()))
     assert all(r["tilelang_ms"] == "1.0000" for r in rows)       # merged into B200
@@ -248,7 +262,7 @@ def frozen_view(path):
 def campaign(run_bench, results):
     """B200 and GH200 each hold a frozen torch/triton/cutile CSV (torch_ms = 2.0)."""
     for gpu in ("B200", "GH200"):
-        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
+        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "triton,cutile")
     return results / "B200/csv/mul2_default.csv", results / "GH200/csv/mul2_default.csv"
 
 
@@ -272,33 +286,32 @@ def test_nki_merges_into_the_csv_of_its_campaign(run_bench, results, campaign):
     assert sorted(p.name for p in results.iterdir()) == ["B200", "GH200"]
 
 
-def test_nki_logs_live_in_the_campaign_namespace_and_are_archived_with_it(run_bench, results, campaign):
+def test_nki_logs_live_in_the_campaign_namespace(run_bench, results, campaign):
     run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
     timing = json.loads((results / "B200/logs/time_measurement_logs/mul2_default_nki.json").read_text())
     assert "nki_ms" in timing[0]
     assert (results / "B200/logs/autotune_logs/mul2_default_nki.json").is_file()
     # the engine is told where the Neuron profiling flow keeps its artifacts
     assert run_bench.calls["logs_dir"][-1] == results / "B200" / "logs"
-    assert run_bench.calls["archived"] == ["B200"]                 # one archive call, for this namespace
 
 
 def test_nki_columns_survive_a_later_tilelang_merge(run_bench, campaign):
     b200, _ = campaign
     run_bench.calls["torch_ms"] = 5.0
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
     nki = [[r[c] for c in NKI_COLUMNS] for r in read_csv(b200)[1]]
     run_bench.calls["torch_ms"] = 2.0
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
     header, rows = read_csv(b200)
     assert [[r[c] for c in NKI_COLUMNS] for r in rows] == nki
     assert "tilelang_ms" in header
 
 
 def test_nki_runs_only_when_named(run_bench):
-    run_bench("--gpu", "B200", "--operator", "mul2", "--no-archive")
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "all", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "all")
     assert all("nki" not in b for b in run_bench.calls["backends"])
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
     assert run_bench.calls["backends"][-1] == {"nki"}
 
 
@@ -314,17 +327,6 @@ def test_nki_profiling_artifacts_are_placed_under_the_namespace_logs():
     params = inspect.signature(nki_orchestrator.profile_case_on_neuron).parameters
     assert params["base_dir"].default is inspect.Parameter.empty
     assert params["index_path"].default is inspect.Parameter.empty
-
-
-def test_run_bench_passes_its_gpu_to_the_archive_script(monkeypatch):
-    mod = load_script("run_bench")
-    seen = {}
-    monkeypatch.setattr(mod.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd, **kw) or
-                        subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr=""))
-    monkeypatch.chdir("/")                                         # started from outside the repository
-    mod._archive_logs("GH200")
-    assert seen["cmd"][-2:] == ["--gpu", "GH200"] and seen["cmd"][1].endswith("archive_logs.sh")
-    assert seen["cwd"] == paths.REPO_ROOT                          # ...the archive still runs inside it
 
 
 # --------------------------------------------------------------------------
@@ -351,7 +353,7 @@ def test_runs_of_one_operator_never_overwrite_each_others_raw_json(run_bench, re
             ("B200", "tilelang", False), ("B200", "nki", False), ("GH200", "triton,cutile", False)]
     expected = {}
     for gpu, backends, autotune in runs:
-        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", backends, "--no-archive",
+        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", backends,
                   *(["--autotune"] if autotune else []))
         name = f"mul2_{'autotune' if autotune else 'default'}_{backends.replace(',', '-')}.json"
         for kind in ("time_measurement_logs", "autotune_logs"):
@@ -369,8 +371,8 @@ def test_runs_of_one_operator_never_overwrite_each_others_raw_json(run_bench, re
 
 
 def test_backend_order_on_the_command_line_does_not_change_the_file(run_bench, results):
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "cutile,triton", "--no-archive")
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "cutile,triton")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile")
     assert [p.name for p in (results / "B200/logs/time_measurement_logs").iterdir()] == \
         ["mul2_default_triton-cutile.json"]
 
@@ -378,10 +380,10 @@ def test_backend_order_on_the_command_line_does_not_change_the_file(run_bench, r
 def test_a_repeated_tilelang_run_with_other_cases_is_not_refused(run_bench, results, monkeypatch):
     """The autotune log is one file per selection, so a TileLang run no longer
     merges into (and can no longer be refused by) a combined log."""
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
     monkeypatch.setattr(run_bench.module, "run_benchmark_suite",
                         lambda *a, **kw: fake_results({"tilelang"})[:1])     # a --case-indices subset
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
     log = json.loads((results / "B200/logs/autotune_logs/mul2_default_tilelang.json").read_text())
     assert len(log) == 1
 
