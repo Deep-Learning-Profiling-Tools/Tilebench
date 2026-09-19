@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tilebench"
+version = "0.1.0"
+description = "Controlled performance evaluation and bottleneck diagnosis for tile-based programming models"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# Only the framework packages are installed. benchmarks.llm_generated is the
+# LLM pipeline's local output directory: generated trajectories and kernels are
+# experiment artifacts, Git-ignored and archived separately, not part of the
+# installable package, so they are excluded from the distribution.
+[tool.setuptools.packages.find]
+include = ["tilebench*"]
+exclude = ["tilebench.benchmarks.llm_generated*"]
+
+[tool.setuptools.package-data]
+"tilebench.data" = ["peak_performance/*.json"]
+"tilebench.benchmarks" = ["operators/*/config.yaml"]
+"tilebench.llm_codegen" = ["*.md", "problems/*.md"]
+# NCU metadata is one directory per hardware: profiling/metadata/<hardware>/*.json
+"tilebench.profiling" = ["metadata/*/*.json", "*.sh", "*.sbatch"]
