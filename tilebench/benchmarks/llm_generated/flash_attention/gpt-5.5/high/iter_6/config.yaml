@@ -1,0 +1,28 @@
+verify:
+  atol: 5e-3
+  rtol: 5e-3
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+case_defaults:
+  batch_size: 4
+  n_heads: 32
+  head_dim: 128
+  causal: true
+
+case_grid:
+  seq_len: [20480]
+  dtype: ["fp16"]
+
+metrics:
+  flops_expr: "4 * batch_size * n_heads * seq_len * seq_len * head_dim"
+  bytes_expr: "4 * batch_size * n_heads * seq_len * head_dim * dtype_size"
+  plots:
+    - latency_ms
+    - bandwidth_GBs
+    - speedup

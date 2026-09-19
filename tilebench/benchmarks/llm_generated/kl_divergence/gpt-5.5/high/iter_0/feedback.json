@@ -1,0 +1,86 @@
+{
+  "op": "kl_divergence",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/kl_divergence/gpt-5.5/high/iter_0",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "rows": 4096,
+        "cols": 16384
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/kl_divergence/gpt-5.5/high/iter_0/impl_cutile.py\", line 82, in run\n    kernel = _kl_divergence_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "rows": 4096,
+        "cols": 16384
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/kl_divergence/gpt-5.5/high/iter_0/impl_cutile.py\", line 82, in run\n    kernel = _kl_divergence_kernel.with_hints(occupancy=occupancy)\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "rows": 4096,
+        "cols": 16384
+      },
+      "problem_size": 67108864,
+      "latency_ms": 0.08893915,
+      "torch_latency_ms": 0.37608284999999997,
+      "speedup_vs_torch": 4.228541086799233,
+      "cfg": {
+        "BLOCK_N": 2048,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "flops": 268435456.0,
+      "bytes": 536887296.0,
+      "AI": 0.4999847416765846,
+      "measured_bw_GBs": 6036.568777641793,
+      "measured_perf_TFLOPS": 3.0181922809021673,
+      "ceiling_TFLOPS": 3.2696002197198575,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.9231074376306376,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.9231074376306376,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.9231074376306376,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 1.4326040744781494,
+    "iter_total_s": 384.72172594070435
+  },
+  "elapsed_s": 4.567981719970703,
+  "llm_usage": {
+    "elapsed_s": 380.0964777469635,
+    "ttft_s": 368.37244391441345,
+    "input_tokens": 33480,
+    "cached_input_tokens": 0,
+    "output_tokens": 18858,
+    "reasoning_tokens": 17610,
+    "response_chars": 4896
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

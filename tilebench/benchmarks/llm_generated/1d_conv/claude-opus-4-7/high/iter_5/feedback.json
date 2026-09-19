@@ -1,0 +1,142 @@
+{
+  "op": "1d_conv",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/claude-opus-4-7/high/iter_5",
+  "n_cases": 2,
+  "n_combos_attempted": 4,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 19973015 / 19999874 (99.9%)\nGreatest absolute difference: 0.050380706787109375 at index (11304444,) (up to 1e-05 allowed)\nGreatest relative difference: 3698.009033203125 at index (1135772,) (up to 1.3e-06 allowed)"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 129 / 19999874 (0.0%)\nGreatest absolute difference: 2.09808349609375e-05 at index (15040981,) (up to 1e-05 allowed)\nGreatest relative difference: 0.0019874756690114737 at index (13423976,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 19973015 / 19999874 (99.9%)\nGreatest absolute difference: 0.050380706787109375 at index (11304444,) (up to 1e-05 allowed)\nGreatest relative difference: 3698.009033203125 at index (1135772,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 129 / 19999874 (0.0%)\nGreatest absolute difference: 2.09808349609375e-05 at index (15040981,) (up to 1e-05 allowed)\nGreatest relative difference: 0.0019874756690114737 at index (13423976,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp16"
+      },
+      "problem_size": 20000000,
+      "latency_ms": 0.149036,
+      "torch_latency_ms": 5.3500402000000005,
+      "speedup_vs_torch": 35.8976368125822,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 256,
+        "BLOCK_K": 32,
+        "NUM_K_ITERS": 12,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "flops": 5079967996.0,
+      "bytes": 80000002.0,
+      "AI": 63.49959836251004,
+      "measured_bw_GBs": 536.7830725462304,
+      "measured_perf_TFLOPS": 34.08550951447972,
+      "ceiling_TFLOPS": 415.24927353179817,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.08208445309145034,
+      "bound_by": "bandwidth"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp16"
+      },
+      "problem_size": 20000000,
+      "latency_ms": 0.0855182,
+      "torch_latency_ms": 5.34968995,
+      "speedup_vs_torch": 62.55615705194918,
+      "cfg": {
+        "BLOCK_M": 64,
+        "BLOCK_N": 256,
+        "BLOCK_K": 32,
+        "NUM_K_ITERS": 12,
+        "occupancy": 2
+      },
+      "flops": 5079967996.0,
+      "bytes": 80000002.0,
+      "AI": 63.49959836251004,
+      "measured_bw_GBs": 935.4734079997006,
+      "measured_perf_TFLOPS": 59.40218568678948,
+      "ceiling_TFLOPS": 415.24927353179817,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.14305187142546724,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.08208445309145034,
+  "report_arith_mean_cutile": 0.14305187142546724,
+  "stop_score_triton": 0.08208445309145034,
+  "stop_score_cutile": 0.14305187142546724,
+  "timing_breakdown": {
+    "evaluator_total_s": 11.213672399520874,
+    "iter_total_s": 402.7289695739746
+  },
+  "elapsed_s": 14.524490356445312,
+  "llm_usage": {
+    "elapsed_s": 388.1477675437927,
+    "ttft_s": 360.24418473243713,
+    "input_tokens": 57945,
+    "cached_input_tokens": 0,
+    "output_tokens": 34133,
+    "reasoning_tokens": null,
+    "response_chars": 5866
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

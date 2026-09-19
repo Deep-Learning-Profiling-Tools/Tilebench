@@ -1,0 +1,110 @@
+{
+  "op": "matmul_int8",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_int8/gpt-5.5/high/iter_5",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 2,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [],
+  "verify_failures_triton": [],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "int8",
+      "params": {
+        "M": 2048,
+        "N": 2048,
+        "K": 20480,
+        "dtype": "int8"
+      },
+      "problem_size": 171798691840,
+      "latency_ms": 0.48938754999999995,
+      "torch_latency_ms": 3.4379543999999997,
+      "speedup_vs_torch": 7.025014020074684,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 256,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "LOOP_STAGES": 4,
+        "SPLIT_K": 4,
+        "num_warps": 8,
+        "num_stages": 4,
+        "LOAD_MASKS": 0,
+        "ATOMIC_SPLITK": 1,
+        "ZERO_BLOCK_SIZE": 1024,
+        "zero_num_warps": 4,
+        "zero_num_stages": 2
+      },
+      "flops": 171798691840.0,
+      "bytes": 69206016.0,
+      "AI": 2482.4242424242425,
+      "measured_bw_GBs": 141.41351981675874,
+      "measured_perf_TFLOPS": 351.0483497996629,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.07801074439992509,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "int8",
+      "params": {
+        "M": 2048,
+        "N": 2048,
+        "K": 20480,
+        "dtype": "int8"
+      },
+      "problem_size": 171798691840,
+      "latency_ms": 0.9120718000000001,
+      "torch_latency_ms": 3.4374398999999998,
+      "speedup_vs_torch": 3.7688259849717967,
+      "cfg": {
+        "TM": 128,
+        "TN": 128,
+        "TK": 128,
+        "SPLIT_K": 2,
+        "occupancy": 2,
+        "zero_occupancy": 4,
+        "ATOMIC_SPLITK": 1
+      },
+      "flops": 171798691840.0,
+      "bytes": 69206016.0,
+      "AI": 2482.4242424242425,
+      "measured_bw_GBs": 75.87781575968032,
+      "measured_perf_TFLOPS": 188.36092930403066,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.04185798428978459,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.07801074439992509,
+  "report_arith_mean_cutile": 0.04185798428978459,
+  "stop_score_triton": 0.07801074439992509,
+  "stop_score_cutile": 0.04185798428978459,
+  "timing_breakdown": {
+    "evaluator_total_s": 6.970896005630493,
+    "iter_total_s": 448.8643946647644
+  },
+  "elapsed_s": 10.09099793434143,
+  "llm_usage": {
+    "elapsed_s": 438.7162461280823,
+    "ttft_s": 412.5960285663605,
+    "input_tokens": 39039,
+    "cached_input_tokens": 0,
+    "output_tokens": 18632,
+    "reasoning_tokens": 16229,
+    "response_chars": 7761
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

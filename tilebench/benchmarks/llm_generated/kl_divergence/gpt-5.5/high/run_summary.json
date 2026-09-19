@@ -1,0 +1,128 @@
+{
+  "op": "kl_divergence",
+  "model": "gpt-5.5",
+  "effort": "high",
+  "threshold": 0.8,
+  "max_iters": 10,
+  "backends": [
+    "triton",
+    "cutile"
+  ],
+  "history": [
+    {
+      "iter": 0,
+      "active_backends": [
+        "triton",
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": false,
+          "stop_score": 0.9231074376306376,
+          "report_mean": 0.9231074376306376,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "BLOCK_N": 2048,
+            "num_warps": 8,
+            "num_stages": 2
+          },
+          "speedup_vs_torch": 4.228541086799233
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.0,
+          "report_mean": 0.0,
+          "verify_clean": false,
+          "verify_fail_count": 1,
+          "cfg": null,
+          "speedup_vs_torch": null
+        }
+      },
+      "iter_total_s": 384.72172594070435,
+      "llm_usage": {
+        "elapsed_s": 380.0964777469635,
+        "ttft_s": 368.37244391441345,
+        "input_tokens": 33480,
+        "cached_input_tokens": 0,
+        "output_tokens": 18858,
+        "reasoning_tokens": 17610,
+        "response_chars": 4896
+      }
+    },
+    {
+      "iter": 1,
+      "active_backends": [
+        "cutile"
+      ],
+      "per_backend": {
+        "triton": {
+          "skipped": true,
+          "frozen_at": 0
+        },
+        "cutile": {
+          "skipped": false,
+          "stop_score": 0.8540612014799523,
+          "report_mean": 0.8540612014799523,
+          "verify_clean": true,
+          "verify_fail_count": 0,
+          "cfg": {
+            "TILE": 2048,
+            "occupancy": 4
+          },
+          "speedup_vs_torch": 3.9108508947314773
+        }
+      },
+      "iter_total_s": 69.53331542015076,
+      "llm_usage": {
+        "elapsed_s": 63.46191358566284,
+        "ttft_s": 57.78847026824951,
+        "input_tokens": 16947,
+        "cached_input_tokens": 0,
+        "output_tokens": 3249,
+        "reasoning_tokens": 2588,
+        "response_chars": 2677
+      }
+    }
+  ],
+  "frozen": {
+    "triton": 0,
+    "cutile": 1
+  },
+  "best_clean": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.9231074376306376,
+      "report_mean": 0.9231074376306376
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8540612014799523,
+      "report_mean": 0.8540612014799523
+    }
+  },
+  "best_any": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.9231074376306376,
+      "report_mean": 0.9231074376306376
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8540612014799523,
+      "report_mean": 0.8540612014799523
+    }
+  },
+  "promotion": {
+    "triton": {
+      "iter": 0,
+      "stop_score": 0.9231074376306376,
+      "verify_clean": true
+    },
+    "cutile": {
+      "iter": 1,
+      "stop_score": 0.8540612014799523,
+      "verify_clean": true
+    }
+  }
+}

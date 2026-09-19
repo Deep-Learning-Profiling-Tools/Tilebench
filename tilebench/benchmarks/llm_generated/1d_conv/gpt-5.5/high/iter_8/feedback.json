@@ -1,0 +1,141 @@
+{
+  "op": "1d_conv",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/gpt-5.5/high/iter_8",
+  "n_cases": 2,
+  "n_combos_attempted": 4,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 33569 / 19999874 (0.2%)\nGreatest absolute difference: 7.62939453125e-05 at index (17782003,) (up to 1e-05 allowed)\nGreatest relative difference: 0.23076429963111877 at index (2860204,) (up to 1.3e-06 allowed)"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/gpt-5.5/high/iter_8/impl_cutile.py\", line 211, in run\n    _build_b_half_kernel.with_hints(occupancy=occupancy_build),\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/gpt-5.5/high/iter_8/impl_cutile.py\", line 198, in run\n    _build_b_split_kernel.with_hints(occupancy=occupancy_build),\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Tensor-likes are not close!\n\nMismatched elements: 33569 / 19999874 (0.2%)\nGreatest absolute difference: 7.62939453125e-05 at index (17782003,) (up to 1e-05 allowed)\nGreatest relative difference: 0.23076429963111877 at index (2860204,) (up to 1.3e-06 allowed)"
+    }
+  ],
+  "verify_failures_cutile": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/gpt-5.5/high/iter_8/impl_cutile.py\", line 211, in run\n    _build_b_half_kernel.with_hints(occupancy=occupancy_build),\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/1d_conv/gpt-5.5/high/iter_8/impl_cutile.py\", line 198, in run\n    _build_b_split_kernel.with_hints(occupancy=occupancy_build),\nAttributeError: 'kernel' object has no attribute 'with_hints'\n"
+    }
+  ],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "kernel_size": 127,
+        "input_size": 20000000,
+        "dtype": "fp16"
+      },
+      "problem_size": 20000000,
+      "latency_ms": 0.06344795,
+      "torch_latency_ms": 5.343925,
+      "speedup_vs_torch": 84.22533746165163,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 64,
+        "BLOCK_K": 64,
+        "K_TOTAL_PAD": 192,
+        "MMA_BLOCK_OUT": 8192,
+        "KERNEL_SIZE": 127,
+        "BUILD_BLOCK": 1024,
+        "build_num_warps": 4,
+        "build_num_stages": 2,
+        "mma_num_warps": 4,
+        "mma_num_stages": 3,
+        "BMAT_DTYPE_FP16": true,
+        "FP32_FP16_SPLIT4_TC": true,
+        "DENSE_B_ALL": true
+      },
+      "flops": 5079967996.0,
+      "bytes": 80000002.0,
+      "AI": 63.49959836251004,
+      "measured_bw_GBs": 1260.8760724341762,
+      "measured_perf_TFLOPS": 80.06512418446931,
+      "ceiling_TFLOPS": 415.24927353179817,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.19281219568067043,
+      "bound_by": "bandwidth"
+    }
+  ],
+  "report_arith_mean_triton": 0.19281219568067043,
+  "report_arith_mean_cutile": 0.0,
+  "stop_score_triton": 0.19281219568067043,
+  "stop_score_cutile": 0.0,
+  "timing_breakdown": {
+    "evaluator_total_s": 3.260634183883667,
+    "iter_total_s": 367.24503350257874
+  },
+  "elapsed_s": 6.460505723953247,
+  "llm_usage": {
+    "elapsed_s": 360.73626017570496,
+    "ttft_s": 326.199191570282,
+    "input_tokens": 38444,
+    "cached_input_tokens": 0,
+    "output_tokens": 18595,
+    "reasoning_tokens": 14625,
+    "response_chars": 14470
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

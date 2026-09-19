@@ -1,0 +1,55 @@
+# 3D Convolution with valid padding (no padding)
+# Using loose tolerances because cuTile GEMM with TF32 causes numerical differences.
+verify:
+  atol: 0.1
+  rtol: 1e-2
+
+benchmark:
+  warmup: 20
+  repeat: 100
+  use_cuda_graph: true
+  flush_l2: true
+  autotune: false
+
+# Sweep spatial dimensions (input_rows = input_cols) across 20 points.
+# input_cols defaults to input_rows when not specified.
+case_defaults:
+  input_depth: 64
+  kernel_depth: 3
+  kernel_rows: 3
+  kernel_cols: 3
+
+case_grid:
+  input_rows: [640] # 32, 64, ..., 640 (20 points)
+  dtype: ["fp16", "fp32"]
+
+# ---------------------------------------------------------------------------
+# Derived-metric expressions
+#   output_depth = input_depth - kernel_depth + 1
+#   output_rows  = input_rows - kernel_rows + 1
+#   output_cols  = input_rows - kernel_cols + 1  (input_cols = input_rows)
+#
+# FLOPs: 2 * output_depth * output_rows * output_cols * kernel_vol
+# Bytes:
+#   Read  input:  input_depth * input_rows * input_rows * dtype_size
+#   Read  kernel: kernel_depth * kernel_rows * kernel_cols * dtype_size
+#   Write output: output_depth * output_rows * output_cols * dtype_size
+# ---------------------------------------------------------------------------
+metrics:
+  flops_expr: >
+    2 * (input_depth - kernel_depth + 1)
+    * (input_rows - kernel_rows + 1)
+    * (input_rows - kernel_cols + 1)
+    * kernel_depth * kernel_rows * kernel_cols
+
+  bytes_expr: >
+    input_depth * input_rows * input_rows * dtype_size
+    + kernel_depth * kernel_rows * kernel_cols * dtype_size
+    + (input_depth - kernel_depth + 1)
+    * (input_rows - kernel_rows + 1)
+    * (input_rows - kernel_cols + 1) * dtype_size
+
+  plots:
+    - latency_ms
+    - tflops
+    - speedup

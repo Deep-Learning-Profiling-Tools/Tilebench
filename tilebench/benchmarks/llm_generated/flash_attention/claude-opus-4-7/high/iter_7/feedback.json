@@ -1,0 +1,98 @@
+{
+  "op": "flash_attention",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_7",
+  "n_cases": 1,
+  "n_combos_attempted": 2,
+  "n_combos_succeeded": 1,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_7/impl_triton.py\", line 173, in run\n    _attn_fwd_kernel[grid](\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 743, in run\n    launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/compiler/compiler.py\", line 482, in launch_met"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/flash_attention/claude-opus-4-7/high/iter_7/impl_triton.py\", line 173, in run\n    _attn_fwd_kernel[grid](\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 743, in run\n    launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/compiler/compiler.py\", line 482, in launch_met"
+    }
+  ],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "batch_size": 4,
+        "n_heads": 32,
+        "head_dim": 128,
+        "causal": true,
+        "seq_len": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 335544320,
+      "latency_ms": 75.45419345,
+      "torch_latency_ms": 14.17930075,
+      "speedup_vs_torch": 0.18791932034096906,
+      "cfg": {
+        "M": 128,
+        "N": 64,
+        "occupancy": 3
+      },
+      "flops": 27487790694400.0,
+      "bytes": 2684354560.0,
+      "AI": 10240.0,
+      "measured_bw_GBs": 35.5759492913909,
+      "measured_perf_TFLOPS": 364.29772074384283,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.1619100981083746,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.0,
+  "report_arith_mean_cutile": 0.1619100981083746,
+  "stop_score_triton": 0.0,
+  "stop_score_cutile": 0.1619100981083746,
+  "timing_breakdown": {
+    "evaluator_total_s": 8.65352725982666,
+    "iter_total_s": 84.3222987651825
+  },
+  "elapsed_s": 11.839937210083008,
+  "llm_usage": {
+    "elapsed_s": 72.42355036735535,
+    "ttft_s": 18.503617525100708,
+    "input_tokens": 65752,
+    "cached_input_tokens": 0,
+    "output_tokens": 6504,
+    "reasoning_tokens": null,
+    "response_chars": 10176
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}

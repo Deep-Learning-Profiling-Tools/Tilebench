@@ -1,0 +1,285 @@
+{
+  "op": "matmul_fp32_fp16_fp8",
+  "iter_dir": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_fp32_fp16_fp8/gpt-5.5/high/iter_3",
+  "n_cases": 4,
+  "n_combos_attempted": 8,
+  "n_combos_succeeded": 7,
+  "skipped_backends": [],
+  "compile_errors": {
+    "triton": null,
+    "cutile": null
+  },
+  "case_timeout_errors": {},
+  "verify_failures": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_fp32_fp16_fp8/gpt-5.5/high/iter_3/impl_triton.py\", line 113, in run\n    _matmul_kernel[grid](\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 743, in run\n    launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/compiler/compiler.py\", line 482, in launch_metadata"
+    }
+  ],
+  "verify_failures_triton": [
+    {
+      "backend": "triton",
+      "dtype": "fp32",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp32"
+      },
+      "error": "Traceback (most recent call last):\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/tools/llm_codegen/evaluator_runner.py\", line 227, in _run_one_case\n    output = impl.run(*inputs)\n  File \"/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/llm_generated/matmul_fp32_fp16_fp8/gpt-5.5/high/iter_3/impl_triton.py\", line 113, in run\n    _matmul_kernel[grid](\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 370, in <lambda>\n    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/runtime/jit.py\", line 743, in run\n    launch_metadata = kernel.launch_metadata(grid, stream, *bound_args.values())\n  File \"/projects/kzhou6/bcui2/env_software/miniconda3/envs/tilebench_env/lib/python3.10/site-packages/triton/compiler/compiler.py\", line 482, in launch_metadata"
+    }
+  ],
+  "verify_failures_cutile": [],
+  "roofline_per_combo": [
+    {
+      "backend": "triton",
+      "dtype": "fp16",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 1.2351697,
+      "torch_latency_ms": 0.4537303,
+      "speedup_vs_torch": 0.3673424793370498,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 256,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 8,
+        "num_stages": 2,
+        "input_precision": "tf32x3",
+        "EVEN_M": true,
+        "EVEN_N": true,
+        "EVEN_K": true
+      },
+      "flops": 687194767360.0,
+      "bytes": 369098752.0,
+      "AI": 1861.8181818181818,
+      "measured_bw_GBs": 298.8243251109544,
+      "measured_perf_TFLOPS": 556.3565616611223,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.24726958296049883,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "triton",
+      "dtype": "fp8_e4m3fn",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp8_e4m3fn"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 1.0727951,
+      "torch_latency_ms": 11.1779747,
+      "speedup_vs_torch": 10.41948709497275,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 256,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 8,
+        "num_stages": 2,
+        "input_precision": "tf32x3",
+        "EVEN_M": true,
+        "EVEN_N": true,
+        "EVEN_K": true
+      },
+      "flops": 687194767360.0,
+      "bytes": 184549376.0,
+      "AI": 3723.6363636363635,
+      "measured_bw_GBs": 172.02667685562696,
+      "measured_perf_TFLOPS": 640.5647894551346,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.14234773099002992,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "triton",
+      "dtype": "fp8_e5m2",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp8_e5m2"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 1.0759425,
+      "torch_latency_ms": 11.1678338,
+      "speedup_vs_torch": 10.379582366158044,
+      "cfg": {
+        "BLOCK_M": 128,
+        "BLOCK_N": 256,
+        "BLOCK_K": 64,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 8,
+        "num_stages": 2,
+        "input_precision": "tf32x3",
+        "EVEN_M": true,
+        "EVEN_N": true,
+        "EVEN_K": true
+      },
+      "flops": 687194767360.0,
+      "bytes": 184549376.0,
+      "AI": 3723.6363636363635,
+      "measured_bw_GBs": 171.52345594676294,
+      "measured_perf_TFLOPS": 638.6909777799464,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.14193132839554365,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp32",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp32"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 1321.85751975,
+      "torch_latency_ms": 10.68602335,
+      "speedup_vs_torch": 0.008084096198220384,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 256,
+        "TILE_K": 64,
+        "occupancy": 4
+      },
+      "flops": 687194767360.0,
+      "bytes": 738197504.0,
+      "AI": 930.9090909090909,
+      "measured_bw_GBs": 0.558454669259372,
+      "measured_perf_TFLOPS": 0.519870528474179,
+      "ceiling_TFLOPS": 1100.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.00047260957134016276,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp16",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp16"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 0.5354409,
+      "torch_latency_ms": 0.45326204999999997,
+      "speedup_vs_torch": 0.8465211566766752,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 256,
+        "TILE_K": 64,
+        "occupancy": 4
+      },
+      "flops": 687194767360.0,
+      "bytes": 369098752.0,
+      "AI": 1861.8181818181818,
+      "measured_bw_GBs": 689.336119074953,
+      "measured_perf_TFLOPS": 1283.4185198777307,
+      "ceiling_TFLOPS": 2250.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.5704082310567692,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp8_e4m3fn",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp8_e4m3fn"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 0.22309925,
+      "torch_latency_ms": 11.1770993,
+      "speedup_vs_torch": 50.09922400008068,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 256,
+        "TILE_K": 64,
+        "occupancy": 4
+      },
+      "flops": 687194767360.0,
+      "bytes": 184549376.0,
+      "AI": 3723.6363636363635,
+      "measured_bw_GBs": 827.2075141444896,
+      "measured_perf_TFLOPS": 3080.219979941663,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.6844933288759251,
+      "bound_by": "compute"
+    },
+    {
+      "backend": "cutile",
+      "dtype": "fp8_e5m2",
+      "params": {
+        "M": 4096,
+        "N": 4096,
+        "K": 20480,
+        "dtype": "fp8_e5m2"
+      },
+      "problem_size": 687194767360,
+      "latency_ms": 0.24665884999999999,
+      "torch_latency_ms": 11.168105050000001,
+      "speedup_vs_torch": 45.277536362469874,
+      "cfg": {
+        "TILE_M": 128,
+        "TILE_N": 256,
+        "TILE_K": 64,
+        "occupancy": 4
+      },
+      "flops": 687194767360.0,
+      "bytes": 184549376.0,
+      "AI": 3723.6363636363635,
+      "measured_bw_GBs": 748.1968556976569,
+      "measured_perf_TFLOPS": 2786.0130190341847,
+      "ceiling_TFLOPS": 4500.0,
+      "ceiling_bw_GBs": 6539.4,
+      "roofline_pct": 0.6191140042298188,
+      "bound_by": "compute"
+    }
+  ],
+  "report_arith_mean_triton": 0.17718288078202415,
+  "report_arith_mean_cutile": 0.46862204343346336,
+  "stop_score_triton": 0.17718288078202415,
+  "stop_score_cutile": 0.46862204343346336,
+  "timing_breakdown": {
+    "evaluator_total_s": 64.2171700000763,
+    "iter_total_s": 389.84110045433044
+  },
+  "elapsed_s": 67.33494305610657,
+  "llm_usage": {
+    "elapsed_s": 322.4613981246948,
+    "ttft_s": 303.9429066181183,
+    "input_tokens": 39090,
+    "cached_input_tokens": 0,
+    "output_tokens": 13783,
+    "reasoning_tokens": 12022,
+    "response_chars": 5698
+  },
+  "active_backends": [
+    "triton",
+    "cutile"
+  ]
+}
