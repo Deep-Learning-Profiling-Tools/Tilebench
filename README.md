@@ -1,9 +1,7 @@
 # TileBench
-
 <div align="center">
   <img src="assets/tilebench_icon.png" alt="TileBench icon" width="120" />
 </div>
-
 **Controlled performance evaluation and bottleneck diagnosis for tile-based programming models.**
 
 TileBench is a modular accelerator benchmarking framework for comparing kernel implementations under standardized operator semantics, correctness checks, timing protocols, autotuning, and hardware-aware performance metrics.
