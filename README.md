@@ -260,7 +260,7 @@ outputs/profiling/<hardware>/
 └── kernel_counts.json
 ```
 
-Like the NCU reports, these files are generated data: they are written by `tilebench.profiling.ncu_catalogue` and `tilebench.profiling.probe_kernel_count`, ignored by Git, and not part of the installed package. Each GPU has its own directory, and the NCU tools take `--gpu` and refuse a GPU that has no metadata rather than borrowing another GPU's.
+Like the NCU reports, these files are generated data: they are written by `scripts/profiling/ncu_catalogue.py` and `scripts/profiling/probe_kernel_count.py`, ignored by Git, and not part of the installed package. Each GPU has its own directory, and the NCU tools take `--gpu` and refuse a GPU that has no metadata rather than borrowing another GPU's.
 
 Generated NCU reports are local artifacts, written to `outputs/ncu/<hardware>/`, and are not tracked. The released artifact contains 220 raw Nsight Compute reports, the paper's B200 profiles. They cover 45 operators for Triton and cuTile across every profiled dtype (11.8 GB) and are hosted on [Hugging Face](https://huggingface.co/datasets/bcui2/NCU_report). Downloading them requires a free Hugging Face login.
 
@@ -302,10 +302,11 @@ Tilebench/
 │   ├── benchmarks/
 │   │   ├── operators/           # 45 operator definitions and backend implementations
 │   │   └── llm_generated/       # Local LLM-generated artifacts (Git-ignored)
-│   ├── profiling/               # NCU harness and profiling tools (source only)
+│   ├── profiling/               # NCU library: kernel selection, capture validation, catalogue
 │   ├── llm_codegen/             # Iterative LLM generation and evaluation pipeline
 │   └── paths.py                 # Repository/package resource resolution
 ├── scripts/                     # Benchmark, visualization, peak-measurement, artifact entry points
+│   └── profiling/               # NCU command-line tools and the harness NCU executes
 ├── artifacts/                   # Manifest of downloadable artifacts
 ├── skills/                      # Backend API/programming guides used by generation
 ├── tests/                       # Test suite

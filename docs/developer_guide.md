@@ -116,9 +116,9 @@ Supported derived views include latency, bandwidth, speedup, TFLOPS, percentage 
 Every script that reads or writes results takes the same `--gpu` label:
 
 ```bash
-python -m tilebench.profiling.aggregate_results --gpu B200   # results/B200/csv/ -> results/B200/aggregate/
+python scripts/aggregate_results.py --gpu B200               # results/B200/csv/ -> results/B200/aggregate/
 python scripts/plot_sweep_max.py --gpu B200                   # -> results/B200/figures/sweep_max_latency.png
-python -m tilebench.profiling.ncu_catalogue --gpu B200        # -> outputs/profiling/B200/ncu_catalogue.json
+python scripts/profiling/ncu_catalogue.py --gpu B200          # -> outputs/profiling/B200/ncu_catalogue.json
 ```
 
 `ncu_catalogue` records the Triton and cuTile autotune winners, and reads them from exactly one file per operator: `results/<gpu>/logs/autotune_logs/<op>_autotune_triton-cutile.json`. Pass `--tile-language` to read the winners of another autotune run instead; the selection must include `triton` and `cutile`.
@@ -249,13 +249,20 @@ These files are framework inputs. Detailed measurements produced by `scripts/mea
 
 ## Profiling
 
-Profiling support lives under:
+Profiling support is split by role, not by file type:
 
 ```text
-tilebench/profiling/
+tilebench/profiling/     # importable library, installed with the package
+├── ncu_kernel_select.py # kernel selection, capture validation, metadata loading
+└── ncu_catalogue.py     # sweep-max cases and catalogue entries
+scripts/profiling/       # command-line tools, run from a checkout, not installed
+├── ncu_catalogue.py     # build a GPU's catalogue
+├── probe_kernel_count.py
+├── ncu_one.py, ncu_driver.py, ncu_writeup.py, hf_upload.py
+└── ncu_generic_harness.py   # the process NCU profiles; the drivers start it by path
 ```
 
-`tilebench/profiling/` holds Python source only. Cluster launch scripts and measured data do not belong in the installable package: site-specific job scripts stay out of the repository, and everything the tools generate goes under the Git-ignored `outputs/`.
+A module belongs in `tilebench/profiling/` only if other code imports it: no `argparse`, no `__main__`, nothing that runs at import. A program goes under `scripts/`, and imports the library. Campaign-specific scripts, cluster job files and measured data do not belong in either: everything the tools generate goes under the Git-ignored `outputs/`. The tools put the repository root on `sys.path` themselves, so they run from any directory without `PYTHONPATH`.
 
 NCU metadata is generated per hardware, because autotune winners, kernel launch counts and kernel names are measured on one GPU:
 
@@ -268,11 +275,11 @@ outputs/profiling/<gpu>/
 Nothing is committed for any GPU, and nothing here is needed to run benchmarks: only the NCU tools read these files. `scripts/plot_sweep_max.py` does not need them either; it derives each operator's sweep-max case from `config.yaml` with the same rule as the catalogue (`ncu_catalogue.sweep_max_cases`). Use `ncu_catalogue_path`, `kernel_counts_path` and `ncu_output_dir` from `tilebench/paths.py`; there is no global copy. Every tool that touches this metadata takes `--gpu`, required and without a default:
 
 ```bash
-python -m tilebench.profiling.ncu_catalogue --gpu GH200         # writes outputs/profiling/GH200/ncu_catalogue.json
-python -m tilebench.profiling.probe_kernel_count --gpu GH200    # writes outputs/profiling/GH200/kernel_counts.json
-python -m tilebench.profiling.ncu_one --gpu GH200 mul2 fp16     # one operator
-python -m tilebench.profiling.ncu_driver --gpu GH200            # the whole catalogue
-python -m tilebench.profiling.ncu_writeup --gpu GH200
+python scripts/profiling/ncu_catalogue.py --gpu GH200           # writes outputs/profiling/GH200/ncu_catalogue.json
+python scripts/profiling/probe_kernel_count.py --gpu GH200      # writes outputs/profiling/GH200/kernel_counts.json
+python scripts/profiling/ncu_one.py --gpu GH200 mul2 fp16       # one operator
+python scripts/profiling/ncu_driver.py --gpu GH200              # the whole catalogue
+python scripts/profiling/ncu_writeup.py --gpu GH200
 ```
 
 Generated NCU reports are written under `outputs/ncu/<gpu>/` and are ignored by Git, so the reports of two GPUs never collide. The released Hugging Face dataset holds the paper's 220 B200 reports; `hf_upload.py --gpu <gpu>` uploads under a per-GPU prefix and never writes over them.
