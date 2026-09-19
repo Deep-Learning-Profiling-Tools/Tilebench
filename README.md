@@ -5,10 +5,9 @@
   </picture>
 </h1>
 
-**Controlled performance evaluation and bottleneck diagnosis for tile-based programming models.**
+## Overview
 
 TileBench is a modular accelerator benchmarking framework for comparing kernel implementations under standardized operator semantics, correctness checks, timing protocols, autotuning, and hardware-aware performance metrics.
-
 It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, and **AWS Neuron NKI** backends.
 
 [<img src="assets/icons/huggingface.svg" height="16" alt=""> NCU Reports](https://huggingface.co/datasets/bcui2/NCU_report) | [<img src="assets/icons/googledrive.svg" height="16" alt=""> LLM Artifacts](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing) | [<img src="assets/icons/github.svg" height="16" alt=""> Raw Logs](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) | [<img src="assets/icons/book.svg" height="16" alt=""> Developer Guide](docs/developer_guide.md)
