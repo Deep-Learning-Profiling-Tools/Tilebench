@@ -372,6 +372,7 @@ def write_summary(ops: dict, catalogue: list) -> None:
 
 
 def main() -> None:
+    NCU_DIR.mkdir(parents=True, exist_ok=True)
     catalogue = json.loads((NCU_CATALOGUE).read_text())
     cat_by_op = {c["op"]: c for c in catalogue}
     ops = collect_ops()

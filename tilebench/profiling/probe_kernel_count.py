@@ -102,6 +102,7 @@ def main() -> None:
                     counts.append({"op": op, "dtype": dt, "backend": backend,
                                    "count": None, "error": f"{type(e).__name__}: {e}"[:200]})
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(counts, indent=2))
 
     # Print summary: ops where ANY backend launches >1 kernel
