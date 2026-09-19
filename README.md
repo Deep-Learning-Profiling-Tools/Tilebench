@@ -269,9 +269,7 @@ The frozen trajectories behind the paper's LLM results (45 operators × 2 models
 python scripts/fetch_artifacts.py --artifact llm-aacl2026
 ```
 
-> **TODO:** the download link is not published yet. `artifacts/manifest.json` still holds placeholders for the URL and checksum, and the command reports that instead of downloading.
-
-An existing, non-empty directory is left alone unless `--force` is given.
+The archive (28 MB, 6140 files) is also available directly from [Google Drive](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing); its URL and checksum are recorded in `artifacts/manifest.json`. An existing, non-empty directory is left alone unless `--force` is given.
 
 The generation workflow is separate from the manually implemented benchmark path. Generated implementations are evaluated under their own protocol and do not modify the manually maintained kernels.
 
