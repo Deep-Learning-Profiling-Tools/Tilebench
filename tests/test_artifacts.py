@@ -5,6 +5,7 @@ never this checkout's own artifact directory."""
 import importlib.util
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -65,15 +66,23 @@ def published(tmp_path):
 
 # ── manifest ─────────────────────────────────────────────────────────────────
 
-def test_repository_manifest_is_valid_and_unpublished():
+def test_repository_manifest_is_valid():
     manifest = fa.load_manifest()
     e = fa.get_artifact(manifest, "llm-aacl2026")
     assert e["provides"] == [LLM] and e["destination"] == "."
     assert e["archive"] == "tilebench-aacl2026-llm-artifacts.tar.gz"
-    # No URL or checksum is invented: both stay placeholders until the upload exists.
-    if e["url"].startswith(fa.PLACEHOLDER):
-        with pytest.raises(fa.ArtifactError, match="not been published"):
-            fa.require_published("llm-aacl2026", e)
+    # Every entry is either fully published or still an explicit placeholder,
+    # never a half-filled or made-up value.
+    for name in manifest:
+        entry_ = fa.get_artifact(manifest, name)
+        if entry_["url"].startswith(fa.PLACEHOLDER) or entry_["sha256"].startswith(fa.PLACEHOLDER):
+            with pytest.raises(fa.ArtifactError, match="not been published"):
+                fa.require_published(name, entry_)
+        else:
+            fa.require_published(name, entry_)
+            assert re.fullmatch(r"[0-9a-f]{64}", entry_["sha256"])
+            assert entry_["url"].startswith("https://")
+            fa.direct_url(entry_["url"])                  # parses; a folder link would raise
 
 
 def test_unknown_artifact_lists_the_available_ones():
