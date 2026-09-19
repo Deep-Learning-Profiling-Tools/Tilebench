@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-## Overview
+## 👋 Overview
 
 TileBench is a modular accelerator benchmarking framework for comparing kernel implementations under standardized operator semantics, correctness checks, timing protocols, autotuning, and hardware-aware performance metrics.
 It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, and **AWS Neuron NKI** backends.
@@ -14,22 +14,22 @@ It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, 
 
 ![TileBench overview](assets/overview.png)
 
-## Contents
+## 📑 Contents
 
-- [Features](#features)
-- [Results](#results)
-- [Benchmark Suite](#benchmark-suite)
-- [Backend Support](#backend-support)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Evaluation Methodology](#evaluation-methodology)
-- [LLM Kernel Generation](#llm-kernel-generation)
-- [Project Structure](#project-structure)
-- [Recorded Results](#recorded-results)
-- [Developer Guide](#developer-guide)
-- [Attribution](#attribution)
+- [Features](#-features)
+- [Results](#-results)
+- [Benchmark Suite](#-benchmark-suite)
+- [Backend Support](#-backend-support)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Evaluation Methodology](#-evaluation-methodology)
+- [LLM Kernel Generation](#-llm-kernel-generation)
+- [Project Structure](#-project-structure)
+- [Recorded Results](#-recorded-results)
+- [Developer Guide](#-developer-guide)
+- [Attribution](#-attribution)
 
-## Features
+## ✨ Features
 
 - **45 operator tasks** covering point-wise, reduction/normalization, matrix multiplication/attention, stencil/convolution, and data-layout workloads.
 - **Shared correctness harness** using PyTorch references and dtype-aware verification.
@@ -40,7 +40,7 @@ It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, 
 - **Profiling support** with Nsight Compute metadata and kernel-count validation.
 - **Iterative LLM kernel generation** with correctness and performance feedback.
 
-## Results
+## 📊 Results
 
 ### Pairwise wins and losses
 
@@ -74,7 +74,7 @@ Regenerate the figure with:
 python scripts/plot_sweep_max.py
 ```
 
-## Benchmark Suite
+## 🧩 Benchmark Suite
 
 TileBench contains **45 operators**, with 26 task definitions derived from TritonBench and 19 from LeetGPU. Each operator provides a PyTorch reference, backend implementations, a case grid, benchmark controls, and metric formulas.
 
@@ -95,7 +95,7 @@ tilebench/benchmarks/operators/
 
 Each configured dtype is evaluated over the operator's declared input-size sweep.
 
-## Backend Support
+## 🔌 Backend Support
 
 | Backend | Accelerator | Role | Results |
 |:---|:---|:---|:---:|
@@ -109,7 +109,7 @@ Backend coverage is operator-specific. Unsupported dtype/backend combinations ar
 
 NKI runs on Trainium and is compared against a device-local PyTorch reference on the same platform.
 
-## Installation
+## 📦 Installation
 
 TileBench requires **Python 3.10+**.
 
@@ -126,7 +126,7 @@ The Python dependencies are declared in `requirements.txt`. NVIDIA CUDA and AWS 
 
 The NKI backend requires a configured AWS Trainium/Neuron environment.
 
-## Quick Start
+## 🚀 Quick Start
 
 ### Run one operator
 
@@ -189,7 +189,7 @@ python scripts/run_bench_all.py --help
 
 Use the command options to select the desired backends and execution mode.
 
-## Evaluation Methodology
+## 🔬 Evaluation Methodology
 
 ### Correctness
 
@@ -249,7 +249,7 @@ tilebench/profiling/
 
 Generated NCU reports are local artifacts and are not tracked. The released artifact contains 220 raw Nsight Compute reports. They cover 45 operators for Triton and cuTile across every profiled dtype (11.8 GB) and are hosted on [Hugging Face](https://huggingface.co/datasets/bcui2/NCU_report). Downloading them requires a free Hugging Face login.
 
-## LLM Kernel Generation
+## 🤖 LLM Kernel Generation
 
 TileBench also includes an iterative LLM kernel-generation workflow under:
 
@@ -277,7 +277,7 @@ The archive (28 MB, 6140 files) is also available directly from [Google Drive](h
 
 The generation workflow is separate from the manually implemented benchmark path. Generated implementations are evaluated under their own protocol and do not modify the manually maintained kernels.
 
-## Project Structure
+## 📁 Project Structure
 
 ```text
 Tilebench/
@@ -303,7 +303,7 @@ Tilebench/
 └── README.md
 ```
 
-## Recorded Results
+## 💾 Recorded Results
 
 Only benchmark CSVs under `results/csv/` are version-controlled.
 
@@ -326,13 +326,13 @@ Everything else is a generated artifact, ignored on `main`:
 
 Maintainers back up artifacts with `scripts/archive_artifacts.sh --logs | --llm | --all` (add `--push` to publish), and build a downloadable snapshot with `python scripts/package_artifacts.py --artifact <name>`.
 
-## Developer Guide
+## 📘 Developer Guide
 
 Implementation details, CLI options, operator-authoring rules, tuning conventions, dtype handling, and profiling internals are documented separately:
 
 **[TileBench Developer Guide](docs/developer_guide.md)**
 
-## Attribution
+## 🤝 Attribution
 
 TileBench uses TritonBench and LeetGPU as sources of operator coverage and task semantics. TileBench implementations and configurations are maintained independently in this repository.
 
