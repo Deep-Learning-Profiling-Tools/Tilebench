@@ -25,13 +25,30 @@ if not HAS_CUDA:
     os.environ.setdefault("NEURON_RT_NUM_CORES", "1")
 
 
+def _nki_artifact_paths(logs_dir) -> dict:
+    """Where the NKI profiling flow keeps its artifacts: inside the run's result
+    namespace, results/<gpu>/logs/, next to the timing and autotune logs."""
+    if logs_dir is None:
+        raise ValueError(
+            "NKI profiling stores its artifacts under results/<gpu>/logs/; call "
+            "run_benchmark_suite(..., logs_dir=tilebench.paths.results_logs_dir(<gpu>))")
+    return {"base_dir": os.path.join(logs_dir, "nki_profiles"),
+            "index_path": os.path.join(logs_dir, "nki_neff_manifest.jsonl")}
+
+
 def _sync():
     """Synchronize the CUDA device when present; no-op on non-CUDA hosts."""
     if HAS_CUDA:
         torch.cuda.synchronize()
 
 
-def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None):
+def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backends=None,
+                        logs_dir=None):
+    # Only the Neuron profiling flow writes files from inside the engine; every
+    # other output is written by the caller. Resolved up front so a missing
+    # namespace fails before any case runs, not once per case.
+    nki_paths = None if HAS_CUDA else _nki_artifact_paths(logs_dir)
+
     config_path = operator_config(operator_name)
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -191,7 +208,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                     inputs=inputs, ref_output=ref_output, impl_nki=impl_nki,
                     block_size=block_size, autotune=autotune,
                     verify_atol=verify_atol, verify_rtol=verify_rtol,
-                    warmup=warmup, repeat=repeat)
+                    warmup=warmup, repeat=repeat, **nki_paths)
                 torch_stats = neuron_result["torch_stats"]
                 torch_ms    = neuron_result["torch_ms"]
                 if neuron_result.get("torch_err"):

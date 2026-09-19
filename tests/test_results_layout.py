@@ -95,26 +95,64 @@ def test_gitignore_tracks_only_the_per_hardware_summary_csvs(tmp_path):
 # the committed B200 data
 # --------------------------------------------------------------------------
 
-def test_b200_csvs_are_byte_identical_to_the_pre_migration_files():
-    """tests/data/b200_csv.sha256 was recorded from results/csv/ BEFORE the move
-    to results/B200/csv/. The CSVs are frozen paper results: regenerate the
-    manifest only when they are intentionally re-measured:
-        (cd results/B200/csv && sha256sum *.csv) > tests/data/b200_csv.sha256
+#: Columns measured on the GPU of the namespace. NKI_COLUMNS are the one legal
+#: extension: cross-hardware measurements from AWS Trainium, merged in by
+#: `run_bench.py --tile-language nki`, with speedup_nki = torch_nki_ms / nki_ms.
+FROZEN = ["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "speedup_triton",
+          "speedup_cutile", "triton_vs_cutile", "tilelang_ms", "speedup_tilelang"]
+NKI_COLUMNS = ["torch_nki_ms", "nki_ms", "speedup_nki"]
+MANIFEST = REPO / "tests" / "data" / "b200_csv.sha256"
+
+
+def read_csv(path):
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        return list(reader.fieldnames), list(reader)
+
+
+def frozen_digest(path):
+    """SHA256 of the GPU-measured columns only: blind to an NKI extension and to
+    line endings, sensitive to any change in a frozen value or row."""
+    _, rows = read_csv(path)
+    return hashlib.sha256(json.dumps([[r[c] for c in FROZEN] for r in rows]).encode()).hexdigest()
+
+
+def b200_csvs():
+    return sorted((REPO / "results" / "B200" / "csv").glob("*.csv"))
+
+
+def test_b200_frozen_columns_match_the_pre_migration_files():
+    """tests/data/b200_csv.sha256 holds, per file, the raw SHA256 recorded from
+    results/csv/ BEFORE the move to results/B200/csv/, and the digest of its
+    frozen columns. A file is either byte-identical to that state, or carries
+    the NKI extension with its frozen columns untouched. Regenerate only when
+    the B200 numbers are intentionally re-measured:
+        python tests/test_results_layout.py
     """
-    expected = dict(reversed(line.split()) for line in
-                    (REPO / "tests/data/b200_csv.sha256").read_text().splitlines())
-    csv_dir = REPO / "results" / "B200" / "csv"
-    actual = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in csv_dir.glob("*.csv")}
-    assert len(expected) == 90
-    assert actual == expected
+    expected = {name: (raw, frozen) for raw, frozen, name in
+                (line.split() for line in MANIFEST.read_text().splitlines())}
+    files = b200_csvs()
+    assert len(expected) == 90 and sorted(expected) == [p.name for p in files]
+    for p in files:
+        raw, frozen = expected[p.name]
+        header, _ = read_csv(p)
+        assert frozen_digest(p) == frozen, f"{p.name}: a frozen B200 column changed"
+        if header == FROZEN:
+            assert hashlib.sha256(p.read_bytes()).hexdigest() == raw, f"{p.name}: bytes changed"
     assert not (REPO / "results" / "csv").exists(), "the pre-migration directory is gone"
 
 
-def test_b200_csvs_hold_gpu_columns_only():
-    for p in sorted((REPO / "results" / "B200" / "csv").glob("*.csv")):
-        header = p.read_text().splitlines()[0].split(",")
-        assert not [c for c in header if "nki" in c], p.name           # no cross-hardware columns
+def test_b200_csv_schema_allows_only_the_nki_extension():
+    for p in b200_csvs():
+        header, rows = read_csv(p)
+        assert header[:len(FROZEN)] == FROZEN, p.name
+        assert header[len(FROZEN):] in ([], NKI_COLUMNS), p.name       # nothing else may be appended
         assert not {"gpu", "device", "hardware"} & set(header), p.name  # the directory names the GPU
+        if header[len(FROZEN):]:
+            for r in rows:                                              # never torch_ms / nki_ms
+                if "nan" not in (r["torch_nki_ms"], r["nki_ms"]):
+                    assert float(r["speedup_nki"]) == pytest.approx(
+                        float(r["torch_nki_ms"]) / float(r["nki_ms"]), abs=0.006), (p.name, r["params"])
 
 
 # --------------------------------------------------------------------------
@@ -125,12 +163,14 @@ BACKENDS = ("triton", "cutile", "tilelang", "nki")
 
 
 def fake_results(enabled, torch_ms=2.0):
+    """What the engine returns. For an NKI run torch_ms is the torch baseline
+    timed on the Neuron device, and nki_ms is half of it (speedup_nki = 2)."""
     rows = []
     for n in (1024, 2048):
         r = {"params": {"n": n}, "problem_size": n, "dtype": "fp16",
              "torch_ms": torch_ms, "torch_stats": {"mean": torch_ms}}
         for b in BACKENDS:
-            ms = 1.0 if b in enabled else float("nan")
+            ms = (torch_ms / 2 if b == "nki" else 1.0) if b in enabled else float("nan")
             r.update({f"{b}_ms": ms, f"{b}_stats": {}, f"{b}_ok": b in enabled, f"{b}_err": None,
                       f"speedup_{b}": torch_ms / ms if b in enabled else 0.0,
                       f"{b}_autotune_cfg": None})
@@ -141,16 +181,16 @@ def fake_results(enabled, torch_ms=2.0):
 @pytest.fixture
 def run_bench(results, tmp_path, monkeypatch):
     mod = load_script("run_bench")
-    calls = {"backends": [], "archived": []}
+    calls = {"backends": [], "archived": [], "logs_dir": [], "torch_ms": 2.0}
 
-    def engine(operator, benchmark_overrides=None, enabled_backends=None):
+    def engine(operator, benchmark_overrides=None, enabled_backends=None, logs_dir=None):
         calls["backends"].append(set(enabled_backends))
-        return fake_results(enabled_backends)
+        calls["logs_dir"].append(logs_dir)
+        return fake_results(enabled_backends, calls["torch_ms"])
 
     monkeypatch.setattr(mod, "run_benchmark_suite", engine)
     monkeypatch.setattr(mod, "_archive_logs", lambda gpu: calls["archived"].append(gpu))
     monkeypatch.setattr(mod, "_detected_device", lambda: None)
-    monkeypatch.setattr(mod, "NKI_OUTPUT_ROOT", tmp_path / "outputs" / "nki")
 
     def run(*argv):
         monkeypatch.setattr(sys, "argv", ["run_bench.py", *argv])
@@ -173,7 +213,7 @@ def test_run_bench_default_paths_are_scoped_by_gpu(results):
 def test_run_bench_requires_gpu_and_has_no_default(run_bench, results, capsys):
     with pytest.raises(SystemExit) as e:
         run_bench("--operator", "mul2")
-    assert e.value.code == 2 and "--gpu is required" in capsys.readouterr().err
+    assert e.value.code == 2 and "required: --gpu" in capsys.readouterr().err
     with pytest.raises(SystemExit):
         run_bench("--gpu", "../B200", "--operator", "mul2")
     assert not results.exists() and run_bench.calls["backends"] == []
@@ -190,7 +230,7 @@ def test_run_bench_writes_into_the_gpu_namespace_and_archives_only_that_gpu(run_
     # the default backend set is the GPU one: NKI is not part of it
     assert run_bench.calls["backends"] == [{"triton", "cutile", "tilelang"}]
     header = (results / "B200/csv/mul2_default.csv").read_text().splitlines()[0]
-    assert "nki" not in header and "tilelang_ms" in header
+    assert "nki" not in header and "tilelang_ms" in header       # NKI only runs when named
 
 
 def test_same_operator_on_two_gpus_does_not_collide(run_bench, results):
@@ -228,29 +268,82 @@ def test_tilelang_merge_touches_only_the_current_gpu(run_bench, results):
     assert gh200.read_bytes() == gh200_before                     # GH200 untouched
 
 
-@pytest.mark.parametrize("selection", ["nki", "triton,nki", "tilelang,nki"])
-def test_nki_never_enters_a_gpu_namespace(run_bench, results, selection):
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
-    frozen = (results / "B200/csv/mul2_default.csv").read_bytes()
-    with pytest.raises(SystemExit) as e:
-        run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", selection, "--no-archive")
-    assert e.value.code == 2
-    assert (results / "B200/csv/mul2_default.csv").read_bytes() == frozen
+def frozen_view(path):
+    _, rows = read_csv(path)
+    return [[r[c] for c in ("params", "dtype", "torch_ms", "triton_ms", "cutile_ms",
+                            "speedup_triton", "speedup_cutile", "triton_vs_cutile")] for r in rows]
 
 
-def test_nki_alone_writes_outside_results(run_bench, results, tmp_path):
-    run_bench("--operator", "mul2", "--tile-language", "nki")
-    nki = tmp_path / "outputs" / "nki"
-    assert (nki / "csv/mul2_default.csv").read_text().splitlines()[0] == \
-        "params,dtype,torch_ms,nki_ms,speedup_nki"
-    assert (nki / "logs/time_measurement_logs/mul2_results.json").is_file()
-    assert not results.exists()                                   # nothing under results/<gpu>/
-    assert run_bench.calls["archived"] == []                      # GPU log archive is not involved
+@pytest.fixture
+def campaign(run_bench, results):
+    """B200 and GH200 each hold a frozen torch/triton/cutile CSV (torch_ms = 2.0)."""
+    for gpu in ("B200", "GH200"):
+        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
+    return results / "B200/csv/mul2_default.csv", results / "GH200/csv/mul2_default.csv"
 
 
-def test_all_means_every_gpu_backend(run_bench):
+def test_nki_merges_into_the_csv_of_its_campaign(run_bench, results, campaign):
+    b200, gh200 = campaign
+    frozen, gh200_before = frozen_view(b200), gh200.read_bytes()
+
+    run_bench.calls["torch_ms"] = 5.0          # torch on the Neuron device, not the B200's 2.0
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
+
+    header, rows = read_csv(b200)
+    assert header[-3:] == NKI_COLUMNS                              # appended, names unchanged
+    for r in rows:
+        assert (r["torch_nki_ms"], r["nki_ms"], r["speedup_nki"]) == ("5.0000", "2.5000", "2.00")
+        assert r["torch_ms"] == "2.0000"                           # the B200 baseline is a different number
+        assert float(r["speedup_nki"]) == float(r["torch_nki_ms"]) / float(r["nki_ms"])
+        assert float(r["speedup_nki"]) != float(r["torch_ms"]) / float(r["nki_ms"])    # never torch_ms / nki_ms
+    # nki_ms is written as measured: B200 drift scaling (2.0 / 5.0) would have given 1.0
+    assert frozen_view(b200) == frozen                             # frozen GPU columns untouched
+    assert gh200.read_bytes() == gh200_before                      # another namespace is untouched
+    assert sorted(p.name for p in results.iterdir()) == ["B200", "GH200"]
+
+
+def test_nki_logs_live_in_the_campaign_namespace_and_are_archived_with_it(run_bench, results, campaign):
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
+    timing = json.loads((results / "B200/logs/time_measurement_logs/mul2_results.json").read_text())
+    assert "nki_ms" in timing[0]
+    assert (results / "B200/logs/autotune_logs/mul2_autotune.json").is_file()
+    # the engine is told where the Neuron profiling flow keeps its artifacts
+    assert run_bench.calls["logs_dir"][-1] == results / "B200" / "logs"
+    assert run_bench.calls["archived"] == ["B200"]                 # one archive call, for this namespace
+
+
+def test_nki_columns_survive_a_later_tilelang_merge(run_bench, campaign):
+    b200, _ = campaign
+    run_bench.calls["torch_ms"] = 5.0
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki", "--no-archive")
+    nki = [[r[c] for c in NKI_COLUMNS] for r in read_csv(b200)[1]]
+    run_bench.calls["torch_ms"] = 2.0
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    header, rows = read_csv(b200)
+    assert [[r[c] for c in NKI_COLUMNS] for r in rows] == nki
+    assert "tilelang_ms" in header
+
+
+def test_nki_runs_only_when_named(run_bench):
+    run_bench("--gpu", "B200", "--operator", "mul2", "--no-archive")
     run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "all", "--no-archive")
-    assert run_bench.calls["backends"] == [{"triton", "cutile", "tilelang"}]
+    assert all("nki" not in b for b in run_bench.calls["backends"])
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki", "--no-archive")
+    assert run_bench.calls["backends"][-1] == {"nki"}
+
+
+def test_nki_profiling_artifacts_are_placed_under_the_namespace_logs():
+    import inspect
+    from tilebench.core import engine, nki_orchestrator
+    logs = paths.results_logs_dir("B200")
+    assert engine._nki_artifact_paths(logs) == {
+        "base_dir": str(logs / "nki_profiles"),
+        "index_path": str(logs / "nki_neff_manifest.jsonl")}
+    with pytest.raises(ValueError):
+        engine._nki_artifact_paths(None)                          # no silent fallback location
+    params = inspect.signature(nki_orchestrator.profile_case_on_neuron).parameters
+    assert params["base_dir"].default is inspect.Parameter.empty
+    assert params["index_path"].default is inspect.Parameter.empty
 
 
 def test_run_bench_passes_its_gpu_to_the_archive_script(monkeypatch):
@@ -322,15 +415,21 @@ def test_run_bench_all_scopes_its_runs_and_records_the_gpu(results, monkeypatch,
     mod = load_script("run_bench_all")
     seen = []
     monkeypatch.setattr(mod, "run_benchmark_suite",
-                        lambda op, enabled_backends=None: seen.append(enabled_backends) or [{"op": op}])
+                        lambda op, **kw: seen.append(kw) or [{"op": op}])
     monkeypatch.chdir(tmp_path)                                   # main() chdirs; restored on teardown
     monkeypatch.setattr(sys, "argv", ["run_bench_all.py", "--gpu", "GH200", "--operators", "mul2"])
     assert mod.main() == 0
     (summary,) = (results / "GH200/runs").glob("*/summary.json")
     assert json.loads(summary.read_text())["gpu"] == "GH200"
-    assert seen == [{"triton", "cutile", "tilelang"}]
+    assert seen == [{"logs_dir": results / "GH200" / "logs"}]      # backend selection is left to the engine
     assert sorted(p.name for p in results.iterdir()) == ["GH200"]
 
     monkeypatch.setattr(sys, "argv", ["run_bench_all.py", "--operators", "mul2"])
     with pytest.raises(SystemExit):
         mod.main()
+
+
+if __name__ == "__main__":      # regenerate the B200 manifest (see the test that reads it)
+    MANIFEST.write_text("".join(
+        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {frozen_digest(p)}  {p.name}\n" for p in b200_csvs()))
+    print(f"wrote {MANIFEST} ({len(b200_csvs())} files)")

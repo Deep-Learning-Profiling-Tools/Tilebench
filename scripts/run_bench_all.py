@@ -17,11 +17,8 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
-from tilebench.paths import OPERATOR_ROOT, hardware_label, results_runs_dir  # noqa: E402
-
-# Same GPU backend scope as scripts/run_bench.py. NKI targets AWS Trainium and
-# is never part of a results/<gpu>/ namespace.
-_GPU_BACKENDS = ("triton", "cutile", "tilelang")
+from tilebench.paths import (OPERATOR_ROOT, hardware_label,  # noqa: E402
+                             results_logs_dir, results_runs_dir)
 
 
 def discover_operators(operators_root: Path) -> list[str]:
@@ -171,7 +168,7 @@ def main() -> int:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
             try:
-                results = run_benchmark_suite(op, enabled_backends=set(_GPU_BACKENDS))
+                results = run_benchmark_suite(op, logs_dir=results_logs_dir(args.gpu))
                 out_path = operators_dir / f"{op}.json"
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)

@@ -21,7 +21,9 @@
 #
 # Raw logs are scoped by hardware (results/<gpu>/logs/), so --logs and --all
 # take the label of the GPU whose logs to snapshot; the logs of every other GPU
-# already on the archive branch are carried forward untouched.
+# already on the archive branch are carried forward untouched. The whole logs/
+# tree goes in, including the NKI profiles recorded with that campaign
+# (logs/nki_profiles/): there is no separate NKI archive path.
 # scripts/run_bench.py runs `archive_logs.sh --gpu <gpu>` (= --logs) after every
 # benchmark. LLM trajectories are archived only on request, at milestones worth
 # keeping.

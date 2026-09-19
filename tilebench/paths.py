@@ -42,14 +42,13 @@ REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).r
 #: Generated artifacts (NCU reports, measured peak sweeps). Not package data.
 OUTPUT_ROOT = REPO_ROOT / "outputs"
 NCU_OUTPUT_ROOT = OUTPUT_ROOT / "ncu"
-#: NKI runs on AWS Trainium, not on a GPU, so its logs, summaries and profiler
-#: artifacts stay out of the hardware-scoped results/ tree below.
-NKI_OUTPUT_ROOT = OUTPUT_ROOT / "nki"
 
-#: Benchmark results, one namespace per hardware platform:
+#: Benchmark results, one namespace per hardware campaign:
 #:     results/<hardware>/{csv,logs,figures,aggregate,runs}/
-#: Everything under one namespace was measured on that hardware. Only csv/ is
-#: version-controlled. Build paths with the helpers below, never by hand.
+#: The GPU backends in a namespace were measured on that hardware. NKI (AWS
+#: Trainium) measurements are recorded alongside, in their own columns and under
+#: logs/nki_profiles/, as cross-hardware data. Only csv/ is version-controlled.
+#: Build paths with the helpers below, never by hand.
 RESULTS_ROOT = REPO_ROOT / "results"
 
 _HARDWARE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")

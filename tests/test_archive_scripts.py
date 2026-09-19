@@ -65,6 +65,8 @@ def work(tmp_path):
     git(work, "fetch", "-q", "origin")
 
     write(work / "results/B200/logs/a.json", "{}\n")
+    write(work / "results/B200/logs/nki_profiles/mul2/case0/manifest.json", "{}\n")   # NKI, same campaign
+    write(work / "results/B200/logs/nki_neff_manifest.jsonl", "{}\n")
     write(work / "results/GH200/logs/g.json", "{}\n")
     write(work / "results/B200/figures/plot.png", "png")
     write(work / LLM / "op/model/high/iter_0/prompt.md", "prompt\n")
@@ -92,6 +94,9 @@ def test_archive_logs_wrapper_archives_only_the_logs_of_that_gpu(work):
     assert r.returncode == 0, r.stderr
     files = archived(work)
     assert "results/B200/logs/a.json" in files
+    # the whole logs/ tree of the namespace goes in, NKI profiles included: no separate NKI path
+    assert "results/B200/logs/nki_profiles/mul2/case0/manifest.json" in files
+    assert "results/B200/logs/nki_neff_manifest.jsonl" in files
     assert "results/GH200/logs/g.json" not in files        # another GPU's logs are not swept in
     assert "results/B200/figures/plot.png" not in files    # only logs/ is archived
     assert not any(f.startswith(LLM) for f in files)
@@ -134,6 +139,7 @@ def test_archive_is_cumulative_and_keeps_the_legacy_path(work):
     assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
     assert f"{LLM}/op2/model/high/iter_0/prompt.md" in files
     assert "results/B200/logs/a.json" in files
+    assert "results/B200/logs/nki_profiles/mul2/case0/manifest.json" in files
     assert "results/GH200/logs/g.json" in files
     # legacy paths: main dropped them and this machine never had them; the archive keeps them
     assert "benchmarks/llm_generated/legacy.txt" in files
