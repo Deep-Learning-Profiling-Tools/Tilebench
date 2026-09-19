@@ -14,30 +14,52 @@ import json
 import re
 import sys
 
-from tilebench.paths import KERNEL_COUNTS
+from tilebench.paths import kernel_counts_path, ncu_catalogue_path
 
 
-class MissingKernelCountsError(RuntimeError):
-    """The canonical kernel-count metadata is absent."""
+class MissingProfilingMetadataError(RuntimeError):
+    """The profiling metadata of the requested GPU is absent."""
 
 
-def load_kernel_counts(path=KERNEL_COUNTS):
-    """Return ({(op, dtype, backend): count}, {(op, dtype, backend): [names]}).
+class MissingKernelCountsError(MissingProfilingMetadataError):
+    """The kernel-count metadata of the requested GPU is absent."""
+
+
+def load_catalogue(gpu: str) -> list:
+    """The NCU catalogue of `gpu`. Sweep-max cases and autotune winners differ
+    between GPUs, so a missing catalogue is an error: the catalogue of another
+    GPU is never used instead."""
+    path = ncu_catalogue_path(gpu)
+    if not path.exists():
+        raise MissingProfilingMetadataError(
+            f"no NCU catalogue for {gpu} at {path}.\n"
+            f"Build it from that GPU's autotune logs with:\n"
+            f"    python -m tilebench.profiling.ncu_catalogue --gpu {gpu}\n"
+            f"The catalogue of another GPU is never used as a fallback.")
+    return json.loads(path.read_text())
+
+
+def load_kernel_counts(gpu: str):
+    """Return ({(op, dtype, backend): count}, {(op, dtype, backend): [names]})
+    probed on `gpu`.
 
     The NCU harness validates every capture against these counts and names, so
     running without them silently turns that validation off. Missing metadata is
-    therefore an error rather than a default: regenerate it with
-    probe_kernel_count.py. Individual pairs may still be absent (a probe that
-    errored records count=None); callers warn and fall back per pair.
+    therefore an error rather than a default, and the counts of another GPU are
+    never used instead: regenerate it with probe_kernel_count.py. Individual
+    pairs may still be absent (a probe that errored records count=None); callers
+    warn and fall back per pair.
     """
+    path = kernel_counts_path(gpu)
     if not path.exists():
         raise MissingKernelCountsError(
-            f"canonical kernel-count metadata not found at {path}.\n"
+            f"no kernel-count metadata for {gpu} at {path}.\n"
             f"NCU capture validation needs it: without it every pair would be "
             f"assumed to launch exactly one kernel and wrong-kernel reports "
             f"would not be detected.\n"
-            f"Regenerate it on the target GPU with:\n"
-            f"    PYTHONPATH=. python tilebench/profiling/probe_kernel_count.py")
+            f"Probe it on that GPU with:\n"
+            f"    python -m tilebench.profiling.probe_kernel_count --gpu {gpu}\n"
+            f"The counts of another GPU are never used as a fallback.")
     counts, names = {}, {}
     for r in json.loads(path.read_text()):
         key = (r["op"], r["dtype"], r["backend"])

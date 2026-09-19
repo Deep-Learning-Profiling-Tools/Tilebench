@@ -1,5 +1,7 @@
-"""Extract metrics from .ncu-rep files and generate per-op comparison.md
-plus a global outputs/ncu/SUMMARY.md.
+"""Extract metrics from the .ncu-rep files of one GPU (outputs/ncu/<gpu>/) and
+generate per-op comparison.md plus that GPU's outputs/ncu/<gpu>/SUMMARY.md.
+
+Usage:  python -m tilebench.profiling.ncu_writeup --gpu B200
 
 For each report we pull:
   - Duration (us)
@@ -9,18 +11,20 @@ For each report we pull:
     Block Limit (registers, shmem)
   - SOLBottleneck rule text (NCU's own verdict)
 """
+import argparse
 import csv
 import io
 import json
 import re
 import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
-from tilebench.paths import NCU_CATALOGUE, NCU_OUTPUT_ROOT, REPO_ROOT
+from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir
+from tilebench.profiling import ncu_kernel_select as ks
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
-NCU_DIR = NCU_OUTPUT_ROOT
 
 WANTED = {
     "Duration", "Memory Throughput", "DRAM Throughput",
@@ -136,9 +140,9 @@ def fmt(metrics: dict, key: str) -> str:
     return v_str
 
 
-def collect_ops() -> dict:
+def collect_ops(ncu_dir: Path) -> dict:
     ops = {}
-    for sub in sorted(NCU_DIR.iterdir()):
+    for sub in sorted(ncu_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith("_"):
             continue
         reports = sorted(sub.glob("*.ncu-rep"))
@@ -165,8 +169,8 @@ def collect_ops() -> dict:
     return ops
 
 
-def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
-    out_dir = NCU_DIR / op
+def write_op_doc(ncu_dir: Path, op: str, per_pair: dict, catalogue_entry: dict) -> None:
+    out_dir = ncu_dir / op
     headline = []
     headline.append(f"# NCU Comparison: {op}")
     headline.append("")
@@ -327,7 +331,7 @@ def write_op_doc(op: str, per_pair: dict, catalogue_entry: dict) -> None:
     (out_dir / "comparison.md").write_text("\n".join(headline))
 
 
-def write_summary(ops: dict, catalogue: list) -> None:
+def write_summary(ncu_dir: Path, ops: dict, catalogue: list) -> None:
     cat_by_op = {c["op"]: c for c in catalogue}
     lines = [
         "# NCU Sweep Summary — all operators",
@@ -336,7 +340,7 @@ def write_summary(ops: dict, catalogue: list) -> None:
         "**Profile method:** autotune-winner cfg at sweep-max input case, "
         "`--set full --import-source on`, `--launch-skip 3 --launch-count 1`",
         "",
-        "Per-operator detail: `outputs/ncu/<op>/comparison.md` and the "
+        "Per-operator detail: `outputs/ncu/<gpu>/<op>/comparison.md` and the "
         "`<backend>_<dtype>.ncu-rep` files in that directory.",
         "",
         "## Headline duration table (µs)",
@@ -363,23 +367,31 @@ def write_summary(ops: dict, catalogue: list) -> None:
             lines.append(f"| {op} | {dt} | {td_s} | {cd_s} | {ratio_str} |")
     lines.append("")
 
-    failures_path = NCU_DIR / "sweep_failures.md"
+    failures_path = ncu_dir / "sweep_failures.md"
     if failures_path.exists():
         lines.append("## Failed pairs")
         lines.append("")
         lines.append(failures_path.read_text())
-    (NCU_DIR / "SUMMARY.md").write_text("\n".join(lines))
+    (ncu_dir / "SUMMARY.md").write_text("\n".join(lines))
 
 
 def main() -> None:
-    NCU_DIR.mkdir(parents=True, exist_ok=True)
-    catalogue = json.loads((NCU_CATALOGUE).read_text())
+    ap = argparse.ArgumentParser(description="Write up one GPU's NCU reports.")
+    ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                    help="Hardware label (e.g. B200): reads and writes outputs/ncu/<gpu>/")
+    args = ap.parse_args()
+    try:
+        catalogue = ks.load_catalogue(args.gpu)
+    except ks.MissingProfilingMetadataError as e:
+        sys.exit(f"error: {e}")
+    ncu_dir = ncu_output_dir(args.gpu)
+    ncu_dir.mkdir(parents=True, exist_ok=True)
     cat_by_op = {c["op"]: c for c in catalogue}
-    ops = collect_ops()
+    ops = collect_ops(ncu_dir)
     print(f"parsed {sum(len(v) for v in ops.values())} reports across {len(ops)} ops")
     for op, per_pair in ops.items():
-        write_op_doc(op, per_pair, cat_by_op.get(op, {"dtypes": [], "default_params_per_dtype": {}, "autotune_winner_per_dtype": {}}))
-    write_summary(ops, catalogue)
+        write_op_doc(ncu_dir, op, per_pair, cat_by_op.get(op, {"dtypes": [], "default_params_per_dtype": {}, "autotune_winner_per_dtype": {}}))
+    write_summary(ncu_dir, ops, catalogue)
     print(f"wrote {len(ops)} comparison.md files + SUMMARY.md")
 
 

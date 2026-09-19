@@ -18,6 +18,8 @@ import os
 import re
 from pathlib import Path
 
+from tilebench.backends import MODES, backend_tag
+
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
 CORE_ROOT = PACKAGE_ROOT / "core"
@@ -29,18 +31,18 @@ PEAK_PERFORMANCE_ROOT = DATA_ROOT / "peak_performance"
 PROFILING_ROOT = PACKAGE_ROOT / "profiling"
 LLM_CODEGEN_ROOT = PACKAGE_ROOT / "llm_codegen"
 
-#: NCU catalogue consumed by the profiling driver and the figure scripts.
-NCU_CATALOGUE = PROFILING_ROOT / "ncu_catalogue.json"
-
-#: Probed kernel launch counts and kernel names per (op, dtype, backend).
-#: Canonical profiling metadata, not a report: the NCU harness validates every
-#: capture against it. Regenerate with tilebench/profiling/probe_kernel_count.py.
-KERNEL_COUNTS = PROFILING_ROOT / "kernel_counts.json"
+#: NCU profiling metadata, one directory per hardware (see the helpers below):
+#:     profiling/metadata/<hardware>/{ncu_catalogue.json,kernel_counts.json}
+#: Sweep-max cases, autotune winners, kernel launch counts and kernel names all
+#: differ between GPUs, so there is no global copy and no fallback to another
+#: GPU's files.
+PROFILING_METADATA_ROOT = PROFILING_ROOT / "metadata"
 
 REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).resolve()
 
 #: Generated artifacts (NCU reports, measured peak sweeps). Not package data.
 OUTPUT_ROOT = REPO_ROOT / "outputs"
+#: Generated NCU reports, one directory per hardware: outputs/ncu/<hardware>/.
 NCU_OUTPUT_ROOT = OUTPUT_ROOT / "ncu"
 
 #: Benchmark results, one namespace per hardware campaign:
@@ -90,6 +92,46 @@ def results_aggregate_dir(hardware: str) -> Path:
 
 def results_runs_dir(hardware: str) -> Path:
     return results_root(hardware) / "runs"
+
+
+def _log_name(operator: str, mode: str, backends) -> str:
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}; choose from {', '.join(MODES)}")
+    return f"{operator}_{mode}_{backend_tag(backends)}.json"
+
+
+def timing_log_path(hardware: str, operator: str, mode: str, backends) -> Path:
+    """Raw timing JSON of one run:
+        results/<hardware>/logs/time_measurement_logs/<operator>_<mode>_<backend-tag>.json
+    The name carries the mode and the backend selection, so a default run, an
+    autotune run, a TileLang-only run and an NKI run of the same operator never
+    overwrite each other. `backends` may be in any order."""
+    return results_logs_dir(hardware) / "time_measurement_logs" / _log_name(operator, mode, backends)
+
+
+def autotune_log_path(hardware: str, operator: str, mode: str, backends) -> Path:
+    """Selected-config log of one run; same naming rule as timing_log_path."""
+    return results_logs_dir(hardware) / "autotune_logs" / _log_name(operator, mode, backends)
+
+
+def profiling_metadata_dir(hardware: str) -> Path:
+    return PROFILING_METADATA_ROOT / hardware_label(hardware)
+
+
+def ncu_catalogue_path(hardware: str) -> Path:
+    """Sweep-max cases and autotune winners profiled by NCU on this hardware."""
+    return profiling_metadata_dir(hardware) / "ncu_catalogue.json"
+
+
+def kernel_counts_path(hardware: str) -> Path:
+    """Probed kernel launch counts and kernel names per (op, dtype, backend) on
+    this hardware. The NCU harness validates every capture against it."""
+    return profiling_metadata_dir(hardware) / "kernel_counts.json"
+
+
+def ncu_output_dir(hardware: str) -> Path:
+    """Generated NCU reports of this hardware: outputs/ncu/<hardware>/."""
+    return NCU_OUTPUT_ROOT / hardware_label(hardware)
 
 
 def operator_dir(operator: str) -> Path:

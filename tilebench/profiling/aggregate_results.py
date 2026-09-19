@@ -118,8 +118,6 @@ def main(argv=None) -> None:
         ops.add(p.stem.removesuffix("_default"))
     for p in csv_dir.glob("*_autotune.csv"):
         ops.add(p.stem.removesuffix("_autotune"))
-    for p in csv_dir.glob("*_summary.csv"):
-        ops.add(p.stem.removesuffix("_summary"))
     ops.discard("")
 
     wrote = 0

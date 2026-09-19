@@ -2,7 +2,7 @@
 README figure: PyTorch / Triton / cuTile latency at each operator's sweep-max case.
 
 For every operator this takes the largest swept case, the one recorded in
-tilebench/profiling/ncu_catalogue.json (`default_params_per_dtype`), so the figure
+tilebench/profiling/metadata/<gpu>/ncu_catalogue.json (`default_params_per_dtype`), so the figure
 uses the same inputs as the NCU profiles. The dtype is fp16 when the operator
 sweeps it, otherwise the operator's first dtype (shown after the name).
 Latencies are the autotuned Proton means from results/<gpu>/csv/<op>_autotune.csv.
@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import math
 
 import matplotlib
@@ -27,17 +26,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
-# without requiring PYTHONPATH=.
+# without setting PYTHONPATH
 import os
 import sys
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tilebench.paths import (NCU_CATALOGUE, hardware_label,  # noqa: E402
-                             results_csv_dir, results_figures_dir)
-
-CATALOGUE = NCU_CATALOGUE
+from tilebench.paths import hardware_label, results_csv_dir, results_figures_dir  # noqa: E402
+from tilebench.profiling.ncu_kernel_select import load_catalogue  # noqa: E402
 
 # label, CSV column, color
 SERIES = [
@@ -65,7 +62,7 @@ def sweep_max_rows(gpu):
     """[(label, {column: latency_ms})], one per operator, from results/<gpu>/csv/."""
     csv_dir = results_csv_dir(gpu)
     out = []
-    for entry in json.load(open(CATALOGUE)):
+    for entry in load_catalogue(gpu):      # this GPU's catalogue; never another GPU's
         op = entry["op"]
         dtype = "fp16" if "fp16" in entry["dtypes"] else entry["dtypes"][0]
         want = {k: str(v) for k, v in entry["default_params_per_dtype"][dtype].items()}

@@ -1,18 +1,21 @@
-"""NCU sweep driver — iterate ncu_catalogue.json, run NCU on each
+"""NCU sweep driver — iterate the GPU's ncu_catalogue.json, run NCU on each
 (op, dtype, backend) triple at sweep-max input.
 
 For each op/dtype:
   - Use autotune-winner cfg from catalogue if present; else use default
     (no _DEFAULT_CONFIG override).
   - Run NCU on both backends.
-  - Report under outputs/ncu/<op>/{backend}_{dtype}.ncu-rep.
+  - Report under outputs/ncu/<gpu>/<op>/{backend}_{dtype}.ncu-rep.
   - On failure: log and continue.
 
-Progress is appended to outputs/ncu/sweep_log.json after each pair.
-Kernel counts come from tilebench/profiling/kernel_counts.json (canonical
-metadata; regenerate with probe_kernel_count.py).
-Run with: PYTHONPATH=. python tilebench/profiling/ncu_driver.py
+Progress is appended to outputs/ncu/<gpu>/sweep_log.json after each pair.
+The catalogue and the kernel counts are the ones of --gpu,
+tilebench/profiling/metadata/<gpu>/{ncu_catalogue,kernel_counts}.json
+(regenerate with ncu_catalogue.py and probe_kernel_count.py). A GPU without
+them is an error; another GPU's metadata is never used.
+Run with: python -m tilebench.profiling.ncu_driver --gpu B200
 """
+import argparse
 import json
 import os
 import shutil
@@ -22,27 +25,22 @@ import time
 from pathlib import Path
 
 from tilebench.profiling import ncu_kernel_select as ks
-from tilebench.paths import NCU_CATALOGUE, NCU_OUTPUT_ROOT, PROFILING_ROOT, REPO_ROOT
+from tilebench.paths import PROFILING_ROOT, REPO_ROOT, hardware_label, ncu_output_dir
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = PROFILING_ROOT / "ncu_generic_harness.py"
-CATALOGUE = NCU_CATALOGUE
-NCU_DIR = NCU_OUTPUT_ROOT
-LOG_PATH = Path(os.environ.get("NCU_SWEEP_LOG", NCU_DIR / "sweep_log.json"))
-FAIL_PATH = NCU_DIR / "sweep_failures.md"
 
 KERNEL_REGEX_BY_BACKEND_DEFAULT = ".*"
 
 
-def out_path(op: str, backend: str, dtype: str) -> Path:
-    return NCU_DIR / op / f"{backend}_{dtype}.ncu-rep"
+def out_path(ncu_dir: Path, op: str, backend: str, dtype: str) -> Path:
+    return ncu_dir / op / f"{backend}_{dtype}.ncu-rep"
 
 
 def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
-            n_kernels_per_call: int = 1, timeout_s: int = 1800,
+            out: Path, n_kernels_per_call: int = 1, timeout_s: int = 1800,
             kernel_names: list[str] | None = None) -> dict:
-    out = out_path(op, backend, dtype)
     out.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["NCU_OP"] = op
@@ -130,13 +128,20 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
 
 
 def main() -> None:
-    catalogue = json.loads(CATALOGUE.read_text())
-    NCU_DIR.mkdir(parents=True, exist_ok=True)
-
+    ap = argparse.ArgumentParser(description="NCU sweep over one GPU's catalogue.")
+    ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                    help="Hardware label (e.g. B200): reads tilebench/profiling/metadata/<gpu>/, "
+                         "writes outputs/ncu/<gpu>/")
+    args = ap.parse_args()
     try:
-        kernel_counts, kernel_names_map = ks.load_kernel_counts()
-    except ks.MissingKernelCountsError as e:
+        catalogue = ks.load_catalogue(args.gpu)
+        kernel_counts, kernel_names_map = ks.load_kernel_counts(args.gpu)
+    except ks.MissingProfilingMetadataError as e:
         sys.exit(f"error: {e}")
+    ncu_dir = ncu_output_dir(args.gpu)
+    ncu_dir.mkdir(parents=True, exist_ok=True)
+    log_path = Path(os.environ.get("NCU_SWEEP_LOG", ncu_dir / "sweep_log.json"))
+    fail_path = ncu_dir / "sweep_failures.md"
 
     ops_filter = {o.strip() for o in os.environ.get("NCU_OPS", "").split(",") if o.strip()}
     pairs = []
@@ -157,9 +162,9 @@ def main() -> None:
 
     total = len(pairs)
     log = []
-    if LOG_PATH.exists():
+    if log_path.exists():
         try:
-            log = json.loads(LOG_PATH.read_text())
+            log = json.loads(log_path.read_text())
         except Exception:
             log = []
     done_keys = {(e["op"], e["dtype"], e["backend"]) for e in log if e.get("ok")}
@@ -171,19 +176,19 @@ def main() -> None:
         key = (op, dt, backend)
         if key in done_keys:
             continue
-        out = out_path(op, backend, dt)
+        out = out_path(ncu_dir, op, backend, dt)
         if out.exists() and out.stat().st_size > 0:
             log.append({"op": op, "dtype": dt, "backend": backend, "ok": True,
                         "rc": 0, "elapsed_s": 0, "stderr_tail": "(pre-existing)"})
             done_keys.add(key)
             continue
-        res = run_one(op, dt, backend, params, cfg, n_kernels_per_call=n,
+        res = run_one(op, dt, backend, params, cfg, out, n_kernels_per_call=n,
                       kernel_names=names)
         res["n_kernels"] = n
         log.append(res)
         if not res["ok"]:
             fails.append(res)
-        LOG_PATH.write_text(json.dumps(log, indent=2))
+        log_path.write_text(json.dumps(log, indent=2))
 
         done = len(log)
         if done % 20 == 0 or done == total:
@@ -204,7 +209,7 @@ def main() -> None:
                 f"(rc={f['rc']}, {f['elapsed_s']}s)\n"
                 f"  ```\n  {f['stderr_tail'].strip()}\n  ```\n"
             )
-        FAIL_PATH.write_text("\n".join(lines))
+        fail_path.write_text("\n".join(lines))
 
 
 if __name__ == "__main__":

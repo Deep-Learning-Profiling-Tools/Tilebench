@@ -6,9 +6,9 @@ problem statement, input/output spec, mathematical definition, examples,
 constraints.
 
 Usage:
-    PYTHONPATH=. python tools/llm_codegen/generate_descriptions.py             # all 45 ops
-    PYTHONPATH=. python tools/llm_codegen/generate_descriptions.py --operator vector_add
-    PYTHONPATH=. python tools/llm_codegen/generate_descriptions.py --force     # overwrite existing
+    python -m tilebench.llm_codegen.generate_descriptions             # all 45 ops
+    python -m tilebench.llm_codegen.generate_descriptions --operator vector_add
+    python -m tilebench.llm_codegen.generate_descriptions --force     # overwrite existing
 """
 from __future__ import annotations
 

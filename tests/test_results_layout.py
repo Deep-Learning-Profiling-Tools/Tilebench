@@ -35,6 +35,17 @@ def results(tmp_path, monkeypatch):
     return root
 
 
+@pytest.fixture
+def metadata(tmp_path, monkeypatch):
+    """A temporary profiling-metadata tree holding a copy of the committed B200
+    files, plus a temporary NCU output root."""
+    root = tmp_path / "metadata"
+    shutil.copytree(paths.PROFILING_METADATA_ROOT / "B200", root / "B200")
+    monkeypatch.setattr(paths, "PROFILING_METADATA_ROOT", root)
+    monkeypatch.setattr(paths, "NCU_OUTPUT_ROOT", tmp_path / "outputs" / "ncu")
+    return root
+
+
 # --------------------------------------------------------------------------
 # path helpers
 # --------------------------------------------------------------------------
@@ -202,12 +213,12 @@ def run_bench(results, tmp_path, monkeypatch):
 
 def test_run_bench_default_paths_are_scoped_by_gpu(results):
     mod = load_script("run_bench")
-    timing, autotune, summary = mod._default_paths("B200", "mul2", autotune=False)
-    assert timing == results / "B200/logs/time_measurement_logs/mul2_results.json"
-    assert autotune == results / "B200/logs/autotune_logs/mul2_autotune.json"
+    timing, autotune, summary = mod._default_paths("B200", "mul2", False, ["triton", "cutile"])
+    assert timing == results / "B200/logs/time_measurement_logs/mul2_default_triton-cutile.json"
+    assert autotune == results / "B200/logs/autotune_logs/mul2_default_triton-cutile.json"
     assert summary == results / "B200/csv/mul2_default.csv"
-    assert mod._default_paths("B200", "mul2", autotune=True)[2] == results / "B200/csv/mul2_autotune.csv"
-    assert mod._default_paths("GH200", "mul2", autotune=False)[2] == results / "GH200/csv/mul2_default.csv"
+    assert mod._default_paths("B200", "mul2", True, ["nki"])[2] == results / "B200/csv/mul2_autotune.csv"
+    assert mod._default_paths("GH200", "mul2", False, [])[2] == results / "GH200/csv/mul2_default.csv"
 
 
 def test_run_bench_requires_gpu_and_has_no_default(run_bench, results, capsys):
@@ -222,8 +233,8 @@ def test_run_bench_requires_gpu_and_has_no_default(run_bench, results, capsys):
 def test_run_bench_writes_into_the_gpu_namespace_and_archives_only_that_gpu(run_bench, results, capsys):
     run_bench("--gpu", "B200", "--operator", "mul2")
     assert (results / "B200/csv/mul2_default.csv").is_file()
-    assert (results / "B200/logs/time_measurement_logs/mul2_results.json").is_file()
-    assert (results / "B200/logs/autotune_logs/mul2_autotune.json").is_file()
+    assert (results / "B200/logs/time_measurement_logs/mul2_default_triton-cutile-tilelang.json").is_file()
+    assert (results / "B200/logs/autotune_logs/mul2_default_triton-cutile-tilelang.json").is_file()
     assert sorted(p.name for p in results.iterdir()) == ["B200"]
     assert run_bench.calls["archived"] == ["B200"]
     assert "GPU/result namespace: B200" in capsys.readouterr().out
@@ -240,7 +251,7 @@ def test_same_operator_on_two_gpus_does_not_collide(run_bench, results):
     run_bench("--gpu", "GH200", "--operator", "mul2", "--autotune", "--no-archive")
     assert b200.read_bytes() == before
     assert (results / "GH200/csv/mul2_autotune.csv").is_file()
-    assert (results / "GH200/logs/time_measurement_logs/mul2_results.json").is_file()
+    assert (results / "GH200/logs/time_measurement_logs/mul2_autotune_triton-cutile-tilelang.json").is_file()
     assert not (results / "GH200/csv/mul2_default.csv").exists()
 
 
@@ -304,9 +315,9 @@ def test_nki_merges_into_the_csv_of_its_campaign(run_bench, results, campaign):
 
 def test_nki_logs_live_in_the_campaign_namespace_and_are_archived_with_it(run_bench, results, campaign):
     run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
-    timing = json.loads((results / "B200/logs/time_measurement_logs/mul2_results.json").read_text())
+    timing = json.loads((results / "B200/logs/time_measurement_logs/mul2_default_nki.json").read_text())
     assert "nki_ms" in timing[0]
-    assert (results / "B200/logs/autotune_logs/mul2_autotune.json").is_file()
+    assert (results / "B200/logs/autotune_logs/mul2_default_nki.json").is_file()
     # the engine is told where the Neuron profiling flow keeps its artifacts
     assert run_bench.calls["logs_dir"][-1] == results / "B200" / "logs"
     assert run_bench.calls["archived"] == ["B200"]                 # one archive call, for this namespace
@@ -349,10 +360,71 @@ def test_nki_profiling_artifacts_are_placed_under_the_namespace_logs():
 def test_run_bench_passes_its_gpu_to_the_archive_script(monkeypatch):
     mod = load_script("run_bench")
     seen = {}
-    monkeypatch.setattr(mod.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd) or
+    monkeypatch.setattr(mod.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd, **kw) or
                         subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr=""))
+    monkeypatch.chdir("/")                                         # started from outside the repository
     mod._archive_logs("GH200")
     assert seen["cmd"][-2:] == ["--gpu", "GH200"] and seen["cmd"][1].endswith("archive_logs.sh")
+    assert seen["cwd"] == paths.REPO_ROOT                          # ...the archive still runs inside it
+
+
+# --------------------------------------------------------------------------
+# raw JSON names: one file per (GPU, operator, mode, backend selection)
+# --------------------------------------------------------------------------
+
+def test_backend_tag_is_canonical_and_order_free():
+    from tilebench.backends import backend_tag, parse_backends
+    assert backend_tag(["cutile", "triton"]) == backend_tag(["triton", "cutile"]) == "triton-cutile"
+    assert backend_tag(["nki", "tilelang", "cutile", "triton"]) == "triton-cutile-tilelang-nki"
+    assert backend_tag(["tilelang", "tilelang"]) == "tilelang" and backend_tag([]) == "torch"
+    assert parse_backends("cutile, Triton,torch") == ["triton", "cutile"]
+    assert parse_backends(None) == parse_backends("all") == ["triton", "cutile", "tilelang"]
+    with pytest.raises(ValueError):
+        parse_backends("triton,cuda")
+    assert paths.timing_log_path("B200", "mul2", "default", ["cutile", "triton"]) == \
+        paths.timing_log_path("B200", "mul2", "default", ["triton", "cutile"])
+    with pytest.raises(ValueError):
+        paths.timing_log_path("B200", "mul2", "latest", ["triton"])       # no such mode
+
+
+def test_runs_of_one_operator_never_overwrite_each_others_raw_json(run_bench, results):
+    runs = [("B200", "triton,cutile", False), ("B200", "triton,cutile", True),
+            ("B200", "tilelang", False), ("B200", "nki", False), ("GH200", "triton,cutile", False)]
+    expected = {}
+    for gpu, backends, autotune in runs:
+        run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", backends, "--no-archive",
+                  *(["--autotune"] if autotune else []))
+        name = f"mul2_{'autotune' if autotune else 'default'}_{backends.replace(',', '-')}.json"
+        for kind in ("time_measurement_logs", "autotune_logs"):
+            path = results / gpu / "logs" / kind / name
+            expected[path] = path.read_bytes()                     # as written by its own run
+    assert len(expected) == 10
+    for path, content in expected.items():                         # ...and untouched by every later run
+        assert path.read_bytes() == content, path
+    # NKI's raw JSON belongs to the B200 campaign namespace
+    assert (results / "B200/logs/time_measurement_logs/mul2_default_nki.json").is_file()
+    written = sorted(p.name for p in (results / "B200/logs/time_measurement_logs").iterdir())
+    assert written == ["mul2_autotune_triton-cutile.json", "mul2_default_nki.json",
+                       "mul2_default_tilelang.json", "mul2_default_triton-cutile.json"]
+    assert "latest" not in " ".join(written)
+
+
+def test_backend_order_on_the_command_line_does_not_change_the_file(run_bench, results):
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "cutile,triton", "--no-archive")
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile", "--no-archive")
+    assert [p.name for p in (results / "B200/logs/time_measurement_logs").iterdir()] == \
+        ["mul2_default_triton-cutile.json"]
+
+
+def test_a_repeated_tilelang_run_with_other_cases_is_not_refused(run_bench, results, monkeypatch):
+    """The autotune log is one file per selection, so a TileLang run no longer
+    merges into (and can no longer be refused by) a combined log."""
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    monkeypatch.setattr(run_bench.module, "run_benchmark_suite",
+                        lambda *a, **kw: fake_results({"tilelang"})[:1])     # a --case-indices subset
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang", "--no-archive")
+    log = json.loads((results / "B200/logs/autotune_logs/mul2_default_tilelang.json").read_text())
+    assert len(log) == 1
 
 
 # --------------------------------------------------------------------------
@@ -361,15 +433,20 @@ def test_run_bench_passes_its_gpu_to_the_archive_script(monkeypatch):
 
 def test_visualize_reads_and_writes_inside_the_gpu_namespace(results, monkeypatch):
     mod = load_script("visualize")
-    src = results / "GH200/logs/time_measurement_logs/mul2_results.json"
+    src = results / "GH200/logs/time_measurement_logs/mul2_autotune_triton-cutile.json"
     src.parent.mkdir(parents=True)
     src.write_text(json.dumps([{k: v for k, v in r.items() if "nki" not in k}
                                for r in fake_results({"triton", "cutile"})]))
-    monkeypatch.setattr(sys, "argv", ["visualize.py", "--gpu", "GH200", "--operator", "mul2",
-                                      "--metrics", "latency_ms"])
+    argv = ["visualize.py", "--gpu", "GH200", "--operator", "mul2", "--metrics", "latency_ms"]
+    # the run is named explicitly (order-free); nothing is picked by glob or mtime
+    monkeypatch.setattr(sys, "argv", argv + ["--mode", "autotune", "--tile-language", "cutile,triton"])
     mod.main()
     assert list((results / "GH200/figures/mul2").glob("*.png"))
     assert sorted(p.name for p in results.iterdir()) == ["GH200"]
+    monkeypatch.setattr(sys, "argv", argv)                        # the default-mode, GPU-backend run does not exist
+    with pytest.raises(FileNotFoundError) as e:
+        mod.main()
+    assert e.value.filename.endswith("mul2_default_triton-cutile-tilelang.json")
 
     monkeypatch.setattr(sys, "argv", ["visualize.py", "--operator", "mul2"])
     with pytest.raises(SystemExit):                               # --gpu is required
@@ -389,9 +466,13 @@ def test_aggregate_reads_csv_and_writes_aggregate_of_one_gpu(results):
         aggregate_results.main([])
 
 
-def test_plot_sweep_max_selects_the_gpu(results):
+def test_plot_sweep_max_selects_the_gpu(results, metadata):
+    from tilebench.profiling.ncu_kernel_select import MissingProfilingMetadataError
     mod = load_script("plot_sweep_max")
-    with pytest.raises(FileNotFoundError) as e:                   # no GH200 data in the temp tree
+    with pytest.raises(MissingProfilingMetadataError):            # no GH200 catalogue: B200's is not borrowed
+        mod.sweep_max_rows("GH200")
+    shutil.copytree(metadata / "B200", metadata / "GH200")
+    with pytest.raises(FileNotFoundError) as e:                   # ...and no GH200 CSVs in the temp tree
         mod.sweep_max_rows("GH200")
     assert str(results / "GH200" / "csv") in str(e.value.filename)
     with pytest.raises(SystemExit):

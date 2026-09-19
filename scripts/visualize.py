@@ -4,17 +4,19 @@ Typical usage (run from Tilebench/):
     # Run benchmark first:
     python scripts/run_bench.py --gpu B200 --operator mul2
 
-    # Then visualize (paths are inferred from --gpu and --operator):
+    # Then visualize that run. The raw JSON is named after the GPU, the operator,
+    # the mode and the backend selection, so pass the same --tile-language (and
+    # --mode autotune for an autotuned run) as the benchmark:
     python scripts/visualize.py --gpu B200 --operator mul2
 
     # Override paths or metrics explicitly:
     python scripts/visualize.py --gpu B200 --operator mul2 \\
-        --input  results/B200/logs/time_measurement_logs/mul2_results.json \\
+        --input  results/B200/logs/time_measurement_logs/mul2_default_triton-cutile.json \\
         --output-dir results/B200/figures/mul2/ \\
         --metrics latency_ms bandwidth_GBs speedup pct_peak_bw
 
-Default paths (derived from --gpu and --operator):
-    --input      results/<gpu>/logs/time_measurement_logs/<operator>_results.json
+Default paths:
+    --input      results/<gpu>/logs/time_measurement_logs/<operator>_<mode>_<backends>.json
     --output-dir results/<gpu>/figures/<operator>/
 
 Available derived metrics (from core/metrics.py):
@@ -37,7 +39,7 @@ import sys
 import yaml
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
-# without requiring PYTHONPATH=.
+# without setting PYTHONPATH
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
@@ -49,8 +51,9 @@ import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
 from tilebench.core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
+from tilebench.backends import MODES, parse_backends  # noqa: E402
 from tilebench.paths import (hardware_label, operator_config,  # noqa: E402
-                             results_figures_dir, results_logs_dir)
+                             results_figures_dir, timing_log_path)
 
 # ---------------------------------------------------------------------------
 # constants
@@ -376,7 +379,13 @@ def main() -> None:
                              "and derive default input/output paths")
     parser.add_argument("--input", type=str, default=None,
                         help="Timing results JSON produced by run_bench.py "
-                             "(default: results/<gpu>/logs/time_measurement_logs/<operator>_results.json)")
+                             "(default: results/<gpu>/logs/time_measurement_logs/"
+                             "<operator>_<mode>_<backends>.json, from --mode and --tile-language)")
+    parser.add_argument("--mode", choices=MODES, default="default",
+                        help="Which run to read: default or autotune (default: default)")
+    parser.add_argument("--tile-language", type=str, default=None,
+                        help="Backend selection of the run to read, as passed to run_bench.py "
+                             "(default: the GPU backends triton,cutile,tilelang). Order does not matter.")
     parser.add_argument("--metrics", nargs="+", default=None,
                         help="Metrics to plot (default: from config.yaml metrics.plots)")
     parser.add_argument("--output-dir", type=str, default=None,
@@ -389,8 +398,11 @@ def main() -> None:
     args = parser.parse_args()
 
     # Resolve the default paths inside this GPU's namespace; explicit paths win.
-    input_path = args.input or str(
-        results_logs_dir(args.gpu) / "time_measurement_logs" / f"{args.operator}_results.json")
+    try:
+        backends = parse_backends(args.tile_language)
+    except ValueError as e:
+        parser.error(f"--tile-language: {e} (or 'all')")
+    input_path = args.input or str(timing_log_path(args.gpu, args.operator, args.mode, backends))
     output_dir = args.output_dir or str(results_figures_dir(args.gpu) / args.operator)
 
     # Load data

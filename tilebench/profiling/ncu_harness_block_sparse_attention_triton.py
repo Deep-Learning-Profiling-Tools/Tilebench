@@ -10,7 +10,7 @@ Usage:
   ncu --set full --import-source on \\
       --launch-skip 3 --launch-count 1 \\
       --force-overwrite \\
-      -o outputs/ncu/block_sparse_attention/triton_autotune \\
+      -o outputs/ncu/<gpu>/block_sparse_attention/triton_autotune \\
       python tilebench/profiling/ncu_harness_block_sparse_attention_triton.py
 """
 import os

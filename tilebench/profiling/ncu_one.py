@@ -1,22 +1,23 @@
 """Run NCU for one operator.
 
 Usage:
-  python tilebench/profiling/ncu_one.py <op> [<dtype>] [--backend triton|cutile|both]
+  python -m tilebench.profiling.ncu_one --gpu <gpu> <op> [<dtype>] [--backend triton|cutile|both]
 
-Reads autotune winners from the catalogue and kernel counts from
-tilebench/profiling/kernel_counts.json
+Reads the autotune winners and the kernel counts of --gpu from
+tilebench/profiling/metadata/<gpu>/{ncu_catalogue,kernel_counts}.json
 and runs NCU at the sweep-max input case (the same case used by the global
-sweep). Outputs to outputs/ncu/<op>/<backend>_<dtype>.ncu-rep.
+sweep). Outputs to outputs/ncu/<gpu>/<op>/<backend>_<dtype>.ncu-rep. A GPU
+without metadata is an error; another GPU's metadata is never used.
 
 Examples:
   # Both backends, all dtypes:
-  python tilebench/profiling/ncu_one.py matmul_int8
+  python -m tilebench.profiling.ncu_one --gpu B200 matmul_int8
 
   # Single dtype, both backends:
-  python tilebench/profiling/ncu_one.py matmul_fp32_fp16_fp8 fp32
+  python -m tilebench.profiling.ncu_one --gpu B200 matmul_fp32_fp16_fp8 fp32
 
   # Single backend, single dtype:
-  python tilebench/profiling/ncu_one.py softmax fp16 --backend cutile
+  python -m tilebench.profiling.ncu_one --gpu B200 softmax fp16 --backend cutile
 """
 import argparse
 import json
@@ -27,19 +28,17 @@ import time
 from pathlib import Path
 
 from tilebench.profiling import ncu_kernel_select as ks
-from tilebench.paths import NCU_CATALOGUE, NCU_OUTPUT_ROOT, PROFILING_ROOT, REPO_ROOT
+from tilebench.paths import PROFILING_ROOT, REPO_ROOT, hardware_label, ncu_output_dir
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = PROFILING_ROOT / "ncu_generic_harness.py"
-CATALOGUE = NCU_CATALOGUE
-OUT_DIR = NCU_OUTPUT_ROOT
 
 
-def run_one(op: str, backend: str, dtype: str, params: dict,
+def run_one(out_dir: Path, op: str, backend: str, dtype: str, params: dict,
             cfg: dict | None, n_kernels: int,
             kernel_names: list[str] | None = None) -> int:
-    out_path = OUT_DIR / op / f"{backend}_{dtype}.ncu-rep"
+    out_path = out_dir / op / f"{backend}_{dtype}.ncu-rep"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["NCU_OP"] = op
@@ -112,6 +111,9 @@ def run_one(op: str, backend: str, dtype: str, params: dict,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                    help="Hardware label (e.g. B200): reads tilebench/profiling/metadata/<gpu>/, "
+                         "writes outputs/ncu/<gpu>/")
     ap.add_argument("op")
     ap.add_argument("dtype", nargs="?", default=None,
                     help="dtype (e.g. fp16, fp32). Omit for all dtypes.")
@@ -119,15 +121,15 @@ def main() -> None:
                     default="both")
     args = ap.parse_args()
 
-    catalogue = json.loads(CATALOGUE.read_text())
+    try:
+        catalogue = ks.load_catalogue(args.gpu)
+        kc, kcn = ks.load_kernel_counts(args.gpu)
+    except ks.MissingProfilingMetadataError as e:
+        sys.exit(f"error: {e}")
     op_entry = next((c for c in catalogue if c["op"] == args.op), None)
     if op_entry is None:
-        sys.exit(f"error: op {args.op!r} not in catalogue")
-
-    try:
-        kc, kcn = ks.load_kernel_counts()
-    except ks.MissingKernelCountsError as e:
-        sys.exit(f"error: {e}")
+        sys.exit(f"error: op {args.op!r} not in the {args.gpu} catalogue")
+    out_dir = ncu_output_dir(args.gpu)
 
     dtypes = [args.dtype] if args.dtype else op_entry["dtypes"]
     backends = ["triton", "cutile"] if args.backend == "both" else [args.backend]
@@ -144,7 +146,7 @@ def main() -> None:
             cfg = winner.get(be)
             n = ks.kernel_count_for(kc, (args.op, dt, be))
             names = kcn.get((args.op, dt, be))
-            rc_total |= run_one(args.op, be, dt, dict(params), cfg, n, names)
+            rc_total |= run_one(out_dir, args.op, be, dt, dict(params), cfg, n, names)
     sys.exit(rc_total)
 
 

@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
-# without requiring PYTHONPATH=.
+# without setting PYTHONPATH
 import os
 import sys
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,20 +13,18 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
-from tilebench.paths import hardware_label, results_csv_dir, results_logs_dir  # noqa: E402
-
-# Backends measured on the GPU itself; torch is the implicit baseline. They are
-# the default selection. NKI runs on AWS Trainium and only when named explicitly
-# (--tile-language nki); its measurements join the record of the --gpu campaign.
-_GPU_BACKENDS = ("triton", "cutile", "tilelang")
-_TILE_LANGUAGES = _GPU_BACKENDS + ("nki",)
+from tilebench.backends import parse_backends  # noqa: E402
+from tilebench.paths import (REPO_ROOT, autotune_log_path, hardware_label,  # noqa: E402
+                             results_csv_dir, results_logs_dir, timing_log_path)
 
 
 def _archive_logs(gpu: str) -> None:
     """Snapshot results/<gpu>/logs/ onto the raw-log archive branch (local commit only;
     publish it with `scripts/archive_logs.sh --gpu <gpu> --push`). Never fails the benchmark."""
+    # The archive script works on the repository it is started in, so start it
+    # in ours: the benchmark may have been launched from any directory.
     proc = subprocess.run(["bash", str(Path(__file__).with_name("archive_logs.sh")), "--gpu", gpu],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, cwd=REPO_ROOT)
     def last(text):
         return (text.strip().splitlines() or ["no output"])[-1]
     if proc.returncode == 0:
@@ -103,56 +101,6 @@ def _csv_aware_param_formatter(csv_path: str, timing_results: list[dict], fallba
     return _fmt_params
 
 
-def _autotune_key(result: dict) -> tuple[str, int, str]:
-    return (
-        json.dumps(result["params"], sort_keys=True),
-        result["problem_size"],
-        result["dtype"],
-    )
-
-
-def _merge_into_autotune_log(log_path: str, autotune_results: list[dict],
-                             active: list[str]) -> bool:
-    """Merge active backend configs into an existing combined autotune log."""
-    cfg_keys = [f"{b}_autotune_cfg" for b in active]
-    if not cfg_keys or not any(k in r for r in autotune_results for k in cfg_keys):
-        return False
-
-    path = Path(log_path)
-    if not path.exists():
-        return False
-
-    with path.open() as f:
-        old_rows = json.load(f)
-    index = {_autotune_key(r): r for r in old_rows}
-
-    missing = [r for r in autotune_results if _autotune_key(r) not in index]
-    if missing:
-        examples = [
-            (r["params"], r["problem_size"], r["dtype"])
-            for r in missing[:5]
-        ]
-        raise SystemExit(
-            f"autotune log merge: {len(missing)} case(s) have no matching row "
-            f"in {log_path}, e.g. {examples} — refusing to merge"
-        )
-
-    updated = 0
-    for r in autotune_results:
-        old = index[_autotune_key(r)]
-        for key in cfg_keys:
-            if key in r:
-                old[key] = r[key]
-                updated += 1
-
-    with path.open("w") as f:
-        json.dump(old_rows, f, indent=4)
-        f.write("\n")
-
-    print(f"Merged {updated} autotune config(s) into {log_path}")
-    return True
-
-
 def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dict]]:
     """Keep only torch + the active backends' keys, so backends that were not
     run never appear (as nan) in the timing / autotune logs."""
@@ -166,13 +114,17 @@ def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dic
     return timing, autotune
 
 
-def _default_paths(gpu: str, operator: str, autotune: bool) -> tuple[Path, Path, Path]:
+def _default_paths(gpu: str, operator: str, autotune: bool,
+                   backends: list[str]) -> tuple[Path, Path, Path]:
     """Canonical (timing JSON, autotune log, summary CSV) paths for one run,
-    all inside the hardware namespace results/<gpu>/{logs,csv}/."""
-    logs = results_logs_dir(gpu)
+    all inside the hardware namespace results/<gpu>/{logs,csv}/.
+
+    The raw JSON names carry the mode and the backend selection (see
+    tilebench.paths.timing_log_path), so runs never overwrite each other's
+    logs. The summary CSV is one per mode: tilelang/nki runs merge into it."""
     mode = "autotune" if autotune else "default"
-    return (logs / "time_measurement_logs" / f"{operator}_results.json",
-            logs / "autotune_logs" / f"{operator}_autotune.json",
+    return (timing_log_path(gpu, operator, mode, backends),
+            autotune_log_path(gpu, operator, mode, backends),
             results_csv_dir(gpu) / f"{operator}_{mode}.csv")
 
 
@@ -278,11 +230,11 @@ def main():
     parser.add_argument("--operator", type=str, default="vector_add",
                         help="Operator to benchmark")
     parser.add_argument("--output", type=str, default=None,
-                        help="Output path for timing results (default: "
-                             "results/<gpu>/logs/time_measurement_logs/<operator>_results.json)")
+                        help="Output path for timing results (default: results/<gpu>/logs/"
+                             "time_measurement_logs/<operator>_<mode>_<backends>.json)")
     parser.add_argument("--autotune-log", type=str, default=None,
-                        help="Output path for autotune config log (default: "
-                             "results/<gpu>/logs/autotune_logs/<operator>_autotune.json)")
+                        help="Output path for autotune config log (default: results/<gpu>/logs/"
+                             "autotune_logs/<operator>_<mode>_<backends>.json)")
     parser.add_argument("--warmup", type=int, default=None,
                         help="Warmup iterations (default: 20)")
     parser.add_argument("--repeat", type=int, default=None,
@@ -314,29 +266,14 @@ def main():
                         help="Directory to store kept Proton files (default: system temp dir)")
     args = parser.parse_args()
 
-    # Resolve which tile-language backends to run. torch is always on (speedup
-    # baseline); omitting the flag runs every GPU backend.
-    if args.tile_language is None:
-        enabled_backends = set(_GPU_BACKENDS)
-    else:
-        tokens = [t.strip().lower() for t in args.tile_language.split(",") if t.strip()]
-        if "all" in tokens:
-            enabled_backends = set(_GPU_BACKENDS)
-        else:
-            enabled_backends = set()
-            for t in tokens:
-                if t == "torch":
-                    continue  # always on; ignore if explicitly listed
-                if t not in _TILE_LANGUAGES:
-                    parser.error(
-                        f"unknown --tile-language backend '{t}'; "
-                        f"choose from {', '.join(_TILE_LANGUAGES)} (or 'all')"
-                    )
-                enabled_backends.add(t)
-
-    # Active tile-language backends in canonical column order (drives all output).
-    active = [b for b in _TILE_LANGUAGES if b in enabled_backends]
-
+    # Which tile-language backends to run, in canonical column order (drives all
+    # output, including the backend tag of the raw JSON names). torch is always
+    # on (speedup baseline); omitting the flag runs every GPU backend.
+    try:
+        active = parse_backends(args.tile_language)
+    except ValueError as e:
+        parser.error(f"--tile-language: {e} (or 'all')")
+    enabled_backends = set(active)
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -367,7 +304,7 @@ def main():
     # Resolve output paths. Explicit --output / --autotune-log win; the summary
     # CSV always lives in the run's namespace.
     default_output, default_autotune, csv_path = _default_paths(
-        args.gpu, args.operator, args.autotune)
+        args.gpu, args.operator, args.autotune, active)
     output_path = args.output or default_output
     autotune_path = args.autotune_log or default_autotune
 
@@ -405,15 +342,9 @@ def main():
         json.dump(timing_results, f, indent=4)
     print(f"Timing results  → {output_path}")
 
-    merged_autotune_log = (
-        active
-        and set(active) <= {"tilelang", "nki"}
-        and _merge_into_autotune_log(autotune_path, autotune_results, active)
-    )
-    if not merged_autotune_log:
-        with open(autotune_path, "w") as f:
-            json.dump(autotune_results, f, indent=4)
-        print(f"Autotune log    → {autotune_path}")
+    with open(autotune_path, "w") as f:
+        json.dump(autotune_results, f, indent=4)
+    print(f"Autotune log    → {autotune_path}")
     if not args.no_archive:
         _archive_logs(args.gpu)
 

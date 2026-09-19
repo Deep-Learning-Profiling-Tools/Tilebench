@@ -6,10 +6,12 @@
 set -u
 # Hardware label for run_bench.py --gpu (result namespace results/<GPU>/); no default.
 GPU=${GPU:?set GPU to the hardware label of this machine, e.g. GPU=B200}
-cd /projects/kzhou6/bcui2/research/tilebench/Tilebench
+# Works from any directory: tilebench/profiling/rerun_timeout.sh -> repository root
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 OPS=(softmax matmul_fp32_fp16_fp8 kl_divergence histogramming)
-RUN_DIR=outputs/autotune_timing_rerun
+RUN_DIR="$REPO/outputs/autotune_timing_rerun"
+mkdir -p "$RUN_DIR"
 SUMMARY="$RUN_DIR/timing_summary.txt"
 
 echo "" >> "$SUMMARY"
@@ -23,8 +25,8 @@ for op in "${OPS[@]}"; do
   echo "=========================================================" | tee -a "$SUMMARY"
   t0=$(date +%s)
   timeout 1800 \
-    bash -c "PYTHONPATH=. python -u scripts/run_bench.py \
-      --gpu '$GPU' --operator '$op' --warmup 20 --repeat 100 --autotune" \
+    python -u "$REPO/scripts/run_bench.py" \
+      --gpu "$GPU" --operator "$op" --warmup 20 --repeat 100 --autotune \
       > "$out" 2>&1
   rc=$?
   t1=$(date +%s)

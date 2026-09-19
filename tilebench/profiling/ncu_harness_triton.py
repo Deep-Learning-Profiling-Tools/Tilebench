@@ -5,7 +5,7 @@ then performs a single clean launch which NCU profiles.
 
 Usage:
   ncu --set full --launch-skip 3 --launch-count 1 \
-      -o outputs/ncu/matmul_int8_triton \
+      -o outputs/ncu/<gpu>/matmul_int8_triton \
       python tilebench/profiling/ncu_harness_triton.py
 """
 import sys

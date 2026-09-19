@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
-# without requiring PYTHONPATH=.
+# without setting PYTHONPATH
 import os
 import sys
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

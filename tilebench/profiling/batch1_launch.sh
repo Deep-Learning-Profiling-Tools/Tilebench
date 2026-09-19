@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Batch 1 — runs on the current interactive B200 session.
+# Batch 1 — runs on the current interactive GPU session.
 # 23 operators: slow + medium + fast mix; 2 timeout ops included.
-
-cd /projects/kzhou6/bcui2/research/tilebench/Tilebench
+# Usage: GPU=<label> tilebench/profiling/batch1_launch.sh   (from any directory)
 
 OPS=(
   # slow (8): matmul / conv / attention / norm — incl. 1 timeout (matmul_fp32_fp16_fp8)
@@ -13,4 +12,4 @@ OPS=(
   mul2 vector_add relu sigmoid matrix_transpose rope gaussian_blur bitonic_sort
 )
 
-bash tilebench/profiling/run_batch.sh batch1 "${OPS[@]}"
+exec bash "$(dirname "${BASH_SOURCE[0]}")/run_batch.sh" batch1 "${OPS[@]}"

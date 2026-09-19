@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Run a list of operators in {default, autotune} mode.
-# Per-op JSONs are renamed to ${op}_default.json / ${op}_autotune.json so both
-# modes' results survive. Autotune mode for the 4 "problematic" ops has a
+# Run a list of operators in {default, autotune} mode on one GPU.
+#
+# run_bench.py owns the result names: every run writes its raw JSON to
+#   results/<GPU>/logs/{time_measurement_logs,autotune_logs}/<op>_<mode>_<backends>.json
+# and its summary to results/<GPU>/csv/<op>_<mode>.csv, so the default and the
+# autotune pass of one operator never overwrite each other and nothing is
+# renamed or copied here. Autotune mode for the 4 "problematic" ops has a
 # 60-minute timeout (raised from 30 in the previous run); if it times out,
 # we skip and continue.
 #
 # Usage: GPU=<label> run_batch.sh <batch_name> <op1> <op2> ...
 #   GPU is the hardware label passed to run_bench.py --gpu (e.g. GPU=B200); it
 #   selects the result namespace results/<GPU>/ and has no default.
+#   Works from any directory: the repository is located from this file.
 
 set -u
 
@@ -19,11 +24,11 @@ OPS=("$@")
 # 4 ops with 60-min autotune timeout (others run without timeout)
 TIMEOUT_OPS=(softmax matmul_fp32_fp16_fp8 kl_divergence histogramming)
 
-REPO=/projects/kzhou6/bcui2/research/tilebench/Tilebench
+# tilebench/profiling/run_batch.sh -> repository root
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RUN_BENCH="$REPO/scripts/run_bench.py"
 LOG_DIR=${REPO}/outputs/${BATCH}
 mkdir -p "$LOG_DIR"
-
-cd "$REPO"
 
 needs_timeout() {
   local op=$1
@@ -33,17 +38,8 @@ needs_timeout() {
   return 1
 }
 
-rename_outputs() {
-  local op=$1
-  local suffix=$2
-  local src_json="results/${GPU}/logs/time_measurement_logs/${op}_results.json"
-  local src_csv="results/${GPU}/csv/${op}_summary.csv"
-  [ -f "$src_json" ] && cp "$src_json" "results/${GPU}/logs/time_measurement_logs/${op}_${suffix}.json"
-  [ -f "$src_csv" ]  && cp "$src_csv"  "results/${GPU}/csv/${op}_${suffix}.csv"
-}
-
 START=$(date +%s)
-echo "=== Batch ${BATCH} starting at $(date) on $(hostname) ==="
+echo "=== Batch ${BATCH} on ${GPU} starting at $(date) on $(hostname) ==="
 echo "Ops (${#OPS[@]}): ${OPS[*]}"
 echo "Timeout list (60min): ${TIMEOUT_OPS[*]}"
 echo
@@ -51,16 +47,15 @@ echo
 for op in "${OPS[@]}"; do
   echo "----- ${op} (default) -----"
   ts=$(date +%s)
-  PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" \
+  python "$RUN_BENCH" --gpu "$GPU" --operator "$op" \
       > "$LOG_DIR/${op}_default.log" 2>&1
   rc=$?
-  rename_outputs "$op" default
   echo "  default rc=$rc  elapsed=$(($(date +%s) - ts))s"
 
   echo "----- ${op} (autotune) -----"
   ts=$(date +%s)
   if needs_timeout "$op"; then
-    timeout 3600 env PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" --autotune \
+    timeout 3600 python "$RUN_BENCH" --gpu "$GPU" --operator "$op" --autotune \
         > "$LOG_DIR/${op}_autotune.log" 2>&1
     rc=$?
     if [ $rc -eq 124 ]; then
@@ -69,11 +64,10 @@ for op in "${OPS[@]}"; do
       continue
     fi
   else
-    PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" --autotune \
+    python "$RUN_BENCH" --gpu "$GPU" --operator "$op" --autotune \
         > "$LOG_DIR/${op}_autotune.log" 2>&1
     rc=$?
   fi
-  rename_outputs "$op" autotune
   echo "  autotune rc=$rc  elapsed=$(($(date +%s) - ts))s"
 done
 

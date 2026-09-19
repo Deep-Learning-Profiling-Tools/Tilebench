@@ -11,7 +11,7 @@ Usage:
   ncu --set full --import-source on \\
       --launch-skip 3 --launch-count 1 \\
       --force-overwrite \\
-      -o outputs/ncu/block_sparse_attention/cutile_autotune \\
+      -o outputs/ncu/<gpu>/block_sparse_attention/cutile_autotune \\
       python tilebench/profiling/ncu_harness_block_sparse_attention_cutile.py
 """
 import os

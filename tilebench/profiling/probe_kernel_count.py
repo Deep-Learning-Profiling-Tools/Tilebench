@@ -7,11 +7,17 @@ For every (op, backend) we:
   - run a second call inside torch.profiler and count distinct device
     kernels triggered between the two synchronization points
 
-Output: tilebench/profiling/kernel_counts.json (canonical profiling metadata,
-tracked with the package). A full run rewrites it; an ONLY_OP run merges that
-operator's rows into the existing file instead of truncating it to one operator.
+Output: tilebench/profiling/metadata/<gpu>/kernel_counts.json (canonical
+profiling metadata, tracked with the package, one file per GPU: launch counts
+and kernel names differ between GPUs). A full run rewrites it; an ONLY_OP run
+merges that operator's rows into the existing file instead of truncating it to
+one operator. Only the file of --gpu is ever read or written.
         and a short summary table to stdout.
+
+Usage:  python -m tilebench.profiling.probe_kernel_count --gpu B200
+        ONLY_OP=softmax python -m tilebench.profiling.probe_kernel_count --gpu B200
 """
+import argparse
 import importlib
 import json
 import os
@@ -20,7 +26,8 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
-from tilebench.paths import KERNEL_COUNTS, NCU_CATALOGUE, NCU_OUTPUT_ROOT, REPO_ROOT
+from tilebench.paths import REPO_ROOT, hardware_label, kernel_counts_path
+from tilebench.profiling import ncu_kernel_select as ks
 ROOT = REPO_ROOT
 sys.path.insert(0, str(ROOT))
 
@@ -81,8 +88,16 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
 
 
 def main() -> None:
-    catalogue = json.loads((NCU_CATALOGUE).read_text())
-    out_path = KERNEL_COUNTS
+    ap = argparse.ArgumentParser(description="Probe kernel launch counts on the current GPU.")
+    ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                    help="Hardware label of the GPU being probed (e.g. B200): reads and writes "
+                         "tilebench/profiling/metadata/<gpu>/ only")
+    args = ap.parse_args()
+    try:
+        catalogue = ks.load_catalogue(args.gpu)
+    except ks.MissingProfilingMetadataError as e:
+        sys.exit(f"error: {e}")
+    out_path = kernel_counts_path(args.gpu)
     counts: list[dict] = []
 
     only_op = os.environ.get("ONLY_OP")

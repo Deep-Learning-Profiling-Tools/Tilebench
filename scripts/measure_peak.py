@@ -27,7 +27,7 @@ import sys
 from datetime import datetime
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
-# without requiring PYTHONPATH=.
+# without setting PYTHONPATH
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)

@@ -40,11 +40,16 @@ def write(path, text="x\n"):
     path.write_text(text)
 
 
+LEGACY_LOG = "time_measurement_logs/legacy_results.json"     # relative path, kept by the migration
+
+
 @pytest.fixture
 def work(tmp_path):
-    """A clone whose archive branch already holds the legacy snapshots (the
-    pre-package LLM directory and the pre-hardware-scoped results/logs/) that
-    main has since dropped, plus git-ignored artifacts of two GPUs on disk."""
+    """The situation the real repository is in. The archive branch holds two
+    legacy snapshots, raw logs under results/logs/ and the pre-package LLM
+    directory, plus the logs of another GPU. main has dropped the LLM snapshot
+    but STILL tracks the legacy results/logs/. Git-ignored artifacts of two GPUs
+    are on disk."""
     origin, work = tmp_path / "origin.git", tmp_path / "work"
     git(tmp_path, "init", "-q", "--bare", str(origin))
     git(tmp_path, "init", "-q", str(work))
@@ -53,16 +58,18 @@ def work(tmp_path):
     write(work / "src.txt")
     write(work / ".gitignore", f"results/*\n{LLM}/\n__pycache__/\n*.pyc\n")
     write(work / "benchmarks/llm_generated/legacy.txt", "legacy\n")
-    write(work / "results/logs/legacy.json", "{}\n")
+    write(work / f"results/logs/{LEGACY_LOG}", '{"paper": "B200"}\n')
+    write(work / "results/GH200/logs/archived_g.json", '{"gpu": "GH200"}\n')
     git(work, "add", "-A")
-    git(work, "add", "-f", "results/logs/legacy.json")
-    git(work, "commit", "-q", "-m", "main with the legacy snapshot")
+    git(work, "add", "-f", "results/logs", "results/GH200")
+    git(work, "commit", "-q", "-m", "main with the legacy snapshots")
     git(work, "push", "-q", "origin", "main")
     git(work, "push", "-q", "origin", f"main:refs/heads/{BRANCH}")   # archive starts here
-    git(work, "rm", "-q", "-r", "benchmarks/llm_generated", "results/logs")
-    git(work, "commit", "-q", "-m", "main drops the legacy snapshot")
+    git(work, "rm", "-q", "-r", "benchmarks/llm_generated", "results/GH200")
+    git(work, "commit", "-q", "-m", "main drops the LLM snapshot, still tracks results/logs/")
     git(work, "push", "-q", "origin", "main")
     git(work, "fetch", "-q", "origin")
+    assert f"results/logs/{LEGACY_LOG}" in git(work, "ls-tree", "-r", "--name-only", "origin/main")
 
     write(work / "results/B200/logs/a.json", "{}\n")
     write(work / "results/B200/logs/nki_profiles/mul2/case0/manifest.json", "{}\n")   # NKI, same campaign
@@ -72,6 +79,10 @@ def work(tmp_path):
     write(work / LLM / "op/model/high/iter_0/prompt.md", "prompt\n")
     write(work / LLM / "op/model/high/iter_0/__pycache__/impl.cpython-310.pyc", "bytecode")
     return work
+
+
+def blob(work, rev, path):
+    return git(work, "rev-parse", f"{rev}:{path}")
 
 
 def test_mode_is_required(work):
@@ -141,9 +152,10 @@ def test_archive_is_cumulative_and_keeps_the_legacy_path(work):
     assert "results/B200/logs/a.json" in files
     assert "results/B200/logs/nki_profiles/mul2/case0/manifest.json" in files
     assert "results/GH200/logs/g.json" in files
-    # legacy paths: main dropped them and this machine never had them; the archive keeps them
+    assert "results/GH200/logs/archived_g.json" in files   # archived earlier, never on this machine
+    # the legacy LLM snapshot: main dropped it and this machine never had it; the archive keeps it
     assert "benchmarks/llm_generated/legacy.txt" in files
-    assert "results/logs/legacy.json" in files
+    assert f"results/B200/logs/{LEGACY_LOG}" in files       # the legacy raw logs live on, migrated
 
 
 def test_working_tree_wins_and_history_is_only_appended(work):
@@ -170,3 +182,84 @@ def test_no_push_unless_asked(work):
     assert git(work, "ls-remote", "origin", f"refs/heads/{BRANCH}") == remote_before
     assert run(ARTIFACTS, work, "--llm", "--push").returncode == 0
     assert git(work, "ls-remote", "origin", f"refs/heads/{BRANCH}").split()[0] == git(work, "rev-parse", BRANCH)
+
+
+
+# --------------------------------------------------------------------------
+# legacy results/logs/ -> results/B200/logs/
+# --------------------------------------------------------------------------
+
+def test_legacy_logs_are_migrated_byte_for_byte_and_never_come_back(work):
+    before = blob(work, f"origin/{BRANCH}", f"results/logs/{LEGACY_LOG}")
+    gh200 = blob(work, f"origin/{BRANCH}", "results/GH200/logs/archived_g.json")
+
+    r = run(ARTIFACTS, work, "--llm")                      # any mode canonicalises the archive
+    assert r.returncode == 0, r.stderr
+    files = archived(work)
+    assert blob(work, BRANCH, f"results/B200/logs/{LEGACY_LOG}") == before     # same bytes, same relative path
+    # gone from the new tip, although origin/main still tracks it and is the base tree
+    assert not any(f.startswith("results/logs/") for f in files)
+    assert f"results/logs/{LEGACY_LOG}" in git(work, "ls-tree", "-r", "--name-only", "origin/main")
+    assert blob(work, BRANCH, "results/GH200/logs/archived_g.json") == gh200   # another GPU is untouched
+    assert "benchmarks/llm_generated/legacy.txt" in files                       # both LLM paths are kept
+    assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
+    assert "migrate 1 legacy results/logs/ logs to results/B200/logs/" in git(work, "log", "-1", "--format=%s", BRANCH)
+
+    tip = git(work, "rev-parse", BRANCH)                   # later runs have nothing left to migrate
+    assert "already up to date" in run(ARTIFACTS, work, "--llm").stdout
+    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    assert not any(f.startswith("results/logs/") for f in archived(work))
+    git(work, "merge-base", "--is-ancestor", tip, BRANCH)  # history is only appended to
+
+
+def test_identical_file_at_the_destination_is_fine(work):
+    write(work / f"results/B200/logs/{LEGACY_LOG}", '{"paper": "B200"}\n')      # same content as the legacy log
+    r = run(LOGS, work, "--gpu", "B200")
+    assert r.returncode == 0, r.stderr
+    assert git(work, "show", f"{BRANCH}:results/B200/logs/{LEGACY_LOG}") == '{"paper": "B200"}'
+
+
+def test_different_file_in_the_working_directory_aborts_the_migration(work):
+    write(work / f"results/B200/logs/{LEGACY_LOG}", '{"stale": "local rerun"}\n')
+    r = run(LOGS, work, "--gpu", "B200")
+    assert r.returncode == 1
+    assert f"results/B200/logs/{LEGACY_LOG}" in r.stderr and "DIFFERENT" in r.stderr
+    assert subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{BRANCH}"],
+                          cwd=work, env=ENV, capture_output=True).returncode != 0   # nothing was committed
+    # the conflict is about B200 only: the same run for another GPU still works
+    assert run(LOGS, work, "--gpu", "GH200").returncode == 0
+
+
+def test_different_file_already_archived_aborts_the_migration(work, tmp_path):
+    # an archive tip that holds the legacy log AND a different file at its destination
+    env = {**ENV, "GIT_INDEX_FILE": str(tmp_path / "idx")}
+    sh = lambda *a, **kw: subprocess.run(["git", *a], cwd=work, env=env, check=True,
+                                         capture_output=True, text=True, **kw).stdout.strip()
+    sh("read-tree", f"origin/{BRANCH}")
+    other = sh("hash-object", "-w", "--stdin", input="other\n")
+    sh("update-index", "--add", "--cacheinfo", f"100644,{other},results/B200/logs/{LEGACY_LOG}")
+    commit = sh("commit-tree", sh("write-tree"), "-p", f"origin/{BRANCH}", "-m", "conflicting tip")
+    git(work, "update-ref", f"refs/heads/{BRANCH}", commit)
+
+    r = run(ARTIFACTS, work, "--llm")
+    assert r.returncode == 1 and f"results/B200/logs/{LEGACY_LOG}" in r.stderr
+    assert git(work, "rev-parse", BRANCH) == commit       # the branch did not move
+
+
+def test_summary_csvs_come_from_main_not_from_the_archive_script(work):
+    """Once main uses results/<gpu>/csv/, the archive tree shows the CSVs and the
+    logs of that GPU side by side, and neither legacy directory."""
+    write(work / "results/B200/csv/mul2_default.csv", "params,dtype\n")
+    write(work / "results/B200/csv/notes.txt", "not tracked\n")
+    git(work, "rm", "-q", "-r", "results/logs")
+    git(work, "add", "-f", "results/B200/csv/mul2_default.csv")
+    git(work, "commit", "-q", "-m", "main adopts results/B200/csv/ and stops tracking results/logs/")
+    git(work, "push", "-q", "origin", "main")
+
+    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    files = archived(work)
+    assert "results/B200/csv/mul2_default.csv" in files   # from main's tree
+    assert "results/B200/csv/notes.txt" not in files      # the script copies no CSV directory
+    assert "results/B200/logs/a.json" in files
+    assert f"results/B200/logs/{LEGACY_LOG}" in files
+    assert not any(f.startswith(("results/csv/", "results/logs/")) for f in files)

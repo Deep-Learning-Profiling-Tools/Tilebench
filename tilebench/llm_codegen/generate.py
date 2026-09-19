@@ -1,7 +1,7 @@
 """LLM code-generation main loop.
 
 Usage:
-    PYTHONPATH=. python tools/llm_codegen/generate.py \
+    python -m tilebench.llm_codegen.generate \
         --operator vector_add --model gpt-5.5 --max-iters 10
 
 For each iteration:

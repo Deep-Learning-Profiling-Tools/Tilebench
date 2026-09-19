@@ -14,7 +14,7 @@ Usage:
       --kernel-name regex:"matmul" \
       --launch-skip 3 --launch-count 1 \
       --force-overwrite \
-      -o outputs/ncu/matmul_int8_triton_autotune \
+      -o outputs/ncu/<gpu>/matmul_int8_triton_autotune \
       python tilebench/profiling/ncu_harness_triton_autotune.py
 """
 import sys
