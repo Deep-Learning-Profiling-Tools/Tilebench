@@ -36,7 +36,6 @@ This document contains implementation and maintenance details for extending Tile
 | `--case-indices` | all | Run a subset of cases, for example `0,1,3` |
 | `--keep-proton-files` | false | Keep Proton `.hatchet` files |
 | `--proton-output-dir` | system temp | Proton output directory |
-| `--no-archive` | false | Disable local raw-log archiving |
 
 ```bash
 python scripts/run_bench.py --gpu B200 --operator mul2 --tile-language triton,cutile,tilelang
@@ -327,18 +326,7 @@ tilebench/benchmarks/llm_generated/
 
 Writers should create these directories when needed; a fresh clone must not depend on pre-existing generated directories.
 
-### Archiving artifacts
-
-`scripts/archive_artifacts.sh` backs artifacts up on the `archive/raw-logs-2026-09-18` branch without checking it out or touching the index:
-
-```bash
-scripts/archive_artifacts.sh --logs --gpu B200   # results/B200/logs/
-scripts/archive_artifacts.sh --llm               # tilebench/benchmarks/llm_generated/
-scripts/archive_artifacts.sh --all --gpu B200    # both
-scripts/archive_artifacts.sh --llm --push
-```
-
-The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. `--logs --gpu <gpu>` snapshots the whole `results/<gpu>/logs/` tree, so the NKI logs and profiles recorded with that campaign are archived with it; there is no separate NKI archive path. Carry-forward covers the raw logs of every other GPU, the NCU metadata under `outputs/profiling/`, and the legacy `benchmarks/llm_generated/` snapshot, which is kept but no longer written to. The archive branch sits on the public code baseline plus this archive-only material; when its tip already contains `origin/main`, a run keeps the tip's own tree as the base, so code merged into the archive from a branch ahead of `main` is not rolled back. The paper's B200 raw logs are stored under `results/B200/logs/`: they were migrated there, byte for byte, from the flat location they had before results were scoped by hardware, and that location is never recreated, even while `main` still tracks it. A migrated log that would meet a different file at its destination aborts the run instead of overwriting it. The summary CSVs are part of the source tree and are not copied by the script. `run_bench.py` calls `scripts/archive_logs.sh --gpu <gpu>` (equivalent to `--logs --gpu <gpu>`) after each run, so the raw logs of that GPU are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
+Running a benchmark only writes files under these paths. It performs no Git operation and backs nothing up. The paper's frozen raw logs, LLM trajectories and B200 NCU metadata are preserved on the `archive/raw-logs-2026-09-18` branch.
 
 ### Publishing a downloadable artifact
 
