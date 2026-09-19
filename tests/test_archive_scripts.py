@@ -282,8 +282,9 @@ def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
         mode, _, sha = meta.split()
         sh("update-index", "--add", "--cacheinfo", f"{mode},{sha},{path}")
     extra = {"newer_source.py": "ahead of main\n",
-             "tilebench/profiling/run_batch.sh": "#!/usr/bin/env bash\n",
-             "tilebench/profiling/batch2.sbatch": "#SBATCH\n",
+             "tilebench/profiling/retired_launch.sh": "#!/usr/bin/env bash\n",
+             "tilebench/profiling/retired_job.sbatch": "#SBATCH\n",
+             "tilebench/profiling/retired_harness.py": "# campaign-specific harness\n",
              "outputs/profiling/B200/kernel_counts.json": "[]"}
     for path, text in extra.items():
         sha = sh("hash-object", "-w", "--stdin", input=text)
@@ -307,6 +308,7 @@ def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
     assert run(LOGS, work, "--gpu", "B200").returncode == 0
     files = archived(work)
     assert "main_moved.txt" in files
-    assert {"tilebench/profiling/run_batch.sh", "tilebench/profiling/batch2.sbatch",
+    assert {"tilebench/profiling/retired_launch.sh", "tilebench/profiling/retired_job.sbatch",
+            "tilebench/profiling/retired_harness.py",
             "outputs/profiling/B200/kernel_counts.json"} <= files
     assert "results/B200/logs/a.json" in files and "benchmarks/llm_generated/legacy.txt" in files

@@ -14,8 +14,8 @@ merges that operator's rows into the existing file instead of truncating it to
 one operator. Only the file of --gpu is ever read or written.
         and a short summary table to stdout.
 
-Usage:  python -m tilebench.profiling.probe_kernel_count --gpu B200
-        ONLY_OP=softmax python -m tilebench.profiling.probe_kernel_count --gpu B200
+Usage:  python scripts/profiling/probe_kernel_count.py --gpu B200
+        ONLY_OP=softmax python scripts/profiling/probe_kernel_count.py --gpu B200
 """
 import argparse
 import importlib
@@ -26,13 +26,20 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
-from tilebench.paths import REPO_ROOT, hardware_label, kernel_counts_path
-from tilebench.profiling import ncu_kernel_select as ks
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.paths import REPO_ROOT, hardware_label, kernel_counts_path  # noqa: E402
+from tilebench.profiling import ncu_kernel_select as ks  # noqa: E402
 ROOT = REPO_ROOT
-sys.path.insert(0, str(ROOT))
 
 import torch
-from tilebench.data.tensors import GENERATORS
+from tilebench.data.tensors import GENERATORS  # noqa: E402
 
 DTYPE_MAP = {
     "fp16": torch.float16, "bf16": torch.bfloat16, "fp32": torch.float32,

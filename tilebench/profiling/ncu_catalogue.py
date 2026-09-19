@@ -1,34 +1,26 @@
-"""
-Catalogue all benchmark operators for the NCU sweep:
-  - read each operator's config.yaml
-  - compute sweep-max case (largest product of varied case_grid dims)
-  - list dtypes
-  - look up the autotune-winner cfg for that case in ONE autotune log, named
-    explicitly by GPU, mode and backend selection:
-    results/<gpu>/logs/autotune_logs/<op>_autotune_<backends>.json
-    (tilebench.paths.autotune_log_path). It is never picked by glob or mtime.
+"""NCU catalogue: for every operator, the sweep-max case of its config.yaml and the
+autotune winners recorded for it on one GPU.
 
-Writes outputs/profiling/<gpu>/ncu_catalogue.json for the driver to consume. It
-is generated, hardware-specific data (the winners come from that GPU's autotune
-runs), so it lives with the other generated outputs, not in the source package.
-Each GPU has its own catalogue; building one never touches another.
+Library only. The command line lives in scripts/profiling/ncu_catalogue.py.
 
-Usage:  python -m tilebench.profiling.ncu_catalogue --gpu B200 [op ...]
-        ... --tile-language triton,cutile,tilelang   # winners from that run instead
+  - sweep_max_cases(op)   dtypes and sweep-max case per dtype, from config.yaml
+                          alone (largest product of the varied case_grid dims)
+  - collect_op(...)       one catalogue entry: the cases above plus the winners
+                          read from ONE autotune log, named explicitly by GPU,
+                          mode and backend selection
+                          (tilebench.paths.autotune_log_path): never picked by
+                          glob or mtime
+  - write_catalogue(...)  build or refresh outputs/profiling/<gpu>/ncu_catalogue.json
+
+The catalogue is generated, hardware-specific data (the winners come from that
+GPU's autotune runs), so it lives with the other generated outputs, not in the
+source package. Each GPU has its own; building one never touches another.
 """
-import argparse
 import json
-import os
-import sys
 from pathlib import Path
 
 import yaml
-from tilebench.backends import parse_backends
-from tilebench.paths import (OPERATOR_ROOT, REPO_ROOT, autotune_log_path, hardware_label,
-                             ncu_catalogue_path)
-
-ROOT = REPO_ROOT
-sys.path.insert(0, str(ROOT))
+from tilebench.paths import OPERATOR_ROOT, autotune_log_path, list_operators, ncu_catalogue_path
 
 OPS_DIR = OPERATOR_ROOT
 
@@ -180,64 +172,22 @@ def collect_op(op_name: str, gpu: str, backends: list[str]) -> dict:
     }
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Build the NCU sweep catalogue.")
-    parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
-                        help="Hardware label (e.g. B200): selects both the autotune logs read "
-                             "(results/<gpu>/logs/autotune_logs/) and the catalogue written "
-                             "(outputs/profiling/<gpu>/ncu_catalogue.json)")
-    parser.add_argument("--tile-language", type=str, default="triton,cutile",
-                        help="Backend selection of the autotune run whose winners to read, as "
-                             "passed to run_bench.py --autotune. It must include triton and "
-                             "cutile, the two backends NCU profiles (default: triton,cutile)")
-    parser.add_argument("ops", nargs="*", help="Operators to refresh (default: all)")
-    args = parser.parse_args(argv)
-    try:
-        backends = parse_backends(args.tile_language)
-    except ValueError as e:
-        parser.error(f"--tile-language: {e}")
-    if not {"triton", "cutile"} <= set(backends):
-        parser.error("--tile-language must include triton and cutile: the catalogue records "
-                     "the autotune winners of exactly these two backends")
-
-    skip = {"_template", "__pycache__"}
-    all_ops = sorted([
-        p.name for p in OPS_DIR.iterdir()
-        if p.is_dir() and p.name not in skip and (p / "config.yaml").exists()
-    ])
-    out = ncu_catalogue_path(args.gpu)
+def write_catalogue(gpu: str, backends: list[str], ops: list[str] | None = None) -> tuple[Path, list[dict]]:
+    """Build the catalogue of `gpu`, or refresh only `ops` inside the existing
+    one, and write it. Returns (path, the entries that were (re)built)."""
+    all_ops = list_operators()
+    out = ncu_catalogue_path(gpu)
     out.parent.mkdir(parents=True, exist_ok=True)
-
-    requested = args.ops
-    if requested:
-        unknown = [op for op in requested if op not in all_ops]
+    if ops:
+        unknown = [op for op in ops if op not in all_ops]
         if unknown:
-            raise SystemExit(f"unknown ops: {unknown}")
+            raise ValueError(f"unknown ops: {unknown}")
         existing = json.loads(out.read_text()) if out.exists() else []
         by_op = {c["op"]: c for c in existing}
-        for op in requested:
-            by_op[op] = collect_op(op, args.gpu, backends)
-        catalogue = [by_op[op] for op in sorted(by_op)]
-        out.write_text(json.dumps(catalogue, indent=2, default=str))
-        print(f"wrote {out}  (updated {len(requested)} of {len(catalogue)} ops: {requested})")
-        catalogue = [by_op[op] for op in requested]
-    else:
-        catalogue = [collect_op(op, args.gpu, backends) for op in all_ops]
-        out.write_text(json.dumps(catalogue, indent=2, default=str))
-        print(f"wrote {out}  ({len(catalogue)} ops)")
-    no_log = [c["op"] for c in catalogue if not c.get("has_autotune_log")]
-    if no_log:
-        print(f"ops without autotune log: {no_log}")
-    for c in catalogue:
-        op = c["op"]
-        dts = c["dtypes"]
-        for dt in dts:
-            has_tune = dt in c["autotune_winner_per_dtype"]
-            ps = c["default_params_per_dtype"][dt]
-            print(f"  {op:30s}  dtype={dt:8s}  "
-                  f"autotune={'yes' if has_tune else 'NO'}  "
-                  f"params={ps}")
-
-
-if __name__ == "__main__":
-    main()
+        for op in ops:
+            by_op[op] = collect_op(op, gpu, backends)
+        out.write_text(json.dumps([by_op[op] for op in sorted(by_op)], indent=2, default=str))
+        return out, [by_op[op] for op in ops]
+    catalogue = [collect_op(op, gpu, backends) for op in all_ops]
+    out.write_text(json.dumps(catalogue, indent=2, default=str))
+    return out, catalogue

@@ -1,7 +1,7 @@
 """Run NCU for one operator.
 
 Usage:
-  python -m tilebench.profiling.ncu_one --gpu <gpu> <op> [<dtype>] [--backend triton|cutile|both]
+  python scripts/profiling/ncu_one.py --gpu <gpu> <op> [<dtype>] [--backend triton|cutile|both]
 
 Reads the autotune winners and the kernel counts of --gpu from
 outputs/profiling/<gpu>/{ncu_catalogue,kernel_counts}.json
@@ -11,13 +11,13 @@ without metadata is an error; another GPU's metadata is never used.
 
 Examples:
   # Both backends, all dtypes:
-  python -m tilebench.profiling.ncu_one --gpu B200 matmul_int8
+  python scripts/profiling/ncu_one.py --gpu B200 matmul_int8
 
   # Single dtype, both backends:
-  python -m tilebench.profiling.ncu_one --gpu B200 matmul_fp32_fp16_fp8 fp32
+  python scripts/profiling/ncu_one.py --gpu B200 matmul_fp32_fp16_fp8 fp32
 
   # Single backend, single dtype:
-  python -m tilebench.profiling.ncu_one --gpu B200 softmax fp16 --backend cutile
+  python scripts/profiling/ncu_one.py --gpu B200 softmax fp16 --backend cutile
 """
 import argparse
 import json
@@ -27,18 +27,27 @@ import sys
 import time
 from pathlib import Path
 
-from tilebench.profiling import ncu_kernel_select as ks
-from tilebench.paths import PROFILING_ROOT, REPO_ROOT, hardware_label, ncu_output_dir
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.profiling import ncu_kernel_select as ks  # noqa: E402
+from tilebench.paths import REPO_ROOT, hardware_label, ncu_report_path  # noqa: E402
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
-HARNESS = PROFILING_ROOT / "ncu_generic_harness.py"
+# The process NCU profiles: a sibling script, located from this file, never from the CWD.
+HARNESS = Path(__file__).resolve().with_name("ncu_generic_harness.py")
 
 
-def run_one(out_dir: Path, op: str, backend: str, dtype: str, params: dict,
+def run_one(gpu: str, op: str, backend: str, dtype: str, params: dict,
             cfg: dict | None, n_kernels: int,
             kernel_names: list[str] | None = None) -> int:
-    out_path = out_dir / op / f"{backend}_{dtype}.ncu-rep"
+    out_path = ncu_report_path(gpu, op, backend, dtype)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["NCU_OP"] = op
@@ -129,7 +138,6 @@ def main() -> None:
     op_entry = next((c for c in catalogue if c["op"] == args.op), None)
     if op_entry is None:
         sys.exit(f"error: op {args.op!r} not in the {args.gpu} catalogue")
-    out_dir = ncu_output_dir(args.gpu)
 
     dtypes = [args.dtype] if args.dtype else op_entry["dtypes"]
     backends = ["triton", "cutile"] if args.backend == "both" else [args.backend]
@@ -146,7 +154,7 @@ def main() -> None:
             cfg = winner.get(be)
             n = ks.kernel_count_for(kc, (args.op, dt, be))
             names = kcn.get((args.op, dt, be))
-            rc_total |= run_one(out_dir, args.op, be, dt, dict(params), cfg, n, names)
+            rc_total |= run_one(args.gpu, args.op, be, dt, dict(params), cfg, n, names)
     sys.exit(rc_total)
 
 

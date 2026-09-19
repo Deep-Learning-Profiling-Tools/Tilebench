@@ -13,7 +13,7 @@ The catalogue and the kernel counts are the ones of --gpu,
 outputs/profiling/<gpu>/{ncu_catalogue,kernel_counts}.json
 (regenerate with ncu_catalogue.py and probe_kernel_count.py). A GPU without
 them is an error; another GPU's metadata is never used.
-Run with: python -m tilebench.profiling.ncu_driver --gpu B200
+Run with: python scripts/profiling/ncu_driver.py --gpu B200
 """
 import argparse
 import json
@@ -24,18 +24,23 @@ import sys
 import time
 from pathlib import Path
 
-from tilebench.profiling import ncu_kernel_select as ks
-from tilebench.paths import PROFILING_ROOT, REPO_ROOT, hardware_label, ncu_output_dir
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.profiling import ncu_kernel_select as ks  # noqa: E402
+from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir, ncu_report_path  # noqa: E402
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
-HARNESS = PROFILING_ROOT / "ncu_generic_harness.py"
+# The process NCU profiles: a sibling script, located from this file, never from the CWD.
+HARNESS = Path(__file__).resolve().with_name("ncu_generic_harness.py")
 
 KERNEL_REGEX_BY_BACKEND_DEFAULT = ".*"
-
-
-def out_path(ncu_dir: Path, op: str, backend: str, dtype: str) -> Path:
-    return ncu_dir / op / f"{backend}_{dtype}.ncu-rep"
 
 
 def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
@@ -176,7 +181,7 @@ def main() -> None:
         key = (op, dt, backend)
         if key in done_keys:
             continue
-        out = out_path(ncu_dir, op, backend, dt)
+        out = ncu_report_path(args.gpu, op, backend, dt)
         if out.exists() and out.stat().st_size > 0:
             log.append({"op": op, "dtype": dt, "backend": backend, "ok": True,
                         "rc": 0, "elapsed_s": 0, "stderr_tail": "(pre-existing)"})
