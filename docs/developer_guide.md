@@ -211,11 +211,13 @@ tilebench/llm_codegen/
 
 Task descriptions, framework conventions, prompt construction, evaluation, and feedback logic live there. Backend API guides are under `skills/`.
 
-Generated trajectories and selected implementations are stored under:
+Each run writes its trajectory (prompts, responses, kernels, feedback, token usage) and the selected implementation to:
 
 ```text
-tilebench/benchmarks/llm_generated/
+tilebench/benchmarks/llm_generated/<operator>/<model>/<effort>/
 ```
+
+This directory is the pipeline's default output location and is Git-ignored: the pipeline creates it on demand, and nothing under it is committed to `main`.
 
 Keep LLM generation separate from the manually implemented benchmark path. Generated code must not delegate the operator computation to PyTorch, vendor libraries, or backend autotuners when the generation protocol forbids them.
 
@@ -227,16 +229,40 @@ The repository tracks only per-case benchmark CSVs under:
 results/csv/
 ```
 
-Other benchmark artifacts are generated locally and ignored, including:
+Other artifacts are generated locally and ignored, including:
 
 ```text
 results/logs/
 results/figures/
 results/aggregate/
 outputs/
+tilebench/benchmarks/llm_generated/
 ```
 
 Writers should create these directories when needed; a fresh clone must not depend on pre-existing generated directories.
+
+### Archiving artifacts
+
+`scripts/archive_artifacts.sh` backs artifacts up on the `archive/raw-logs-2026-09-18` branch without checking it out or touching the index:
+
+```bash
+scripts/archive_artifacts.sh --logs     # results/logs/
+scripts/archive_artifacts.sh --llm      # tilebench/benchmarks/llm_generated/
+scripts/archive_artifacts.sh --all      # both
+scripts/archive_artifacts.sh --llm --push
+```
+
+The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. `run_bench.py` calls `scripts/archive_logs.sh` (equivalent to `--logs`) after each run, so raw logs are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
+
+### Publishing a downloadable artifact
+
+Downloadable artifacts are declared in `artifacts/manifest.json` (URL, SHA256, archive name, and the directories the archive provides). To publish one:
+
+```bash
+python scripts/package_artifacts.py --artifact llm-aacl2026
+```
+
+writes a reproducible `outputs/artifacts/<archive>.tar.gz` and prints its SHA256. Upload the archive, then put the file's share link and that checksum in the manifest. Readers restore it with `python scripts/fetch_artifacts.py --artifact <name>`.
 
 ## Pre-Merge Checklist
 
