@@ -26,10 +26,11 @@ from pathlib import Path
 
 # Longest prefix first: benchmarks/ must not shadow the ncu artifact rule.
 # Every pull request that predates the layout change was measured on B200, so
-# its profiling metadata and NCU reports land in the B200 namespace.
+# its profiling metadata and NCU reports land in the B200 namespace (both are
+# generated data under the Git-ignored outputs/ tree).
 MOVES = [
-    ("tilebench_run/ncu/kernel_counts.json", "tilebench/profiling/metadata/B200/kernel_counts.json"),
-    ("tilebench_run/ncu_catalogue.json", "tilebench/profiling/metadata/B200/ncu_catalogue.json"),
+    ("tilebench_run/ncu/kernel_counts.json", "outputs/profiling/B200/kernel_counts.json"),
+    ("tilebench_run/ncu_catalogue.json", "outputs/profiling/B200/ncu_catalogue.json"),
     ("tilebench_run/ncu/", "outputs/ncu/B200/"),
     ("tilebench_run/", "tilebench/profiling/"),
     ("tools/llm_codegen/", "tilebench/llm_codegen/"),

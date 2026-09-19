@@ -10,7 +10,7 @@ For each op/dtype:
 
 Progress is appended to outputs/ncu/<gpu>/sweep_log.json after each pair.
 The catalogue and the kernel counts are the ones of --gpu,
-tilebench/profiling/metadata/<gpu>/{ncu_catalogue,kernel_counts}.json
+outputs/profiling/<gpu>/{ncu_catalogue,kernel_counts}.json
 (regenerate with ncu_catalogue.py and probe_kernel_count.py). A GPU without
 them is an error; another GPU's metadata is never used.
 Run with: python -m tilebench.profiling.ncu_driver --gpu B200
@@ -130,7 +130,7 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
 def main() -> None:
     ap = argparse.ArgumentParser(description="NCU sweep over one GPU's catalogue.")
     ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
-                    help="Hardware label (e.g. B200): reads tilebench/profiling/metadata/<gpu>/, "
+                    help="Hardware label (e.g. B200): reads outputs/profiling/<gpu>/, "
                          "writes outputs/ncu/<gpu>/")
     args = ap.parse_args()
     try:

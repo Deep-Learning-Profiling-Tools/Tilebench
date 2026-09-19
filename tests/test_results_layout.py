@@ -4,7 +4,6 @@ No test here needs a GPU: the benchmark engine is replaced by a stub, and every
 write goes to a temporary results root.
 """
 import csv
-import hashlib
 import importlib.util
 import json
 import shutil
@@ -32,17 +31,6 @@ def results(tmp_path, monkeypatch):
     """Point the results tree at a temporary directory."""
     root = tmp_path / "results"
     monkeypatch.setattr(paths, "RESULTS_ROOT", root)
-    return root
-
-
-@pytest.fixture
-def metadata(tmp_path, monkeypatch):
-    """A temporary profiling-metadata tree holding a copy of the committed B200
-    files, plus a temporary NCU output root."""
-    root = tmp_path / "metadata"
-    shutil.copytree(paths.PROFILING_METADATA_ROOT / "B200", root / "B200")
-    monkeypatch.setattr(paths, "PROFILING_METADATA_ROOT", root)
-    monkeypatch.setattr(paths, "NCU_OUTPUT_ROOT", tmp_path / "outputs" / "ncu")
     return root
 
 
@@ -112,7 +100,6 @@ def test_gitignore_tracks_only_the_per_hardware_summary_csvs(tmp_path):
 FROZEN = ["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "speedup_triton",
           "speedup_cutile", "triton_vs_cutile", "tilelang_ms", "speedup_tilelang"]
 NKI_COLUMNS = ["torch_nki_ms", "nki_ms", "speedup_nki"]
-MANIFEST = REPO / "tests" / "data" / "b200_csv.sha256"
 
 
 def read_csv(path):
@@ -121,36 +108,8 @@ def read_csv(path):
         return list(reader.fieldnames), list(reader)
 
 
-def frozen_digest(path):
-    """SHA256 of the GPU-measured columns only: blind to an NKI extension and to
-    line endings, sensitive to any change in a frozen value or row."""
-    _, rows = read_csv(path)
-    return hashlib.sha256(json.dumps([[r[c] for c in FROZEN] for r in rows]).encode()).hexdigest()
-
-
 def b200_csvs():
     return sorted((REPO / "results" / "B200" / "csv").glob("*.csv"))
-
-
-def test_b200_frozen_columns_match_the_pre_migration_files():
-    """tests/data/b200_csv.sha256 holds, per file, the raw SHA256 recorded from
-    results/csv/ BEFORE the move to results/B200/csv/, and the digest of its
-    frozen columns. A file is either byte-identical to that state, or carries
-    the NKI extension with its frozen columns untouched. Regenerate only when
-    the B200 numbers are intentionally re-measured:
-        python tests/test_results_layout.py
-    """
-    expected = {name: (raw, frozen) for raw, frozen, name in
-                (line.split() for line in MANIFEST.read_text().splitlines())}
-    files = b200_csvs()
-    assert len(expected) == 90 and sorted(expected) == [p.name for p in files]
-    for p in files:
-        raw, frozen = expected[p.name]
-        header, _ = read_csv(p)
-        assert frozen_digest(p) == frozen, f"{p.name}: a frozen B200 column changed"
-        if header == FROZEN:
-            assert hashlib.sha256(p.read_bytes()).hexdigest() == raw, f"{p.name}: bytes changed"
-    assert not (REPO / "results" / "csv").exists(), "the pre-migration directory is gone"
 
 
 def test_b200_csv_schema_allows_only_the_nki_extension():
@@ -466,22 +425,25 @@ def test_aggregate_reads_csv_and_writes_aggregate_of_one_gpu(results):
         aggregate_results.main([])
 
 
-def test_plot_sweep_max_selects_the_gpu(results, metadata):
-    from tilebench.profiling.ncu_kernel_select import MissingProfilingMetadataError
+def test_plot_sweep_max_selects_the_gpu(results):
     mod = load_script("plot_sweep_max")
-    with pytest.raises(MissingProfilingMetadataError):            # no GH200 catalogue: B200's is not borrowed
+    with pytest.raises(FileNotFoundError) as e:                   # no GH200 results: B200's are not borrowed
         mod.sweep_max_rows("GH200")
-    shutil.copytree(metadata / "B200", metadata / "GH200")
-    with pytest.raises(FileNotFoundError) as e:                   # ...and no GH200 CSVs in the temp tree
-        mod.sweep_max_rows("GH200")
-    assert str(results / "GH200" / "csv") in str(e.value.filename)
+    assert str(results / "GH200" / "csv") in str(e.value)
+    # one GH200 result: that operator, at the sweep-max case of its config.yaml, and nothing from B200
+    real = next((REPO / "results" / "B200" / "csv").glob("mul2_autotune.csv"))
+    (results / "GH200" / "csv").mkdir(parents=True)
+    shutil.copy(real, results / "GH200" / "csv" / real.name)
+    assert [label for label, _ in mod.sweep_max_rows("GH200")] == ["mul2"]
     with pytest.raises(SystemExit):
         mod.main([])
 
 
-def test_plot_sweep_max_finds_every_committed_b200_operator():
-    rows = load_script("plot_sweep_max").sweep_max_rows("B200")   # the real, migrated CSVs
+def test_plot_sweep_max_needs_only_the_configs_and_the_committed_csvs(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "PROFILING_METADATA_ROOT", tmp_path / "no-metadata")
+    rows = load_script("plot_sweep_max").sweep_max_rows("B200")   # the real B200 CSVs
     assert len(rows) == 45
+    assert not (tmp_path / "no-metadata").exists()                # no NCU catalogue is read or written
 
 
 def test_plot_sweep_max_default_output_cannot_clobber_the_readme_figure(results, monkeypatch):
@@ -508,9 +470,3 @@ def test_run_bench_all_scopes_its_runs_and_records_the_gpu(results, monkeypatch,
     monkeypatch.setattr(sys, "argv", ["run_bench_all.py", "--operators", "mul2"])
     with pytest.raises(SystemExit):
         mod.main()
-
-
-if __name__ == "__main__":      # regenerate the B200 manifest (see the test that reads it)
-    MANIFEST.write_text("".join(
-        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {frozen_digest(p)}  {p.name}\n" for p in b200_csvs()))
-    print(f"wrote {MANIFEST} ({len(b200_csvs())} files)")

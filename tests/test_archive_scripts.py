@@ -263,3 +263,50 @@ def test_summary_csvs_come_from_main_not_from_the_archive_script(work):
     assert "results/B200/logs/a.json" in files
     assert f"results/B200/logs/{LEGACY_LOG}" in files
     assert not any(f.startswith(("results/csv/", "results/logs/")) for f in files)
+
+
+# --------------------------------------------------------------------------
+# archive = public baseline + archive-only material
+# --------------------------------------------------------------------------
+
+def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
+    """The archive can hold code merged in from a branch ahead of main, and files
+    that left the public tree: cluster launch scripts and per-GPU NCU metadata."""
+    env = {**ENV, "GIT_INDEX_FILE": str(tmp_path / "idx")}
+    sh = lambda *a, **kw: subprocess.run(["git", *a], cwd=work, env=env, check=True,
+                                         capture_output=True, text=True, **kw).stdout.strip()
+    sh("read-tree", "origin/main")
+    for line in git(work, "ls-tree", "-r", f"origin/{BRANCH}", "--", "benchmarks/llm_generated",
+                    "results/GH200").splitlines():
+        meta, path = line.split("\t")
+        mode, _, sha = meta.split()
+        sh("update-index", "--add", "--cacheinfo", f"{mode},{sha},{path}")
+    extra = {"newer_source.py": "ahead of main\n",
+             "tilebench/profiling/run_batch.sh": "#!/usr/bin/env bash\n",
+             "tilebench/profiling/batch2.sbatch": "#SBATCH\n",
+             "outputs/profiling/B200/kernel_counts.json": "[]"}
+    for path, text in extra.items():
+        sha = sh("hash-object", "-w", "--stdin", input=text)
+        sh("update-index", "--add", "--cacheinfo", f"100644,{sha},{path}")
+    merged = sh("commit-tree", sh("write-tree"), "-p", f"origin/{BRANCH}", "-p", "origin/main",
+                "-m", "merge a newer baseline into the archive")
+    git(work, "update-ref", f"refs/heads/{BRANCH}", merged)
+
+    # main is already contained in the archive tip: the tip's own tree is the base
+    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    files = archived(work)
+    assert set(extra) <= files and "results/B200/logs/a.json" in files
+    for path, text in extra.items():
+        assert git(work, "show", f"{BRANCH}:{path}") == text.strip()
+
+    # main moves on: its tree becomes the base, and the archive-only files are still carried forward
+    write(work / "main_moved.txt")
+    git(work, "add", "main_moved.txt")
+    git(work, "commit", "-q", "-m", "main advances")
+    git(work, "push", "-q", "origin", "main")
+    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    files = archived(work)
+    assert "main_moved.txt" in files
+    assert {"tilebench/profiling/run_batch.sh", "tilebench/profiling/batch2.sbatch",
+            "outputs/profiling/B200/kernel_counts.json"} <= files
+    assert "results/B200/logs/a.json" in files and "benchmarks/llm_generated/legacy.txt" in files

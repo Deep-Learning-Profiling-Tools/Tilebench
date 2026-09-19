@@ -4,7 +4,7 @@ Usage:
   python -m tilebench.profiling.ncu_one --gpu <gpu> <op> [<dtype>] [--backend triton|cutile|both]
 
 Reads the autotune winners and the kernel counts of --gpu from
-tilebench/profiling/metadata/<gpu>/{ncu_catalogue,kernel_counts}.json
+outputs/profiling/<gpu>/{ncu_catalogue,kernel_counts}.json
 and runs NCU at the sweep-max input case (the same case used by the global
 sweep). Outputs to outputs/ncu/<gpu>/<op>/<backend>_<dtype>.ncu-rep. A GPU
 without metadata is an error; another GPU's metadata is never used.
@@ -112,7 +112,7 @@ def run_one(out_dir: Path, op: str, backend: str, dtype: str, params: dict,
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
-                    help="Hardware label (e.g. B200): reads tilebench/profiling/metadata/<gpu>/, "
+                    help="Hardware label (e.g. B200): reads outputs/profiling/<gpu>/, "
                          "writes outputs/ncu/<gpu>/")
     ap.add_argument("op")
     ap.add_argument("dtype", nargs="?", default=None,

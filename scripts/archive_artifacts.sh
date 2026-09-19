@@ -4,9 +4,13 @@
 # main version-controls source and the summary CSVs only. Raw benchmark logs
 # and LLM-generated trajectories are generated artifacts: ignored on main,
 # backed up here. Each run builds one commit whose tree is
-#     <origin/main's tree, without the legacy results/logs/>
+#     <the public code baseline, without the legacy results/logs/>
 #   + <every artifact already on the archive branch>      (cumulative)
 #   + <the selected artifact directories from the working directory>
+# The baseline is origin/main. When the archive tip already contains origin/main
+# there is nothing new to absorb and the tip's own tree is kept instead, so code
+# merged into the archive from a newer baseline (a branch ahead of main) is
+# never rolled back to main by an archive run.
 # with the working directory winning on a path collision. The summary CSVs are
 # part of main's tree (results/<gpu>/csv/) and are never copied by this script.
 # Artifacts that this
@@ -38,7 +42,9 @@ LLM_PATH="tilebench/benchmarks/llm_generated"
 # Fixed paths the archive owns, carried forward on every run whichever mode is
 # selected. benchmarks/llm_generated/ is a legacy location (before the
 # tilebench/ package): a historical snapshot that is kept and never written to.
-ARCHIVE_PATHS=("benchmarks/llm_generated" "$LLM_PATH")
+# outputs/profiling/ holds the NCU metadata (catalogue, kernel counts) of each
+# GPU: generated data that the public tree does not track.
+ARCHIVE_PATHS=("benchmarks/llm_generated" "$LLM_PATH" "outputs/profiling")
 # Legacy raw-log location, from before results were scoped by hardware. Every
 # log ever stored there was measured on B200 (the paper campaign), so it is
 # canonicalised to results/B200/logs/<same relative path> and never kept:
@@ -106,12 +112,20 @@ trap 'rm -rf "$tmp"' EXIT
 in_index() { GIT_INDEX_FILE="$tmp/$1" git "${@:2}"; }
 entries() { in_index "$1" ls-files -s | sed 's/^[0-9]* \([0-9a-f]*\) [0-9]\t/\1\t/' | LC_ALL=C sort -t $'\t' -k2; }
 
-in_index index read-tree "$BASE"
+base_tree="$BASE"
+for tip in $remote_tip $local_tip; do
+    if git merge-base --is-ancestor "$BASE" "$tip"; then base_tree="$tip"; fi
+done
+in_index index read-tree "$base_tree"
 # main's copy of the legacy logs is not inherited (see LEGACY_LOGS above).
 in_index index ls-files -z -- "$LEGACY_LOGS" | in_index index update-index -z --force-remove --stdin
 
 for tip in $remote_tip $local_tip; do
     git ls-tree -r "$tip" -- "${ARCHIVE_PATHS[@]}" | in_index index update-index --index-info
+    # cluster launch scripts that left the public tree and are kept here only
+    git ls-tree -r -z "$tip" -- tilebench/profiling \
+        | { grep -z -E '\.(sh|sbatch)$' || true; } \
+        | in_index index update-index -z --index-info
     # the raw logs of every GPU archived so far: results/<gpu>/logs/
     git ls-tree -r -z "$tip" -- results \
         | { grep -z -E $'\tresults/[^/]+/logs/' || true; } \

@@ -31,19 +31,19 @@ PEAK_PERFORMANCE_ROOT = DATA_ROOT / "peak_performance"
 PROFILING_ROOT = PACKAGE_ROOT / "profiling"
 LLM_CODEGEN_ROOT = PACKAGE_ROOT / "llm_codegen"
 
-#: NCU profiling metadata, one directory per hardware (see the helpers below):
-#:     profiling/metadata/<hardware>/{ncu_catalogue.json,kernel_counts.json}
-#: Sweep-max cases, autotune winners, kernel launch counts and kernel names all
-#: differ between GPUs, so there is no global copy and no fallback to another
-#: GPU's files.
-PROFILING_METADATA_ROOT = PROFILING_ROOT / "metadata"
-
 REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).resolve()
 
 #: Generated artifacts (NCU reports, measured peak sweeps). Not package data.
 OUTPUT_ROOT = REPO_ROOT / "outputs"
 #: Generated NCU reports, one directory per hardware: outputs/ncu/<hardware>/.
 NCU_OUTPUT_ROOT = OUTPUT_ROOT / "ncu"
+#: NCU profiling metadata, one directory per hardware (see the helpers below):
+#:     outputs/profiling/<hardware>/{ncu_catalogue.json,kernel_counts.json}
+#: Autotune winners, kernel launch counts and kernel names are measured on one
+#: GPU, so this is generated experiment data, not a package resource: it lives
+#: with the other generated outputs, there is no global copy, and another GPU's
+#: files are never used as a fallback.
+PROFILING_METADATA_ROOT = OUTPUT_ROOT / "profiling"
 
 #: Benchmark results, one namespace per hardware campaign:
 #:     results/<hardware>/{csv,logs,figures,aggregate,runs}/

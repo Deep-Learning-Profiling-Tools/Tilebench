@@ -8,8 +8,10 @@ Catalogue all benchmark operators for the NCU sweep:
     results/<gpu>/logs/autotune_logs/<op>_autotune_<backends>.json
     (tilebench.paths.autotune_log_path). It is never picked by glob or mtime.
 
-Writes tilebench/profiling/metadata/<gpu>/ncu_catalogue.json for the driver to
-consume. Each GPU has its own catalogue; building one never touches another.
+Writes outputs/profiling/<gpu>/ncu_catalogue.json for the driver to consume. It
+is generated, hardware-specific data (the winners come from that GPU's autotune
+runs), so it lives with the other generated outputs, not in the source package.
+Each GPU has its own catalogue; building one never touches another.
 
 Usage:  python -m tilebench.profiling.ncu_catalogue --gpu B200 [op ...]
         ... --tile-language triton,cutile,tilelang   # winners from that run instead
@@ -66,14 +68,10 @@ def case_size(case: dict) -> int:
     return size
 
 
-def collect_op(op_name: str, gpu: str, backends: list[str]) -> dict:
-    """Build a catalogue entry for one operator."""
-    op_dir = OPS_DIR / op_name
-    cfg_path = op_dir / "config.yaml"
-    if not cfg_path.exists():
-        return {"op": op_name, "error": "no config.yaml"}
-
-    with open(cfg_path) as f:
+def sweep_max_cases(op_name: str) -> tuple[list, dict]:
+    """(dtypes, {dtype: params of the sweep-max case}) of one operator, derived
+    from its config.yaml alone: no measurement and no hardware is involved."""
+    with open(OPS_DIR / op_name / "config.yaml") as f:
         cfg = yaml.safe_load(f)
 
     case_defaults = cfg.get("case_defaults", {}) or {}
@@ -108,6 +106,14 @@ def collect_op(op_name: str, gpu: str, backends: list[str]) -> dict:
         params = dict(case_defaults)
         params.update(max_case)
         per_dtype[dt] = params
+    return dtypes, per_dtype
+
+
+def collect_op(op_name: str, gpu: str, backends: list[str]) -> dict:
+    """Build a catalogue entry for one operator."""
+    if not (OPS_DIR / op_name / "config.yaml").exists():
+        return {"op": op_name, "error": "no config.yaml"}
+    dtypes, per_dtype = sweep_max_cases(op_name)
 
     log_path = autotune_log_path(gpu, op_name, "autotune", backends)
     autotune_data = None
@@ -179,7 +185,7 @@ def main(argv=None):
     parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
                         help="Hardware label (e.g. B200): selects both the autotune logs read "
                              "(results/<gpu>/logs/autotune_logs/) and the catalogue written "
-                             "(tilebench/profiling/metadata/<gpu>/ncu_catalogue.json)")
+                             "(outputs/profiling/<gpu>/ncu_catalogue.json)")
     parser.add_argument("--tile-language", type=str, default="triton,cutile",
                         help="Backend selection of the autotune run whose winners to read, as "
                              "passed to run_bench.py --autotune. It must include triton and "
