@@ -1,9 +1,14 @@
 """Hardware-scoped NCU profiling metadata and outputs, both generated data:
     outputs/profiling/<hardware>/{ncu_catalogue,kernel_counts}.json
     outputs/ncu/<hardware>/
+and the boundary between the package and the tools that use it:
+    tilebench/profiling/   importable library modules
+    scripts/profiling/     command-line tools and the process NCU profiles
 No test here needs a GPU or the ncu binary.
 """
+import ast
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -17,6 +22,15 @@ import tilebench.paths as paths
 from tilebench.profiling import ncu_kernel_select as ks
 
 REPO = Path(__file__).resolve().parents[1]
+TOOLS = REPO / "scripts" / "profiling"
+
+
+def load_tool(name):
+    """Import scripts/profiling/<name>.py the way `python <path>` would find it."""
+    spec = importlib.util.spec_from_file_location(f"_tool_{name}", TOOLS / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 @pytest.fixture
 def metadata(tmp_path, monkeypatch):
@@ -28,7 +42,7 @@ def metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "PROFILING_METADATA_ROOT", root)
     monkeypatch.setattr(paths, "NCU_OUTPUT_ROOT", tmp_path / "outputs" / "ncu")
     monkeypatch.setattr(paths, "RESULTS_ROOT", tmp_path / "results")
-    ncu_catalogue.main(["--gpu", "B200"])
+    ncu_catalogue.write_catalogue("B200", ["triton", "cutile"])
     rows = [{"op": c["op"], "dtype": dt, "backend": be, "count": 1, "names": [f"{c['op']}_kernel"]}
             for c in json.loads((root / "B200" / "ncu_catalogue.json").read_text())
             for dt in c["dtypes"] for be in ("triton", "cutile")]
@@ -60,11 +74,22 @@ def test_metadata_and_ncu_outputs_are_one_directory_per_hardware():
                 helper(label)
 
 
-def test_the_source_package_holds_no_profiling_data_or_cluster_scripts():
+def test_the_profiling_package_is_an_importable_library():
+    """No data, no cluster scripts, and no module that is a program: command-line
+    tools and the process NCU profiles live under scripts/profiling/."""
     assert not hasattr(paths, "NCU_CATALOGUE") and not hasattr(paths, "KERNEL_COUNTS")
-    stray = [p.relative_to(REPO).as_posix() for p in (REPO / "tilebench" / "profiling").rglob("*")
-             if p.is_file() and p.suffix in {".json", ".sh", ".sbatch"}]
-    assert stray == []
+    package = REPO / "tilebench" / "profiling"
+    files = [p for p in package.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    assert [p.name for p in files if p.suffix != ".py"] == []
+    for path in files:
+        tree = ast.parse(path.read_text())
+        guards = [n for n in ast.walk(tree) if isinstance(n, ast.If) and "__main__" in ast.unparse(n.test)]
+        imports = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+        assert not guards and "argparse" not in imports, f"{path.name} is a program, not a library module"
+        # importing a library module does nothing but define names
+        effects = [n for n in tree.body if isinstance(n, (ast.For, ast.While, ast.With))
+                   or (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call))]
+        assert effects == [], f"{path.name} runs code at import"
 
 
 # --------------------------------------------------------------------------
@@ -89,8 +114,7 @@ def test_missing_gpu_metadata_fails_loudly_without_falling_back(metadata):
 
 @pytest.mark.parametrize("module", ["ncu_one", "ncu_driver", "ncu_writeup"])
 def test_ncu_tools_require_a_gpu_and_refuse_one_without_metadata(metadata, monkeypatch, module, capsys):
-    import importlib
-    mod = importlib.import_module(f"tilebench.profiling.{module}")
+    mod = load_tool(module)
     extra = ["mul2"] if module == "ncu_one" else []
     monkeypatch.setattr(sys, "argv", [module, *extra])
     with pytest.raises(SystemExit) as e:                      # no B200 default
@@ -105,11 +129,12 @@ def test_ncu_tools_require_a_gpu_and_refuse_one_without_metadata(metadata, monke
 
 
 def test_ncu_reports_of_two_gpus_cannot_collide(metadata):
-    from tilebench.profiling import ncu_driver
-    b200 = ncu_driver.out_path(paths.ncu_output_dir("B200"), "mul2", "triton", "fp16")
-    gh200 = ncu_driver.out_path(paths.ncu_output_dir("GH200"), "mul2", "triton", "fp16")
+    b200 = paths.ncu_report_path("B200", "mul2", "triton", "fp16")
+    gh200 = paths.ncu_report_path("GH200", "mul2", "triton", "fp16")
     assert b200 != gh200 and b200.name == gh200.name == "triton_fp16.ncu-rep"
     assert b200.parts[-4:-1] == ("ncu", "B200", "mul2")
+    with pytest.raises(ValueError):
+        paths.ncu_report_path("../B200", "mul2", "triton", "fp16")
 
 
 # --------------------------------------------------------------------------
@@ -128,7 +153,7 @@ def _autotune_log(gpu, op, mode, backends, triton_cfg):
 
 
 def test_catalogue_generation_is_per_gpu_and_reads_one_named_log(metadata):
-    from tilebench.profiling import ncu_catalogue
+    ncu_catalogue = load_tool("ncu_catalogue")
     b200 = {p.name: digest(p) for p in (metadata / "B200").iterdir()}
     wanted = _autotune_log("GH200", "mul2", "autotune", ["cutile", "triton"], {"BLOCK": 1024})
     # decoys that a glob or an mtime guess could pick up instead; written later, so newer
@@ -158,7 +183,7 @@ def test_catalogue_generation_is_per_gpu_and_reads_one_named_log(metadata):
 
 
 def test_kernel_count_probe_is_per_gpu(metadata, monkeypatch):
-    from tilebench.profiling import probe_kernel_count as probe
+    probe = load_tool("probe_kernel_count")
     shutil.copy(metadata / "B200" / "ncu_catalogue.json", (metadata / "GH200").mkdir() or metadata / "GH200")
     b200 = digest(metadata / "B200" / "kernel_counts.json")
     monkeypatch.setattr(probe, "count_one", lambda *a, **kw: {"count": 7, "names": ["gh200_kernel"]})
@@ -207,9 +232,14 @@ def test_a_regular_install_ships_source_without_experiment_data_or_cluster_scrip
 
     installed = [p.relative_to(site).as_posix() for p in (site / "tilebench").rglob("*")
                  if p.is_file() and "__pycache__" not in p.parts]      # pip byte-compiles on install
-    assert "tilebench/profiling/ncu_one.py" in installed and "tilebench/paths.py" in installed
+    assert "tilebench/paths.py" in installed
     assert [f for f in installed if f.endswith((".sh", ".sbatch"))] == []
-    assert [f for f in installed if f.startswith("tilebench/profiling/") and not f.endswith(".py")] == []
+    # the profiling package is the library the tools import, and nothing else:
+    # no command-line tool, no harness that NCU executes, no data
+    assert sorted(f for f in installed if f.startswith("tilebench/profiling/")) == [
+        "tilebench/profiling/__init__.py", "tilebench/profiling/ncu_catalogue.py",
+        "tilebench/profiling/ncu_kernel_select.py"]
+    assert not (site / "scripts").exists()                # scripts/ is not installed
     # the resources the framework does need at run time are still there
     assert "tilebench/data/peak_performance/B200.json" in installed
     assert "tilebench/benchmarks/operators/mul2/config.yaml" in installed
@@ -224,3 +254,40 @@ def test_a_regular_install_ships_source_without_experiment_data_or_cluster_scrip
     info = json.loads(out.stdout.strip().splitlines()[-1])
     assert info["pkg"].startswith(str(site)) and info["ops"] == 45
     assert "/tilebench/" not in info["meta"].replace(str(site), "")     # generated data is not inside the package
+
+
+# --------------------------------------------------------------------------
+# scripts/profiling/: the tools run from anywhere, and find their harness
+# --------------------------------------------------------------------------
+
+def _run_outside_the_repo(tmp_path, script, *args):
+    env = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "TILEBENCH_REPO_ROOT"}}
+    return subprocess.run([sys.executable, str(script), *args], cwd=tmp_path, env=env,
+                          capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("script", ["profiling/ncu_catalogue.py", "profiling/ncu_one.py",
+                                    "profiling/ncu_driver.py", "profiling/ncu_writeup.py",
+                                    "profiling/probe_kernel_count.py", "aggregate_results.py"])
+def test_tools_start_from_outside_the_repository_without_pythonpath(tmp_path, script):
+    path = REPO / "scripts" / script
+    assert _run_outside_the_repo(tmp_path, path, "--help").returncode == 0
+    missing = _run_outside_the_repo(tmp_path, path, *(["mul2"] if script.endswith("ncu_one.py") else []))
+    assert missing.returncode == 2 and "--gpu" in missing.stderr           # parsed its arguments: no GPU default
+    assert list(tmp_path.iterdir()) == []                                  # and wrote nothing
+
+
+def test_hf_upload_starts_from_outside_the_repository(tmp_path):
+    pytest.importorskip("huggingface_hub")
+    r = _run_outside_the_repo(tmp_path, TOOLS / "hf_upload.py")
+    assert r.returncode == 2 and "--gpu" in r.stderr                       # stops at its arguments, uploads nothing
+
+
+def test_the_drivers_start_the_generic_harness_next_to_them(tmp_path):
+    harness = TOOLS / "ncu_generic_harness.py"
+    assert harness.is_file()
+    for tool in ("ncu_driver", "ncu_one"):
+        assert load_tool(tool).HARNESS == harness                          # from its own location, not the CWD
+    # started by path from elsewhere, it imports tilebench and stops at its first input, NCU_OP
+    r = _run_outside_the_repo(tmp_path, harness)
+    assert r.returncode != 0 and "NCU_OP" in r.stderr and "ModuleNotFoundError" not in r.stderr

@@ -122,10 +122,15 @@ in_index index ls-files -z -- "$LEGACY_LOGS" | in_index index update-index -z --
 
 for tip in $remote_tip $local_tip; do
     git ls-tree -r "$tip" -- "${ARCHIVE_PATHS[@]}" | in_index index update-index --index-info
-    # cluster launch scripts that left the public tree and are kept here only
-    git ls-tree -r -z "$tip" -- tilebench/profiling \
-        | { grep -z -E '\.(sh|sbatch)$' || true; } \
-        | in_index index update-index -z --index-info
+    # Files that left the public tilebench/profiling/ (cluster launch scripts,
+    # campaign-specific harnesses) and are kept here only: whatever the tip
+    # holds there that the base tree does not.
+    mapfile -t retired < <(LC_ALL=C comm -13 \
+        <(in_index index ls-files -- tilebench/profiling | LC_ALL=C sort) \
+        <(git ls-tree -r --name-only "$tip" -- tilebench/profiling | LC_ALL=C sort))
+    if [ "${#retired[@]}" -gt 0 ]; then
+        git ls-tree -r "$tip" -- "${retired[@]}" | in_index index update-index --index-info
+    fi
     # the raw logs of every GPU archived so far: results/<gpu>/logs/
     git ls-tree -r -z "$tip" -- results \
         | { grep -z -E $'\tresults/[^/]+/logs/' || true; } \

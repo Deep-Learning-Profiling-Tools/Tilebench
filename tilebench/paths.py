@@ -134,6 +134,13 @@ def ncu_output_dir(hardware: str) -> Path:
     return NCU_OUTPUT_ROOT / hardware_label(hardware)
 
 
+def ncu_report_path(hardware: str, operator: str, backend: str, dtype: str) -> Path:
+    """One NCU report: outputs/ncu/<hardware>/<operator>/<backend>_<dtype>.ncu-rep.
+    The single rule shared by the sweep driver and the one-operator tool, so
+    the reports of two GPUs can never collide."""
+    return ncu_output_dir(hardware) / operator / f"{backend}_{dtype}.ncu-rep"
+
+
 def operator_dir(operator: str) -> Path:
     """Directory holding one operator's config.yaml and impl_*.py files."""
     return OPERATOR_ROOT / operator
