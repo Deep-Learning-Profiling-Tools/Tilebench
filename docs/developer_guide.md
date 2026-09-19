@@ -23,44 +23,77 @@ This document contains implementation and maintenance details for extending Tile
 
 | Argument | Default | Description |
 |---|---|---|
+| `--gpu` | required, no default | Hardware label of the machine being measured, such as `B200`; names the result namespace `results/<gpu>/` |
 | `--operator` | `vector_add` | Operator to benchmark |
-| `--output` | `results/logs/time_measurement_logs/<op>_results.json` | Local timing JSON |
-| `--autotune-log` | `results/logs/autotune_logs/<op>_autotune.json` | Local autotune metadata |
+| `--output` | `results/<gpu>/logs/time_measurement_logs/<op>_results.json` | Local timing JSON |
+| `--autotune-log` | `results/<gpu>/logs/autotune_logs/<op>_autotune.json` | Local autotune metadata |
 | `--warmup` | from config | Warmup iterations |
 | `--repeat` | from config | Timed iterations |
 | `--use-cuda-graph` | from config | Enable CUDA graph replay |
 | `--flush-l2` | from config | Flush L2 before each iteration |
 | `--autotune` | off | Enable autotuned execution |
-| `--tile-language` | all | Comma-separated backends: `triton,cutile,tilelang,nki`; PyTorch always runs as the reference |
+| `--tile-language` | all GPU backends | Comma-separated GPU backends: `triton,cutile,tilelang` (or `all`); PyTorch always runs as the reference. `nki` is selected alone, see below |
 | `--case-indices` | all | Run a subset of cases, for example `0,1,3` |
 | `--keep-proton-files` | false | Keep Proton `.hatchet` files |
 | `--proton-output-dir` | system temp | Proton output directory |
 | `--no-archive` | false | Disable local raw-log archiving |
 
-A Triton/cuTile run writes the tracked summary CSV to:
+```bash
+python scripts/run_bench.py --gpu B200 --operator mul2 --tile-language triton,cutile,tilelang
+```
+
+The run writes the tracked summary CSV to:
 
 ```text
-results/csv/<operator>_default.csv
-results/csv/<operator>_autotune.csv
+results/<gpu>/csv/<operator>_default.csv
+results/<gpu>/csv/<operator>_autotune.csv
 ```
 
 Local logs and generated figures are ignored by Git.
 
+**Hardware namespaces.** `--gpu` is a label, not a device selector: it names the directory that the results of this machine go to, and `run_bench.py` prints it next to the detected device, with a warning when the label does not appear in the device name. It has no default, so a run on a GH200 or an AMD GPU cannot land in `results/B200/` by omission. There is no list of supported labels; any single path component made of letters, digits, `.`, `_`, `+` or `-` is accepted, so a new GPU needs a new label and no code change. Explicit `--output` and `--autotune-log` paths are respected, while the summary CSV always goes to `results/<gpu>/csv/`.
+
+**One namespace, one hardware.** A CSV under `results/<gpu>/csv/` holds measurements taken on that GPU only. A TileLang-only run is merged into the existing CSV of the same `--gpu`, leaving the frozen PyTorch, Triton and cuTile columns untouched. A backend that the platform does not support is reported as skipped or failed by the engine, with `nan` latency and `<backend>_ok = false`; never record it as a successful result.
+
+**NKI.** NKI targets AWS Trainium, so it is not part of any GPU namespace. Run it alone and without `--gpu`: `python scripts/run_bench.py --operator <op> --tile-language nki`. Its logs, summary CSV and profiler artifacts go to the Git-ignored `outputs/nki/`. Combining `nki` with GPU backends, or with `--gpu`, is rejected.
+
 ### `scripts/run_bench_all.py`
 
-Runs the operator suite sequentially. Use `--help` for the current command-line options.
+Runs the operator suite sequentially with the GPU backends. `--gpu` is required; each run is stored under `results/<gpu>/runs/<timestamp>/` and its `summary.json` records the label. `--results-root` overrides the location.
+
+```bash
+python scripts/run_bench_all.py --gpu B200
+```
 
 ### `scripts/visualize.py`
 
 | Argument | Default | Description |
 |---|---|---|
+| `--gpu` | required | Hardware label such as `B200`: selects the result namespace and loads `tilebench/data/peak_performance/<gpu>.json` |
 | `--operator` | required | Operator name |
-| `--input` | default timing JSON path | Input timing JSON |
-| `--output-dir` | local figure directory | Figure output |
+| `--input` | `results/<gpu>/logs/time_measurement_logs/<op>_results.json` | Input timing JSON |
+| `--output-dir` | `results/<gpu>/figures/<op>/` | Figure output |
 | `--metrics` | from `config.yaml` | Metrics to plot |
-| `--gpu` | none | Device label such as `B200`; loads `tilebench/data/peak_performance/<GPU>.json` |
+
+```bash
+python scripts/visualize.py --gpu B200 --operator mul2
+```
+
+`--gpu` serves two purposes here: it is the result namespace, and it selects the GPU-specific peak metadata behind the roofline and percentage-of-peak metrics. When no `<gpu>.json` exists those metrics are skipped with a warning. Explicit `--input` and `--output-dir` win over the defaults.
 
 Supported derived views include latency, bandwidth, speedup, TFLOPS, percentage of peak, arithmetic intensity, and roofline plots.
+
+### Other result consumers
+
+Every script that reads or writes results takes the same `--gpu` label:
+
+```bash
+python -m tilebench.profiling.aggregate_results --gpu B200   # results/B200/csv/ -> results/B200/aggregate/
+python scripts/plot_sweep_max.py --gpu B200                   # -> results/B200/figures/sweep_max_latency.png
+python -m tilebench.profiling.ncu_catalogue --gpu B200        # reads results/B200/logs/autotune_logs/
+```
+
+Build result paths with the helpers in `tilebench/paths.py` (`results_root`, `results_csv_dir`, `results_logs_dir`, `results_figures_dir`, `results_aggregate_dir`, `results_runs_dir`), never by concatenating strings.
 
 ## Operator Layout
 
@@ -223,18 +256,19 @@ Keep LLM generation separate from the manually implemented benchmark path. Gener
 
 ## Generated Outputs
 
-The repository tracks only per-case benchmark CSVs under:
+Results are scoped by hardware. The repository tracks only per-case benchmark CSVs under:
 
 ```text
-results/csv/
+results/<gpu>/csv/
 ```
 
-Other artifacts are generated locally and ignored, including:
+The committed paper results are `results/B200/csv/`. Other artifacts are generated locally and ignored, including:
 
 ```text
-results/logs/
-results/figures/
-results/aggregate/
+results/<gpu>/logs/
+results/<gpu>/figures/
+results/<gpu>/aggregate/
+results/<gpu>/runs/
 outputs/
 tilebench/benchmarks/llm_generated/
 ```
@@ -246,13 +280,13 @@ Writers should create these directories when needed; a fresh clone must not depe
 `scripts/archive_artifacts.sh` backs artifacts up on the `archive/raw-logs-2026-09-18` branch without checking it out or touching the index:
 
 ```bash
-scripts/archive_artifacts.sh --logs     # results/logs/
-scripts/archive_artifacts.sh --llm      # tilebench/benchmarks/llm_generated/
-scripts/archive_artifacts.sh --all      # both
+scripts/archive_artifacts.sh --logs --gpu B200   # results/B200/logs/
+scripts/archive_artifacts.sh --llm               # tilebench/benchmarks/llm_generated/
+scripts/archive_artifacts.sh --all --gpu B200    # both
 scripts/archive_artifacts.sh --llm --push
 ```
 
-The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. `run_bench.py` calls `scripts/archive_logs.sh` (equivalent to `--logs`) after each run, so raw logs are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
+The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. That covers the raw logs of every other GPU and two legacy locations that are kept but no longer written to: `results/logs/`, which holds the paper's B200 logs from before results were scoped by hardware, and `benchmarks/llm_generated/`. `run_bench.py` calls `scripts/archive_logs.sh --gpu <gpu>` (equivalent to `--logs --gpu <gpu>`) after each run, so the raw logs of that GPU are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
 
 ### Publishing a downloadable artifact
 
@@ -277,4 +311,4 @@ writes a reproducible `outputs/artifacts/<archive>.tar.gz` and prints its SHA256
 - [ ] Optional TileLang/NKI implementations follow the same semantic contract.
 - [ ] `pytest` passes.
 - [ ] `python -m compileall tilebench scripts tests` passes.
-- [ ] No generated artifacts outside `results/csv/` are accidentally tracked.
+- [ ] No generated artifacts outside `results/<gpu>/csv/` are accidentally tracked.

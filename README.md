@@ -71,8 +71,10 @@ The figure and the pairwise matrix summarize different case sets: the figure sho
 Regenerate the figure with:
 
 ```bash
-python scripts/plot_sweep_max.py
+python scripts/plot_sweep_max.py --gpu B200 --output assets/sweep_max_latency.png
 ```
+
+Without `--output` the figure goes to `results/<gpu>/figures/`, so plotting another GPU never overwrites this one.
 
 ## 🧩 Benchmark Suite
 
@@ -134,6 +136,7 @@ Run the fixed default configuration for Triton and cuTile:
 
 ```bash
 python scripts/run_bench.py \
+  --gpu B200 \
   --operator mul2 \
   --tile-language triton,cutile \
   --no-archive
@@ -143,6 +146,7 @@ Run the autotuned configuration:
 
 ```bash
 python scripts/run_bench.py \
+  --gpu B200 \
   --operator mul2 \
   --tile-language triton,cutile \
   --autotune \
@@ -151,11 +155,13 @@ python scripts/run_bench.py \
 
 PyTorch runs automatically as the reference baseline.
 
+`--gpu` is the hardware label of the machine being measured. It is required and has no default: every result is written under `results/<gpu>/`, so runs on different GPUs never overwrite each other. On another machine, change the label (for example `--gpu GH200`).
+
 Tracked summary CSVs are written to:
 
 ```text
-results/csv/mul2_default.csv
-results/csv/mul2_autotune.csv
+results/B200/csv/mul2_default.csv
+results/B200/csv/mul2_autotune.csv
 ```
 
 Local timing logs, profiling outputs, figures, and other generated artifacts are ignored by Git.
@@ -164,6 +170,7 @@ Local timing logs, profiling outputs, figures, and other generated artifacts are
 
 ```bash
 python scripts/run_bench.py \
+  --gpu B200 \
   --operator mul2 \
   --tile-language triton,cutile \
   --case-indices 0,1,2 \
@@ -174,20 +181,20 @@ python scripts/run_bench.py \
 
 ```bash
 python scripts/visualize.py \
-  --operator mul2 \
   --gpu B200 \
+  --operator mul2 \
   --metrics latency_ms bandwidth_GBs speedup pct_peak_bw roofline
 ```
 
-Generated figures are local outputs and are not tracked.
+`--gpu` selects both the result namespace (`results/B200/logs/` in, `results/B200/figures/` out) and the peak-performance metadata used by the roofline metrics. Generated figures are local outputs and are not tracked.
 
 ### Run the full suite
 
 ```bash
-python scripts/run_bench_all.py --help
+python scripts/run_bench_all.py --gpu B200
 ```
 
-Use the command options to select the desired backends and execution mode.
+Each run is stored under `results/<gpu>/runs/`, with the GPU label recorded in its manifest. See `--help` for the remaining options.
 
 ## 🔬 Evaluation Methodology
 
@@ -295,7 +302,8 @@ Tilebench/
 ├── skills/                      # Backend API/programming guides used by generation
 ├── tests/                       # Test suite
 ├── results/
-│   └── csv/                     # Tracked per-case benchmark summaries
+│   └── <hardware>/              # One namespace per GPU; B200 is the one committed today
+│       └── csv/                 # Tracked per-case benchmark summaries
 ├── assets/                      # README images and link icons
 ├── docs/                        # Extended documentation
 ├── pyproject.toml
@@ -305,26 +313,26 @@ Tilebench/
 
 ## 💾 Recorded Results
 
-Only benchmark CSVs under `results/csv/` are version-controlled.
+Results are scoped by hardware, and only the summary CSVs are version-controlled:
 
 ```text
-results/csv/
+results/<hardware>/csv/
 ├── <operator>_default.csv
 └── <operator>_autotune.csv
 ```
 
-The repository contains 45 operators, with one default-mode and one autotuned CSV per operator.
+Everything under one `results/<hardware>/` namespace was measured on that hardware. The results committed today are the paper's B200 measurements, in `results/B200/csv/`: 45 operators, with one default-mode and one autotuned CSV per operator. Results for other hardware sit beside them, for example `results/GH200/csv/`, with no code change: the label passed to `--gpu` names the directory.
 
 Everything else is a generated artifact, ignored on `main`:
 
 | Artifact | Local path | Where it is kept |
 |:---|:---|:---|
-| Raw timing and autotune logs | `results/logs/` | [<img src="assets/icons/github.svg" height="14" alt=""> `archive/raw-logs-2026-09-18`](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) branch, snapshotted after each `run_bench.py` |
+| Raw timing and autotune logs | `results/<hardware>/logs/` | [<img src="assets/icons/github.svg" height="14" alt=""> `archive/raw-logs-2026-09-18`](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) branch, snapshotted after each `run_bench.py`. The paper's B200 logs predate this layout and are kept there under the legacy path `results/logs/` |
 | LLM-generated trajectories and kernels | `tilebench/benchmarks/llm_generated/` | Same archive branch, on request; the paper snapshot on [<img src="assets/icons/googledrive.svg" height="14" alt=""> Google Drive](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing) via `fetch_artifacts.py` |
 | Nsight Compute reports | `outputs/ncu/` | [<img src="assets/icons/huggingface.svg" height="14" alt=""> Hugging Face dataset](https://huggingface.co/datasets/bcui2/NCU_report) |
-| Figures, aggregates, peak sweeps | `results/figures/`, `results/aggregate/`, `outputs/` | Local only; regenerated by the scripts |
+| Figures, aggregates, run directories, peak sweeps | `results/<hardware>/figures/`, `aggregate/`, `runs/`, and `outputs/` | Local only; regenerated by the scripts |
 
-Maintainers back up artifacts with `scripts/archive_artifacts.sh --logs | --llm | --all` (add `--push` to publish), and build a downloadable snapshot with `python scripts/package_artifacts.py --artifact <name>`.
+Maintainers back up artifacts with `scripts/archive_artifacts.sh --logs --gpu <hardware> | --llm | --all --gpu <hardware>` (add `--push` to publish), and build a downloadable snapshot with `python scripts/package_artifacts.py --artifact <name>`.
 
 ## 📘 Developer Guide
 
