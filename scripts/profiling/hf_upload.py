@@ -14,8 +14,8 @@ skipped.
 Auth: $HUGGING_FACE holds the HF API token.
 
 Run:
-  python -m tilebench.profiling.hf_upload --gpu GH200            # all ops
-  python -m tilebench.profiling.hf_upload --gpu GH200 1d_conv    # just one op (incremental)
+  python scripts/profiling/hf_upload.py --gpu GH200            # all ops
+  python scripts/profiling/hf_upload.py --gpu GH200 1d_conv    # just one op (incremental)
 """
 import argparse
 import os
@@ -23,7 +23,15 @@ import sys
 from pathlib import Path
 
 from huggingface_hub import HfApi
-from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir  # noqa: E402
 
 ROOT = REPO_ROOT
 REPO_ID = "bcui2/NCU_report"

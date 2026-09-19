@@ -1,7 +1,7 @@
 """Extract metrics from the .ncu-rep files of one GPU (outputs/ncu/<gpu>/) and
 generate per-op comparison.md plus that GPU's outputs/ncu/<gpu>/SUMMARY.md.
 
-Usage:  python -m tilebench.profiling.ncu_writeup --gpu B200
+Usage:  python scripts/profiling/ncu_writeup.py --gpu B200
 
 For each report we pull:
   - Duration (us)
@@ -20,8 +20,16 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir
-from tilebench.profiling import ncu_kernel_select as ks
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir  # noqa: E402
+from tilebench.profiling import ncu_kernel_select as ks  # noqa: E402
 
 ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"

@@ -20,7 +20,7 @@ SCRIPTS = REPO / "scripts"
 
 
 def load_script(name):
-    spec = importlib.util.spec_from_file_location(f"_script_{name}", SCRIPTS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_script_{name.replace('/', '_')}", SCRIPTS / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -413,7 +413,7 @@ def test_visualize_reads_and_writes_inside_the_gpu_namespace(results, monkeypatc
 
 
 def test_aggregate_reads_csv_and_writes_aggregate_of_one_gpu(results):
-    from tilebench.profiling import aggregate_results
+    aggregate_results = load_script("aggregate_results")
     src = results / "B200/csv/mul2_default.csv"
     src.parent.mkdir(parents=True)
     src.write_text("params,dtype,torch_ms,triton_ms,cutile_ms\nn=1,fp16,2.0,1.0,1.0\nn=2,fp16,2.0,1.0,1.0\n")

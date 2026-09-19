@@ -34,7 +34,7 @@ def load_catalogue(gpu: str) -> list:
         raise MissingProfilingMetadataError(
             f"no NCU catalogue for {gpu} at {path}.\n"
             f"Build it from that GPU's autotune logs with:\n"
-            f"    python -m tilebench.profiling.ncu_catalogue --gpu {gpu}\n"
+            f"    python scripts/profiling/ncu_catalogue.py --gpu {gpu}\n"
             f"The catalogue of another GPU is never used as a fallback.")
     return json.loads(path.read_text())
 
@@ -58,7 +58,7 @@ def load_kernel_counts(gpu: str):
             f"assumed to launch exactly one kernel and wrong-kernel reports "
             f"would not be detected.\n"
             f"Probe it on that GPU with:\n"
-            f"    python -m tilebench.profiling.probe_kernel_count --gpu {gpu}\n"
+            f"    python scripts/profiling/probe_kernel_count.py --gpu {gpu}\n"
             f"The counts of another GPU are never used as a fallback.")
     counts, names = {}, {}
     for r in json.loads(path.read_text()):

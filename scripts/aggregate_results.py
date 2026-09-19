@@ -3,7 +3,7 @@
 Input:  results/<gpu>/csv/<op>_default.csv  + results/<gpu>/csv/<op>_autotune.csv
 Output: results/<gpu>/aggregate/<op>.csv
 
-Usage:  python -m tilebench.profiling.aggregate_results --gpu B200
+Usage:  python scripts/aggregate_results.py --gpu B200
 
 For each operator, the output CSV has one row per (dtype, mode) combination
 with the per-case geometric mean of each timing column. Rows where the backend
@@ -30,7 +30,15 @@ import csv
 import math
 from collections import defaultdict
 from pathlib import Path
-from tilebench.paths import hardware_label, results_aggregate_dir, results_csv_dir
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+import os
+import sys
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tilebench.paths import hardware_label, results_aggregate_dir, results_csv_dir  # noqa: E402
 
 MEAN_COLS = ("torch_ms", "triton_ms", "cutile_ms")
 
