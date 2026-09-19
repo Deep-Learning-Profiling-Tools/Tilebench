@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from core.nki_timer import (NkiTraceError, find_session_dir, session_neffs,
+from tilebench.core.nki_timer import (NkiTraceError, find_session_dir, session_neffs,
                             time_windows)
 
 
