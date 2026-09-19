@@ -1,38 +1,42 @@
 #!/usr/bin/env bash
 # Snapshot git-ignored experiment artifacts onto the archive branch.
 #
+# Maintainer tool. It lives on the archive branch only: the public branch does
+# not ship it, and running a benchmark never archives anything. To use it, take
+# it from this branch and run it inside a checkout of the public branch, where
+# the artifacts are (the archive branch itself must not be checked out there):
+#     git show origin/archive/raw-logs-2026-09-18:scripts/archive_artifacts.sh > /tmp/archive_artifacts.sh
+#     bash /tmp/archive_artifacts.sh --logs --gpu B200
+#
 # main version-controls source and the summary CSVs only. Raw benchmark logs
 # and LLM-generated trajectories are generated artifacts: ignored on main,
 # backed up here. Each run builds one commit whose tree is
 #     <the public code baseline, without the legacy results/logs/>
-#   + <every artifact already on the archive branch>      (cumulative)
+#   + <everything the archive already keeps that the baseline lacks>  (cumulative)
 #   + <the selected artifact directories from the working directory>
-# The baseline is origin/main. When the archive tip already contains origin/main
-# there is nothing new to absorb and the tip's own tree is kept instead, so code
-# merged into the archive from a newer baseline (a branch ahead of main) is
-# never rolled back to main by an archive run.
-# with the working directory winning on a path collision. The summary CSVs are
-# part of main's tree (results/<gpu>/csv/) and are never copied by this script.
-# Artifacts that this
-# machine does not hold are inherited from the archive tip, never dropped, so
-# a partial checkout adds to the backup instead of replacing it. Nothing is
-# checked out: the working tree and the real index are left untouched, and
-# history is only ever appended to.
+# with the working directory winning on a path collision. The baseline is
+# origin/main. When the archive tip already contains origin/main there is
+# nothing new to absorb and the tip's own tree is kept instead, so code merged
+# into the archive from a newer baseline (a branch ahead of main) is never
+# rolled back to main by an archive run. The summary CSVs are part of the
+# baseline (results/<gpu>/csv/) and are never copied by this script. Artifacts
+# that this machine does not hold are inherited from the archive tip, never
+# dropped, so a partial checkout adds to the backup instead of replacing it.
+# Nothing is checked out: the working tree and the real index are left
+# untouched, and history is only ever appended to.
 #
 # Usage (from anywhere inside the repo):
-#     scripts/archive_artifacts.sh --logs --gpu B200   # results/B200/logs/
-#     scripts/archive_artifacts.sh --llm               # tilebench/benchmarks/llm_generated/
-#     scripts/archive_artifacts.sh --all --gpu B200    # both
-#     ... --push                                       # also push the archive branch
+#     archive_artifacts.sh --logs --gpu B200   # results/B200/logs/
+#     archive_artifacts.sh --llm               # tilebench/benchmarks/llm_generated/
+#     archive_artifacts.sh --all --gpu B200    # both
+#     ... --push                               # also push the archive branch
 #
 # Raw logs are scoped by hardware (results/<gpu>/logs/), so --logs and --all
 # take the label of the GPU whose logs to snapshot; the logs of every other GPU
 # already on the archive branch are carried forward untouched. The whole logs/
 # tree goes in, including the NKI profiles recorded with that campaign
-# (logs/nki_profiles/): there is no separate NKI archive path.
-# scripts/run_bench.py runs `archive_logs.sh --gpu <gpu>` (= --logs) after every
-# benchmark. LLM trajectories are archived only on request, at milestones worth
-# keeping.
+# (logs/nki_profiles/): there is no separate NKI archive path. LLM trajectories
+# are archived only on request, at milestones worth keeping.
 set -euo pipefail
 
 BRANCH="archive/raw-logs-2026-09-18"
@@ -43,8 +47,11 @@ LLM_PATH="tilebench/benchmarks/llm_generated"
 # selected. benchmarks/llm_generated/ is a legacy location (before the
 # tilebench/ package): a historical snapshot that is kept and never written to.
 # outputs/profiling/ holds the NCU metadata (catalogue, kernel counts) of each
-# GPU: generated data that the public tree does not track.
-ARCHIVE_PATHS=("benchmarks/llm_generated" "$LLM_PATH" "outputs/profiling")
+# GPU: generated data that the public tree does not track. The last two are
+# this script and its tests: the public tree does not have them, so they must
+# carry themselves forward or the first run on a newer main would delete them.
+ARCHIVE_PATHS=("benchmarks/llm_generated" "$LLM_PATH" "outputs/profiling"
+               "scripts/archive_artifacts.sh" "tests/test_archive_scripts.py")
 # Legacy raw-log location, from before results were scoped by hardware. Every
 # log ever stored there was measured on B200 (the paper campaign), so it is
 # canonicalised to results/B200/logs/<same relative path> and never kept:

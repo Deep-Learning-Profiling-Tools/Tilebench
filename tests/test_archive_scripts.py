@@ -1,5 +1,6 @@
-"""scripts/archive_artifacts.sh and its archive_logs.sh wrapper, run against a
-throwaway repository (never the real one)."""
+"""scripts/archive_artifacts.sh, run against a throwaway repository (never the
+real one). Like the script, this file lives on the archive branch only; run it
+from a worktree of that branch:  pytest tests/test_archive_scripts.py"""
 import os
 import shutil
 import subprocess
@@ -9,7 +10,6 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 ARTIFACTS = REPO / "scripts" / "archive_artifacts.sh"
-LOGS = REPO / "scripts" / "archive_logs.sh"
 BRANCH = "archive/raw-logs-2026-09-18"
 LLM = "tilebench/benchmarks/llm_generated"
 
@@ -93,15 +93,15 @@ def test_mode_is_required(work):
 @pytest.mark.parametrize("args", [(), ("--gpu",), ("--gpu", "../B200"), ("--gpu", "a/b"), ("--gpu", "")])
 def test_logs_need_a_safe_gpu_label(work, args):
     tip = git(work, "rev-parse", f"origin/{BRANCH}")
-    r = run(LOGS, work, *args)
+    r = run(ARTIFACTS, work, "--logs", *args)
     assert r.returncode == 2 and "--gpu" in r.stderr
     assert git(work, "rev-parse", f"origin/{BRANCH}") == tip
     assert subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{BRANCH}"],
                           cwd=work, env=ENV, capture_output=True).returncode != 0   # nothing was committed
 
 
-def test_archive_logs_wrapper_archives_only_the_logs_of_that_gpu(work):
-    r = run(LOGS, work, "--gpu", "B200")
+def test_logs_mode_archives_only_the_logs_of_that_gpu(work):
+    r = run(ARTIFACTS, work, "--logs", "--gpu", "B200")
     assert r.returncode == 0, r.stderr
     files = archived(work)
     assert "results/B200/logs/a.json" in files
@@ -142,10 +142,10 @@ def test_archive_is_cumulative_and_keeps_the_legacy_path(work):
     shutil.rmtree(work / LLM / "op")
     write(work / LLM / "op2/model/high/iter_0/prompt.md", "second\n")
     assert run(ARTIFACTS, work, "--llm").returncode == 0
-    assert run(LOGS, work, "--gpu", "B200").returncode == 0   # a logs-only run drops nothing either
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "B200").returncode == 0   # a logs-only run drops nothing either
     # the B200 logs leave this machine; a GH200 run must not drop them from the archive
     shutil.rmtree(work / "results/B200")
-    assert run(LOGS, work, "--gpu", "GH200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "GH200").returncode == 0
     files = archived(work)
     assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
     assert f"{LLM}/op2/model/high/iter_0/prompt.md" in files
@@ -207,27 +207,27 @@ def test_legacy_logs_are_migrated_byte_for_byte_and_never_come_back(work):
 
     tip = git(work, "rev-parse", BRANCH)                   # later runs have nothing left to migrate
     assert "already up to date" in run(ARTIFACTS, work, "--llm").stdout
-    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "B200").returncode == 0
     assert not any(f.startswith("results/logs/") for f in archived(work))
     git(work, "merge-base", "--is-ancestor", tip, BRANCH)  # history is only appended to
 
 
 def test_identical_file_at_the_destination_is_fine(work):
     write(work / f"results/B200/logs/{LEGACY_LOG}", '{"paper": "B200"}\n')      # same content as the legacy log
-    r = run(LOGS, work, "--gpu", "B200")
+    r = run(ARTIFACTS, work, "--logs", "--gpu", "B200")
     assert r.returncode == 0, r.stderr
     assert git(work, "show", f"{BRANCH}:results/B200/logs/{LEGACY_LOG}") == '{"paper": "B200"}'
 
 
 def test_different_file_in_the_working_directory_aborts_the_migration(work):
     write(work / f"results/B200/logs/{LEGACY_LOG}", '{"stale": "local rerun"}\n')
-    r = run(LOGS, work, "--gpu", "B200")
+    r = run(ARTIFACTS, work, "--logs", "--gpu", "B200")
     assert r.returncode == 1
     assert f"results/B200/logs/{LEGACY_LOG}" in r.stderr and "DIFFERENT" in r.stderr
     assert subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{BRANCH}"],
                           cwd=work, env=ENV, capture_output=True).returncode != 0   # nothing was committed
     # the conflict is about B200 only: the same run for another GPU still works
-    assert run(LOGS, work, "--gpu", "GH200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "GH200").returncode == 0
 
 
 def test_different_file_already_archived_aborts_the_migration(work, tmp_path):
@@ -256,7 +256,7 @@ def test_summary_csvs_come_from_main_not_from_the_archive_script(work):
     git(work, "commit", "-q", "-m", "main adopts results/B200/csv/ and stops tracking results/logs/")
     git(work, "push", "-q", "origin", "main")
 
-    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "B200").returncode == 0
     files = archived(work)
     assert "results/B200/csv/mul2_default.csv" in files   # from main's tree
     assert "results/B200/csv/notes.txt" not in files      # the script copies no CSV directory
@@ -285,7 +285,10 @@ def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
              "tilebench/profiling/retired_launch.sh": "#!/usr/bin/env bash\n",
              "tilebench/profiling/retired_job.sbatch": "#SBATCH\n",
              "tilebench/profiling/retired_harness.py": "# campaign-specific harness\n",
-             "outputs/profiling/B200/kernel_counts.json": "[]"}
+             "outputs/profiling/B200/kernel_counts.json": "[]",
+             # the archive tooling itself: the public tree does not ship it
+             "scripts/archive_artifacts.sh": "#!/usr/bin/env bash\n# archive copy\n",
+             "tests/test_archive_scripts.py": "# archive copy\n"}
     for path, text in extra.items():
         sha = sh("hash-object", "-w", "--stdin", input=text)
         sh("update-index", "--add", "--cacheinfo", f"100644,{sha},{path}")
@@ -294,7 +297,7 @@ def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
     git(work, "update-ref", f"refs/heads/{BRANCH}", merged)
 
     # main is already contained in the archive tip: the tip's own tree is the base
-    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "B200").returncode == 0
     files = archived(work)
     assert set(extra) <= files and "results/B200/logs/a.json" in files
     for path, text in extra.items():
@@ -305,10 +308,12 @@ def test_material_kept_only_on_the_archive_survives_every_run(work, tmp_path):
     git(work, "add", "main_moved.txt")
     git(work, "commit", "-q", "-m", "main advances")
     git(work, "push", "-q", "origin", "main")
-    assert run(LOGS, work, "--gpu", "B200").returncode == 0
+    assert run(ARTIFACTS, work, "--logs", "--gpu", "B200").returncode == 0
     files = archived(work)
     assert "main_moved.txt" in files
     assert {"tilebench/profiling/retired_launch.sh", "tilebench/profiling/retired_job.sbatch",
             "tilebench/profiling/retired_harness.py",
-            "outputs/profiling/B200/kernel_counts.json"} <= files
+            "outputs/profiling/B200/kernel_counts.json",
+            "scripts/archive_artifacts.sh", "tests/test_archive_scripts.py"} <= files
+    assert git(work, "show", f"{BRANCH}:scripts/archive_artifacts.sh").endswith("# archive copy")
     assert "results/B200/logs/a.json" in files and "benchmarks/llm_generated/legacy.txt" in files
