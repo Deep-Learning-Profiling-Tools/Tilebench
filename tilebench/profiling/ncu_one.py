@@ -3,7 +3,8 @@
 Usage:
   python tilebench/profiling/ncu_one.py <op> [<dtype>] [--backend triton|cutile|both]
 
-Reads autotune winners / kernel counts from the catalogue + kernel_counts.json
+Reads autotune winners from the catalogue and kernel counts from
+tilebench/profiling/kernel_counts.json
 and runs NCU at the sweep-max input case (the same case used by the global
 sweep). Outputs to outputs/ncu/<op>/<backend>_<dtype>.ncu-rep.
 
@@ -32,7 +33,6 @@ ROOT = REPO_ROOT
 NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = PROFILING_ROOT / "ncu_generic_harness.py"
 CATALOGUE = NCU_CATALOGUE
-KERNEL_COUNTS = NCU_OUTPUT_ROOT / "kernel_counts.json"
 OUT_DIR = NCU_OUTPUT_ROOT
 
 
@@ -124,14 +124,10 @@ def main() -> None:
     if op_entry is None:
         sys.exit(f"error: op {args.op!r} not in catalogue")
 
-    kc, kcn = {}, {}
-    if KERNEL_COUNTS.exists():
-        for r in json.loads(KERNEL_COUNTS.read_text()):
-            key = (r["op"], r["dtype"], r["backend"])
-            if r.get("count") is not None:
-                kc[key] = r["count"]
-            if r.get("names"):
-                kcn[key] = r["names"]
+    try:
+        kc, kcn = ks.load_kernel_counts()
+    except ks.MissingKernelCountsError as e:
+        sys.exit(f"error: {e}")
 
     dtypes = [args.dtype] if args.dtype else op_entry["dtypes"]
     backends = ["triton", "cutile"] if args.backend == "both" else [args.backend]
@@ -146,7 +142,7 @@ def main() -> None:
         winner = op_entry["autotune_winner_per_dtype"].get(dt) or {}
         for be in backends:
             cfg = winner.get(be)
-            n = kc.get((args.op, dt, be), 1)
+            n = ks.kernel_count_for(kc, (args.op, dt, be))
             names = kcn.get((args.op, dt, be))
             rc_total |= run_one(args.op, be, dt, dict(params), cfg, n, names)
     sys.exit(rc_total)

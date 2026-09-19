@@ -10,7 +10,54 @@ mismatch rather than silently shipping a wrong-kernel report.
 
 ncu_one.py and ncu_driver.py both import this so the selection logic is identical.
 """
+import json
 import re
+import sys
+
+from tilebench.paths import KERNEL_COUNTS
+
+
+class MissingKernelCountsError(RuntimeError):
+    """The canonical kernel-count metadata is absent."""
+
+
+def load_kernel_counts(path=KERNEL_COUNTS):
+    """Return ({(op, dtype, backend): count}, {(op, dtype, backend): [names]}).
+
+    The NCU harness validates every capture against these counts and names, so
+    running without them silently turns that validation off. Missing metadata is
+    therefore an error rather than a default: regenerate it with
+    probe_kernel_count.py. Individual pairs may still be absent (a probe that
+    errored records count=None); callers warn and fall back per pair.
+    """
+    if not path.exists():
+        raise MissingKernelCountsError(
+            f"canonical kernel-count metadata not found at {path}.\n"
+            f"NCU capture validation needs it: without it every pair would be "
+            f"assumed to launch exactly one kernel and wrong-kernel reports "
+            f"would not be detected.\n"
+            f"Regenerate it on the target GPU with:\n"
+            f"    PYTHONPATH=. python tilebench/profiling/probe_kernel_count.py")
+    counts, names = {}, {}
+    for r in json.loads(path.read_text()):
+        key = (r["op"], r["dtype"], r["backend"])
+        if r.get("count") is not None:
+            counts[key] = r["count"]
+        if r.get("names"):
+            names[key] = r["names"]
+    return counts, names
+
+
+def kernel_count_for(counts, key, default=1):
+    """Count for one (op, dtype, backend), warning when the pair was not probed."""
+    if key in counts:
+        return counts[key]
+    print(f"warn: no probed kernel count for {key}; assuming {default} launch(es). "
+          f"Re-run probe_kernel_count.py if this pair is newly added.",
+          file=sys.stderr)
+    return default
+
+
 
 # torch/ATen library kernels are mangled C++ (`void at::native::...<...>`) and
 # carry regex-special chars; the op's OWN Triton/cuTile kernels are bare

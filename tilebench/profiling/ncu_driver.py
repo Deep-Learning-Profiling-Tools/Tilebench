@@ -9,6 +9,8 @@ For each op/dtype:
   - On failure: log and continue.
 
 Progress is appended to outputs/ncu/sweep_log.json after each pair.
+Kernel counts come from tilebench/profiling/kernel_counts.json (canonical
+metadata; regenerate with probe_kernel_count.py).
 Run with: PYTHONPATH=. python tilebench/profiling/ncu_driver.py
 """
 import json
@@ -131,16 +133,10 @@ def main() -> None:
     catalogue = json.loads(CATALOGUE.read_text())
     NCU_DIR.mkdir(parents=True, exist_ok=True)
 
-    kc_path = NCU_DIR / "kernel_counts.json"
-    kernel_counts: dict[tuple[str, str, str], int] = {}
-    kernel_names_map: dict[tuple[str, str, str], list] = {}
-    if kc_path.exists():
-        for r in json.loads(kc_path.read_text()):
-            key = (r["op"], r["dtype"], r["backend"])
-            if r.get("count") is not None:
-                kernel_counts[key] = r["count"]
-            if r.get("names"):
-                kernel_names_map[key] = r["names"]
+    try:
+        kernel_counts, kernel_names_map = ks.load_kernel_counts()
+    except ks.MissingKernelCountsError as e:
+        sys.exit(f"error: {e}")
 
     ops_filter = {o.strip() for o in os.environ.get("NCU_OPS", "").split(",") if o.strip()}
     pairs = []
@@ -155,7 +151,7 @@ def main() -> None:
                 cfg = None
                 if winner is not None:
                     cfg = winner.get(backend)
-                n = kernel_counts.get((op, dt, backend), 1)
+                n = ks.kernel_count_for(kernel_counts, (op, dt, backend))
                 names = kernel_names_map.get((op, dt, backend))
                 pairs.append((op, dt, backend, params, cfg, n, names))
 
