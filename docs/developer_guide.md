@@ -60,7 +60,7 @@ results/B200/logs/time_measurement_logs/mul2_default_tilelang.json
 results/B200/logs/time_measurement_logs/mul2_default_nki.json
 ```
 
-The backend tag always lists the backends in the canonical order `triton`, `cutile`, `tilelang`, `nki`, so `--tile-language cutile,triton` and `triton,cutile` name the same file; a torch-only run is tagged `torch`. `run_bench.py` owns these names: batch scripts do not rename or copy results. Build them with `timing_log_path` and `autotune_log_path` from `tilebench/paths.py`, and the selection with `tilebench/backends.py`. A reader must name the run it wants; never pick a file by glob, by modification time, or as "the latest". Explicit `--output` and `--autotune-log` paths still win. The summary CSV stays one per mode.
+The backend tag always lists the backends in the canonical order `triton`, `cutile`, `tilelang`, `nki`, so `--tile-language cutile,triton` and `triton,cutile` name the same file; a torch-only run is tagged `torch`. `run_bench.py` owns these names: callers do not rename or copy results. Build them with `timing_log_path` and `autotune_log_path` from `tilebench/paths.py`, and the selection with `tilebench/backends.py`. A reader must name the run it wants; never pick a file by glob, by modification time, or as "the latest". Explicit `--output` and `--autotune-log` paths still win. The summary CSV stays one per mode.
 
 **Hardware namespaces.** `--gpu` is a label, not a device selector: it names the directory that the results of this machine go to, and `run_bench.py` prints it next to the detected device, with a warning when the label does not appear in the device name. It has no default, so a run on a GH200 or an AMD GPU cannot land in `results/B200/` by omission. There is no list of supported labels; any single path component made of letters, digits, `.`, `_`, `+` or `-` is accepted, so a new GPU needs a new label and no code change. Explicit `--output` and `--autotune-log` paths are respected, while the summary CSV always goes to `results/<gpu>/csv/`.
 
@@ -118,7 +118,7 @@ Every script that reads or writes results takes the same `--gpu` label:
 ```bash
 python -m tilebench.profiling.aggregate_results --gpu B200   # results/B200/csv/ -> results/B200/aggregate/
 python scripts/plot_sweep_max.py --gpu B200                   # -> results/B200/figures/sweep_max_latency.png
-python -m tilebench.profiling.ncu_catalogue --gpu B200        # -> tilebench/profiling/metadata/B200/ncu_catalogue.json
+python -m tilebench.profiling.ncu_catalogue --gpu B200        # -> outputs/profiling/B200/ncu_catalogue.json
 ```
 
 `ncu_catalogue` records the Triton and cuTile autotune winners, and reads them from exactly one file per operator: `results/<gpu>/logs/autotune_logs/<op>_autotune_triton-cutile.json`. Pass `--tile-language` to read the winners of another autotune run instead; the selection must include `triton` and `cutile`.
@@ -255,19 +255,21 @@ Profiling support lives under:
 tilebench/profiling/
 ```
 
-Canonical metadata is kept per hardware, because sweep-max cases, autotune winners, kernel launch counts and kernel names all differ between GPUs:
+`tilebench/profiling/` holds Python source only. Cluster launch scripts and measured data do not belong in the installable package: site-specific job scripts stay out of the repository, and everything the tools generate goes under the Git-ignored `outputs/`.
+
+NCU metadata is generated per hardware, because autotune winners, kernel launch counts and kernel names are measured on one GPU:
 
 ```text
-tilebench/profiling/metadata/<gpu>/
+outputs/profiling/<gpu>/
 ├── ncu_catalogue.json    # profiled operator/dtype cases and selected configurations
 └── kernel_counts.json    # expected kernel counts and names, used to validate NCU captures
 ```
 
-The repository commits `tilebench/profiling/metadata/B200/`. Other hardware sits beside it and never overwrites it. Use `ncu_catalogue_path`, `kernel_counts_path` and `ncu_output_dir` from `tilebench/paths.py`; there is no global copy. Every tool that touches this metadata takes `--gpu`, required and without a default:
+Nothing is committed for any GPU, and nothing here is needed to run benchmarks: only the NCU tools read these files. `scripts/plot_sweep_max.py` does not need them either; it derives each operator's sweep-max case from `config.yaml` with the same rule as the catalogue (`ncu_catalogue.sweep_max_cases`). Use `ncu_catalogue_path`, `kernel_counts_path` and `ncu_output_dir` from `tilebench/paths.py`; there is no global copy. Every tool that touches this metadata takes `--gpu`, required and without a default:
 
 ```bash
-python -m tilebench.profiling.ncu_catalogue --gpu GH200         # writes metadata/GH200/ncu_catalogue.json
-python -m tilebench.profiling.probe_kernel_count --gpu GH200    # writes metadata/GH200/kernel_counts.json
+python -m tilebench.profiling.ncu_catalogue --gpu GH200         # writes outputs/profiling/GH200/ncu_catalogue.json
+python -m tilebench.profiling.probe_kernel_count --gpu GH200    # writes outputs/profiling/GH200/kernel_counts.json
 python -m tilebench.profiling.ncu_one --gpu GH200 mul2 fp16     # one operator
 python -m tilebench.profiling.ncu_driver --gpu GH200            # the whole catalogue
 python -m tilebench.profiling.ncu_writeup --gpu GH200
@@ -329,7 +331,7 @@ scripts/archive_artifacts.sh --all --gpu B200    # both
 scripts/archive_artifacts.sh --llm --push
 ```
 
-The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. `--logs --gpu <gpu>` snapshots the whole `results/<gpu>/logs/` tree, so the NKI logs and profiles recorded with that campaign are archived with it; there is no separate NKI archive path. Carry-forward covers the raw logs of every other GPU and the legacy `benchmarks/llm_generated/` snapshot, which is kept but no longer written to. The paper's B200 raw logs are stored under `results/B200/logs/`: they were migrated there, byte for byte, from the flat location they had before results were scoped by hardware, and that location is never recreated, even while `main` still tracks it. A migrated log that would meet a different file at its destination aborts the run instead of overwriting it. The summary CSVs are part of the source tree and are not copied by the script. `run_bench.py` calls `scripts/archive_logs.sh --gpu <gpu>` (equivalent to `--logs --gpu <gpu>`) after each run, so the raw logs of that GPU are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
+The archive is cumulative: artifacts that the current machine does not hold are carried forward from the archive tip, never dropped. `--logs --gpu <gpu>` snapshots the whole `results/<gpu>/logs/` tree, so the NKI logs and profiles recorded with that campaign are archived with it; there is no separate NKI archive path. Carry-forward covers the raw logs of every other GPU, the NCU metadata under `outputs/profiling/`, and the legacy `benchmarks/llm_generated/` snapshot, which is kept but no longer written to. The archive branch sits on the public code baseline plus this archive-only material; when its tip already contains `origin/main`, a run keeps the tip's own tree as the base, so code merged into the archive from a branch ahead of `main` is not rolled back. The paper's B200 raw logs are stored under `results/B200/logs/`: they were migrated there, byte for byte, from the flat location they had before results were scoped by hardware, and that location is never recreated, even while `main` still tracks it. A migrated log that would meet a different file at its destination aborts the run instead of overwriting it. The summary CSVs are part of the source tree and are not copied by the script. `run_bench.py` calls `scripts/archive_logs.sh --gpu <gpu>` (equivalent to `--logs --gpu <gpu>`) after each run, so the raw logs of that GPU are archived automatically; LLM trajectories are archived only on request, at milestones worth keeping. Nothing is pushed without `--push`.
 
 ### Publishing a downloadable artifact
 
