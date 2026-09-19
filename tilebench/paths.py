@@ -31,6 +31,11 @@ LLM_CODEGEN_ROOT = PACKAGE_ROOT / "llm_codegen"
 #: NCU catalogue consumed by the profiling driver and the figure scripts.
 NCU_CATALOGUE = PROFILING_ROOT / "ncu_catalogue.json"
 
+#: Probed kernel launch counts and kernel names per (op, dtype, backend).
+#: Canonical profiling metadata, not a report: the NCU harness validates every
+#: capture against it. Regenerate with tilebench/profiling/probe_kernel_count.py.
+KERNEL_COUNTS = PROFILING_ROOT / "kernel_counts.json"
+
 REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).resolve()
 
 #: Generated artifacts (NCU reports, measured peak sweeps). Not package data.

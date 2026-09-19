@@ -7,7 +7,9 @@ For every (op, backend) we:
   - run a second call inside torch.profiler and count distinct device
     kernels triggered between the two synchronization points
 
-Output: outputs/ncu/kernel_counts.json
+Output: tilebench/profiling/kernel_counts.json (canonical profiling metadata,
+tracked with the package). A full run rewrites it; an ONLY_OP run merges that
+operator's rows into the existing file instead of truncating it to one operator.
         and a short summary table to stdout.
 """
 import importlib
@@ -18,7 +20,7 @@ import traceback
 from pathlib import Path
 from types import SimpleNamespace
 
-from tilebench.paths import NCU_CATALOGUE, NCU_OUTPUT_ROOT, REPO_ROOT
+from tilebench.paths import KERNEL_COUNTS, NCU_CATALOGUE, NCU_OUTPUT_ROOT, REPO_ROOT
 ROOT = REPO_ROOT
 sys.path.insert(0, str(ROOT))
 
@@ -80,7 +82,7 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
 
 def main() -> None:
     catalogue = json.loads((NCU_CATALOGUE).read_text())
-    out_path = NCU_OUTPUT_ROOT / "kernel_counts.json"
+    out_path = KERNEL_COUNTS
     counts: list[dict] = []
 
     only_op = os.environ.get("ONLY_OP")
@@ -102,6 +104,14 @@ def main() -> None:
                     counts.append({"op": op, "dtype": dt, "backend": backend,
                                    "count": None, "error": f"{type(e).__name__}: {e}"[:200]})
 
+    if only_op and out_path.exists():
+        # Single-operator refresh: keep every other operator's rows. Without
+        # this an ONLY_OP run would replace the canonical file with one op.
+        probed = {(r["op"], r["dtype"], r["backend"]) for r in counts}
+        kept = [r for r in json.loads(out_path.read_text())
+                if (r["op"], r["dtype"], r["backend"]) not in probed]
+        counts = sorted(kept + counts,
+                        key=lambda r: (r["op"], r["dtype"], r["backend"]))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(counts, indent=2))
 
