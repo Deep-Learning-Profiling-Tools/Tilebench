@@ -1,7 +1,6 @@
 import argparse
 import csv
 import json
-import subprocess
 from pathlib import Path
 
 # Run from anywhere: put the repository root on sys.path so `tilebench` imports
@@ -14,24 +13,8 @@ if _REPO_ROOT not in sys.path:
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
 from tilebench.backends import parse_backends  # noqa: E402
-from tilebench.paths import (REPO_ROOT, autotune_log_path, hardware_label,  # noqa: E402
+from tilebench.paths import (autotune_log_path, hardware_label,  # noqa: E402
                              results_csv_dir, results_logs_dir, timing_log_path)
-
-
-def _archive_logs(gpu: str) -> None:
-    """Snapshot results/<gpu>/logs/ onto the raw-log archive branch (local commit only;
-    publish it with `scripts/archive_logs.sh --gpu <gpu> --push`). Never fails the benchmark."""
-    # The archive script works on the repository it is started in, so start it
-    # in ours: the benchmark may have been launched from any directory.
-    proc = subprocess.run(["bash", str(Path(__file__).with_name("archive_logs.sh")), "--gpu", gpu],
-                          capture_output=True, text=True, cwd=REPO_ROOT)
-    def last(text):
-        return (text.strip().splitlines() or ["no output"])[-1]
-    if proc.returncode == 0:
-        print(f"Raw-log archive → {last(proc.stdout)}")
-    else:
-        print(f"Warning: raw-log archive skipped ({last(proc.stderr)}); "
-              f"benchmark results are unaffected")
 
 
 # Display labels for the tile-language backends (torch is the implicit baseline).
@@ -258,8 +241,6 @@ def main():
                              "tilelang (or 'all', the default). torch always runs as the "
                              "speedup baseline. 'nki' (AWS Trainium) only runs when named "
                              "explicitly; its columns are merged into results/<gpu>/csv/.")
-    parser.add_argument("--no-archive", action="store_true",
-                        help="Do not snapshot results/<gpu>/logs/ onto the raw-log archive branch")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
@@ -345,8 +326,6 @@ def main():
     with open(autotune_path, "w") as f:
         json.dump(autotune_results, f, indent=4)
     print(f"Autotune log    → {autotune_path}")
-    if not args.no_archive:
-        _archive_logs(args.gpu)
 
     # Determine which param keys actually vary across ALL cases in this run.
     # Keys that are constant (same value in every case) are hidden to reduce noise.
