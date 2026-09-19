@@ -321,7 +321,9 @@ results/<hardware>/csv/
 └── <operator>_autotune.csv
 ```
 
-Everything under one `results/<hardware>/` namespace was measured on that hardware. The results committed today are the paper's B200 measurements, in `results/B200/csv/`: 45 operators, with one default-mode and one autotuned CSV per operator. Results for other hardware sit beside them, for example `results/GH200/csv/`, with no code change: the label passed to `--gpu` names the directory.
+The PyTorch, Triton, cuTile and TileLang columns under one `results/<hardware>/` namespace were measured on that hardware. The results committed today are the paper's B200 measurements, in `results/B200/csv/`: 45 operators, with one default-mode and one autotuned CSV per operator. Results for other hardware sit beside them, for example `results/GH200/csv/`, with no code change: the label passed to `--gpu` names the directory.
+
+NKI measurements are stored alongside the B200 campaign results for a unified per-operator record, but they are cross-hardware measurements: NKI runs on AWS Trainium, not on B200. When present, they appear as three extra columns, `torch_nki_ms`, `nki_ms` and `speedup_nki`. `nki_ms` is compared against the device-local `torch_nki_ms` baseline, not against the B200 `torch_ms` value, so `speedup_nki = torch_nki_ms / nki_ms`. NKI logs and profiles are kept under `results/B200/logs/` in the same way.
 
 Everything else is a generated artifact, ignored on `main`:
 
