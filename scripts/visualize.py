@@ -2,20 +2,20 @@
 
 Typical usage (run from Tilebench/):
     # Run benchmark first:
-    PYTHONPATH=. python scripts/run_bench.py --operator mul2
+    python scripts/run_bench.py --gpu B200 --operator mul2
 
-    # Then visualize (paths are inferred from --operator automatically):
-    PYTHONPATH=. python scripts/visualize.py --operator mul2
+    # Then visualize (paths are inferred from --gpu and --operator):
+    python scripts/visualize.py --gpu B200 --operator mul2
 
     # Override paths or metrics explicitly:
-    PYTHONPATH=. python scripts/visualize.py --operator mul2 \\
-        --input  results/logs/time_measurement_logs/mul2_results.json \\
-        --output-dir results/figures/mul2/ \\
+    python scripts/visualize.py --gpu B200 --operator mul2 \\
+        --input  results/B200/logs/time_measurement_logs/mul2_results.json \\
+        --output-dir results/B200/figures/mul2/ \\
         --metrics latency_ms bandwidth_GBs speedup pct_peak_bw
 
-Default paths (derived from --operator):
-    --input      results/logs/time_measurement_logs/<operator>_results.json
-    --output-dir results/figures/<operator>/
+Default paths (derived from --gpu and --operator):
+    --input      results/<gpu>/logs/time_measurement_logs/<operator>_results.json
+    --output-dir results/<gpu>/figures/<operator>/
 
 Available derived metrics (from core/metrics.py):
     latency_ms          raw mean latency (always available)
@@ -49,7 +49,8 @@ import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
 from tilebench.core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
-from tilebench.paths import operator_config  # noqa: E402
+from tilebench.paths import (hardware_label, operator_config,  # noqa: E402
+                             results_figures_dir, results_logs_dir)
 
 # ---------------------------------------------------------------------------
 # constants
@@ -375,22 +376,22 @@ def main() -> None:
                              "and derive default input/output paths")
     parser.add_argument("--input", type=str, default=None,
                         help="Timing results JSON produced by run_bench.py "
-                             "(default: results/logs/time_measurement_logs/<operator>_results.json)")
+                             "(default: results/<gpu>/logs/time_measurement_logs/<operator>_results.json)")
     parser.add_argument("--metrics", nargs="+", default=None,
                         help="Metrics to plot (default: from config.yaml metrics.plots)")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Directory to write PNG files "
-                             "(default: results/figures/<operator>/)")
-    parser.add_argument("--gpu", type=str, default=None,
-                        help="GPU short name (e.g. B200). Loads peak performance from "
-                             "tilebench/data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
+                             "(default: results/<gpu>/figures/<operator>/)")
+    parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                        help="Hardware label (e.g. B200). Selects the result namespace "
+                             "results/<gpu>/ for the default paths, and loads peak performance from "
+                             "tilebench/data/peak_performance/<gpu>.json for roofline and pct_peak metrics.")
     args = parser.parse_args()
 
-    # Resolve operator-bound default paths
-    input_path = args.input or (
-        f"results/logs/time_measurement_logs/{args.operator}_results.json"
-    )
-    output_dir = args.output_dir or f"results/figures/{args.operator}"
+    # Resolve the default paths inside this GPU's namespace; explicit paths win.
+    input_path = args.input or str(
+        results_logs_dir(args.gpu) / "time_measurement_logs" / f"{args.operator}_results.json")
+    output_dir = args.output_dir or str(results_figures_dir(args.gpu) / args.operator)
 
     # Load data
     with open(input_path) as f:
@@ -402,13 +403,11 @@ def main() -> None:
     metrics_cfg: dict = config.get("metrics", {})
 
     # Load GPU-specific peak performance data
-    peak_cfg: dict = {}
-    if args.gpu:
-        peak_cfg = load_peak_config(args.gpu)
-        if not peak_cfg:
-            print(f"Warning: no peak data found for GPU '{args.gpu}' at "
-                  f"tilebench/data/peak_performance/{args.gpu}.json — "
-                  f"roofline/pct_peak will be skipped")
+    peak_cfg = load_peak_config(args.gpu)
+    if not peak_cfg:
+        print(f"Warning: no peak data found for GPU '{args.gpu}' at "
+              f"tilebench/data/peak_performance/{args.gpu}.json — "
+              f"roofline/pct_peak will be skipped")
 
     # Determine which metrics to plot
     if args.metrics:

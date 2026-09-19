@@ -1,7 +1,9 @@
 """Aggregate per-op sweep CSVs into per-op dtype-grouped CSVs.
 
-Input:  results/csv/<op>_default.csv  + results/csv/<op>_autotune.csv
-Output: results/aggregate/<op>.csv
+Input:  results/<gpu>/csv/<op>_default.csv  + results/<gpu>/csv/<op>_autotune.csv
+Output: results/<gpu>/aggregate/<op>.csv
+
+Usage:  python -m tilebench.profiling.aggregate_results --gpu B200
 
 For each operator, the output CSV has one row per (dtype, mode) combination
 with the per-case geometric mean of each timing column. Rows where the backend
@@ -23,16 +25,12 @@ re-averaged here.
   speedup_cutile   = torch_ms  / cutile_ms
   triton_vs_cutile = cutile_ms / triton_ms     (>1 => Triton faster than cuTile)
 """
+import argparse
 import csv
 import math
 from collections import defaultdict
 from pathlib import Path
-from tilebench.paths import REPO_ROOT
-
-ROOT = REPO_ROOT
-CSV_DIR = ROOT / "results" / "csv"
-OUT_DIR = ROOT / "results" / "aggregate"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+from tilebench.paths import hardware_label, results_aggregate_dir, results_csv_dir
 
 MEAN_COLS = ("torch_ms", "triton_ms", "cutile_ms")
 
@@ -49,11 +47,11 @@ def _parse_float(s: str):
     return v
 
 
-def aggregate_one_op(op: str) -> bool:
+def aggregate_one_op(op: str, csv_dir: Path, out_dir: Path) -> bool:
     """Build the aggregate CSV for `op`. Returns True if any data was written."""
     rows_out = []
     for mode in ("default", "autotune"):
-        path = CSV_DIR / f"{op}_{mode}.csv"
+        path = csv_dir / f"{op}_{mode}.csv"
         if not path.exists():
             continue
         try:
@@ -90,7 +88,7 @@ def aggregate_one_op(op: str) -> bool:
 
     if not rows_out:
         return False
-    out_path = OUT_DIR / f"{op}.csv"
+    out_path = out_dir / f"{op}.csv"
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(
             f, fieldnames=["dtype", "mode", "n_cases", *MEAN_COLS,
@@ -105,24 +103,33 @@ def aggregate_one_op(op: str) -> bool:
     return True
 
 
-def main() -> None:
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                        help="Hardware label (e.g. B200): reads results/<gpu>/csv/, "
+                             "writes results/<gpu>/aggregate/")
+    args = parser.parse_args(argv)
+    csv_dir = results_csv_dir(args.gpu)
+    out_dir = results_aggregate_dir(args.gpu)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     ops = set()
-    for p in CSV_DIR.glob("*_default.csv"):
+    for p in csv_dir.glob("*_default.csv"):
         ops.add(p.stem.removesuffix("_default"))
-    for p in CSV_DIR.glob("*_autotune.csv"):
+    for p in csv_dir.glob("*_autotune.csv"):
         ops.add(p.stem.removesuffix("_autotune"))
-    for p in CSV_DIR.glob("*_summary.csv"):
+    for p in csv_dir.glob("*_summary.csv"):
         ops.add(p.stem.removesuffix("_summary"))
     ops.discard("")
 
     wrote = 0
     skipped = []
     for op in sorted(ops):
-        if aggregate_one_op(op):
+        if aggregate_one_op(op, csv_dir, out_dir):
             wrote += 1
         else:
             skipped.append(op)
-    print(f"wrote {wrote} aggregate CSV files to {OUT_DIR}")
+    print(f"wrote {wrote} aggregate CSV files to {out_dir}")
     if skipped:
         print(f"skipped (no per-op csv data found): {skipped}")
 

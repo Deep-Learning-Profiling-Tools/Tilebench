@@ -27,7 +27,7 @@ identity rules):
       |     every executed NEFF (runtime-written, byte-identical to the
       |     compiler dump) to a recorded pair by SHA256
       |-- write <spec_dir>/manifest.json (authoritative) + append the global
-          audit index results/logs/nki_neff_manifest.jsonl
+          audit index outputs/nki/neff_manifest.jsonl
 
 No step ever selects an artifact by mtime, sequence number, glob order, or
 "most recent compiler event".
@@ -51,7 +51,7 @@ from tilebench.core.nki_profile_spec import (MANIFEST_SCHEMA_VERSION, RUNTIME_IN
                                    NkiProfileSpec, append_jsonl_locked,
                                    atomic_write_json, describe_inputs, make_case_label,
                                    sha256_file, spec_lock)
-from tilebench.paths import OPERATOR_ROOT, PACKAGE_ROOT, REPO_ROOT
+from tilebench.paths import NKI_OUTPUT_ROOT, OPERATOR_ROOT, PACKAGE_ROOT, REPO_ROOT
 
 _REPO_ROOT = str(REPO_ROOT)
 
@@ -206,8 +206,9 @@ def profile_case_on_neuron(
     verify_rtol,
     warmup: int,
     repeat: int,
-    base_dir: str = "results/logs/nki_profiles",
-    index_path: str = "results/logs/nki_neff_manifest.jsonl",
+    # NKI artifacts live under outputs/nki/, outside the GPU-scoped results/ tree.
+    base_dir: str = str(NKI_OUTPUT_ROOT / "profiles"),
+    index_path: str = str(NKI_OUTPUT_ROOT / "neff_manifest.jsonl"),
     python: str | None = None,
     runner: Callable | None = None,
     profiler: Callable | None = None,

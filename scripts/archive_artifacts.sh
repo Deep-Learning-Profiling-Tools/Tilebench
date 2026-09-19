@@ -14,39 +14,60 @@
 # history is only ever appended to.
 #
 # Usage (from anywhere inside the repo):
-#     scripts/archive_artifacts.sh --logs          # results/logs/
-#     scripts/archive_artifacts.sh --llm           # tilebench/benchmarks/llm_generated/
-#     scripts/archive_artifacts.sh --all           # both
-#     ... --push                                   # also push the archive branch
+#     scripts/archive_artifacts.sh --logs --gpu B200   # results/B200/logs/
+#     scripts/archive_artifacts.sh --llm               # tilebench/benchmarks/llm_generated/
+#     scripts/archive_artifacts.sh --all --gpu B200    # both
+#     ... --push                                       # also push the archive branch
 #
-# scripts/run_bench.py runs `archive_logs.sh` (= --logs) after every benchmark.
-# LLM trajectories are archived only on request, at milestones worth keeping.
+# Raw logs are scoped by hardware (results/<gpu>/logs/), so --logs and --all
+# take the label of the GPU whose logs to snapshot; the logs of every other GPU
+# already on the archive branch are carried forward untouched.
+# scripts/run_bench.py runs `archive_logs.sh --gpu <gpu>` (= --logs) after every
+# benchmark. LLM trajectories are archived only on request, at milestones worth
+# keeping.
 set -euo pipefail
 
 BRANCH="archive/raw-logs-2026-09-18"
 BASE="origin/main"
 
-LOGS_PATH="results/logs"
 LLM_PATH="tilebench/benchmarks/llm_generated"
-# Every path the archive owns. All of them are carried forward on every run,
-# whichever mode is selected. benchmarks/llm_generated/ is the pre-refactor
-# location: a historical snapshot that is kept, never written to.
-ARCHIVE_PATHS=("$LOGS_PATH" "benchmarks/llm_generated" "$LLM_PATH")
+# Fixed paths the archive owns, carried forward on every run whichever mode is
+# selected. Two are legacy locations, historical snapshots that are kept and
+# never written to: results/logs/ (raw logs before results were scoped by
+# hardware) and benchmarks/llm_generated/ (before the tilebench/ package).
+ARCHIVE_PATHS=("results/logs" "benchmarks/llm_generated" "$LLM_PATH")
 
 usage() { sed -n '15,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-selected=()
+want_logs=0
+want_llm=0
+gpu=""
 push=0
-for arg in "$@"; do
-    case "$arg" in
-        --logs) selected+=("$LOGS_PATH") ;;
-        --llm)  selected+=("$LLM_PATH") ;;
-        --all)  selected+=("$LOGS_PATH" "$LLM_PATH") ;;
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --logs) want_logs=1 ;;
+        --llm)  want_llm=1 ;;
+        --all)  want_logs=1; want_llm=1 ;;
+        --gpu)  [ "$#" -ge 2 ] || { echo "error: --gpu needs a hardware label" >&2; usage; }
+                gpu="$2"; shift ;;
+        --gpu=*) gpu="${1#--gpu=}" ;;
         --push) push=1 ;;
-        *) echo "error: unknown option $arg" >&2; usage ;;
+        *) echo "error: unknown option $1" >&2; usage ;;
     esac
+    shift
 done
-[ "${#selected[@]}" -gt 0 ] || { echo "error: choose --logs, --llm or --all" >&2; usage; }
+[ "$((want_logs + want_llm))" -gt 0 ] || { echo "error: choose --logs, --llm or --all" >&2; usage; }
+
+selected=()
+if [ "$want_logs" -eq 1 ]; then
+    # Same rule as tilebench.paths.hardware_label: one safe path component.
+    if ! [[ "$gpu" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+        echo "error: --logs needs --gpu <label> (e.g. --gpu B200); got '${gpu}'" >&2
+        usage
+    fi
+    selected+=("results/$gpu/logs")
+fi
+[ "$want_llm" -eq 0 ] || selected+=("$LLM_PATH")
 
 cd "$(git rev-parse --show-toplevel)"
 if [ "$(git symbolic-ref -q --short HEAD)" = "$BRANCH" ]; then
@@ -69,6 +90,10 @@ tree="$(
     git read-tree "$BASE"
     for tip in $remote_tip $local_tip; do
         git ls-tree -r "$tip" -- "${ARCHIVE_PATHS[@]}" | git update-index --index-info
+        # ...and the raw logs of every GPU archived so far: results/<gpu>/logs/.
+        git ls-tree -r -z "$tip" -- results \
+            | { grep -z -E $'\tresults/[^/]+/logs/' || true; } \
+            | git update-index -z --index-info
     done
     for path in "${selected[@]}"; do
         # update-index ignores .gitignore and only ever adds, so artifacts

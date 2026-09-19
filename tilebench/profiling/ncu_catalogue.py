@@ -4,22 +4,26 @@ Catalogue all benchmark operators for the NCU sweep:
   - compute sweep-max case (largest product of varied case_grid dims)
   - list dtypes
   - look up the autotune-winner cfg for that case in the autotune log
+    (results/<gpu>/logs/autotune_logs/<op>_autotune.json)
 
 Writes tilebench/profiling/ncu_catalogue.json for the driver to consume.
+
+Usage:  python -m tilebench.profiling.ncu_catalogue --gpu B200 [op ...]
 """
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
 
 import yaml
-from tilebench.paths import NCU_CATALOGUE, OPERATOR_ROOT, REPO_ROOT
+from tilebench.paths import (NCU_CATALOGUE, OPERATOR_ROOT, REPO_ROOT, hardware_label,
+                             results_logs_dir)
 
 ROOT = REPO_ROOT
 sys.path.insert(0, str(ROOT))
 
 OPS_DIR = OPERATOR_ROOT
-LOG_DIR = ROOT / "results" / "logs" / "autotune_logs"
 
 
 def expand_case_grid(case_grid: dict) -> list[dict]:
@@ -57,7 +61,7 @@ def case_size(case: dict) -> int:
     return size
 
 
-def collect_op(op_name: str) -> dict:
+def collect_op(op_name: str, log_dir: Path) -> dict:
     """Build a catalogue entry for one operator."""
     op_dir = OPS_DIR / op_name
     cfg_path = op_dir / "config.yaml"
@@ -100,7 +104,7 @@ def collect_op(op_name: str) -> dict:
         params.update(max_case)
         per_dtype[dt] = params
 
-    log_path = LOG_DIR / f"{op_name}_autotune.json"
+    log_path = log_dir / f"{op_name}_autotune.json"
     autotune_data = None
     if log_path.exists():
         try:
@@ -166,6 +170,14 @@ def collect_op(op_name: str) -> dict:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Build the NCU sweep catalogue.")
+    parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                        help="Hardware label (e.g. B200): autotune winners are read from "
+                             "results/<gpu>/logs/autotune_logs/")
+    parser.add_argument("ops", nargs="*", help="Operators to refresh (default: all)")
+    args = parser.parse_args()
+    log_dir = results_logs_dir(args.gpu) / "autotune_logs"
+
     skip = {"_template", "__pycache__"}
     all_ops = sorted([
         p.name for p in OPS_DIR.iterdir()
@@ -173,7 +185,7 @@ def main():
     ])
     out = NCU_CATALOGUE
 
-    requested = sys.argv[1:]
+    requested = args.ops
     if requested:
         unknown = [op for op in requested if op not in all_ops]
         if unknown:
@@ -181,13 +193,13 @@ def main():
         existing = json.loads(out.read_text()) if out.exists() else []
         by_op = {c["op"]: c for c in existing}
         for op in requested:
-            by_op[op] = collect_op(op)
+            by_op[op] = collect_op(op, log_dir)
         catalogue = [by_op[op] for op in sorted(by_op)]
         out.write_text(json.dumps(catalogue, indent=2, default=str))
         print(f"wrote {out}  (updated {len(requested)} of {len(catalogue)} ops: {requested})")
         catalogue = [by_op[op] for op in requested]
     else:
-        catalogue = [collect_op(op) for op in all_ops]
+        catalogue = [collect_op(op, log_dir) for op in all_ops]
         out.write_text(json.dumps(catalogue, indent=2, default=str))
         print(f"wrote {out}  ({len(catalogue)} ops)")
     no_log = [c["op"] for c in catalogue if not c.get("has_autotune_log")]

@@ -42,8 +42,9 @@ def write(path, text="x\n"):
 
 @pytest.fixture
 def work(tmp_path):
-    """A clone whose archive branch already holds a legacy LLM snapshot that
-    main has since dropped, plus git-ignored artifacts on disk."""
+    """A clone whose archive branch already holds the legacy snapshots (the
+    pre-package LLM directory and the pre-hardware-scoped results/logs/) that
+    main has since dropped, plus git-ignored artifacts of two GPUs on disk."""
     origin, work = tmp_path / "origin.git", tmp_path / "work"
     git(tmp_path, "init", "-q", "--bare", str(origin))
     git(tmp_path, "init", "-q", str(work))
@@ -52,16 +53,20 @@ def work(tmp_path):
     write(work / "src.txt")
     write(work / ".gitignore", f"results/*\n{LLM}/\n__pycache__/\n*.pyc\n")
     write(work / "benchmarks/llm_generated/legacy.txt", "legacy\n")
+    write(work / "results/logs/legacy.json", "{}\n")
     git(work, "add", "-A")
+    git(work, "add", "-f", "results/logs/legacy.json")
     git(work, "commit", "-q", "-m", "main with the legacy snapshot")
     git(work, "push", "-q", "origin", "main")
     git(work, "push", "-q", "origin", f"main:refs/heads/{BRANCH}")   # archive starts here
-    git(work, "rm", "-q", "-r", "benchmarks/llm_generated")
+    git(work, "rm", "-q", "-r", "benchmarks/llm_generated", "results/logs")
     git(work, "commit", "-q", "-m", "main drops the legacy snapshot")
     git(work, "push", "-q", "origin", "main")
     git(work, "fetch", "-q", "origin")
 
-    write(work / "results/logs/a.json", "{}\n")
+    write(work / "results/B200/logs/a.json", "{}\n")
+    write(work / "results/GH200/logs/g.json", "{}\n")
+    write(work / "results/B200/figures/plot.png", "png")
     write(work / LLM / "op/model/high/iter_0/prompt.md", "prompt\n")
     write(work / LLM / "op/model/high/iter_0/__pycache__/impl.cpython-310.pyc", "bytecode")
     return work
@@ -72,11 +77,23 @@ def test_mode_is_required(work):
     assert r.returncode == 2 and "--logs" in r.stderr
 
 
-def test_archive_logs_wrapper_archives_only_logs(work):
-    r = run(LOGS, work)
+@pytest.mark.parametrize("args", [(), ("--gpu",), ("--gpu", "../B200"), ("--gpu", "a/b"), ("--gpu", "")])
+def test_logs_need_a_safe_gpu_label(work, args):
+    tip = git(work, "rev-parse", f"origin/{BRANCH}")
+    r = run(LOGS, work, *args)
+    assert r.returncode == 2 and "--gpu" in r.stderr
+    assert git(work, "rev-parse", f"origin/{BRANCH}") == tip
+    assert subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/heads/{BRANCH}"],
+                          cwd=work, env=ENV, capture_output=True).returncode != 0   # nothing was committed
+
+
+def test_archive_logs_wrapper_archives_only_the_logs_of_that_gpu(work):
+    r = run(LOGS, work, "--gpu", "B200")
     assert r.returncode == 0, r.stderr
     files = archived(work)
-    assert "results/logs/a.json" in files
+    assert "results/B200/logs/a.json" in files
+    assert "results/GH200/logs/g.json" not in files        # another GPU's logs are not swept in
+    assert "results/B200/figures/plot.png" not in files    # only logs/ is archived
     assert not any(f.startswith(LLM) for f in files)
 
 
@@ -87,7 +104,7 @@ def test_llm_mode_archives_gitignored_trajectories(work):
     files = archived(work)
     assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
     assert not any(f.endswith(".pyc") or "__pycache__" in f for f in files)
-    assert "results/logs/a.json" not in files             # --llm leaves logs alone
+    assert "results/B200/logs/a.json" not in files        # --llm leaves logs alone
     assert "src.txt" in files                              # main's tree is the base
     # nothing was checked out and the real index is untouched
     assert git(work, "rev-parse", "HEAD") == head
@@ -97,9 +114,9 @@ def test_llm_mode_archives_gitignored_trajectories(work):
 
 
 def test_all_mode_archives_both(work):
-    assert run(ARTIFACTS, work, "--all").returncode == 0
+    assert run(ARTIFACTS, work, "--all", "--gpu=B200").returncode == 0
     files = archived(work)
-    assert "results/logs/a.json" in files
+    assert "results/B200/logs/a.json" in files
     assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
 
 
@@ -109,12 +126,18 @@ def test_archive_is_cumulative_and_keeps_the_legacy_path(work):
     shutil.rmtree(work / LLM / "op")
     write(work / LLM / "op2/model/high/iter_0/prompt.md", "second\n")
     assert run(ARTIFACTS, work, "--llm").returncode == 0
-    assert run(LOGS, work).returncode == 0                 # a logs-only run drops nothing either
+    assert run(LOGS, work, "--gpu", "B200").returncode == 0   # a logs-only run drops nothing either
+    # the B200 logs leave this machine; a GH200 run must not drop them from the archive
+    shutil.rmtree(work / "results/B200")
+    assert run(LOGS, work, "--gpu", "GH200").returncode == 0
     files = archived(work)
     assert f"{LLM}/op/model/high/iter_0/prompt.md" in files
     assert f"{LLM}/op2/model/high/iter_0/prompt.md" in files
-    assert "results/logs/a.json" in files
-    assert "benchmarks/llm_generated/legacy.txt" in files  # main dropped it; the archive keeps it
+    assert "results/B200/logs/a.json" in files
+    assert "results/GH200/logs/g.json" in files
+    # legacy paths: main dropped them and this machine never had them; the archive keeps them
+    assert "benchmarks/llm_generated/legacy.txt" in files
+    assert "results/logs/legacy.json" in files
 
 
 def test_working_tree_wins_and_history_is_only_appended(work):

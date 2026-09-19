@@ -15,6 +15,7 @@ CLI arguments first.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -41,6 +42,55 @@ REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).r
 #: Generated artifacts (NCU reports, measured peak sweeps). Not package data.
 OUTPUT_ROOT = REPO_ROOT / "outputs"
 NCU_OUTPUT_ROOT = OUTPUT_ROOT / "ncu"
+#: NKI runs on AWS Trainium, not on a GPU, so its logs, summaries and profiler
+#: artifacts stay out of the hardware-scoped results/ tree below.
+NKI_OUTPUT_ROOT = OUTPUT_ROOT / "nki"
+
+#: Benchmark results, one namespace per hardware platform:
+#:     results/<hardware>/{csv,logs,figures,aggregate,runs}/
+#: Everything under one namespace was measured on that hardware. Only csv/ is
+#: version-controlled. Build paths with the helpers below, never by hand.
+RESULTS_ROOT = REPO_ROOT / "results"
+
+_HARDWARE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
+
+
+def hardware_label(label: str) -> str:
+    """Validate a hardware label (B200, GH200, MI300X, ...) as one safe path component.
+
+    There is deliberately no list of supported devices: a new platform needs a
+    new label, not a code change. Usable as an argparse ``type=``.
+    """
+    if not isinstance(label, str) or not _HARDWARE_LABEL.fullmatch(label):
+        raise ValueError(
+            f"invalid hardware label {label!r}: use one path component made of letters, "
+            f"digits, '.', '_', '+' or '-', starting with a letter or digit (e.g. B200)")
+    return label
+
+
+def results_root(hardware: str) -> Path:
+    return RESULTS_ROOT / hardware_label(hardware)
+
+
+def results_csv_dir(hardware: str) -> Path:
+    """Summary CSVs: the only version-controlled results."""
+    return results_root(hardware) / "csv"
+
+
+def results_logs_dir(hardware: str) -> Path:
+    return results_root(hardware) / "logs"
+
+
+def results_figures_dir(hardware: str) -> Path:
+    return results_root(hardware) / "figures"
+
+
+def results_aggregate_dir(hardware: str) -> Path:
+    return results_root(hardware) / "aggregate"
+
+
+def results_runs_dir(hardware: str) -> Path:
+    return results_root(hardware) / "runs"
 
 
 def operator_dir(operator: str) -> Path:

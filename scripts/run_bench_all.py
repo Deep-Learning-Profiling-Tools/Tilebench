@@ -17,7 +17,11 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
-from tilebench.paths import OPERATOR_ROOT  # noqa: E402
+from tilebench.paths import OPERATOR_ROOT, hardware_label, results_runs_dir  # noqa: E402
+
+# Same GPU backend scope as scripts/run_bench.py. NKI targets AWS Trainium and
+# is never part of a results/<gpu>/ namespace.
+_GPU_BACKENDS = ("triton", "cutile", "tilelang")
 
 
 def discover_operators(operators_root: Path) -> list[str]:
@@ -95,10 +99,18 @@ def copy_profile_artifacts(patterns: list[str], run_dir: Path, repo_root: Path) 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all TileBench operators and save results per run.")
     parser.add_argument(
+        "--gpu",
+        type=hardware_label,
+        required=True,
+        metavar="LABEL",
+        help="Hardware label of the machine being measured, e.g. B200 or GH200. "
+             "Selects the result namespace results/<gpu>/ and is recorded in the run manifest.",
+    )
+    parser.add_argument(
         "--results-root",
         type=str,
-        default="results/runs",
-        help="Root directory for per-run outputs.",
+        default=None,
+        help="Root directory for per-run outputs (default: results/<gpu>/runs).",
     )
     parser.add_argument(
         "--run-name",
@@ -131,7 +143,8 @@ def main() -> int:
         print("No operators found to run.")
         return 1
 
-    run_dir = create_run_dir(Path(args.results_root), args.run_name)
+    results_root = Path(args.results_root) if args.results_root else results_runs_dir(args.gpu)
+    run_dir = create_run_dir(results_root, args.run_name)
     operators_dir = run_dir / "operators"
     operators_dir.mkdir(parents=True, exist_ok=True)
     logs_dir = run_dir / "logs"
@@ -139,6 +152,7 @@ def main() -> int:
     run_log_path = logs_dir / "run.log"
 
     manifest = {
+        "gpu": args.gpu,
         "created_at_utc": _now_utc_str(),
         "hostname": socket.gethostname(),
         "python_executable": sys.executable,
@@ -149,6 +163,7 @@ def main() -> int:
         "artifacts": {},
     }
 
+    print(f"GPU/result namespace: {args.gpu}")
     print(f"Run directory: {run_dir}")
     with run_log_path.open("w", encoding="utf-8") as run_log:
         run_log.write(f"[{_now_utc_str()}] Starting run for {len(operators)} operators\n")
@@ -156,7 +171,7 @@ def main() -> int:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
             try:
-                results = run_benchmark_suite(op)
+                results = run_benchmark_suite(op, enabled_backends=set(_GPU_BACKENDS))
                 out_path = operators_dir / f"{op}.json"
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)

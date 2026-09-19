@@ -5,10 +5,13 @@
 # 60-minute timeout (raised from 30 in the previous run); if it times out,
 # we skip and continue.
 #
-# Usage: run_batch.sh <batch_name> <op1> <op2> ...
+# Usage: GPU=<label> run_batch.sh <batch_name> <op1> <op2> ...
+#   GPU is the hardware label passed to run_bench.py --gpu (e.g. GPU=B200); it
+#   selects the result namespace results/<GPU>/ and has no default.
 
 set -u
 
+GPU=${GPU:?set GPU to the hardware label of this machine, e.g. GPU=B200}
 BATCH=${1:?batch name required}
 shift
 OPS=("$@")
@@ -33,10 +36,10 @@ needs_timeout() {
 rename_outputs() {
   local op=$1
   local suffix=$2
-  local src_json="results/logs/time_measurement_logs/${op}_results.json"
-  local src_csv="results/csv/${op}_summary.csv"
-  [ -f "$src_json" ] && cp "$src_json" "results/logs/time_measurement_logs/${op}_${suffix}.json"
-  [ -f "$src_csv" ]  && cp "$src_csv"  "results/csv/${op}_${suffix}.csv"
+  local src_json="results/${GPU}/logs/time_measurement_logs/${op}_results.json"
+  local src_csv="results/${GPU}/csv/${op}_summary.csv"
+  [ -f "$src_json" ] && cp "$src_json" "results/${GPU}/logs/time_measurement_logs/${op}_${suffix}.json"
+  [ -f "$src_csv" ]  && cp "$src_csv"  "results/${GPU}/csv/${op}_${suffix}.csv"
 }
 
 START=$(date +%s)
@@ -48,7 +51,7 @@ echo
 for op in "${OPS[@]}"; do
   echo "----- ${op} (default) -----"
   ts=$(date +%s)
-  PYTHONPATH=. python scripts/run_bench.py --operator "$op" \
+  PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" \
       > "$LOG_DIR/${op}_default.log" 2>&1
   rc=$?
   rename_outputs "$op" default
@@ -57,7 +60,7 @@ for op in "${OPS[@]}"; do
   echo "----- ${op} (autotune) -----"
   ts=$(date +%s)
   if needs_timeout "$op"; then
-    timeout 3600 env PYTHONPATH=. python scripts/run_bench.py --operator "$op" --autotune \
+    timeout 3600 env PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" --autotune \
         > "$LOG_DIR/${op}_autotune.log" 2>&1
     rc=$?
     if [ $rc -eq 124 ]; then
@@ -66,7 +69,7 @@ for op in "${OPS[@]}"; do
       continue
     fi
   else
-    PYTHONPATH=. python scripts/run_bench.py --operator "$op" --autotune \
+    PYTHONPATH=. python scripts/run_bench.py --gpu "$GPU" --operator "$op" --autotune \
         > "$LOG_DIR/${op}_autotune.log" 2>&1
     rc=$?
   fi

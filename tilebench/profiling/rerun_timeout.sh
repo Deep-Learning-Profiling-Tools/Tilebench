@@ -4,6 +4,8 @@
 # 30-min cap each is plenty.
 
 set -u
+# Hardware label for run_bench.py --gpu (result namespace results/<GPU>/); no default.
+GPU=${GPU:?set GPU to the hardware label of this machine, e.g. GPU=B200}
 cd /projects/kzhou6/bcui2/research/tilebench/Tilebench
 
 OPS=(softmax matmul_fp32_fp16_fp8 kl_divergence histogramming)
@@ -22,7 +24,7 @@ for op in "${OPS[@]}"; do
   t0=$(date +%s)
   timeout 1800 \
     bash -c "PYTHONPATH=. python -u scripts/run_bench.py \
-      --operator '$op' --warmup 20 --repeat 100 --autotune" \
+      --gpu '$GPU' --operator '$op' --warmup 20 --repeat 100 --autotune" \
       > "$out" 2>&1
   rc=$?
   t1=$(date +%s)
