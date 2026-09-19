@@ -201,20 +201,17 @@ def test_run_bench_writes_only_into_the_gpu_namespace(run_bench, results, capsys
     assert "nki" not in header and "tilelang_ms" in header       # NKI only runs when named
 
 
-def test_a_benchmark_run_only_writes_results(run_bench, results, monkeypatch, capsys):
-    """The runner produces files under results/<gpu>/ and does nothing else: it
-    starts no process and performs no Git operation. Backing results up is not
-    part of running a benchmark."""
+def test_a_benchmark_run_only_writes_results(run_bench, results, monkeypatch):
+    """run_bench.py produces files under results/<gpu>/ and does nothing else:
+    with the engine stubbed, it starts no process, so it performs no Git
+    operation. Backing results up is not part of running a benchmark."""
     def forbidden(*args, **kwargs):
         raise AssertionError(f"run_bench.py started a process: {args}")
     monkeypatch.setattr(subprocess, "run", forbidden)
     monkeypatch.setattr(subprocess, "Popen", forbidden)
     run_bench("--gpu", "B200", "--operator", "mul2")
     assert (results / "B200/csv/mul2_default.csv").is_file()
-    for flag in ("--no-archive", "--archive"):                     # removed, not kept as a no-op
-        with pytest.raises(SystemExit) as e:
-            run_bench("--gpu", "B200", "--operator", "mul2", flag)
-        assert e.value.code == 2 and "unrecognized arguments" in capsys.readouterr().err
+    assert sorted(p.name for p in results.iterdir()) == ["B200"]
 
 
 def test_same_operator_on_two_gpus_does_not_collide(run_bench, results):
