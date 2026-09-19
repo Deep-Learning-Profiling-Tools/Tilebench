@@ -1,7 +1,9 @@
-# TileBench
-<div align="center">
-  <img src="assets/tilebench_icon.png" alt="TileBench icon" width="120" />
-</div>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/tilebench_icon_dark.png">
+    <img src="assets/tilebench_icon.png" alt="TileBench" width="460">
+  </picture>
+</h1>
 
 **Controlled performance evaluation and bottleneck diagnosis for tile-based programming models.**
 
@@ -246,7 +248,7 @@ tilebench/profiling/
 └── kernel_counts.json
 ```
 
-Generated NCU reports are local artifacts and are not tracked. The 220 Nsight Compute reports behind the paper's profiling analysis (45 operators, Triton and cuTile, every profiled dtype; 11.8 GB) are published on [<img src="assets/icons/huggingface.svg" height="14" alt=""> Hugging Face](https://huggingface.co/datasets/bcui2/NCU_report); downloading them requires a free Hugging Face login.
+Generated NCU reports are local artifacts and are not tracked. The released artifact contains 220 raw Nsight Compute reports. They cover 45 operators for Triton and cuTile across every profiled dtype (11.8 GB) and are hosted on [Hugging Face](https://huggingface.co/datasets/bcui2/NCU_report). Downloading them requires a free Hugging Face login.
 
 ## LLM Kernel Generation
 
@@ -264,15 +266,15 @@ The pipeline source above is version-controlled. What it generates is not: each 
 tilebench/benchmarks/llm_generated/<operator>/<model>/<effort>/
 ```
 
-which is a local output directory, Git-ignored on `main` and created on demand.
+This is the runtime output path. It is Git-ignored and created on demand, so a fresh clone does not ship the 6140 files of the paper campaign.
 
-The frozen trajectories behind the paper's LLM results (45 operators × 2 models, 732 iterations) are published as a separate artifact. One command downloads it, verifies its SHA256 and restores it to `tilebench/benchmarks/llm_generated/`:
+The frozen trajectories behind the paper's LLM results (45 operators × 2 models, 732 iterations) are published as a separate artifact. One command downloads it, verifies its SHA256 and restores it automatically to `tilebench/benchmarks/llm_generated/`:
 
 ```bash
 python scripts/fetch_artifacts.py --artifact llm-aacl2026
 ```
 
-The archive (28 MB, 6140 files) is also available directly from [<img src="assets/icons/googledrive.svg" height="14" alt=""> Google Drive](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing); its URL and checksum are recorded in `artifacts/manifest.json`. An existing, non-empty directory is left alone unless `--force` is given.
+The archive (28 MB, 6140 files) is also available directly from [Google Drive](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing); its URL and checksum are recorded in `artifacts/manifest.json`. An existing, non-empty directory is left alone unless `--force` is given.
 
 The generation workflow is separate from the manually implemented benchmark path. Generated implementations are evaluated under their own protocol and do not modify the manually maintained kernels.
 
@@ -329,7 +331,7 @@ Maintainers back up artifacts with `scripts/archive_artifacts.sh --logs | --llm 
 
 Implementation details, CLI options, operator-authoring rules, tuning conventions, dtype handling, and profiling internals are documented separately:
 
-**[<img src="assets/icons/book.svg" height="16" alt=""> TileBench Developer Guide](docs/developer_guide.md)**
+**[TileBench Developer Guide](docs/developer_guide.md)**
 
 ## Attribution
 
