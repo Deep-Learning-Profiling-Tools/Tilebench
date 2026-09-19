@@ -1,9 +1,11 @@
 """
 README figure: PyTorch / Triton / cuTile latency at each operator's sweep-max case.
 
-For every operator this takes the largest swept case, the one recorded in
-tilebench/profiling/metadata/<gpu>/ncu_catalogue.json (`default_params_per_dtype`), so the figure
-uses the same inputs as the NCU profiles. The dtype is fp16 when the operator
+For every operator with results on the GPU this takes the largest swept case,
+derived from the operator's config.yaml by the same rule as the NCU catalogue
+(tilebench.profiling.ncu_catalogue.sweep_max_cases), so the figure uses the
+same inputs as the NCU profiles and needs nothing but the configs and the
+committed CSVs. The dtype is fp16 when the operator
 sweeps it, otherwise the operator's first dtype (shown after the name).
 Latencies are the autotuned Proton means from results/<gpu>/csv/<op>_autotune.csv.
 
@@ -34,7 +36,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.paths import hardware_label, results_csv_dir, results_figures_dir  # noqa: E402
-from tilebench.profiling.ncu_kernel_select import load_catalogue  # noqa: E402
+from tilebench.profiling.ncu_catalogue import sweep_max_cases  # noqa: E402
 
 # label, CSV column, color
 SERIES = [
@@ -61,16 +63,19 @@ plt.rcParams.update({
 def sweep_max_rows(gpu):
     """[(label, {column: latency_ms})], one per operator, from results/<gpu>/csv/."""
     csv_dir = results_csv_dir(gpu)
+    ops = sorted(p.name[:-len("_autotune.csv")] for p in csv_dir.glob("*_autotune.csv"))
+    if not ops:
+        raise FileNotFoundError(f"no <operator>_autotune.csv under {csv_dir}")
     out = []
-    for entry in load_catalogue(gpu):      # this GPU's catalogue; never another GPU's
-        op = entry["op"]
-        dtype = "fp16" if "fp16" in entry["dtypes"] else entry["dtypes"][0]
-        want = {k: str(v) for k, v in entry["default_params_per_dtype"][dtype].items()}
+    for op in ops:
+        dtypes, cases = sweep_max_cases(op)
+        dtype = "fp16" if "fp16" in dtypes else dtypes[0]
+        want = {k: str(v) for k, v in cases[dtype].items()}
         with open(csv_dir / f"{op}_autotune.csv", newline="") as f:
             rows = [r for r in csv.DictReader(f) if r["dtype"].strip() == dtype and all(
                 want.get(k.strip()) == v.strip()
                 for k, v in (kv.split("=", 1) for kv in r["params"].split(",")))]
-        assert len(rows) == 1, f"{op}/{dtype}: {len(rows)} CSV rows match the catalogue case"
+        assert len(rows) == 1, f"{op}/{dtype}: {len(rows)} CSV rows match the sweep-max case"
         label = op if dtype == "fp16" else f"{op} ({dtype})"
         out.append((label, {col: float(rows[0][col]) for _, col, _ in SERIES}))
     return out

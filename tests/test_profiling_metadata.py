@@ -1,5 +1,5 @@
-"""Hardware-scoped NCU profiling metadata and outputs:
-    tilebench/profiling/metadata/<hardware>/{ncu_catalogue,kernel_counts}.json
+"""Hardware-scoped NCU profiling metadata and outputs, both generated data:
+    outputs/profiling/<hardware>/{ncu_catalogue,kernel_counts}.json
     outputs/ncu/<hardware>/
 No test here needs a GPU or the ncu binary.
 """
@@ -18,23 +18,21 @@ from tilebench.profiling import ncu_kernel_select as ks
 
 REPO = Path(__file__).resolve().parents[1]
 
-#: The committed B200 files, recorded BEFORE they moved from tilebench/profiling/
-#: to tilebench/profiling/metadata/B200/. Update only when they are regenerated.
-B200_SHA256 = {
-    "ncu_catalogue.json": "814bb30d1c951396739b992d5db92c4ed1ec14fd500a85dae46b3d2be256913d",
-    "kernel_counts.json": "cfe0687e48665968e09e62ac3def2e86ae3bed14aa4a12a46175dcce79b666a6",
-}
-
-
 @pytest.fixture
 def metadata(tmp_path, monkeypatch):
-    """A temporary metadata tree with a copy of the committed B200 files, and
-    temporary results and NCU output roots."""
-    root = tmp_path / "metadata"
-    shutil.copytree(paths.PROFILING_METADATA_ROOT / "B200", root / "B200")
+    """A temporary metadata tree holding B200 metadata (a catalogue built from
+    the operator configs, and probed-looking kernel counts), with temporary
+    results and NCU output roots. Nothing is committed for any GPU."""
+    from tilebench.profiling import ncu_catalogue
+    root = tmp_path / "outputs" / "profiling"
     monkeypatch.setattr(paths, "PROFILING_METADATA_ROOT", root)
     monkeypatch.setattr(paths, "NCU_OUTPUT_ROOT", tmp_path / "outputs" / "ncu")
     monkeypatch.setattr(paths, "RESULTS_ROOT", tmp_path / "results")
+    ncu_catalogue.main(["--gpu", "B200"])
+    rows = [{"op": c["op"], "dtype": dt, "backend": be, "count": 1, "names": [f"{c['op']}_kernel"]}
+            for c in json.loads((root / "B200" / "ncu_catalogue.json").read_text())
+            for dt in c["dtypes"] for be in ("triton", "cutile")]
+    (root / "B200" / "kernel_counts.json").write_text(json.dumps(rows, indent=2))
     return root
 
 
@@ -47,7 +45,8 @@ def digest(path):
 # --------------------------------------------------------------------------
 
 def test_metadata_and_ncu_outputs_are_one_directory_per_hardware():
-    base = paths.PACKAGE_ROOT / "profiling" / "metadata"
+    base = paths.REPO_ROOT / "outputs" / "profiling"           # generated data, outside the package
+    assert paths.PACKAGE_ROOT not in base.parents
     assert paths.ncu_catalogue_path("B200") == base / "B200" / "ncu_catalogue.json"
     assert paths.kernel_counts_path("B200") == base / "B200" / "kernel_counts.json"
     assert paths.ncu_catalogue_path("GH200") == base / "GH200" / "ncu_catalogue.json"
@@ -61,15 +60,11 @@ def test_metadata_and_ncu_outputs_are_one_directory_per_hardware():
                 helper(label)
 
 
-def test_there_is_no_global_metadata_any_more():
+def test_the_source_package_holds_no_profiling_data_or_cluster_scripts():
     assert not hasattr(paths, "NCU_CATALOGUE") and not hasattr(paths, "KERNEL_COUNTS")
-    assert not (paths.PACKAGE_ROOT / "profiling" / "ncu_catalogue.json").exists()
-    assert not (paths.PACKAGE_ROOT / "profiling" / "kernel_counts.json").exists()
-
-
-def test_committed_b200_metadata_is_byte_identical_to_the_pre_move_files():
-    for name, sha in B200_SHA256.items():
-        assert digest(paths.profiling_metadata_dir("B200") / name) == sha, name
+    stray = [p.relative_to(REPO).as_posix() for p in (REPO / "tilebench" / "profiling").rglob("*")
+             if p.is_file() and p.suffix in {".json", ".sh", ".sbatch"}]
+    assert stray == []
 
 
 # --------------------------------------------------------------------------
@@ -105,7 +100,8 @@ def test_ncu_tools_require_a_gpu_and_refuse_one_without_metadata(metadata, monke
     with pytest.raises(SystemExit) as e:
         mod.main()
     assert "GH200" in str(e.value.code) and "fallback" in str(e.value.code)
-    assert not (metadata.parent / "outputs").exists()         # nothing was written for it
+    assert not (metadata / "GH200").exists()                  # nothing was written for it
+    assert not (metadata.parent / "ncu").exists()
 
 
 def test_ncu_reports_of_two_gpus_cannot_collide(metadata):
@@ -191,12 +187,12 @@ def test_kernel_count_probe_is_per_gpu(metadata, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# packaging and portability
+# packaging: the installed package is source only
 # --------------------------------------------------------------------------
 
-def test_metadata_ships_with_a_regular_install(tmp_path):
+def test_a_regular_install_ships_source_without_experiment_data_or_cluster_scripts(tmp_path):
     """Not an editable install: build from a copy of the sources, install into a
-    private directory and read the metadata from outside the repository."""
+    private directory and use the package from outside the repository."""
     src, site = tmp_path / "src", tmp_path / "site"
     shutil.copytree(REPO / "tilebench", src / "tilebench",
                     ignore=shutil.ignore_patterns("__pycache__", "llm_generated", "*.pyc"))
@@ -209,53 +205,22 @@ def test_metadata_ships_with_a_regular_install(tmp_path):
         pytest.skip("pip is not available")
     assert build.returncode == 0, build.stderr[-2000:]
 
+    installed = [p.relative_to(site).as_posix() for p in (site / "tilebench").rglob("*")
+                 if p.is_file() and "__pycache__" not in p.parts]      # pip byte-compiles on install
+    assert "tilebench/profiling/ncu_one.py" in installed and "tilebench/paths.py" in installed
+    assert [f for f in installed if f.endswith((".sh", ".sbatch"))] == []
+    assert [f for f in installed if f.startswith("tilebench/profiling/") and not f.endswith(".py")] == []
+    # the resources the framework does need at run time are still there
+    assert "tilebench/data/peak_performance/B200.json" in installed
+    assert "tilebench/benchmarks/operators/mul2/config.yaml" in installed
+
     code = ("import json, tilebench, tilebench.paths as p\n"
-            "from tilebench.profiling import ncu_kernel_select as ks\n"
-            "counts, names = ks.load_kernel_counts('B200')\n"
-            "print(json.dumps({'pkg': tilebench.__file__, 'catalogue': str(p.ncu_catalogue_path('B200')),"
-            " 'ops': len(ks.load_catalogue('B200')), 'pairs': len(counts)}))\n")
+            "print(json.dumps({'pkg': tilebench.__file__, 'meta': str(p.ncu_catalogue_path('B200')),"
+            " 'ops': len(p.list_operators())}))\n")
     env = {k: v for k, v in os.environ.items() if k != "TILEBENCH_REPO_ROOT"}
     env["PYTHONPATH"] = str(site)
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path, env=env)
     assert out.returncode == 0, out.stderr[-2000:]
     info = json.loads(out.stdout.strip().splitlines()[-1])
-    assert info["pkg"].startswith(str(site)) and info["catalogue"].startswith(str(site))
-    assert info["ops"] == 45 and info["pairs"] > 0
-    for name, sha in B200_SHA256.items():                     # the installed copies are the committed bytes
-        assert digest(site / "tilebench/profiling/metadata/B200" / name) == sha
-
-
-@pytest.mark.parametrize("script", ["run_batch.sh", "rerun_timeout.sh", "batch1_launch.sh",
-                                    "supplemental_launch.sh", "batch2.sbatch"])
-def test_profiling_shell_scripts_are_machine_independent(script):
-    text = (REPO / "tilebench" / "profiling" / script).read_text()
-    assert "/projects/" not in text and "kzhou6" not in text and "bcui2" not in text
-    assert "PYTHONPATH" not in text and "_summary.csv" not in text and "rename_outputs" not in text
-
-
-def test_run_batch_works_from_outside_the_repository(tmp_path):
-    """A stub `python` records how run_batch.sh calls the benchmark."""
-    record = tmp_path / "calls.txt"
-    stub = tmp_path / "bin" / "python"
-    stub.parent.mkdir()
-    stub.write_text(f'#!/usr/bin/env bash\necho "$PWD|${{PYTHONPATH:-unset}}|$*" >> "{record}"\n')
-    stub.chmod(0o755)
-    batch = f"pytest_{os.getpid()}"
-    env = {**os.environ, "PATH": f"{stub.parent}{os.pathsep}{os.environ['PATH']}", "GPU": "GH200"}
-    env.pop("PYTHONPATH", None)
-    try:
-        r = subprocess.run(["bash", str(REPO / "tilebench/profiling/run_batch.sh"), batch, "mul2"],
-                           cwd=tmp_path, env=env, capture_output=True, text=True)
-        assert r.returncode == 0, r.stderr
-        calls = [line.split("|") for line in record.read_text().splitlines()]
-        assert len(calls) == 2                                # default, then autotune
-        for cwd, pythonpath, args in calls:
-            assert cwd == str(tmp_path) and pythonpath == "unset"
-            assert args.startswith(f"{REPO}/scripts/run_bench.py --gpu GH200 --operator mul2")
-        assert calls[1][2].endswith("--autotune") and not calls[0][2].endswith("--autotune")
-    finally:
-        shutil.rmtree(REPO / "outputs" / batch, ignore_errors=True)
-    missing = subprocess.run(["bash", str(REPO / "tilebench/profiling/run_batch.sh"), batch, "mul2"],
-                             cwd=tmp_path, env={k: v for k, v in env.items() if k != "GPU"},
-                             capture_output=True, text=True)
-    assert missing.returncode != 0 and "GPU" in missing.stderr      # no default label
+    assert info["pkg"].startswith(str(site)) and info["ops"] == 45
+    assert "/tilebench/" not in info["meta"].replace(str(site), "")     # generated data is not inside the package

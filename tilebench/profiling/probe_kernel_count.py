@@ -7,9 +7,9 @@ For every (op, backend) we:
   - run a second call inside torch.profiler and count distinct device
     kernels triggered between the two synchronization points
 
-Output: tilebench/profiling/metadata/<gpu>/kernel_counts.json (canonical
-profiling metadata, tracked with the package, one file per GPU: launch counts
-and kernel names differ between GPUs). A full run rewrites it; an ONLY_OP run
+Output: outputs/profiling/<gpu>/kernel_counts.json (generated profiling
+metadata, one file per GPU: launch counts and kernel names differ between
+GPUs; it is measured data, kept with the other generated outputs). A full run rewrites it; an ONLY_OP run
 merges that operator's rows into the existing file instead of truncating it to
 one operator. Only the file of --gpu is ever read or written.
         and a short summary table to stdout.
@@ -91,7 +91,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Probe kernel launch counts on the current GPU.")
     ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
                     help="Hardware label of the GPU being probed (e.g. B200): reads and writes "
-                         "tilebench/profiling/metadata/<gpu>/ only")
+                         "outputs/profiling/<gpu>/ only")
     args = ap.parse_args()
     try:
         catalogue = ks.load_catalogue(args.gpu)
