@@ -1,7 +1,7 @@
 """LLM code-generation main loop.
 
 Usage:
-    python -m tilebench.llm_codegen.generate \
+    python -m tilebench.llm.generate \
         --operator vector_add --model gpt-5.5 --max-iters 10
 
 For each iteration:
@@ -33,12 +33,12 @@ from tilebench.paths import LLM_GENERATED_ROOT, REPO_ROOT, operator_dir
 _REPO_ROOT = REPO_ROOT
 sys.path.insert(0, str(_REPO_ROOT))
 
-from tilebench.llm_codegen.evaluator import (
+from tilebench.llm.evaluator import (
     evaluate,
     is_backend_verify_clean,
 )
-from tilebench.llm_codegen.llm_client import LLMClient
-from tilebench.llm_codegen.prompt_builder import (
+from tilebench.llm.llm_client import LLMClient
+from tilebench.llm.prompt_builder import (
     SYSTEM, build_feedback_prompt, build_initial_prompt, parse_response,
 )
 

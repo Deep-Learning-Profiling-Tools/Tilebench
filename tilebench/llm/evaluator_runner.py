@@ -46,7 +46,7 @@ try:
 except ImportError:
     proton = None
 from tilebench.data.tensors import GENERATORS, expand_cases, infer_problem_size
-from tilebench.llm_codegen.roofline import roofline_pct, load_peak
+from tilebench.llm.roofline import roofline_pct, load_peak
 
 
 def _proton_time_rotating(

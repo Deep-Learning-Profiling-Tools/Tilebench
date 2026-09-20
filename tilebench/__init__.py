@@ -8,10 +8,11 @@ package never pulls in torch, triton or the vendor backends.
 from tilebench.paths import (  # noqa: F401
     BENCHMARK_ROOT,
     DATA_ROOT,
-    LLM_CODEGEN_ROOT,
+    LLM_ROOT,
     OPERATOR_ROOT,
     PACKAGE_ROOT,
     PEAK_PERFORMANCE_ROOT,
+    PROBLEMS_ROOT,
     PROFILING_ROOT,
     REPO_ROOT,
 )
