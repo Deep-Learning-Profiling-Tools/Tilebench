@@ -63,6 +63,18 @@ def test_unsafe_labels_are_rejected(label):
         paths.results_root(label)
 
 
+def test_every_operator_has_a_task_description_beside_the_packages():
+    """tilebench/problems/ is a data directory at the package top level, next to
+    benchmarks/, core/ and data/: one <operator>_current.md per operator, read by
+    the LLM pipeline in tilebench/llm/."""
+    from tilebench.llm import prompt_builder
+    assert paths.PROBLEMS_ROOT == paths.PACKAGE_ROOT / "problems"
+    assert paths.LLM_ROOT == paths.PACKAGE_ROOT / "llm" and (paths.LLM_ROOT / "prompt_builder.py").is_file()
+    described = sorted(p.name[:-len("_current.md")] for p in paths.PROBLEMS_ROOT.iterdir())
+    assert described == paths.list_operators()
+    assert all(prompt_builder._problem_desc_path(op).parent == paths.PROBLEMS_ROOT for op in described)
+
+
 # --------------------------------------------------------------------------
 # .gitignore
 # --------------------------------------------------------------------------

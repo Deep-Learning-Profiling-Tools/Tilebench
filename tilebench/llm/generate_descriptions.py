@@ -1,14 +1,14 @@
 """One-time tool to auto-generate problem descriptions from impl_torch.py.
 
-Writes `tools/llm_codegen/problems/<op>_current.md` for ops that lack one.
+Writes `tilebench/problems/<op>_current.md` for ops that lack one.
 The format mirrors the LeetGPU-style descriptions already present in the repo:
 problem statement, input/output spec, mathematical definition, examples,
 constraints.
 
 Usage:
-    python -m tilebench.llm_codegen.generate_descriptions             # all 45 ops
-    python -m tilebench.llm_codegen.generate_descriptions --operator vector_add
-    python -m tilebench.llm_codegen.generate_descriptions --force     # overwrite existing
+    python -m tilebench.llm.generate_descriptions             # all 45 ops
+    python -m tilebench.llm.generate_descriptions --operator vector_add
+    python -m tilebench.llm.generate_descriptions --force     # overwrite existing
 """
 from __future__ import annotations
 
@@ -17,14 +17,13 @@ import sys
 import time
 from pathlib import Path
 
-_THIS_DIR = Path(__file__).resolve().parent
-from tilebench.paths import OPERATOR_ROOT, REPO_ROOT, operator_dir
+from tilebench.paths import OPERATOR_ROOT, PROBLEMS_ROOT, REPO_ROOT, operator_dir
 _REPO_ROOT = REPO_ROOT
 sys.path.insert(0, str(_REPO_ROOT))
 
-from tilebench.llm_codegen.llm_client import LLMClient
+from tilebench.llm.llm_client import LLMClient
 
-PROBLEMS_DIR = _THIS_DIR / "problems"
+PROBLEMS_DIR = PROBLEMS_ROOT
 
 _DESC_SYSTEM = """\
 You are a technical writer documenting GPU kernel benchmarks. Your job: take the

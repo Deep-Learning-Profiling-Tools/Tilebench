@@ -29,7 +29,10 @@ OPERATOR_ROOT = BENCHMARK_ROOT / "operators"
 LLM_GENERATED_ROOT = BENCHMARK_ROOT / "llm_generated"
 PEAK_PERFORMANCE_ROOT = DATA_ROOT / "peak_performance"
 PROFILING_ROOT = PACKAGE_ROOT / "profiling"
-LLM_CODEGEN_ROOT = PACKAGE_ROOT / "llm_codegen"
+LLM_ROOT = PACKAGE_ROOT / "llm"
+#: Task descriptions, one <operator>_current.md per operator: the problem
+#: statement the LLM pipeline puts in its prompts.
+PROBLEMS_ROOT = PACKAGE_ROOT / "problems"
 
 REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).resolve()
 

@@ -243,16 +243,22 @@ def test_a_regular_install_ships_source_without_experiment_data_or_cluster_scrip
     # the resources the framework does need at run time are still there
     assert "tilebench/data/peak_performance/B200.json" in installed
     assert "tilebench/benchmarks/operators/mul2/config.yaml" in installed
+    # the LLM pipeline and the task descriptions it reads, a data directory beside the packages
+    assert "tilebench/llm/prompt_builder.py" in installed and "tilebench/llm/framework_guide.md" in installed
+    assert sum(f.startswith("tilebench/problems/") and f.endswith("_current.md") for f in installed) == 45
 
     code = ("import json, tilebench, tilebench.paths as p\n"
+            "from tilebench.llm import prompt_builder as pb\n"
             "print(json.dumps({'pkg': tilebench.__file__, 'meta': str(p.ncu_catalogue_path('B200')),"
-            " 'ops': len(p.list_operators())}))\n")
+            " 'ops': len(p.list_operators()), 'problems': str(p.PROBLEMS_ROOT),"
+            " 'described': sum(pb._problem_desc_path(op).is_file() for op in p.list_operators())}))\n")
     env = {k: v for k, v in os.environ.items() if k != "TILEBENCH_REPO_ROOT"}
     env["PYTHONPATH"] = str(site)
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path, env=env)
     assert out.returncode == 0, out.stderr[-2000:]
     info = json.loads(out.stdout.strip().splitlines()[-1])
     assert info["pkg"].startswith(str(site)) and info["ops"] == 45
+    assert info["problems"] == str(site / "tilebench" / "problems") and info["described"] == 45
     assert "/tilebench/" not in info["meta"].replace(str(site), "")     # generated data is not inside the package
 
 
