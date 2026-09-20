@@ -266,10 +266,10 @@ Generated NCU reports are local artifacts, written to `outputs/ncu/<hardware>/`,
 TileBench also includes an iterative LLM kernel-generation workflow under:
 
 ```text
-tilebench/llm_codegen/
+tilebench/llm/
 ```
 
-The workflow combines operator descriptions, backend API references, framework constraints, PyTorch references, correctness feedback, and performance feedback across refinement iterations.
+The task descriptions it puts in its prompts, one per operator, are under `tilebench/problems/`. The workflow combines operator descriptions, backend API references, framework constraints, PyTorch references, correctness feedback, and performance feedback across refinement iterations.
 
 The pipeline source above is version-controlled. What it generates is not: each run writes its prompts, responses, kernels, feedback and token usage to
 
@@ -299,8 +299,9 @@ Tilebench/
 │   ├── benchmarks/
 │   │   ├── operators/           # 45 operator definitions and backend implementations
 │   │   └── llm_generated/       # Local LLM-generated artifacts (Git-ignored)
+│   ├── problems/                # Task description of each operator, used in the LLM prompts
 │   ├── profiling/               # NCU library: kernel selection, capture validation, catalogue
-│   ├── llm_codegen/             # Iterative LLM generation and evaluation pipeline
+│   ├── llm/                     # Iterative LLM generation and evaluation pipeline
 │   └── paths.py                 # Repository/package resource resolution
 ├── scripts/                     # Benchmark, visualization, peak-measurement, artifact entry points
 │   └── profiling/               # NCU command-line tools and the harness NCU executes

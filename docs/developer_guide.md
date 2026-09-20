@@ -290,10 +290,10 @@ If the catalogue or `kernel_counts.json` of the requested GPU is missing, the to
 The iterative generation pipeline is under:
 
 ```text
-tilebench/llm_codegen/
+tilebench/llm/
 ```
 
-Task descriptions, framework conventions, prompt construction, evaluation, and feedback logic live there. Backend API guides are under `skills/`.
+Framework conventions, prompt construction, evaluation, and feedback logic live there; run it with `python -m tilebench.llm.generate`. The task descriptions it reads, one `<operator>_current.md` per operator, are under `tilebench/problems/` (`PROBLEMS_ROOT` in `tilebench/paths.py`), a data directory beside `benchmarks/`, `core/` and `data/`. Backend API guides are under `skills/`.
 
 Each run writes its trajectory (prompts, responses, kernels, feedback, token usage) and the selected implementation to:
 
