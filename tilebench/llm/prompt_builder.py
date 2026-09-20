@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from tilebench.paths import REPO_ROOT, operator_dir
+from tilebench.paths import PROBLEMS_ROOT, REPO_ROOT, operator_dir
 
 _THIS_DIR = Path(__file__).resolve().parent
 
 
-# System prompt — loaded from tools/llm_codegen/system_prompt.md so it can
+# System prompt — loaded from tilebench/llm/system_prompt.md so it can
 # be edited without touching Python code. The actual framework conventions
 # (autotune, get_last_config, dtype handling, forbidden patterns) live in
 # framework_guide.md and are injected into every user message.
@@ -141,9 +141,9 @@ def _backend_ref_sections(backend: str) -> list[str]:
 
 def _problem_desc_path(op: str) -> Path:
     """Resolve the canonical problem-description path:
-    tools/llm_codegen/problems/<op>_current.md (no fallback — only "current" is used).
+    tilebench/problems/<op>_current.md (no fallback — only "current" is used).
     """
-    return _THIS_DIR / "problems" / f"{op}_current.md"
+    return PROBLEMS_ROOT / f"{op}_current.md"
 
 
 def build_initial_prompt(

@@ -265,7 +265,7 @@ def test_llm_generated_is_git_ignored_but_the_pipeline_source_is_not():
         return subprocess.run(["git", "check-ignore", "-q", "--no-index", path], cwd=REPO).returncode == 0
     assert ignored(f"{LLM}/relu/gpt-5.5/high/iter_0/prompt.md")
     assert ignored(f"{LLM}/new_op/new_model/high/final/impl_triton.py")
-    assert not ignored("tilebench/llm_codegen/generate.py")
+    assert not ignored("tilebench/llm/generate.py")
     assert not ignored("artifacts/manifest.json")
     tracked = subprocess.run(["git", "ls-files", LLM], cwd=REPO, capture_output=True, text=True).stdout
     assert tracked.strip() == ""
