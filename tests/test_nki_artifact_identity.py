@@ -6,11 +6,11 @@ import os
 
 import pytest
 
-from core.nki_artifact import (NEFF_PATH_ENV, NKI_HLO_MARKER,
+from tilebench.core.nki_artifact import (NEFF_PATH_ENV, NKI_HLO_MARKER,
                                NkiArtifactIdentityError, resolve_expected_pairs,
                                resolve_explicit_override, resolve_phase_pairs,
                                validate_manifest_reuse, validate_pair)
-from core.nki_profile_spec import MANIFEST_SCHEMA_VERSION, sha256_file
+from tilebench.core.nki_profile_spec import MANIFEST_SCHEMA_VERSION, sha256_file
 
 
 def write_pair(root, stem, *, marker: bool, neff_bytes=b"NEFF-bytes"):
