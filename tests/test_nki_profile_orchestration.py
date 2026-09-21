@@ -7,9 +7,9 @@ import types
 import pytest
 import torch
 
-from core.nki_orchestrator import NkiOrchestrationError, profile_case_on_neuron
+from tilebench.core.nki_orchestrator import NkiOrchestrationError, profile_case_on_neuron
 
-WINNER_TRACE = [{"tuner_name": "benchmarks.operators.vector_add.impl_nki.add_kernel",
+WINNER_TRACE = [{"tuner_name": "tilebench.benchmarks.operators.vector_add.impl_nki.add_kernel",
                  "shape_key": [[128, 8192], "torch.float16"],
                  "config": {"free_tile_size": 2048}}]
 
@@ -26,8 +26,8 @@ def fake_impl_nki():
 
 def artifact_record(workdir, stem, marker):
     """Create a REAL fake pair on disk (the parent re-validates its SHA256s)."""
-    from core.nki_artifact import NKI_HLO_MARKER
-    from core.nki_profile_spec import sha256_file
+    from tilebench.core.nki_artifact import NKI_HLO_MARKER
+    from tilebench.core.nki_profile_spec import sha256_file
     os.makedirs(workdir, exist_ok=True)
     neff = os.path.join(workdir, f"{stem}.neff")
     hlo = os.path.join(workdir, f"{stem}.hlo_module.pb")
@@ -428,7 +428,7 @@ def test_torch_verification_failure_is_not_published_as_baseline(tmp_path):
 
 
 def test_explicit_override_is_reported_unverified(tmp_path, monkeypatch):
-    from core.nki_artifact import NEFF_PATH_ENV
+    from tilebench.core.nki_artifact import NEFF_PATH_ENV
     override_dir = tmp_path / "override"
     art = artifact_record(str(override_dir), "MODULE_OVERRIDE", True)
     monkeypatch.setenv(NEFF_PATH_ENV, art["neff_path"])
