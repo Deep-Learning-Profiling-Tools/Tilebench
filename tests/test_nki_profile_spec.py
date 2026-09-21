@@ -2,7 +2,7 @@
 import json
 import os
 
-from core.nki_profile_spec import (NkiProfileSpec, append_jsonl_locked,
+from tilebench.core.nki_profile_spec import (NkiProfileSpec, append_jsonl_locked,
                                    atomic_write_json, canonical_json,
                                    make_case_label)
 
@@ -16,7 +16,7 @@ BASE = dict(
     input_specs=[{"kind": "tensor", "shape": [1048576], "dtype": "torch.float16",
                   "stride": [1]}],
     autotune_enabled=True,
-    autotune_replay=[{"tuner_name": "benchmarks.operators.vector_add.impl_nki.add_kernel",
+    autotune_replay=[{"tuner_name": "tilebench.benchmarks.operators.vector_add.impl_nki.add_kernel",
                       "shape_key": [[128, 8192], "torch.float16"],
                       "config": {"free_tile_size": 2048}}],
     verify_atol=None,
@@ -24,8 +24,8 @@ BASE = dict(
     warmup=2,
     repeat=3,
     nki_enabled=True,
-    operator_source_sha256={"benchmarks/operators/vector_add/impl_nki.py": "aa" * 32},
-    harness_source_sha256={"core/nki_timer.py": "bb" * 32},
+    operator_source_sha256={"tilebench/benchmarks/operators/vector_add/impl_nki.py": "aa" * 32},
+    harness_source_sha256={"tilebench/core/nki_timer.py": "bb" * 32},
     neuron_target="trn2",
     logical_nc_config="",
     neuron_cc_flags="",
@@ -53,7 +53,7 @@ def test_different_winner_config_changes_id():
 
 
 def test_different_operator_source_hash_changes_id():
-    other = {"benchmarks/operators/vector_add/impl_nki.py": "cc" * 32}
+    other = {"tilebench/benchmarks/operators/vector_add/impl_nki.py": "cc" * 32}
     assert spec_with().spec_id != spec_with(operator_source_sha256=other).spec_id
 
 
@@ -101,12 +101,12 @@ def test_operator_source_files_cover_transitive_repo_imports():
     artifact after the helper changes."""
     import importlib
     import pytest
-    from core.nki_orchestrator import _operator_source_files
+    from tilebench.core.nki_orchestrator import _operator_source_files
 
-    impl = pytest.importorskip("benchmarks.operators.streamk_matmul.impl_nki")
-    impl_torch = importlib.import_module("benchmarks.operators.streamk_matmul.impl_torch")
+    impl = pytest.importorskip("tilebench.benchmarks.operators.streamk_matmul.impl_nki")
+    impl_torch = importlib.import_module("tilebench.benchmarks.operators.streamk_matmul.impl_torch")
     files = _operator_source_files("streamk_matmul", (impl, impl_torch))
-    assert "benchmarks/operators/streamk_matmul/impl_nki.py" in files
-    assert "benchmarks/operators/streamk_matmul/impl_torch.py" in files
-    assert "benchmarks/operators/matmul_fp32_fp16_fp8/impl_nki.py" in files
+    assert "tilebench/benchmarks/operators/streamk_matmul/impl_nki.py" in files
+    assert "tilebench/benchmarks/operators/streamk_matmul/impl_torch.py" in files
+    assert "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_nki.py" in files
     assert all(not f.startswith("/") for f in files)  # repo-relative, stable
