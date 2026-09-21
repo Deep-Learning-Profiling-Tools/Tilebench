@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import torch
 
-from core.nki_autotune import NkiAutotuner
+from tilebench.core.nki_autotune import NkiAutotuner
 
 try:
     import nki
