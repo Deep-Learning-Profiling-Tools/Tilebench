@@ -1,25 +1,3 @@
-"""NKI (AWS Trainium) implementation of reverse_array: ``out[i] = x[n - 1 - i]``.
-
-Design (mirrors the Triton / cuTile kernels):
-
-* Triton handles ``BLOCK_SIZE`` contiguous output elements per program by
-  loading the mirrored input range. NKI processes ``[128, BLOCK_SIZE]`` tiles:
-  a contiguous ``[128, BLOCK_SIZE]`` load (partition ``p`` holds input elements
-  ``[start + p*B, start + (p+1)*B)``), an on-chip free-axis reversal
-  (``tensor_copy`` from a stride ``-1`` view), and a store in which partition
-  ``p`` lands at output offset ``n - start - (p+1)*B``. Partition order in the
-  output is the mirror image of the input's, and the DMA engines only accept
-  positive partition strides, so the store is one contiguous DMA per partition
-  row (``BLOCK_SIZE`` elements each) -- a large ``BLOCK_SIZE`` keeps those DMAs
-  efficient. ``BLOCK_SIZE`` search space is that of ``impl_triton.py`` /
-  ``impl_cutile.py`` (1024/2048/4096/8192); the default is 8192 (largest
-  per-row DMA).
-* Work is split across the NeuronCores of the logical core (LNC2 on trn2):
-  each program instance (``nl.program_id(0)``) owns a contiguous half of the
-  input range.
-* Tails are handled inside the kernel (``[128, q]`` + ``[1, r]`` tiles); no
-  host-side padding / reshape / slicing.
-"""
 import functools
 import os
 import re
@@ -42,11 +20,6 @@ except ImportError:
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
-
-    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
-    into an ``--lnc 1`` module silently computes only core 0's half.
-    """
     explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
     if explicit.strip().isdigit():
         return int(explicit.strip())
@@ -66,12 +39,6 @@ def _lnc_degree() -> int:
 if nki is not None:
     @nki.jit
     def reverse_kernel(a_input, block_size):
-        """``out[i] = a_input[n - 1 - i]`` over a flat ``(n,)`` HBM tensor.
-
-        Args:
-            a_input: flat ``(n,)`` tensor in HBM (fp16 / bf16 / fp32 / int8).
-            block_size: elements per partition per tile (compile-time constant).
-        """
         n = a_input.shape[0]
         out = nl.ndarray((n,), dtype=a_input.dtype, buffer=nl.shared_hbm)
 
@@ -93,19 +60,15 @@ if nki is not None:
         return out
 
     def _tile_body(p, f, start, n, a_input, out):
-        """Reverse the ``[p, f]`` tile at flat input offset ``start``."""
         tile = nl.ndarray((p, f), dtype=a_input.dtype, buffer=nl.sbuf)
         nisa.dma_copy(dst=tile, src=a_input.ap(pattern=[[f, p], [1, f]], offset=start))
-        # Free-axis reversal on-chip: stride -1 along the free axis of the source view.
         rev = nl.ndarray((p, f), dtype=a_input.dtype, buffer=nl.sbuf)
         nisa.tensor_copy(dst=rev, src=tile.ap(pattern=[[f, p], [-1, f]], offset=f - 1))
-        # Partition p holds input [start + p*f, start + (p+1)*f) -> output [n - start - (p+1)*f, ...).
         for pp in range(p):
             dst0 = n - start - (pp + 1) * f
             nisa.dma_copy(dst=out.ap(pattern=[[f, 1], [1, f]], offset=dst0), src=rev[pp:pp + 1, 0:f])
 
 
-# Same block sizes as impl_triton.py / impl_cutile.py (search 1024/2048/4096/8192); default 8192.
 _DEFAULT_CONFIG = SimpleNamespace(block_size=8192)
 _SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (1024, 2048, 4096, 8192)]
 _kernel = reverse_kernel[_lnc_degree()] if nki is not None else None
