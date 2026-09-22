@@ -3,15 +3,9 @@ import torch
 
 def run(input: torch.Tensor, rows: int, cols: int, **kwargs):
     if input.device.type == "xla":
-        # Neuron/XLA: the in-place slice assignment of the non-XLA path lowers to a
-        # dynamic-update-slice that costs ~3x the stencil itself. Assembling the same
-        # result from the pass-through border rows / columns and the interior with
-        # torch.cat compiles to a single efficient graph.
         up, down = input[0:rows - 2, 1:cols - 1], input[2:rows, 1:cols - 1]
         left, right = input[1:rows - 1, 0:cols - 2], input[1:rows - 1, 2:cols]
         if input.dtype in (torch.float16, torch.bfloat16):
-            # The compiler fuses the chain of 16-bit adds in fp32; round after every add
-            # (as the eager reference does) so the result matches it bit for bit.
             s = (up.float() + down.float()).to(input.dtype)
             s = (s.float() + left.float()).to(input.dtype)
             s = (s.float() + right.float()).to(input.dtype)
