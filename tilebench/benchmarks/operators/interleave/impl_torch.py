@@ -3,7 +3,6 @@ import torch.nn.functional as F
 
 
 def _view_cols(n: int, lo: int = 128, hi: int = 8192) -> int | None:
-    """Largest divisor of ``n`` in ``[lo, hi]`` (row length of the 2-D view), or None."""
     for c in range(hi, lo - 1, -1):
         if n % c == 0:
             return c
@@ -19,11 +18,6 @@ def _interleave(a: torch.Tensor, b: torch.Tensor, n: int) -> torch.Tensor:
 
 def run(A: torch.Tensor, B: torch.Tensor, N: int, **kwargs):
     if A.device.type == "xla" and N % 128 != 0:
-        # Neuron/XLA: the strided assignments compile to one streaming pass when the
-        # length is a multiple of 128 (2M elements: 0.08 ms) but to element-wise
-        # scatters otherwise (1M: 10 ms, 3M: 226 ms). Pad the row length of a 2-D view
-        # to a multiple of 128 (strided DMAs), interleave the padded flat tensors and
-        # drop the padding again.
         cols = _view_cols(N)
         if cols is not None:
             rows = N // cols
