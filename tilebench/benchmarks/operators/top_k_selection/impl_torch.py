@@ -1,9 +1,5 @@
 import torch
 
-# Neuron/XLA: the compiler's TopK lowering allocates an SBUF work area proportional to N * k
-# and fails to compile beyond N * k = 2**28 (N=2**20, k=1024: "TopKImpl ... Allocated memory out
-# of bound"). Larger problems are split into chunks whose top-k are merged by a second top-k,
-# which yields exactly the same values.
 _XLA_TOPK_MAX_NK = 1 << 28
 
 
