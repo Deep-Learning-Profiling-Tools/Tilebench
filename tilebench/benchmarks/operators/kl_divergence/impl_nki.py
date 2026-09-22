@@ -1,22 +1,3 @@
-"""NKI (AWS Trainium) implementation of kl_divergence: ``loss[r] = sum_c q * (log(q) - log_p)``.
-
-Design (mirrors the Triton / cuTile kernels):
-
-* Triton runs one program per row and walks the row in ``BLOCK_SIZE``-column
-  blocks, accumulating ``q * (where(q > 0, log(q), 0) - log_p)`` in fp32. NKI
-  puts 128 rows on the 128 SBUF partitions and walks the same column blocks;
-  per block: two ``[128, BLOCK]`` DMAs, ``log(max(q, tiny))`` on the Scalar engine
-  (the clamp makes the ``q == 0`` term exactly 0, as Triton's ``where`` does),
-  ``(log_q - log_p) * q`` on the Vector engine and the free-axis sum on the Scalar
-  engine (identity activation + reduce, fp32). The per-block partials are reduced
-  once at the end.
-  ``BLOCK_SIZE`` defaults / search space are those of ``impl_triton.py`` /
-  ``impl_cutile.py`` (default 1024; search 512/1024/2048/4096).
-* Row tiles are split across the NeuronCores of the logical core (LNC2 on trn2)
-  by ``nl.program_id(0)``.
-* Partial row tiles / column blocks are clamped with ``min()``; nothing is
-  padded or sliced on the host.
-"""
 import functools
 import os
 import re
@@ -36,16 +17,11 @@ except ImportError:
     nki = None
     PMAX = 128
 
-TINY = 1.0e-38   # smallest normal fp32 (log(TINY) is finite)
+TINY = 1.0e-38
 
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel is launched with (``kernel[lnc]``).
-
-    Must match the LNC the XLA module is compiled for: launching a ``kernel[2]``
-    into an ``--lnc 1`` module silently computes only core 0's half.
-    """
     explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
     if explicit.strip().isdigit():
         return int(explicit.strip())
@@ -65,13 +41,6 @@ def _lnc_degree() -> int:
 if nki is not None:
     @nki.jit
     def kl_divergence_kernel(log_p_input, q_input, block_size):
-        """Row-wise KL divergence of ``[n_rows, n_cols]`` HBM tensors -> ``[n_rows, 1]`` fp32.
-
-        Args:
-            log_p_input: ``[n_rows, n_cols]`` log-probabilities in HBM (fp32).
-            q_input: ``[n_rows, n_cols]`` probabilities in HBM (fp32).
-            block_size: columns per block (``BLOCK_SIZE``, compile-time constant).
-        """
         n_rows, n_cols = log_p_input.shape
         out = nl.ndarray((n_rows, 1), dtype=nl.float32, buffer=nl.shared_hbm)
         n_blocks = (n_cols + block_size - 1) // block_size
@@ -91,16 +60,9 @@ if nki is not None:
                 q = nl.ndarray((rs, cs), dtype=q_input.dtype, buffer=nl.sbuf)
                 nisa.dma_copy(dst=log_p, src=log_p_input[r0:r0 + rs, c0:c0 + cs])
                 nisa.dma_copy(dst=q, src=q_input[r0:r0 + rs, c0:c0 + cs])
-                # log(q) on the Scalar engine. log(0) = -inf would give 0 * -inf = NaN, so q is
-                # clamped to the smallest positive fp32 first: where q == 0 the term becomes
-                # (log(tiny) - log_p) * 0 = 0, the same value Triton's tl.where(q > 0, ...) yields.
-                # One fp32 work tile per block, updated in place (keeps the SBUF footprint at
-                # three [128, BLOCK] tiles per block so several blocks stay in flight).
                 t = nl.ndarray((rs, cs), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.tensor_scalar(dst=t, data=q, op0=nl.maximum, operand0=TINY)      # max(q, tiny)
-                nisa.activation(dst=t, op=nl.log, data=t)                               # log(q)
-                # term = (log_q - log_p) * q on the Vector engine, free-axis sum on the Scalar
-                # engine (identity activation + reduce, fp32 accumulate) to balance the engines.
+                nisa.tensor_scalar(dst=t, data=q, op0=nl.maximum, operand0=TINY)
+                nisa.activation(dst=t, op=nl.log, data=t)
                 nisa.scalar_tensor_tensor(dst=t, data=log_p, op0=nl.multiply, operand0=-1.0,
                                           op1=nl.add, operand1=t)
                 nisa.tensor_tensor(dst=t, data1=t, data2=q, op=nl.multiply)
@@ -115,7 +77,6 @@ if nki is not None:
         return out
 
 
-# Same column block sizes as impl_triton.py (BLOCK_SIZE default 1024; search 512/1024/2048/4096).
 _DEFAULT_CONFIG = SimpleNamespace(block_size=1024)
 _SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (512, 1024, 2048, 4096)]
 _kernel = kl_divergence_kernel[_lnc_degree()] if nki is not None else None
