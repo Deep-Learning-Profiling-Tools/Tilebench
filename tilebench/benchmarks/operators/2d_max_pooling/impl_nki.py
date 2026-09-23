@@ -12,7 +12,7 @@ except ImportError:
     PMAX = 128
 
 if nki is not None:
-    from core.nki_autotune import NkiAutotuner
+    from tilebench.core.nki_autotune import NkiAutotuner
 
     @nki.jit
     def max_pool2d_kernel(input_hbm, in_H, in_W, kernel_size, stride, padding,
