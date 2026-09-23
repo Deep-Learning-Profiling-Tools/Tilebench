@@ -2,20 +2,22 @@
 
 Typical usage (run from Tilebench/):
     # Run benchmark first:
-    PYTHONPATH=. python scripts/run_bench.py --operator mul2
+    python scripts/run_bench.py --gpu B200 --operator mul2
 
-    # Then visualize (paths are inferred from --operator automatically):
-    PYTHONPATH=. python scripts/visualize.py --operator mul2
+    # Then visualize that run. The raw JSON is named after the GPU, the operator,
+    # the mode and the backend selection, so pass the same --tile-language (and
+    # --mode autotune for an autotuned run) as the benchmark:
+    python scripts/visualize.py --gpu B200 --operator mul2
 
     # Override paths or metrics explicitly:
-    PYTHONPATH=. python scripts/visualize.py --operator mul2 \\
-        --input  results/logs/time_measurement_logs/mul2_results.json \\
-        --output-dir results/figures/mul2/ \\
+    python scripts/visualize.py --gpu B200 --operator mul2 \\
+        --input  results/B200/logs/time_measurement_logs/mul2_default_triton-cutile.json \\
+        --output-dir results/B200/figures/mul2/ \\
         --metrics latency_ms bandwidth_GBs speedup pct_peak_bw
 
-Default paths (derived from --operator):
-    --input      results/logs/time_measurement_logs/<operator>_results.json
-    --output-dir results/figures/<operator>/
+Default paths:
+    --input      results/<gpu>/logs/time_measurement_logs/<operator>_<mode>_<backends>.json
+    --output-dir results/<gpu>/figures/<operator>/
 
 Available derived metrics (from core/metrics.py):
     latency_ms          raw mean latency (always available)
@@ -36,11 +38,11 @@ import sys
 
 import yaml
 
-# Allow running as: PYTHONPATH=. python scripts/visualize.py
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import numpy as np                      # noqa: E402
 import matplotlib                       # noqa: E402
@@ -48,7 +50,10 @@ matplotlib.use("Agg")                   # non-interactive backend; safe on headl
 import matplotlib.pyplot as plt         # noqa: E402
 import matplotlib.ticker as ticker      # noqa: E402
 
-from core.metrics import NON_GPU_BACKENDS, compute_derived, load_peak_config  # noqa: E402
+from tilebench.core.metrics import applicable_backends, compute_derived, load_peak_config  # noqa: E402
+from tilebench.backends import MODES, parse_backends  # noqa: E402
+from tilebench.paths import (hardware_label, operator_config,  # noqa: E402
+                             results_figures_dir, timing_log_path)
 
 # ---------------------------------------------------------------------------
 # constants
@@ -86,7 +91,7 @@ _GPU_PEAK_METRICS = ["pct_peak_bw", "pct_peak_tflops", "roofline"]
 
 
 def _load_operator_config(operator: str) -> dict:
-    path = os.path.join("benchmarks", "operators", operator, "config.yaml")
+    path = operator_config(operator)
     if not os.path.exists(path):
         return {}
     with open(path) as f:
@@ -259,10 +264,12 @@ def _plot_roofline(
 
     any_data_in_figure = False
 
-    # The roofline ceilings are GPU peaks; non-GPU backends (e.g. NKI on
-    # Trainium) must not be plotted against them — that would be a
-    # cross-hardware comparison (see PR #102 review).
-    roofline_backends = [b for b in BACKENDS if b not in NON_GPU_BACKENDS]
+    # Only plot backends that actually ran on the hardware metrics_cfg's
+    # peak_* values describe -- otherwise this would be a cross-hardware
+    # comparison (see PR #102 review). metrics_cfg here is the peak_cfg merged
+    # over the operator's metrics config, so a peak file's declared "backends"
+    # (e.g. Trainium2.json -> ["torch", "nki"]) takes effect automatically.
+    roofline_backends = [b for b in BACKENDS if b in applicable_backends(metrics_cfg)]
 
     for ax_idx, dtype in enumerate(dtypes):
         row, col = divmod(ax_idx, ncols)
@@ -372,22 +379,31 @@ def main() -> None:
                              "and derive default input/output paths")
     parser.add_argument("--input", type=str, default=None,
                         help="Timing results JSON produced by run_bench.py "
-                             "(default: results/logs/time_measurement_logs/<operator>_results.json)")
+                             "(default: results/<gpu>/logs/time_measurement_logs/"
+                             "<operator>_<mode>_<backends>.json, from --mode and --tile-language)")
+    parser.add_argument("--mode", choices=MODES, default="default",
+                        help="Which run to read: default or autotune (default: default)")
+    parser.add_argument("--tile-language", type=str, default=None,
+                        help="Backend selection of the run to read, as passed to run_bench.py "
+                             "(default: the GPU backends triton,cutile,tilelang). Order does not matter.")
     parser.add_argument("--metrics", nargs="+", default=None,
                         help="Metrics to plot (default: from config.yaml metrics.plots)")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Directory to write PNG files "
-                             "(default: results/figures/<operator>/)")
-    parser.add_argument("--gpu", type=str, default=None,
-                        help="GPU short name (e.g. B200). Loads peak performance from "
-                             "data/peak_performance/<GPU>.json for roofline and pct_peak metrics.")
+                             "(default: results/<gpu>/figures/<operator>/)")
+    parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
+                        help="Hardware label (e.g. B200). Selects the result namespace "
+                             "results/<gpu>/ for the default paths, and loads peak performance from "
+                             "tilebench/data/peak_performance/<gpu>.json for roofline and pct_peak metrics.")
     args = parser.parse_args()
 
-    # Resolve operator-bound default paths
-    input_path = args.input or (
-        f"results/logs/time_measurement_logs/{args.operator}_results.json"
-    )
-    output_dir = args.output_dir or f"results/figures/{args.operator}"
+    # Resolve the default paths inside this GPU's namespace; explicit paths win.
+    try:
+        backends = parse_backends(args.tile_language)
+    except ValueError as e:
+        parser.error(f"--tile-language: {e} (or 'all')")
+    input_path = args.input or str(timing_log_path(args.gpu, args.operator, args.mode, backends))
+    output_dir = args.output_dir or str(results_figures_dir(args.gpu) / args.operator)
 
     # Load data
     with open(input_path) as f:
@@ -399,13 +415,11 @@ def main() -> None:
     metrics_cfg: dict = config.get("metrics", {})
 
     # Load GPU-specific peak performance data
-    peak_cfg: dict = {}
-    if args.gpu:
-        peak_cfg = load_peak_config(args.gpu)
-        if not peak_cfg:
-            print(f"Warning: no peak data found for GPU '{args.gpu}' at "
-                  f"data/peak_performance/{args.gpu}.json — "
-                  f"roofline/pct_peak will be skipped")
+    peak_cfg = load_peak_config(args.gpu)
+    if not peak_cfg:
+        print(f"Warning: no peak data found for GPU '{args.gpu}' at "
+              f"tilebench/data/peak_performance/{args.gpu}.json — "
+              f"roofline/pct_peak will be skipped")
 
     # Determine which metrics to plot
     if args.metrics:
