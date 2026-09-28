@@ -22,7 +22,7 @@ In the max fp32 case, TileLang issues 60,948,480 million instructions, Triton is
 
 ### matmul_fp32_fp16_fp8
 
-main issue (tilelang) -- 
+main issue (tilelang) -- In fp32, no tcgen05.mma so TileLang uses HMMA and executs much more instructions compared to CuTile and Triton. In fp16 and fp8 TileLang has 2.5-2.8x instructions as Triton and shows much higher LSU activity, indicating alot more memory movement work. 
 
 CuTile tensor pipeline ranges from 79% to 81% and Triton is 52% to 69% for FP32, FP16 and FP8. CuTile is 1.55×, 1.12×, and 1.22× faster than Triton (maximum input case) in FP32, FP16, and FP8. TileLang-Triton speedup is 0.40x, 0.80x, 0.72x in fp32, fp16 and fp8 respectively. TileLang has 68.23% tensor activity in fp32, 46.20% in fp16, 43.78% in fp8. In all dtypes, TileLang loads 0 TMA bytes. SMEM allocation (TL, TR, Cu) is (131.07, 98.35, 229.74 kb), (197.63, 196.66, 229.60 kb) and (197.63, 196.66, 229.54 kb) in fp32, fp16, fp8 respectively.
 
@@ -30,30 +30,53 @@ In fp32, without tcgen05, the GEMM is decomposed into smaller warp-level Tensor 
 
 ### flash_attention
 
+main issue (tilelang) - TileLang compiler is unable to pipeline with our implementation. Mainly because TileLang is serial while CuTile and TileLang pipelining or have greater warps to hide latency. 
+
 At maximum input case, TileLang-Triton speed-up is 0.62x and CuTile-Triton is 1.10x. Triton selects 128x64, CuTile selects 128x128 and TileLang selects 128x128. Shared Memory is (TL, TR, Cu) is 131.0, 96.6 kb, 224.4 kb. However, TileLang executes 11.95 B instructions, compared to Triton's 10.77 B and CuTile's 4.45 B. TileLang loads 0 bytes via TMA. However, TileLang executes 7.3x CBU instructions than CuTile and 80x CBU instructions than Triton. TileLang is unable to pipeline loads and compute due to compiler problems, and must use LDG and STS instructions via synchronous loading. TileLang uses 233 registers per thread. The greater issue is that TileLang achieves 8 resident warps, Triton achieves 16 and CuTile achieves 12. CuTile has 1 CTA / SM with greater tile sizes and pipelining, while Triton has 2 CTA / SMs leaving 16 warps to hide latency and CTAs synchronize independently so one syncthreads does not stall the other. TileLang has neither. Since the TileLang compiler did not allow pipelining, all the work is serial, and TileLang is stuck at 1 CTA / SM because of its greater register usage and shared memory footprint.
+
+In our implementation, the following error when trying to use T.Pipelined is "LowerSharedTmem: Buffer qk_tmem is 2-dimensional, cannot be indexed with the 1-dimensional indices provided." 
 
 ### block_sparse_attention
 
+need to look into this more. Is it a pure instruction count difference? how does synchronization look? Look at paper case study. 
+
 TileLang uses 62.5 kb, Triton uses 49.2 kb while CuTile uses 221.2 kb. However, both TileLang and CuTile are equally slower than Triton. TileLang-Triton speedup is 0.32x and CuTile-Triton speedup is 0.33x (maximum input case).
 
-Since TileLang does not use as much SMEM as CuTile this is not a simple problem the strategy of using a large tile does not work. Instead, both CuTile and TileLang use tcgen05.mma while Triton stays on legacy HMMA. TileLang continues to load 0 bytes through TMA and both TileLang and CuTile respectively execute 1.93x and 2.14x instructions more than Triton. For non-mma instructions, TileLang has 2.27x and CuTile has 2.51x. Therefore, for both CuTile and TileLang the dominant issue is the additional shared memory staging, synchronization, and sparse block traversal, rather than the choice of MMA instruction family
+Since TileLang does not use as much SMEM as CuTile this is not a simple problem the strategy of using a large tile does not work. Instead, both CuTile and TileLang use tcgen05.mma while Triton stays on legacy HMMA. TileLang continues to load 0 bytes through TMA and both TileLang and CuTile respectively execute 1.93x and 2.14x instructions more than Triton. For non-mma instructions, TileLang has 2.27x and CuTile has 2.51x. Therefore, for both CuTile and TileLang the dominant issue is the additional shared memory staging, synchronization, and sparse block traversal, rather than the choice of MMA instruction family. 
 
 ### linear_self_attention
 
+
+(main issue) -- TileLang greater instruction count, and TileLang loads data through LDG and STS + 16.7x wavefronts compared to Triton. Tensor Pipe of Triton is 8x more active. TileLang is also the only DSL that falls back to legacy HMMA for the output GEMM. 
+
 The column reduction takes 29.4% of total NCU time in TileLang, 57% in Triton, and 53% in CuTile. For this kernel, TileLang takes 245.3us, Triton takes 114.8us and CuTile takes 258.7us. CuTile has 1.75x instructions as Triton, while TileLang has 2.83x instructions compared to Triton.
 
-In the KV GEMM, only CuTile uses tcgen05, while TileLang and Triton both use legacy HMMA at identical counts, and TileLang loads 0 bytes via TMA. TileLang executes 3.11x instructions of Triton. In the output GEMM TileLang is alone in using legacy HMMA, while Triton and CuTile both use tcgen05. TileLang takes 8.02x Triton's time and 2.69 CuTile's time. TileLang does not use cp.async or TMA but rather loads data through LDG and STS. TileLang's LSU works with 16.7x wavefronts compared to Triton, and its Tensor Pipe is at 1.05% compared to Triton's 8.49%.
+In the KV GEMM, only CuTile uses tcgen05, while TileLang and Triton both use legacy HMMA at identical counts, and TileLang loads 0 bytes via TMA. TileLang executes 3.11x instructions of Triton. In the output GEMM TileLang is alone in using legacy HMMA, while Triton and CuTile both use tcgen05. TileLang takes 8.02x Triton's time and 2.69x CuTile's time. TileLang does not use cp.async or TMA but rather loads data through LDG and STS. TileLang's LSU works with 16.7x wavefronts compared to Triton, and its Tensor Pipe is at 1.05% compared to Triton's 8.49%.
 
 ### flash_decode
+
+(mainly a CuTile analysis, already done)
 
 CuTile requires 3.72x Triton's latency and 3.75x TileLang's latency (maximum input case). All DSLs use no shared memory, TMA, or tensor core instructions. TileLang executes 0.85x instructions as Triton. All kernels launch 16 CTAs.
 
 ### streamk_matmul
 
+(main issue) At larger values where full GEMM is majority of time, TileLang starts losing because of its slower matmul implementation (see matmul_fp32_fp16_fp8). 
+
 Using geomean latency on all cases, TileLang requires 1.54x latency than Triton and 0.78x than CuTile (geomean latency). However, the geomean latency hides patterns across input size and dtype. In fp32, similar to the basic matmul case, TileLang uses legacy HMMA and is only faster than CuTile in the five smallest input cases, all at or below 11.3M output elements; beyond that CuTile is ahead in every case, reaching 2.61x at the maximum input. In fp16/bf16, TileLang is faster than CuTile in 32 of 40 cases, but the gap closes as the output grows. Starting from 0.24x at 5.2M elements to 0.88x at 58.7M and CuTile overtakes TileLang above 90.2M elements, ending at 1.24x in the maximum input case.
 
 The two backends fail in different kernels, which is why they cross. CuTile's deficit is in first_wave, whose share of the output tiles falls from 54% at the smallest inputs to 1.9% at the largest, so CuTile improves with input size, from 3.16x Triton at m=1024 to 1.47x at m=8192 in fp16/bf16. TileLang's deficit is in full_tiles, which is an ordinary matmul and dominates as the input grows, so TileLang degrades with input size, from 1.11x to 1.39x over the same range. In fp32 TileLang's curve is lifted to 2.02x (smallest case)-2.35x because the legacy HMMA fallback applies to every tile at every size, which moves the crossover down from 90.2M to 14.7M elements with CuTile.
 
-### Gaussian Blur
+### gaussian blur
 
-TileLang uses 255 registers/thread while Triton uses 34 and CuTile uses 48. TileLang requires 2.18x latency of Triton and 1.49x that of CuTile. TileLang is limited to 8 warps / SM, while Triton is limited to 48 warps / SM and CuTile to 40 warps / SM. TileLang SM throughput is 29.28% while Triton reaches 85.37% and CuTile reaches 84.39%. This suggests that because of the high register usage, TileLang is unable to have enough work resident to fully utilize the SM and is why it is slower than Triton and CuTile. TileLang computes 8 outputs/thread and unrolls all indexing and all 49 filter positions, leading to 392 FP32 FMA instructions and 441 load instructions in a 1,872-instruction kernel (SASS). 
+(main issue) TileLang is unable to have enough work resident to fully utilize the SM and is why it is slower than Triton and CuTile, this could be because it unrolls all indexing and 49 filter positions. 
+
+TileLang uses 255 registers/thread while Triton uses 34 and CuTile uses 48. TileLang requires 2.18x latency of Triton and 1.49x that of CuTile. TileLang is limited to 8 warps / SM, while Triton is limited to 48 warps / SM and CuTile to 40 warps / SM. TileLang SM throughput is 29.28% while Triton reaches 85.37% and CuTile reaches 84.39%. This suggests that because of the high register usage, TileLang is unable to have enough work resident to fully utilize the SM and is why it is slower than Triton and CuTile. TileLang computes 8 outputs/thread and unrolls all indexing and all 49 filter positions, leading to 392 FP32 FMA instructions and 441 load instructions in a 1,872-instruction kernel (SASS).
+
+### batched matmul
+
+### matrix transpose
+
+### reverse array
+
+
