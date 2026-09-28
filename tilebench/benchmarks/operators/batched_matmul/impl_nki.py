@@ -16,6 +16,8 @@ try:
 except ImportError:
     nki = None
 
+BLOCK_M = 128
+BLOCK_N = 128
 MAX_TILE_M = 128
 MAX_TILE_K = 128
 MAX_TILE_N = 512
@@ -141,14 +143,14 @@ def run(A: torch.Tensor, B: torch.Tensor,
     A3 = A.view(BATCH, M, K)
     B3 = B.view(BATCH, K, N)
 
-    tile_m = min(MAX_TILE_M, M)
+    tile_m = min(BLOCK_M, M)
     tile_k = min(MAX_TILE_K, K)
-    tile_n = min(MAX_TILE_N, N)
+    tile_n = min(BLOCK_N, N)
     _default = SimpleNamespace(block_size_m=tile_m, block_size_k=tile_k, block_size_n=tile_n)
     if autotune:
-        _space = [SimpleNamespace(block_size_m=bm, block_size_k=bk, block_size_n=bn)
-                  for bm in (64, 128) for bk in (64, 128) for bn in (128, 256, 512)
-                  if bm <= M and bk <= K and bn <= N]
+        _space = [SimpleNamespace(block_size_m=bm, block_size_k=MAX_TILE_K, block_size_n=bn)
+                  for bm in (32, 64, 128) for bn in (32, 64, 128, 256, 512)
+                  if bm <= M and bn <= N]
         if not any(vars(c) == vars(_default) for c in _space):
             _space.append(_default)
         cfg = _tuner.tune_or_cached(
