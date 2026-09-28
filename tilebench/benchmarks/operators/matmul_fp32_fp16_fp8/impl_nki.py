@@ -186,14 +186,14 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
             f"({TILE_M}, {TILE_N}, {TILE_K})"
         )
 
-    tib_m = _pick_tiles_in_block(M, TILE_M, 4)
+    tib_m = _pick_tiles_in_block(M, TILE_M, 1 if a.dtype == torch.float32 else 2)
     tib_n = _pick_tiles_in_block(N, TILE_N, 2)
     tib_k = _pick_tiles_in_block(K, TILE_K, 8)
     _default = SimpleNamespace(block_size_m=TILE_M * tib_m, block_size_n=TILE_N * tib_n,
                                block_size_k=TILE_K * tib_k)
     if autotune:
         _space = [SimpleNamespace(block_size_m=bm, block_size_n=bn, block_size_k=bk)
-                  for bm in (256, 512) for bn in (512, 1024) for bk in (512, 1024)
+                  for bm in (128, 256, 512) for bn in (512, 1024) for bk in (512, 1024)
                   if M % bm == 0 and N % bn == 0 and K % bk == 0]
         if not any(vars(c) == vars(_default) for c in _space):
             _space.append(_default)
