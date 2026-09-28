@@ -6,31 +6,21 @@ try:
     import nki
     import nki.isa as nisa
     import nki.language as nl
-    PMAX = nl.tile_size.pmax          # 128 partitions
+    PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
     PMAX = 128
+
+_DEFAULT_RC = (2, 128)
+_SEARCH_RC = [(1, 128), (1, 256), (1, 512), (2, 128), (2, 256), (4, 128), (4, 256),
+              (8, 64), (16, 512), (32, 512)]
 
 if nki is not None:
     from tilebench.core.nki_autotune import NkiAutotuner
 
     @nki.jit
     def max_pool2d_kernel(input_hbm, in_H, in_W, kernel_size, stride, padding,
-                          itemsize, oh_block):
-        """2D max pooling over the trailing two axes of a flattened plane tensor.
-
-        Args:
-            input_hbm: (planes, in_H * in_W) -- ``planes`` is ``N * C``
-            in_H, in_W: input spatial extents (compile-time constants)
-            kernel_size, stride, padding: pooling parameters (compile-time constants)
-            itemsize: bytes per element, for sizing the SBUF window buffer
-            oh_block: output rows per block; 0 picks the largest block that fits
-                the per-partition SBUF budget, a nonzero value (autotune
-                candidate) is used as-is once validated against that budget
-
-        Returns:
-            (planes, out_H * out_W)
-        """
+                          itemsize, oh_block, ow_block):
         planes, in_HW = input_hbm.shape
 
         out_H = (in_H + 2 * padding - kernel_size) // stride + 1
@@ -40,45 +30,25 @@ if nki is not None:
         assert in_HW == in_H * in_W
         assert out_H >= 1 and out_W >= 1
 
-        # W window: column j holds input column j - padding, so a whole output row
-        # of tap kw is the affine view [stride, out_W] at offset kw.
-        w_buf = (out_W - 1) * stride + kernel_size
-        n_valid_w = max(0, min(w_buf - padding, in_W))
-
-        # oh_block == 0: largest block (output rows per block) whose window +
-        # output buffers fit the per-partition SBUF budget. sbuf_fmax_bytes
-        # only resolves inside an active trace, which is here -- not in
-        # run(). A nonzero oh_block (autotune candidate) is validated against
-        # the same budget below instead of trusted blindly, so a candidate
-        # that doesn't fit raises here and NkiAutotuner just skips it.
-        if oh_block == 0:
-            oh_block = max(1, out_H)
-            while oh_block > 1:
-                nh_buf = (oh_block - 1) * stride + kernel_size
-                sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
-                if sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes:
-                    break
-                oh_block //= 2
+        oh_block = min(oh_block, out_H)
+        ow_block = min(ow_block, out_W)
 
         nh_buf = (oh_block - 1) * stride + kernel_size
-        sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * out_W)
+        w_buf = (ow_block - 1) * stride + kernel_size
+        sbuf_bytes = itemsize * (nh_buf * w_buf + oh_block * ow_block)
         assert sbuf_bytes <= nl.tile_size.sbuf_fmax_bytes
         win_pp = nh_buf * w_buf
 
         n_plane_tiles = (planes + PMAX - 1) // PMAX
         n_row_blocks = (out_H + oh_block - 1) // oh_block
+        n_col_blocks = (out_W + ow_block - 1) // ow_block
 
         output_hbm = nl.ndarray((planes, out_HW), dtype=input_hbm.dtype,
                                 buffer=nl.shared_hbm)
 
-        win = nl.ndarray((PMAX, nh_buf, w_buf), dtype=input_hbm.dtype,
-                         buffer=nl.sbuf)
-        out_sb = nl.ndarray((PMAX, oh_block, out_W), dtype=input_hbm.dtype,
+        win = nl.ndarray((PMAX, nh_buf, w_buf), dtype=input_hbm.dtype, buffer=nl.sbuf)
+        out_sb = nl.ndarray((PMAX, oh_block, ow_block), dtype=input_hbm.dtype,
                             buffer=nl.sbuf)
-
-        # Zero-pad analogue for max pooling: the border columns are never written
-        # again, so they stay -inf and can never win a max.
-        nisa.memset(dst=win[0:PMAX, 0:nh_buf, 0:w_buf], value=float("-inf"))
 
         for p_tile in range(n_plane_tiles):
             p_start = p_tile * PMAX
@@ -88,55 +58,54 @@ if nki is not None:
                 oh0 = blk_idx * oh_block
                 blk = min(oh_block, out_H - oh0)
                 nh = (blk - 1) * stride + kernel_size
-
-                # --- load the input window rows, clipped to [0, in_H) ---------
                 ih0 = oh0 * stride - padding
-                lo = max(ih0, 0)
-                hi = min(ih0 + nh, in_H)
-                dst_j = lo - ih0
-                n_rows = hi - lo
-                if dst_j > 0:
-                    nisa.memset(dst=win[0:p_sz, 0:dst_j, 0:w_buf],
-                                value=float("-inf"))
-                if dst_j + n_rows < nh:
-                    nisa.memset(dst=win[0:p_sz, dst_j + n_rows:nh, 0:w_buf],
-                                value=float("-inf"))
-                if n_rows > 0:
-                    nisa.dma_copy(
-                        dst=win[0:p_sz, dst_j:dst_j + n_rows,
-                                padding:padding + n_valid_w],
-                        src=input_hbm.ap(
-                            pattern=[[in_HW, p_sz], [in_W, n_rows],
-                                     [1, n_valid_w]],
-                            offset=p_start * in_HW + lo * in_W,
-                        ),
-                    )
+                row_lo = max(ih0, 0)
+                row_hi = min(ih0 + nh, in_H)
+                row_dst = row_lo - ih0
+                n_rows = row_hi - row_lo
 
-                # --- reduce the kernel_size^2 taps with max -------------------
-                acc = out_sb[0:p_sz, 0:blk, 0:out_W]
-                for kh in range(kernel_size):
-                    for kw in range(kernel_size):
-                        # Shifted, strided view of the loaded window: element
-                        # (r, c) is input[.., (oh0+r)*stride+kh-pad,
-                        # c*stride+kw-pad].
-                        tap = win.ap(
-                            pattern=[[win_pp, p_sz], [stride * w_buf, blk],
-                                     [stride, out_W]],
-                            offset=kh * w_buf + kw,
+                for cblk_idx in range(n_col_blocks):
+                    ow0 = cblk_idx * ow_block
+                    cw = min(ow_block, out_W - ow0)
+                    nw = (cw - 1) * stride + kernel_size
+                    iw0 = ow0 * stride - padding
+                    col_lo = max(iw0, 0)
+                    col_hi = min(iw0 + nw, in_W)
+                    col_dst = col_lo - iw0
+                    n_cols = col_hi - col_lo
+
+                    nisa.memset(dst=win[0:p_sz, 0:nh, 0:nw], value=float("-inf"))
+                    if n_rows > 0 and n_cols > 0:
+                        nisa.dma_copy(
+                            dst=win[0:p_sz, row_dst:row_dst + n_rows,
+                                    col_dst:col_dst + n_cols],
+                            src=input_hbm.ap(
+                                pattern=[[in_HW, p_sz], [in_W, n_rows], [1, n_cols]],
+                                offset=p_start * in_HW + row_lo * in_W + col_lo,
+                            ),
                         )
-                        if kh == 0 and kw == 0:
-                            nisa.tensor_copy(dst=acc, src=tap)
-                        else:
-                            nisa.tensor_tensor(dst=acc, data1=acc, data2=tap,
-                                               op=nl.maximum)
 
-                nisa.dma_copy(
-                    dst=output_hbm.ap(
-                        pattern=[[out_HW, p_sz], [1, blk * out_W]],
-                        offset=p_start * out_HW + oh0 * out_W,
-                    ),
-                    src=acc,
-                )
+                    acc = out_sb[0:p_sz, 0:blk, 0:cw]
+                    for kh in range(kernel_size):
+                        for kw in range(kernel_size):
+                            tap = win.ap(
+                                pattern=[[win_pp, p_sz], [stride * w_buf, blk],
+                                         [stride, cw]],
+                                offset=kh * w_buf + kw,
+                            )
+                            if kh == 0 and kw == 0:
+                                nisa.tensor_copy(dst=acc, src=tap)
+                            else:
+                                nisa.tensor_tensor(dst=acc, data1=acc, data2=tap,
+                                                   op=nl.maximum)
+
+                    nisa.dma_copy(
+                        dst=output_hbm.ap(
+                            pattern=[[out_HW, p_sz], [out_W, blk], [1, cw]],
+                            offset=p_start * out_HW + oh0 * out_W + ow0,
+                        ),
+                        src=acc,
+                    )
 
         return output_hbm
 
@@ -152,24 +121,20 @@ def run(input: torch.Tensor, N: int, C: int, H: int, W: int,
     itemsize = input.element_size()
 
     if autotune:
-        out_H = (H + 2 * padding - kernel_size) // stride + 1
-        search_space = [SimpleNamespace(oh_block=o)
-                        for o in (8, 16, 32, 64) if o <= out_H]
-        search_space.append(SimpleNamespace(oh_block=0))  # SBUF-fit fallback
         cfg = _tuner.tune_or_cached(
             shape_key=((N, C, H, W), kernel_size, stride, padding, str(input.dtype)),
-            search_space=search_space,
+            search_space=[SimpleNamespace(oh_block=r, ow_block=c) for r, c in _SEARCH_RC],
             args_fn=lambda cfg: (x, H, W, kernel_size, stride, padding,
-                                 itemsize, cfg.oh_block),
+                                 itemsize, cfg.oh_block, cfg.ow_block),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
-        oh_block = cfg.oh_block
+        oh_block, ow_block = cfg.oh_block, cfg.ow_block
     else:
-        oh_block = 0
+        oh_block, ow_block = _DEFAULT_RC
 
     result = max_pool2d_kernel(x, H, W, kernel_size, stride, padding,
-                               itemsize, oh_block)
+                               itemsize, oh_block, ow_block)
     return result.reshape(-1)
 
 
