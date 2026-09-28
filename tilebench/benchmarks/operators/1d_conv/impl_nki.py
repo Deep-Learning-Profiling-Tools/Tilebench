@@ -13,30 +13,18 @@ try:
     import nki
     import nki.isa as nisa
     import nki.language as nl
-    PMAX = nl.tile_size.pmax          # 128 partitions
+    PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
     PMAX = 128
 
-# PSUM bank free size in fp32 elements on trn2 (NeuronCore-v3): the moving
-# operand of nc_matmul -- i.e. the number of output positions per matmul.
 PSUM_FMAX = 512
 
-# Output positions per L-block. Shrunk if the input window + output block would
-# not fit the per-partition SBUF budget.
 MAX_L_BLOCK = 8192
-# Per-partition SBUF spent on the input windows + output blocks (trn2 has 192KB).
 SBUF_BUDGET_BYTES = 144 * 1024
-# Number of L-blocks in flight per dynamic-loop iteration, each with its own
-# window/output buffer. All the loads of a group are issued before any of its
-# matmuls, so DMA overlaps compute instead of strictly alternating with it.
 MAX_BLOCKS_IN_FLIGHT = 4
-# Smallest L-block worth using: 2048 columns keeps every window DMA well above
-# the 2KB-contiguous-per-partition threshold where DMA efficiency drops off.
 MIN_L_BLOCK = 2048
 
-# Below this many interior block groups the on-device loop is not worth its
-# overhead, so the blocks are unrolled at compile time instead.
 MIN_DYNAMIC_GROUPS = 4
 
 MAX_STATIC_BATCH = 8
@@ -45,14 +33,6 @@ MAX_STATIC_GROUPS = 4
 
 @functools.lru_cache(maxsize=1)
 def _lnc_degree() -> int:
-    """Logical-NeuronCore degree the kernel must be launched with.
-
-    The kernel contains on-device control flow (``nl.dynamic_range``), which the
-    backend only lowers correctly when the NKI launch degree matches the LNC the
-    XLA module is compiled for -- launching an LNC=1 kernel into an LNC=2 module
-    fails with ``[NCC_IXGM002] ... core 1 has 1 basic blocks``. trn2/trn3
-    default to LNC=2 unless the compiler/runtime env says otherwise.
-    """
     explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
     if explicit.strip().isdigit():
         return int(explicit.strip())
@@ -62,8 +42,6 @@ def _lnc_degree() -> int:
     target = os.environ.get("NEURON_PLATFORM_TARGET_OVERRIDE", "").strip().lower()
     if target in ("trn2", "gen3", "trn3", "gen4"):
         return 2
-    # NEURON_PLATFORM_TARGET_OVERRIDE is rarely set in practice, so the branch
-    # above rarely fires -- ask the instance directly rather than guessing LNC=1.
     try:
         out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
         lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
@@ -84,19 +62,12 @@ def kernel_assert(condition: bool, message: str) -> None:
 
 
 def _block_bytes(itemsize: int, n_ic_tiles: int, stride: int, kL: int, l_block: int) -> int:
-    """Per-partition SBUF bytes for one in-flight block (window + output)."""
     window_cols = (l_block - 1) * stride + kL
     return itemsize * (n_ic_tiles * window_cols + l_block)
 
 
 def _choose_tiling(itemsize: int, n_ic_tiles: int, stride: int, kL: int,
                    out_L: int) -> tuple[int, int]:
-    """Pick (l_block, blocks_in_flight) fitting the per-partition SBUF budget.
-
-    Overlap is worth more than block size here (the kernel is DMA/PE bound), so
-    the largest number of in-flight blocks wins; the block length is then shrunk
-    until the group fits SBUF, down to MIN_L_BLOCK to keep DMAs large.
-    """
     needed = max(PSUM_FMAX, div_ceil(out_L, PSUM_FMAX) * PSUM_FMAX)
     l_cap = min(MAX_L_BLOCK, needed)
     l_floor = min(MIN_L_BLOCK, l_cap)
@@ -107,14 +78,12 @@ def _choose_tiling(itemsize: int, n_ic_tiles: int, stride: int, kL: int,
                and blocks_in_flight
                * _block_bytes(itemsize, n_ic_tiles, stride, kL, l_block)
                > SBUF_BUDGET_BYTES):
-            # Halve, but keep l_block a whole number of PSUM tiles.
             l_block = max(l_floor, (l_block // 2) // PSUM_FMAX * PSUM_FMAX)
         if (blocks_in_flight
                 * _block_bytes(itemsize, n_ic_tiles, stride, kL, l_block)
                 <= SBUF_BUDGET_BYTES):
             return l_block, blocks_in_flight
 
-    # Single block that still does not fit the budget: shrink to the PSUM tile.
     return PSUM_FMAX, 1
 
 
@@ -122,24 +91,12 @@ if nki is not None:
 
     def _load_window(input_hbm, windows, buf, cfg, b, g, l_start, blk,
                      in_off_sb=None, sub=0):
-        """Load input[b, group-g channels, window] into SBUF, zero-padded.
-
-        On the dynamic path (``in_off_sb`` given) the window start lives in an
-        SBUF scalar that the on-device loop advances; ``sub`` is this block's
-        index inside the in-flight group and rides along as a static offset.
-        Such a block is guaranteed (by the caller's peeling) to lie fully inside
-        the input. On the static path ``l_start`` is a plain Python int and the
-        DMA is clipped to the valid input range, the rest of the window zeroed.
-        """
         stride, pad, kL = cfg["stride"], cfg["pad"], cfg["kL"]
         in_ch_g, n_ic_tiles = cfg["in_ch_g"], cfg["n_ic_tiles"]
         in_channels, in_L = cfg["in_channels"], cfg["in_L"]
         w_len = (blk - 1) * stride + kL
 
         if in_off_sb != None:
-            # A dynamic_range register supports no arithmetic and cannot be fed
-            # to nl.ds(), so the window offset is carried in an SBUF scalar and
-            # applied with .ap(scalar_offset=..., indirect_dim=<L axis>).
             sub_offset = sub * blk * stride
             for ic_tile in range(n_ic_tiles):
                 ic_size = min(PMAX, in_ch_g - ic_tile * PMAX)
@@ -157,8 +114,6 @@ if nki is not None:
 
         il_start = l_start * stride - pad
 
-        # Static (boundary) block: clip the DMA to the valid input range and
-        # zero the columns that fall outside it -- that is the conv's zero pad.
         valid_lo = max(il_start, 0)
         valid_hi = min(il_start + w_len, in_L)
         n_valid = valid_hi - valid_lo
@@ -184,7 +139,6 @@ if nki is not None:
 
     def _compute_block(output_hbm, weight_t, windows, out_sbs, buf, cfg, b, g,
                        l_start, blk, out_off_sb=None, sub=0):
-        """Matmul an already-loaded window and store ``blk`` output positions."""
         stride, kL = cfg["stride"], cfg["kL"]
         in_ch_g, out_ch_g = cfg["in_ch_g"], cfg["out_ch_g"]
         n_ic_tiles, n_oc_tiles = cfg["n_ic_tiles"], cfg["n_oc_tiles"]
@@ -207,8 +161,6 @@ if nki is not None:
                         nisa.nc_matmul(
                             dst=acc_psum,
                             stationary=weight_t[0:ic_size, w_idx, 0:oc_size],
-                            # Shifted, strided view of the already-loaded window:
-                            # column c holds input[.., c * stride + kl].
                             moving=windows.ap(
                                 pattern=[[win_pp, ic_size], [stride, n_col]],
                                 offset=(buf * n_ic_tiles + ic_tile) * window_cols
@@ -240,19 +192,11 @@ if nki is not None:
 
     def _process_l_block(input_hbm, output_hbm, weight_t, windows, out_sbs,
                          cfg, b, g, l_start, blk):
-        """Static (compile-time offset) block: load then compute, buffer 0."""
         _load_window(input_hbm, windows, 0, cfg, b, g, l_start, blk)
         _compute_block(output_hbm, weight_t, windows, out_sbs, 0, cfg, b, g,
                        l_start, blk)
 
     def _prepare_weight(weight_hbm, cfg, g):
-        """Transpose weight into per-(oc_tile, ic_tile, kl) stationary tiles.
-
-        ``nc_matmul`` contracts along the partition axis, so the stationary
-        operand must be laid out as ``[ic, oc]`` while HBM holds ``[oc, ic, kL]``.
-        The weight is tiny, so it is loaded contiguously (fast DMA) and
-        transposed on-chip once per kernel invocation rather than gathered.
-        """
         kL, in_ch_g, out_ch_g = cfg["kL"], cfg["in_ch_g"], cfg["out_ch_g"]
         n_ic_tiles, n_oc_tiles = cfg["n_ic_tiles"], cfg["n_oc_tiles"]
 
@@ -293,25 +237,11 @@ if nki is not None:
     @nki.jit
     def conv1d_kernel(input_hbm, weight_hbm, stride, padding, groups, l_block,
                       blocks_in_flight):
-        """Batched, multi-channel, strided, zero-padded 1D convolution.
-
-        Args:
-            input_hbm:  (batch, in_channels, in_L)
-            weight_hbm: (out_channels, in_channels // groups, kL)
-            stride, padding, groups: conv parameters (compile-time constants)
-            l_block: output positions per L-block (multiple of 512)
-            blocks_in_flight: L-blocks per dynamic-loop iteration (own buffers)
-
-        Returns:
-            (batch, out_channels, out_L) with out_L = (in_L + 2*padding - kL)//stride + 1
-        """
         batch, in_channels, in_L = input_hbm.shape
         out_channels, in_ch_g, kL = weight_hbm.shape
         out_L = (in_L + 2 * padding - kL) // stride + 1
         out_ch_g = out_channels // groups
 
-        # NKI kernels cannot `raise`; the host-side run() performs the friendly
-        # validation, these are the in-kernel invariants.
         assert in_ch_g * groups == in_channels
         assert out_channels % groups == 0
         assert l_block % PSUM_FMAX == 0
@@ -335,8 +265,6 @@ if nki is not None:
         n_blocks = div_ceil(out_L, l_block)
         n_full_blocks = out_L // l_block
 
-        # Blocks whose input window is entirely in range need no zero padding
-        # and can therefore share one uniform on-device loop body.
         first_safe = div_ceil(padding, l_block * stride)
         last_safe = (in_L + padding - cfg["window_cols"]) // (l_block * stride)
         last_safe = min(last_safe, n_full_blocks - 1)
@@ -357,17 +285,12 @@ if nki is not None:
                                  dtype=input_hbm.dtype, buffer=nl.sbuf)
 
             for b in range(batch):
-                # Head block(s): the only ones that can read left of the input.
                 for i in range(0, first_safe):
                     _process_l_block(input_hbm, output_hbm, weight_t, windows,
                                      out_sbs, cfg, b, g, i * l_block,
                                      min(l_block, out_L - i * l_block))
 
                 if use_dynamic:
-                    # Interior blocks: one uniform body executed on-device, so
-                    # the instruction count stays constant as in_L grows. All
-                    # the loads of a group are issued before its first matmul so
-                    # the DMA queues run ahead of the Tensor Engine.
                     in_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
                     out_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
                     nisa.memset(dst=in_off_sb,
@@ -387,12 +310,10 @@ if nki is not None:
                         nisa.tensor_scalar(dst=out_off_sb, data=out_off_sb, op0=nl.add,
                                            operand0=blocks_in_flight * l_block)
 
-                # Interior blocks the on-device loop did not cover.
                 for i in range(first_safe + n_dynamic, last_safe + 1):
                     _process_l_block(input_hbm, output_hbm, weight_t, windows,
                                      out_sbs, cfg, b, g, i * l_block, l_block)
 
-                # Tail block(s): can read past the end of the input.
                 for i in range(last_safe + 1, n_blocks):
                     _process_l_block(input_hbm, output_hbm, weight_t, windows,
                                      out_sbs, cfg, b, g, i * l_block,
@@ -401,7 +322,7 @@ if nki is not None:
         return output_hbm
 
 
-_tuner = NkiAutotuner(conv1d_kernel) if nki is not None else None
+_tuner = NkiAutotuner(conv1d_kernel[_lnc_degree()]) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
