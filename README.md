@@ -7,7 +7,8 @@
 
 <div align="center">
 
-**TileBench: A Controlled Benchmark for Performance Evaluation and Bottleneck Diagnosis of Tile-Based Programming Models**
+**TileBench: A Controlled Benchmark for Performance Evaluation and Bottleneck Diagnosis of Tile-Based Programming Models**<br>
+AACL 2026
 
 [<img src="assets/icons/arxiv.svg" height="16" alt=""> Paper](https://arxiv.org/abs/2609.29067) | [<img src="assets/icons/huggingface.svg" height="16" alt=""> NCU Reports](https://huggingface.co/datasets/bcui2/NCU_report) | [<img src="assets/icons/googledrive.svg" height="16" alt=""> LLM Artifacts](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing) | [<img src="assets/icons/github.svg" height="16" alt=""> Raw Logs](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) | [<img src="assets/icons/book.svg" height="16" alt=""> Developer Guide](docs/developer_guide.md)
 
