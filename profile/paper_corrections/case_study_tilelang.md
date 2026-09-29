@@ -18,6 +18,8 @@ TileLang (in maximum input case) requires 1.67 Triton latency while CuTile requi
 
 main issue (tilelang) -- TileLang lowers indexing more concisely as shown by instructin count and ALU activity, however the final latency does not reflect that (7% faster) and TileLang has many long scoreboard stalls and LG throttle, suggesting that it suffers from memory dependencies while Triton can hide indexing latency through this waiting. 
 
+why does triton hide better latency look at stalls
+
 In the max fp32 case, TileLang issues 60,948,480 million instructions, Triton issues 160,399,360 instructions and CuTile issues 234,946,560 instructions. Triton and CuTile latency and instruction count closely track *paper case study already talks about this*. However, TileLang has about 100 million less instructions but is only 1.07x faster than Triton. Looking at the NCU report, TileLang long scoreboard stalls are double (18.77) of Trition (9.86) and quadruple of CuTile (4.49). The LG throttle values are (TL, TR, Cu) 9.24, 0.34, 0.08. The ALU % pipe (TL, TR, Cu) is 17.77%, 64.33%, and 77.25%. The data suggests that TileLang lowers its indexing much better as supported by the much less instructions and the difference in % of the ALU pipe. However, the latency does not track closely with TileLang because of memory dependcies and throttles. This suggests that Triton is able tl hide latency of its more verbose indexing while it waits for global memory. 
 
 ### matmul_fp32_fp16_fp8
@@ -79,4 +81,5 @@ TileLang uses 255 registers/thread while Triton uses 34 and CuTile uses 48. Tile
 
 ### reverse array
 
+try to create some sort of harness or something that is reproucible and can always do this analysis. 
 
