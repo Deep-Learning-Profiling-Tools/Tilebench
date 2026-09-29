@@ -35,6 +35,7 @@ It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, 
 - [Recorded Results](#-recorded-results)
 - [Developer Guide](#-developer-guide)
 - [Attribution](#-attribution)
+- [Citation](#-citation)
 
 ## ✨ Features
 
@@ -362,3 +363,19 @@ Implementation details, CLI options, operator-authoring rules, tuning convention
 TileBench uses TritonBench and LeetGPU as sources of operator coverage and task semantics. TileBench implementations and configurations are maintained independently in this repository.
 
 Third-party libraries, tools, and dependencies remain governed by their respective licenses and terms.
+
+## 📝 Citation
+
+If you use TileBench in your research, please cite our paper:
+
+```bibtex
+@misc{cui2026tilebenchcontrolledbenchmarkperformance,
+      title={TileBench: A Controlled Benchmark for Performance Evaluation and Bottleneck Diagnosis of Tile-Based Programming Models},
+      author={Bowen Cui and Zhongchun Zhou and Hao Wu and Tejas Ramesh and Junyu Yin and Jialiang Gu and Keren Zhou},
+      year={2026},
+      eprint={2609.29067},
+      archivePrefix={arXiv},
+      primaryClass={cs.PF},
+      url={https://arxiv.org/abs/2609.29067},
+}
+```
