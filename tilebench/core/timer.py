@@ -48,7 +48,9 @@ def _flush_l2_buffer_mb() -> int:
     The cache is the one tilebench.hardware.last_level_cache_bytes() reports:
     the runtime L2 size on NVIDIA (so B200 still evicts 2x its 126.5 MB L2), or
     a measured device-level LLC for architectures whose L2 is not the last
-    level. Hardcoding a size silently under-evicts on GPUs with a larger cache
+    level; on such an architecture without a validated size (CDNA3 for now) it
+    raises UncalibratedCacheError, so a flushed measurement fails instead of
+    evicting only the L2. Hardcoding a size silently under-evicts on GPUs with a larger cache
     than the author assumed (the previous 64 MB constant covered only half of
     B200's 126.5 MB L2, leaving small-input operators warm).
 

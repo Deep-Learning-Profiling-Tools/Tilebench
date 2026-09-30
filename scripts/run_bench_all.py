@@ -16,8 +16,9 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tilebench.core.engine import run_benchmark_suite  # noqa: E402
+from tilebench.core.engine import DEFAULT_ENABLED_BACKENDS, run_benchmark_suite  # noqa: E402
 from tilebench import provenance  # noqa: E402
+from tilebench.backends import canonical_backends, parse_backends  # noqa: E402
 from tilebench.paths import (OPERATOR_ROOT, hardware_label,  # noqa: E402
                              results_logs_dir, results_runs_dir)
 
@@ -130,7 +131,27 @@ def main() -> int:
         default=[],
         help="Optional file/dir/glob paths to copy into this run's profiles directory.",
     )
+    parser.add_argument(
+        "--tile-language",
+        type=str,
+        default=None,
+        help="Comma-separated backends to run, parsed exactly like run_bench.py --tile-language: "
+             "triton, cutile, tilelang, nki, or 'all' (= triton,cutile,tilelang). torch always "
+             "runs as the speedup baseline. If omitted, the engine's default selection "
+             f"({', '.join(DEFAULT_ENABLED_BACKENDS)}) is used, as before.",
+    )
     args = parser.parse_args()
+
+    # None keeps the engine's own default; a named selection is passed as a set.
+    if args.tile_language is None:
+        enabled_backends = None
+    else:
+        try:
+            enabled_backends = set(parse_backends(args.tile_language))
+        except ValueError as e:
+            parser.error(f"--tile-language: {e} (or 'all')")
+    backends = canonical_backends(
+        DEFAULT_ENABLED_BACKENDS if enabled_backends is None else enabled_backends)
 
     repo_root = Path(__file__).resolve().parent.parent
     os.chdir(repo_root)
@@ -162,8 +183,14 @@ def main() -> int:
         # source commit, software stack and device, captured before any measurement
         "provenance": provenance.collect(args.gpu),
     }
+    manifest["provenance"]["run"] = {
+        "script": "scripts/run_bench_all.py",
+        "tile_language": args.tile_language,     # as given; None = engine default
+        "backends": backends,                    # the selection actually passed to the engine
+    }
 
     print(f"GPU/result namespace: {args.gpu}")
+    print(f"Tile-language backends: torch (baseline) + {', '.join(backends) or '(none)'}")
     print(f"Run directory: {run_dir}")
     with run_log_path.open("w", encoding="utf-8") as run_log:
         run_log.write(f"[{_now_utc_str()}] Starting run for {len(operators)} operators\n")
@@ -171,7 +198,9 @@ def main() -> int:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
             try:
-                results = run_benchmark_suite(op, logs_dir=results_logs_dir(args.gpu))
+                # Without --tile-language the engine is called exactly as before.
+                selection = {} if enabled_backends is None else {"enabled_backends": enabled_backends}
+                results = run_benchmark_suite(op, logs_dir=results_logs_dir(args.gpu), **selection)
                 out_path = operators_dir / f"{op}.json"
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)

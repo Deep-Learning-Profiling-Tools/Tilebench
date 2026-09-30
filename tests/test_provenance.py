@@ -39,53 +39,55 @@ def repo(tmp_path):
 # --------------------------------------------------------------------------
 
 @needs_git
-def test_clean_checkout_records_the_exact_sha(repo):
+def test_clean_checkout_records_the_exact_sha_and_is_not_dirty(repo):
     state = provenance.source_state(repo / "tilebench")      # any directory of the checkout
     assert state["git_sha"] == git(repo, "rev-parse", "HEAD") and len(state["git_sha"]) == 40
-    assert state["dirty"] is False and state["dirty_files"] == [] and state["untracked_files"] == []
+    assert state["dirty"] is False and state["tracked_dirty"] is False
+    assert state["dirty_files"] == [] and state["untracked_files"] == []
 
 
 @needs_git
 @pytest.mark.parametrize("rel", ["scripts/run_bench.py", "tilebench/core/engine.py"])
-def test_a_modified_source_file_anywhere_in_the_checkout_is_dirty(repo, rel):
+def test_a_tracked_source_modification_anywhere_in_the_checkout_is_dirty(repo, rel):
     (repo / rel).write_text("v2\n")
     state = provenance.source_state(repo / "tilebench")
-    assert state["dirty"] is True and state["dirty_files"] == [rel]
+    assert state["dirty"] is True and state["tracked_dirty"] is True
+    assert state["dirty_files"] == [rel] and state["untracked_files"] == []
 
 
 @needs_git
 def test_a_staged_change_is_dirty(repo):
     (repo / "scripts/run_bench.py").write_text("v2\n")
     git(repo, "add", "scripts/run_bench.py")
-    assert provenance.source_state(repo)["dirty"] is True
-
-
-@needs_git
-def test_rewritten_summary_csvs_are_data_not_a_dirty_source(repo):
-    """run_bench.py rewrites results/<gpu>/csv/: the next run of the same
-    campaign must not report its source as dirty because of that."""
-    (repo / "results/B200/csv/op.csv").write_text("new measurement\n")
-    assert provenance.source_state(repo)["dirty"] is False
-
-
-@needs_git
-def test_new_result_files_are_not_listed_as_untracked_source(repo):
-    (repo / "results/SMOKE/csv/op_default.csv").parent.mkdir(parents=True)
-    (repo / "results/SMOKE/csv/op_default.csv").write_text("x\n")
     state = provenance.source_state(repo)
-    assert state["dirty"] is False and state["untracked_files"] == []
+    assert state["dirty"] is True and state["tracked_dirty"] is True
 
 
 @needs_git
-def test_untracked_files_are_listed_but_do_not_make_the_tree_dirty(repo):
+def test_an_untracked_source_file_is_dirty(repo):
+    """An untracked impl or helper can change what runs as much as an edit."""
     (repo / "tilebench/core/new_helper.py").write_text("x\n")
     state = provenance.source_state(repo)
-    assert state["dirty"] is False and state["untracked_files"] == ["tilebench/core/new_helper.py"]
+    assert state["dirty"] is True and state["tracked_dirty"] is False
+    assert state["dirty_files"] == [] and state["untracked_files"] == ["tilebench/core/new_helper.py"]
+
+
+@needs_git
+def test_only_results_changed_or_untracked_is_not_dirty(repo):
+    """run_bench.py rewrites results/<gpu>/csv/ and creates new result files:
+    the next run of the same campaign must not report its source as dirty."""
+    (repo / "results/B200/csv/op.csv").write_text("new measurement\n")            # tracked, modified
+    (repo / "results/SMOKE/csv/op_default.csv").parent.mkdir(parents=True)
+    (repo / "results/SMOKE/csv/op_default.csv").write_text("x\n")                  # untracked
+    state = provenance.source_state(repo)
+    assert state["dirty"] is False and state["tracked_dirty"] is False
+    assert state["dirty_files"] == [] and state["untracked_files"] == []
 
 
 def test_no_checkout_is_recorded_not_raised(tmp_path):
     state = provenance.source_state(tmp_path)
-    assert state["git_sha"] is None and state["dirty"] is None and state["error"]
+    assert state["git_sha"] is None and state["dirty"] is None and state["tracked_dirty"] is None
+    assert state["error"]
 
 
 def test_no_git_binary_is_recorded_not_raised(tmp_path, monkeypatch):
@@ -201,10 +203,11 @@ def test_run_bench_records_the_source_state_of_the_checkout(run_bench, results, 
     seen = []
     monkeypatch.setattr(provenance, "source_state",
                         lambda: seen.append(1) or {"git_sha": "a" * 40, "dirty": True,
+                                                    "tracked_dirty": True,
                                                     "dirty_files": ["x.py"], "untracked_files": []})
     run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
     record = json.loads((results / "B200/logs/provenance/mul2_default_tilelang.json").read_text())
-    assert seen and record["source"] == {"git_sha": "a" * 40, "dirty": True,
+    assert seen and record["source"] == {"git_sha": "a" * 40, "dirty": True, "tracked_dirty": True,
                                          "dirty_files": ["x.py"], "untracked_files": []}
 
 
@@ -217,7 +220,7 @@ def test_an_empty_run_writes_no_sidecar(run_bench, results, monkeypatch):
 def test_run_bench_all_manifest_gains_a_provenance_key(results, tmp_path, monkeypatch):
     mod = load_script("run_bench_all")
     monkeypatch.setattr(mod, "run_benchmark_suite",
-                        lambda op, logs_dir=None: fake_results({"triton"}))
+                        lambda op, enabled_backends=None, logs_dir=None: fake_results({"triton"}))
     monkeypatch.setattr(sys, "argv", ["run_bench_all.py", "--gpu", "MI300X",
                                       "--results-root", str(tmp_path / "runs"),
                                       "--operators", "mul2"])

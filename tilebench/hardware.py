@@ -23,9 +23,19 @@ _AMD_ARCH = {"gfx942": "cdna3"}
 
 #: Device-level last-level cache size in bytes, for architectures where the
 #: runtime's L2_cache_size is not the cache the timer must evict (e.g. the
-#: Infinity Cache of CDNA3). Empty until measured on the hardware itself; an
-#: architecture without an entry uses the runtime-reported L2 size.
+#: Infinity Cache of CDNA3). Filled only with a value validated by an eviction
+#: sweep on the hardware itself; an architecture without an entry uses the
+#: runtime-reported L2 size, unless it is listed in _LLC_CALIBRATION_REQUIRED.
 _LLC_BYTES: dict[str, int] = {}
+
+#: Architectures whose runtime L2 is known not to be the last-level cache: a
+#: cold-cache measurement refuses to run on them until _LLC_BYTES holds their
+#: validated size, instead of silently evicting only the L2.
+_LLC_CALIBRATION_REQUIRED = frozenset({"cdna3"})
+
+
+class UncalibratedCacheError(RuntimeError):
+    """The eviction size of this architecture's last-level cache is unknown."""
 
 
 class DeviceInfo(NamedTuple):
@@ -75,10 +85,19 @@ def supports_tma() -> bool:
 
 def last_level_cache_bytes() -> int | None:
     """Size of the device-level last-level cache that must be evicted for a
-    cold-entry measurement, or None when it cannot be determined."""
+    cold-entry measurement, or None when it cannot be determined.
+
+    Raises UncalibratedCacheError on an architecture listed in
+    _LLC_CALIBRATION_REQUIRED that has no validated _LLC_BYTES entry."""
     arch = detect_arch()
     if arch in _LLC_BYTES:
         return _LLC_BYTES[arch]
+    if arch in _LLC_CALIBRATION_REQUIRED:
+        raise UncalibratedCacheError(
+            f"{arch.upper()} LLC eviction size has not been calibrated yet. Its runtime L2 is "
+            f"not the last-level cache, so evicting it would not give a cold-cache measurement. "
+            f"Validate the size with an eviction sweep on the hardware and register it in "
+            f"tilebench.hardware._LLC_BYTES[{arch!r}] before any flushed performance run.")
     try:
         import torch
         return torch.cuda.get_device_properties(torch.cuda.current_device()).L2_cache_size

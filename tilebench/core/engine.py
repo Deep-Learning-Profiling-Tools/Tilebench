@@ -24,6 +24,9 @@ HAS_CUDA = torch.cuda.is_available()
 if not HAS_CUDA:
     os.environ.setdefault("NEURON_RT_NUM_CORES", "1")
 
+#: Backends run_benchmark_suite() tries when the caller names none.
+DEFAULT_ENABLED_BACKENDS = ("triton", "cutile", "tilelang", "nki")
+
 
 def _nki_artifact_paths(logs_dir) -> dict:
     """Where the NKI profiling flow keeps its artifacts: inside the run's result
@@ -56,7 +59,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     # Which tile-language backends to run this invocation. torch always runs —
     # it is the speedup baseline. None → all (backward-compatible default).
     if enabled_backends is None:
-        enabled_backends = {"triton", "cutile", "tilelang", "nki"}
+        enabled_backends = set(DEFAULT_ENABLED_BACKENDS)
     else:
         enabled_backends = set(enabled_backends)
 

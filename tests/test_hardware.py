@@ -136,12 +136,41 @@ def test_failed_query_keeps_the_old_fallback(device):
     assert timer._flush_l2_buffer_mb() == flush_mb_before_refactor(None) == 256
 
 
-def test_a_measured_llc_replaces_the_runtime_l2(device, monkeypatch):
-    """How an architecture whose L2 is not the last level (CDNA3) plugs in its
-    measured cache size; no value is registered until it has been measured."""
+def test_hopper_keeps_using_the_runtime_l2(device):
+    device(name="NVIDIA GH200 480GB", capability=(9, 0), l2=60 * MB)
+    assert hardware.last_level_cache_bytes() == 60 * MB
+    assert timer._flush_l2_buffer_mb() == flush_mb_before_refactor(60 * MB) == 120
+
+
+def test_no_llc_value_is_registered_for_any_architecture_yet():
     assert hardware._LLC_BYTES == {}
+    assert hardware._LLC_CALIBRATION_REQUIRED == {"cdna3"}
+
+
+def test_cdna3_without_a_validated_llc_refuses_to_flush(device):
+    device(name="AMD Instinct MI300X", hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
+    msg = "CDNA3 LLC eviction size has not been calibrated yet."
+    with pytest.raises(hardware.UncalibratedCacheError, match=msg):
+        hardware.last_level_cache_bytes()
+    with pytest.raises(hardware.UncalibratedCacheError, match=msg):
+        timer._flush_l2_buffer_mb()                                 # no silent L2 fallback
+    with pytest.raises(hardware.UncalibratedCacheError, match=msg):
+        timer._flush_l2_cache()                                     # before any allocation
+
+
+def test_cdna3_flushed_measurement_fails_before_running_anything(device, monkeypatch):
+    """report_benchmark raises before timing anything when it must flush; the
+    engine does not catch it around the torch baseline, so the run stops."""
     device(hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
-    assert timer._flush_l2_buffer_mb() == flush_mb_before_refactor(4 * MB)   # runtime L2 today
+    calls = []
+    monkeypatch.setattr(timer, "proton", object())                  # never reached
+    with pytest.raises(hardware.UncalibratedCacheError):
+        timer.report_benchmark(lambda: calls.append(1), (), warmup=1, repeat=1, flush_l2=True)
+    assert calls == []
+
+
+def test_cdna3_with_a_validated_llc_uses_it(device, monkeypatch):
+    device(hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
     monkeypatch.setitem(hardware._LLC_BYTES, "cdna3", 300 * MB)   # synthetic, not a spec value
     assert hardware.last_level_cache_bytes() == 300 * MB
     assert timer._flush_l2_buffer_mb() == 600

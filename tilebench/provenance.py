@@ -47,8 +47,10 @@ def _git(repo: Path, *args: str) -> str:
 def source_state(repo: Path = PACKAGE_ROOT) -> dict:
     """Commit and working-tree state of the checkout holding ``repo``.
 
-    dirty: a tracked file outside results/ differs from HEAD (staged or not).
-    Untracked files do not make the tree dirty; they are listed separately."""
+    Paths under results/ are benchmark output and never count.
+    tracked_dirty: a tracked file differs from HEAD (staged or not).
+    dirty: tracked_dirty, or an untracked (not ignored) file exists, since an
+    untracked source file can change what runs just as well."""
     try:
         top = Path(_git(repo, "rev-parse", "--show-toplevel").strip())
         sha = _git(top, "rev-parse", "HEAD").strip()
@@ -60,8 +62,9 @@ def source_state(repo: Path = PACKAGE_ROOT) -> dict:
         changed = [path for code, path in status if code != "??"]
         untracked = [path for code, path in status if code == "??"]
     except Exception as e:  # no git, not a checkout, ...
-        return {"git_sha": None, "dirty": None, "error": f"{type(e).__name__}: {e}".strip()}
-    return {"git_sha": sha, "dirty": bool(changed),
+        return {"git_sha": None, "dirty": None, "tracked_dirty": None,
+                "error": f"{type(e).__name__}: {e}".strip()}
+    return {"git_sha": sha, "dirty": bool(changed or untracked), "tracked_dirty": bool(changed),
             "dirty_files": changed[:_MAX_LISTED], "untracked_files": untracked[:_MAX_LISTED]}
 
 
