@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from core import nki_autotune as na
-from core.nki_autotune import (NkiAutotuner, NkiAutotuneReplayError,
+from tilebench.core import nki_autotune as na
+from tilebench.core.nki_autotune import (NkiAutotuner, NkiAutotuneReplayError,
                                NkiAutotuneSerializationError, canonical_config,
                                canonical_shape_key)
 
