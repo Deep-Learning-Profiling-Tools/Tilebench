@@ -5,12 +5,19 @@
   </picture>
 </h1>
 
+<div align="center">
+
+**TileBench: A Controlled Benchmark for Performance Evaluation and Bottleneck Diagnosis of Tile-Based Programming Models**<br>
+AACL 2026
+
+[<img src="assets/icons/arxiv.svg" height="16" alt=""> Paper](https://arxiv.org/abs/2609.29067) | [<img src="assets/icons/huggingface.svg" height="16" alt=""> NCU Reports](https://huggingface.co/datasets/bcui2/NCU_report) | [<img src="assets/icons/googledrive.svg" height="16" alt=""> LLM Artifacts](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing) | [<img src="assets/icons/github.svg" height="16" alt=""> Raw Logs](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) | [<img src="assets/icons/book.svg" height="16" alt=""> Developer Guide](docs/developer_guide.md)
+
+</div>
+
 ## 👋 Overview
 
 TileBench is a modular accelerator benchmarking framework for comparing kernel implementations under standardized operator semantics, correctness checks, timing protocols, autotuning, and hardware-aware performance metrics.
 It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, and **AWS Neuron NKI** backends.
-
-[<img src="assets/icons/huggingface.svg" height="16" alt=""> NCU Reports](https://huggingface.co/datasets/bcui2/NCU_report) | [<img src="assets/icons/googledrive.svg" height="16" alt=""> LLM Artifacts](https://drive.google.com/file/d/1yBPmzuHMnKeblaK4jd3BPmkxLg9o-Z8v/view?usp=sharing) | [<img src="assets/icons/github.svg" height="16" alt=""> Raw Logs](https://github.com/Deep-Learning-Profiling-Tools/Tilebench/tree/archive/raw-logs-2026-09-18) | [<img src="assets/icons/book.svg" height="16" alt=""> Developer Guide](docs/developer_guide.md)
 
 ![TileBench overview](assets/overview.png)
 
@@ -28,6 +35,7 @@ It currently supports **PyTorch**, **Triton**, **NVIDIA cuTile**, **TileLang**, 
 - [Recorded Results](#-recorded-results)
 - [Developer Guide](#-developer-guide)
 - [Attribution](#-attribution)
+- [Citation](#-citation)
 
 ## ✨ Features
 
@@ -355,3 +363,19 @@ Implementation details, CLI options, operator-authoring rules, tuning convention
 TileBench uses TritonBench and LeetGPU as sources of operator coverage and task semantics. TileBench implementations and configurations are maintained independently in this repository.
 
 Third-party libraries, tools, and dependencies remain governed by their respective licenses and terms.
+
+## 📝 Citation
+
+If you use TileBench in your research, please cite our paper:
+
+```bibtex
+@misc{cui2026tilebenchcontrolledbenchmarkperformance,
+      title={TileBench: A Controlled Benchmark for Performance Evaluation and Bottleneck Diagnosis of Tile-Based Programming Models},
+      author={Bowen Cui and Zhongchun Zhou and Hao Wu and Tejas Ramesh and Junyu Yin and Jialiang Gu and Keren Zhou},
+      year={2026},
+      eprint={2609.29067},
+      archivePrefix={arXiv},
+      primaryClass={cs.PF},
+      url={https://arxiv.org/abs/2609.29067},
+}
+```
