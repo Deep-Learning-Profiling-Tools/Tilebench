@@ -23,8 +23,18 @@ import json
 import os
 import re
 import statistics
+import sys
 from datetime import datetime
-import torch
+
+# Run from anywhere: put the repository root on sys.path so `tilebench` imports
+# without setting PYTHONPATH
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+import torch  # noqa: E402
+
+from tilebench.paths import PEAK_PERFORMANCE_ROOT  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -440,22 +450,24 @@ def main():
             "peak_tflops": round(peak_tflops[dname], 1),
         }
 
-    # Save detailed results to results/peak_performance/<GPU>_peak_performance.json
-    detail_dir = os.path.join(os.path.dirname(__file__), "..", "results", "peak_performance")
+    # Detailed sweep (per-size latency/bandwidth/compute + environment metadata) is a
+    # generated experimental output, not a device specification: it goes to the
+    # git-ignored outputs/ tree, never to results/ or to the package data directory.
+    detail_dir = os.path.join(_REPO_ROOT, "outputs", "peak_performance")
     os.makedirs(detail_dir, exist_ok=True)
     detail_path = os.path.join(detail_dir, f"{gpu_label}_peak_performance.json")
     with open(detail_path, "w") as f:
         json.dump(full_results, f, indent=2)
     print(f"Detailed results saved to {os.path.abspath(detail_path)}")
 
-    # Save summary to data/peak_performance/<GPU>.json
-    # Keys match what core/metrics.py and scripts/visualize.py expect
+    # Concise framework-consumed summary (the roofline ceilings) stays in package data.
+    # Keys match what tilebench/core/metrics.py and scripts/visualize.py expect
     summary = {
         "gpu": gpu_name,
         "peak_bw_GBs": round(peak_hbm_bw, 1),
         "peak_tflops": {k: round(v, 1) for k, v in peak_tflops.items()},
     }
-    summary_dir = os.path.join(os.path.dirname(__file__), "..", "data", "peak_performance")
+    summary_dir = str(PEAK_PERFORMANCE_ROOT)
     os.makedirs(summary_dir, exist_ok=True)
     summary_path = os.path.join(summary_dir, f"{gpu_label}.json")
     with open(summary_path, "w") as f:
