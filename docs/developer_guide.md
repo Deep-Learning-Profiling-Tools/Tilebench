@@ -63,6 +63,20 @@ The backend tag always lists the backends in the canonical order `triton`, `cuti
 
 **Hardware namespaces.** `--gpu` is a label, not a device selector: it names the directory that the results of this machine go to, and `run_bench.py` prints it next to the detected device, with a warning when the label does not appear in the device name. It has no default, so a run on a GH200 or an AMD GPU cannot land in `results/B200/` by omission. There is no list of supported labels; any single path component made of letters, digits, `.`, `_`, `+` or `-` is accepted, so a new GPU needs a new label and no code change. Explicit `--output` and `--autotune-log` paths are respected, while the summary CSV always goes to `results/<gpu>/csv/`.
 
+**Architecture-specific code paths.** Code that depends on the hardware asks `tilebench/hardware.py`, never the `--gpu` label: `detect_arch()` returns `"blackwell"` (sm_100), `"hopper"` (sm_90), `"cdna3"` (gfx942) or `None` (no CUDA/HIP GPU, or a device outside this scope), probed from the actual device on first use and cached; `supports_tmem()` and `supports_tma()` are built on it. Importing the module does not initialise the GPU, and on a host without one every probe returns `None`/`False`. An operator that needs two paths keeps one source file and the same kernel names, and branches in Python before the kernel is built. The declared autotune candidates are identical on every architecture: a candidate that does not compile or run on a device fails and is skipped by the existing error handling, it is never filtered out in advance. The timer evicts `2 x last_level_cache_bytes()` before every warmup and timed launch; that is the runtime L2 size unless a measured device-level cache size is registered for the architecture in `hardware._LLC_BYTES` (empty until measured on the hardware).
+
+**Provenance.** Every run records which source, software stack and device produced it, without changing the result JSON formats. `run_bench.py` writes a sidecar with the same file name as the run's logs, `results/<gpu>/logs/provenance/<op>_<mode>_<backends>.json` (`provenance_log_path`; with an explicit `--output`, next to it as `<output stem>.provenance.json`), and `run_bench_all.py` adds the same record under the `provenance` key of `results/<gpu>/runs/<timestamp>/summary.json`. The record (`tilebench/provenance.py`, schema `tilebench-provenance/1`) is captured before any measurement:
+
+| Block | Fields |
+|---|---|
+| `source` | `git_sha` (full SHA of `HEAD`), `dirty` (a tracked file outside `results/` differs from `HEAD`), `dirty_files`, `untracked_files` (listed, not counted as dirty) |
+| `software` | `python`, `torch`, `torch_cuda`, `torch_hip`, `triton`, `tilelang`, `cuda_tile` (`None` when not installed) |
+| `device` | `requested_label` (`--gpu`), `name`, `vendor`, `arch` (`detect_arch()`), `compute_capability`, `gcn_arch_name` |
+| `host` | `hostname`, `argv` |
+| `run` | `run_bench.py` only: operator, mode, backends, overrides, and the timing log, autotune log and summary CSV it describes |
+
+A field that cannot be determined is `None` (with `source.error` when Git is unavailable); collecting provenance never fails a run. The sidecar lives under `logs/`, so it is Git-ignored and archived with the raw logs.
+
 **What a namespace holds.** The PyTorch, Triton, cuTile and TileLang columns of a CSV under `results/<gpu>/csv/` were measured on that GPU. A TileLang-only run is merged into the existing CSV of the same `--gpu`, leaving the frozen PyTorch, Triton and cuTile columns untouched. A backend that the platform does not support is reported as skipped or failed by the engine, with `nan` latency and `<backend>_ok = false`; never record it as a successful result.
 
 **NKI.** NKI runs on AWS Trainium, not on the GPU. It only runs when named explicitly, and `--gpu` then names the campaign whose record the measurements join, without claiming that NKI ran on that GPU:

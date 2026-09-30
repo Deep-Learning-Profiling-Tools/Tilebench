@@ -15,6 +15,8 @@ from typing import Any, Callable
 
 import torch
 
+from tilebench.hardware import last_level_cache_bytes
+
 try:
     import triton.profiler as proton  # type: ignore
 except ImportError:
@@ -41,12 +43,14 @@ _l2_flush_buf: torch.Tensor | None = None
 
 
 def _flush_l2_buffer_mb() -> int:
-    """Eviction buffer size: 2x the device's own L2, queried at runtime.
+    """Eviction buffer size: 2x the device's last-level cache, queried at runtime.
 
-    Hardcoding a size silently under-evicts on GPUs with a larger L2 than the
-    author assumed (the previous 64 MB constant covered only half of B200's
-    126.5 MB L2, leaving small-input operators warm). Deriving it from
-    cudaDeviceProp keeps the methodology correct across B200 / A100 / GH200.
+    The cache is the one tilebench.hardware.last_level_cache_bytes() reports:
+    the runtime L2 size on NVIDIA (so B200 still evicts 2x its 126.5 MB L2), or
+    a measured device-level LLC for architectures whose L2 is not the last
+    level. Hardcoding a size silently under-evicts on GPUs with a larger cache
+    than the author assumed (the previous 64 MB constant covered only half of
+    B200's 126.5 MB L2, leaving small-input operators warm).
 
     The 2x factor is measured, not assumed: on B200 a 64/128/256/512 MB sweep
     showed 64 MB leaves inputs warm (flash_decode 26.5 -> 45.0 us,
@@ -55,16 +59,15 @@ def _flush_l2_buffer_mb() -> int:
     the cold-entry measurement. Intra-operator producer-consumer reuse is
     unaffected (linear_self_attention is flat across all four sizes).
     """
-    try:
-        l2_bytes = torch.cuda.get_device_properties(
-            torch.cuda.current_device()).L2_cache_size
-    except Exception:
-        l2_bytes = 128 * 1024 * 1024      # conservative fallback
-    return max(64, 2 * l2_bytes // (1024 * 1024))
+    llc_bytes = last_level_cache_bytes()
+    if llc_bytes is None:
+        llc_bytes = 128 * 1024 * 1024     # conservative fallback
+    return max(64, 2 * llc_bytes // (1024 * 1024))
 
 
 def _flush_l2_cache(flush_mb: int | None = None) -> None:
-    """Evict L2 at the operator boundary (never between an operator's kernels)."""
+    """Evict the device's last-level cache at the operator boundary (never
+    between an operator's kernels)."""
     global _l2_flush_buf
     if flush_mb is None:
         flush_mb = _flush_l2_buffer_mb()

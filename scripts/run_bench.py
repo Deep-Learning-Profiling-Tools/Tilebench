@@ -13,8 +13,10 @@ if _REPO_ROOT not in sys.path:
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
 from tilebench.backends import parse_backends  # noqa: E402
+from tilebench import provenance  # noqa: E402
 from tilebench.paths import (autotune_log_path, hardware_label,  # noqa: E402
-                             results_csv_dir, results_logs_dir, timing_log_path)
+                             provenance_log_path, results_csv_dir, results_logs_dir,
+                             timing_log_path)
 
 
 # Display labels for the tile-language backends (torch is the implicit baseline).
@@ -289,9 +291,12 @@ def main():
     output_path = args.output or default_output
     autotune_path = args.autotune_log or default_autotune
 
+    # Captured before any measurement, written beside the logs of this run.
+    run_provenance = provenance.collect(args.gpu)
     device = _detected_device()
     print(f"GPU/result namespace: {args.gpu}"
-          + (f" (detected device: {device})" if device else ""))
+          + (f" (detected device: {device}, arch: {run_provenance['device']['arch']})"
+             if device else ""))
     if device and args.gpu.lower() not in device.lower():
         print(f"Warning: --gpu {args.gpu} does not appear in the detected device name "
               f"'{device}'; results are written to results/{args.gpu}/ regardless")
@@ -326,6 +331,22 @@ def main():
     with open(autotune_path, "w") as f:
         json.dump(autotune_results, f, indent=4)
     print(f"Autotune log    → {autotune_path}")
+
+    # Beside the logs it describes: in the namespace, or next to an explicit --output.
+    mode = "autotune" if args.autotune else "default"
+    provenance_path = (provenance_log_path(args.gpu, args.operator, mode, active)
+                       if args.output is None
+                       else Path(output_path).with_suffix(".provenance.json"))
+    provenance_path.parent.mkdir(parents=True, exist_ok=True)
+    run_provenance["run"] = {
+        "script": "scripts/run_bench.py", "operator": args.operator, "mode": mode,
+        "backends": active, "overrides": overrides,
+        "timing_log": str(output_path), "autotune_log": str(autotune_path),
+        "summary_csv": str(csv_path),
+    }
+    with open(provenance_path, "w") as f:
+        json.dump(run_provenance, f, indent=4)
+    print(f"Provenance      → {provenance_path}")
 
     # Determine which param keys actually vary across ALL cases in this run.
     # Keys that are constant (same value in every case) are hidden to reduce noise.

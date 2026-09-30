@@ -117,6 +117,13 @@ def autotune_log_path(hardware: str, operator: str, mode: str, backends) -> Path
     return results_logs_dir(hardware) / "autotune_logs" / _log_name(operator, mode, backends)
 
 
+def provenance_log_path(hardware: str, operator: str, mode: str, backends) -> Path:
+    """Provenance sidecar of one run (tilebench.provenance): source commit,
+    software stack and device. Same file name as the run's timing and autotune
+    logs, in a directory of its own so the log directories keep their format."""
+    return results_logs_dir(hardware) / "provenance" / _log_name(operator, mode, backends)
+
+
 def profiling_metadata_dir(hardware: str) -> Path:
     return PROFILING_METADATA_ROOT / hardware_label(hardware)
 

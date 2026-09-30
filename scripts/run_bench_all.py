@@ -17,6 +17,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
+from tilebench import provenance  # noqa: E402
 from tilebench.paths import (OPERATOR_ROOT, hardware_label,  # noqa: E402
                              results_logs_dir, results_runs_dir)
 
@@ -158,6 +159,8 @@ def main() -> int:
         "operators_succeeded": [],
         "operators_failed": [],
         "artifacts": {},
+        # source commit, software stack and device, captured before any measurement
+        "provenance": provenance.collect(args.gpu),
     }
 
     print(f"GPU/result namespace: {args.gpu}")
