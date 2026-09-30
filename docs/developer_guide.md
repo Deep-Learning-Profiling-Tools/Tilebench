@@ -340,7 +340,15 @@ tilebench/benchmarks/llm_generated/
 
 Writers should create these directories when needed; a fresh clone must not depend on pre-existing generated directories.
 
-Running a benchmark only writes files under these paths. It performs no Git operation and backs nothing up. The paper's frozen raw logs, LLM trajectories and B200 NCU metadata are preserved on the `archive/raw-logs-2026-09-18` branch.
+Running a benchmark only writes files under these paths. It performs no Git operation and backs nothing up. The paper's frozen raw logs, LLM trajectories and B200 NCU metadata are preserved on the `archive/raw-logs-2026-09-18` branch, which is frozen.
+
+TileBench++ artifacts are archived on `archive/tilebenchpp-2026-10`, by the maintenance tool that lives on that branch only (`scripts/archive_artifacts.sh`, with its tests). It snapshots `results/<gpu>/logs/` (`--logs`, provenance sidecars included), `outputs/profiling/<gpu>/` (`--profiling`) and `tilebench/benchmarks/llm_generated/` (`--llm`); `--all --gpu <gpu>` is all three. `--base` names the source commit the artifacts were produced from; it is recorded as an exact SHA and kept reachable from the archive. A run only adds or updates files, so the artifacts other machines archived are never dropped. Summary CSVs stay on the source branches, and NCU reports (`*.ncu-rep`) go to external storage:
+
+```bash
+git show origin/archive/tilebenchpp-2026-10:scripts/archive_artifacts.sh > /tmp/archive_artifacts.sh
+bash /tmp/archive_artifacts.sh --branch archive/tilebenchpp-2026-10 \
+    --base <source.git_sha of the runs' provenance> --logs --profiling --gpu GH200 --push
+```
 
 ### Publishing a downloadable artifact
 

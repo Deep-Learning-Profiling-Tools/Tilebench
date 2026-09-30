@@ -52,13 +52,13 @@ def source_state(repo: Path = PACKAGE_ROOT) -> dict:
     try:
         top = Path(_git(repo, "rev-parse", "--show-toplevel").strip())
         sha = _git(top, "rev-parse", "HEAD").strip()
-        excludes = [f":(exclude){p}" for p in _DATA_PATHS]
-        changed = [line[3:] for line in _git(
-            top, "status", "--porcelain", "--untracked-files=no", "--", ".", *excludes
-        ).splitlines()]
-        untracked = [line[3:] for line in _git(
-            top, "status", "--porcelain", "--untracked-files=all", "--", ".", *excludes
-        ).splitlines() if line.startswith("??")]
+        # Filtered here rather than with an exclude pathspec, which older Git
+        # (2.27) does not apply to untracked files.
+        status = [(line[:2], line[3:]) for line in _git(
+            top, "status", "--porcelain", "--untracked-files=all").splitlines()
+            if not line[3:].startswith(tuple(f"{p}/" for p in _DATA_PATHS))]
+        changed = [path for code, path in status if code != "??"]
+        untracked = [path for code, path in status if code == "??"]
     except Exception as e:  # no git, not a checkout, ...
         return {"git_sha": None, "dirty": None, "error": f"{type(e).__name__}: {e}".strip()}
     return {"git_sha": sha, "dirty": bool(changed),
@@ -74,12 +74,14 @@ def _distribution_version(name: str) -> str | None:
 
 def _module_version(module: str) -> str | None:
     """Version of whichever distribution provides ``module`` (Triton ships as
-    ``triton`` on CUDA and under another distribution name on ROCm)."""
+    ``triton`` on CUDA and under another distribution name on ROCm), falling
+    back to the distribution named like the module when the installed
+    metadata does not map it (tilelang 0.1.11)."""
     try:
         dists = importlib.metadata.packages_distributions().get(module, [])
     except Exception:
-        return None
-    for dist in dists:
+        dists = []
+    for dist in [*dists, module]:
         version = _distribution_version(dist)
         if version:
             return version

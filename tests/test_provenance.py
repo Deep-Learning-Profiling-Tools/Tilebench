@@ -69,6 +69,14 @@ def test_rewritten_summary_csvs_are_data_not_a_dirty_source(repo):
 
 
 @needs_git
+def test_new_result_files_are_not_listed_as_untracked_source(repo):
+    (repo / "results/SMOKE/csv/op_default.csv").parent.mkdir(parents=True)
+    (repo / "results/SMOKE/csv/op_default.csv").write_text("x\n")
+    state = provenance.source_state(repo)
+    assert state["dirty"] is False and state["untracked_files"] == []
+
+
+@needs_git
 def test_untracked_files_are_listed_but_do_not_make_the_tree_dirty(repo):
     (repo / "tilebench/core/new_helper.py").write_text("x\n")
     state = provenance.source_state(repo)
@@ -99,6 +107,22 @@ def test_software_versions():
     assert sw["python"] == ".".join(map(str, sys.version_info[:3]))
     assert sw["torch"] == torch.__version__
     assert sw["torch_cuda"] == torch.version.cuda and sw["torch_hip"] == torch.version.hip
+
+
+def test_a_distribution_the_metadata_does_not_map_is_found_by_its_module_name(monkeypatch):
+    """tilelang 0.1.11 installs without a module -> distribution mapping."""
+    monkeypatch.setattr(provenance.importlib.metadata, "packages_distributions", lambda: {})
+    monkeypatch.setattr(provenance, "_distribution_version",
+                        lambda name: {"tilelang": "0.1.11"}.get(name))
+    assert provenance._module_version("tilelang") == "0.1.11"
+
+
+def test_a_module_shipped_under_another_distribution_name_is_found(monkeypatch):
+    monkeypatch.setattr(provenance.importlib.metadata, "packages_distributions",
+                        lambda: {"triton": ["pytorch-triton-rocm"]})
+    monkeypatch.setattr(provenance, "_distribution_version",
+                        lambda name: {"pytorch-triton-rocm": "3.3.0"}.get(name))
+    assert provenance._module_version("triton") == "3.3.0"
 
 
 def test_backends_that_are_not_installed_are_none(monkeypatch):
