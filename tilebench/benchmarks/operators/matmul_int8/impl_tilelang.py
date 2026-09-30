@@ -3,6 +3,8 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
+from tilebench.hardware import supports_tmem
+
 from . import impl_torch
 
 
@@ -74,78 +76,146 @@ def matmul_configs():
     ]
 
 
-@tilelang.autotune(
-    configs=matmul_configs(),
-    warmup=3,
-    rep=10,
-    timeout=60,
-    ref_prog=_autotune_ref,
-    manual_check_prog=_autotune_check,
-)
-@tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
-def matmul_kernel(
-    a,
-    b,
-    c,
-    BLOCK_SIZE_M: int = 256,
-    BLOCK_SIZE_N: int = 64,
-    BLOCK_SIZE_K: int = 64,
-    GROUP_SIZE_M: int = 8,
-    threads: int = 128,
-    num_stages: int = 4,
-):
-    M, K, K_b, N = T.const("M, K, K_b, N")
-    a: T.Tensor((M, K), "int8")
-    b: T.Tensor((K_b, N), "uint8")
-    c: T.Tensor((M, N), "int32")
+if supports_tmem():
+    @tilelang.autotune(
+        configs=matmul_configs(),
+        warmup=3,
+        rep=10,
+        timeout=60,
+        ref_prog=_autotune_ref,
+        manual_check_prog=_autotune_check,
+    )
+    @tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
+    def matmul_kernel(
+        a,
+        b,
+        c,
+        BLOCK_SIZE_M: int = 256,
+        BLOCK_SIZE_N: int = 64,
+        BLOCK_SIZE_K: int = 64,
+        GROUP_SIZE_M: int = 8,
+        threads: int = 128,
+        num_stages: int = 4,
+    ):
+        M, K, K_b, N = T.const("M, K, K_b, N")
+        a: T.Tensor((M, K), "int8")
+        b: T.Tensor((K_b, N), "uint8")
+        c: T.Tensor((M, N), "int32")
 
-    with T.Kernel(
-        T.ceildiv(M, BLOCK_SIZE_M),
-        T.ceildiv(N, BLOCK_SIZE_N),
-        threads=threads,
-    ) as (pid_m, pid_n):
-        T.use_swizzle(panel_size=GROUP_SIZE_M, enable=True)
+        with T.Kernel(
+            T.ceildiv(M, BLOCK_SIZE_M),
+            T.ceildiv(N, BLOCK_SIZE_N),
+            threads=threads,
+        ) as (pid_m, pid_n):
+            T.use_swizzle(panel_size=GROUP_SIZE_M, enable=True)
 
-        start_m = pid_m * BLOCK_SIZE_M
-        start_n = pid_n * BLOCK_SIZE_N
+            start_m = pid_m * BLOCK_SIZE_M
+            start_n = pid_n * BLOCK_SIZE_N
 
-        a_shared = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), "int8")
-        b_packed_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
-        b_packed_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
-        b_unpacked_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
-        b_unpacked_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
-        acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
-        acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
-        mbar = T.alloc_barrier(1)
+            a_shared = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), "int8")
+            b_packed_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
+            b_packed_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
+            b_unpacked_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
+            b_unpacked_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
+            acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
+            acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
+            mbar = T.alloc_barrier(1)
 
-        for kb_tile in T.Pipelined(T.ceildiv(K_b, BLOCK_SIZE_K), num_stages=num_stages):
-            T.copy(b[kb_tile * BLOCK_SIZE_K, start_n], b_packed_shared)
-            T.copy(b_packed_shared, b_packed_local)
+            for kb_tile in T.Pipelined(T.ceildiv(K_b, BLOCK_SIZE_K), num_stages=num_stages):
+                T.copy(b[kb_tile * BLOCK_SIZE_K, start_n], b_packed_shared)
+                T.copy(b_packed_shared, b_packed_local)
 
-            for field_i in T.serial(4):
-                k_pos = field_i * K_b + kb_tile * BLOCK_SIZE_K
-                T.copy(a[start_m, k_pos], a_shared)
+                for field_i in T.serial(4):
+                    k_pos = field_i * K_b + kb_tile * BLOCK_SIZE_K
+                    T.copy(a[start_m, k_pos], a_shared)
 
-                for kk, nn in T.Parallel(BLOCK_SIZE_K, BLOCK_SIZE_N):
-                    field = T.bitwise_and(
-                        T.shift_right(T.cast(b_packed_local[kk, nn], "int32"), 2 * field_i),
-                        3,
+                    for kk, nn in T.Parallel(BLOCK_SIZE_K, BLOCK_SIZE_N):
+                        field = T.bitwise_and(
+                            T.shift_right(T.cast(b_packed_local[kk, nn], "int32"), 2 * field_i),
+                            3,
+                        )
+                        b_unpacked_local[kk, nn] = T.cast(field, "int8") - T.cast(1, "int8")
+
+                    T.copy(b_unpacked_local, b_unpacked_shared)
+                    T.sync_threads()
+                    T.gemm(
+                        a_shared,
+                        b_unpacked_shared,
+                        acc_tmem,
+                        mbar=mbar,
+                        clear_accum=kb_tile + field_i == 0,
                     )
-                    b_unpacked_local[kk, nn] = T.cast(field, "int8") - T.cast(1, "int8")
+                    T.sync_threads()
 
-                T.copy(b_unpacked_local, b_unpacked_shared)
-                T.sync_threads()
-                T.gemm(
-                    a_shared,
-                    b_unpacked_shared,
-                    acc_tmem,
-                    mbar=mbar,
-                    clear_accum=kb_tile + field_i == 0,
-                )
-                T.sync_threads()
+            T.copy(acc_tmem, acc)
+            T.copy(acc, c[start_m, start_n])
+else:
+    # Hopper (sm_90) and any other architecture without tensor memory: the int32
+    # accumulator is a register fragment, cleared once before the K loop.
+    @tilelang.autotune(
+        configs=matmul_configs(),
+        warmup=3,
+        rep=10,
+        timeout=60,
+        ref_prog=_autotune_ref,
+        manual_check_prog=_autotune_check,
+    )
+    @tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True})
+    def matmul_kernel(
+        a,
+        b,
+        c,
+        BLOCK_SIZE_M: int = 256,
+        BLOCK_SIZE_N: int = 64,
+        BLOCK_SIZE_K: int = 64,
+        GROUP_SIZE_M: int = 8,
+        threads: int = 128,
+        num_stages: int = 4,
+    ):
+        M, K, K_b, N = T.const("M, K, K_b, N")
+        a: T.Tensor((M, K), "int8")
+        b: T.Tensor((K_b, N), "uint8")
+        c: T.Tensor((M, N), "int32")
 
-        T.copy(acc_tmem, acc)
-        T.copy(acc, c[start_m, start_n])
+        with T.Kernel(
+            T.ceildiv(M, BLOCK_SIZE_M),
+            T.ceildiv(N, BLOCK_SIZE_N),
+            threads=threads,
+        ) as (pid_m, pid_n):
+            T.use_swizzle(panel_size=GROUP_SIZE_M, enable=True)
+
+            start_m = pid_m * BLOCK_SIZE_M
+            start_n = pid_n * BLOCK_SIZE_N
+
+            a_shared = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), "int8")
+            b_packed_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
+            b_packed_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "uint8")
+            b_unpacked_local = T.alloc_fragment((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
+            b_unpacked_shared = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), "int8")
+            acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "int32")
+            T.clear(acc)
+
+            for kb_tile in T.Pipelined(T.ceildiv(K_b, BLOCK_SIZE_K), num_stages=num_stages):
+                T.copy(b[kb_tile * BLOCK_SIZE_K, start_n], b_packed_shared)
+                T.copy(b_packed_shared, b_packed_local)
+
+                for field_i in T.serial(4):
+                    k_pos = field_i * K_b + kb_tile * BLOCK_SIZE_K
+                    T.copy(a[start_m, k_pos], a_shared)
+
+                    for kk, nn in T.Parallel(BLOCK_SIZE_K, BLOCK_SIZE_N):
+                        field = T.bitwise_and(
+                            T.shift_right(T.cast(b_packed_local[kk, nn], "int32"), 2 * field_i),
+                            3,
+                        )
+                        b_unpacked_local[kk, nn] = T.cast(field, "int8") - T.cast(1, "int8")
+
+                    T.copy(b_unpacked_local, b_unpacked_shared)
+                    T.sync_threads()
+                    T.gemm(a_shared, b_unpacked_shared, acc)
+                    T.sync_threads()
+
+            T.copy(acc, c[start_m, start_n])
 
 
 def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,

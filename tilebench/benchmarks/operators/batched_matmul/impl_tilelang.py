@@ -3,6 +3,8 @@ import tilelang
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
 
+from tilebench.hardware import supports_tmem
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 128,
@@ -70,61 +72,108 @@ def bmm_configs():
     ]
 
 
-@tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit(
-    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
-)
-def bmm_kernel(
-    A,
-    B,
-    C,
-    dtype,
-    BLOCK_SIZE_M: int = 64,
-    BLOCK_SIZE_N: int = 64,
-    BLOCK_SIZE_K: int = 32,
-    GROUPSIZE: int = 8,
-    threads: int = 128,
-    num_stages: int = 2,
-):
-    BATCH, M, N, K = T.const("BATCH, M, N, K")
+if supports_tmem():
+    @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+    )
+    def bmm_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        BLOCK_SIZE_M: int = 64,
+        BLOCK_SIZE_N: int = 64,
+        BLOCK_SIZE_K: int = 32,
+        GROUPSIZE: int = 8,
+        threads: int = 128,
+        num_stages: int = 2,
+    ):
+        BATCH, M, N, K = T.const("BATCH, M, N, K")
 
-    A: T.Tensor((BATCH, M, K), dtype)
-    B: T.Tensor((BATCH, K, N), dtype)
-    C: T.Tensor((BATCH, M, N), dtype)
+        A: T.Tensor((BATCH, M, K), dtype)
+        B: T.Tensor((BATCH, K, N), dtype)
+        C: T.Tensor((BATCH, M, N), dtype)
 
-    with T.Kernel(
-        T.ceildiv(M, BLOCK_SIZE_M),
-        T.ceildiv(N, BLOCK_SIZE_N),
-        BATCH,
-        threads=threads,
-    ) as (pid_m, pid_n, pid_b):
-        T.use_swizzle(panel_size=GROUPSIZE, order="row", enable=GROUPSIZE > 1)
+        with T.Kernel(
+            T.ceildiv(M, BLOCK_SIZE_M),
+            T.ceildiv(N, BLOCK_SIZE_N),
+            BATCH,
+            threads=threads,
+        ) as (pid_m, pid_n, pid_b):
+            T.use_swizzle(panel_size=GROUPSIZE, order="row", enable=GROUPSIZE > 1)
 
-        start_m = pid_m * BLOCK_SIZE_M
-        start_n = pid_n * BLOCK_SIZE_N
-        A_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
-        B_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
-        acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
-        use_tmem = dtype != "float32"
-        if use_tmem:
-            acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
-            mbar = T.alloc_barrier(1)
-        else:
+            start_m = pid_m * BLOCK_SIZE_M
+            start_n = pid_n * BLOCK_SIZE_N
+            A_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
+            B_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
+            acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
+            use_tmem = dtype != "float32"
+            if use_tmem:
+                acc_tmem = T.alloc_tmem((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
+                mbar = T.alloc_barrier(1)
+            else:
+                T.clear(acc)
+
+            for k in T.Pipelined(T.ceildiv(K, BLOCK_SIZE_K), num_stages=num_stages):
+                T.copy(A[pid_b, start_m, k * BLOCK_SIZE_K], A_tile)
+                T.copy(B[pid_b, k * BLOCK_SIZE_K, start_n], B_tile)
+                if use_tmem:
+                    T.gemm(A_tile, B_tile, acc_tmem, mbar=mbar, clear_accum=k == 0)
+                    T.sync_threads()
+                else:
+                    T.gemm(A_tile, B_tile, acc)
+
+            if use_tmem:
+                T.sync_threads()
+                T.copy(acc_tmem, acc)
+            T.copy(acc, C[pid_b, start_m, start_n])
+else:
+    # Hopper (sm_90) and any other architecture without tensor memory: every
+    # dtype accumulates in a register fragment, as the fp32 path above does.
+    @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
+    )
+    def bmm_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        BLOCK_SIZE_M: int = 64,
+        BLOCK_SIZE_N: int = 64,
+        BLOCK_SIZE_K: int = 32,
+        GROUPSIZE: int = 8,
+        threads: int = 128,
+        num_stages: int = 2,
+    ):
+        BATCH, M, N, K = T.const("BATCH, M, N, K")
+
+        A: T.Tensor((BATCH, M, K), dtype)
+        B: T.Tensor((BATCH, K, N), dtype)
+        C: T.Tensor((BATCH, M, N), dtype)
+
+        with T.Kernel(
+            T.ceildiv(M, BLOCK_SIZE_M),
+            T.ceildiv(N, BLOCK_SIZE_N),
+            BATCH,
+            threads=threads,
+        ) as (pid_m, pid_n, pid_b):
+            T.use_swizzle(panel_size=GROUPSIZE, order="row", enable=GROUPSIZE > 1)
+
+            start_m = pid_m * BLOCK_SIZE_M
+            start_n = pid_n * BLOCK_SIZE_N
+            A_tile = T.alloc_shared((BLOCK_SIZE_M, BLOCK_SIZE_K), dtype)
+            B_tile = T.alloc_shared((BLOCK_SIZE_K, BLOCK_SIZE_N), dtype)
+            acc = T.alloc_fragment((BLOCK_SIZE_M, BLOCK_SIZE_N), "float32")
             T.clear(acc)
 
-        for k in T.Pipelined(T.ceildiv(K, BLOCK_SIZE_K), num_stages=num_stages):
-            T.copy(A[pid_b, start_m, k * BLOCK_SIZE_K], A_tile)
-            T.copy(B[pid_b, k * BLOCK_SIZE_K, start_n], B_tile)
-            if use_tmem:
-                T.gemm(A_tile, B_tile, acc_tmem, mbar=mbar, clear_accum=k == 0)
-                T.sync_threads()
-            else:
+            for k in T.Pipelined(T.ceildiv(K, BLOCK_SIZE_K), num_stages=num_stages):
+                T.copy(A[pid_b, start_m, k * BLOCK_SIZE_K], A_tile)
+                T.copy(B[pid_b, k * BLOCK_SIZE_K, start_n], B_tile)
                 T.gemm(A_tile, B_tile, acc)
 
-        if use_tmem:
-            T.sync_threads()
-            T.copy(acc_tmem, acc)
-        T.copy(acc, C[pid_b, start_m, start_n])
+            T.copy(acc, C[pid_b, start_m, start_n])
 
 
 def run(

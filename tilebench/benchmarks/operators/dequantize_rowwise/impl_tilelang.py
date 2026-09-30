@@ -1,3 +1,5 @@
+import platform
+
 import torch
 import tilelang
 import tilelang.language as T
@@ -6,6 +8,8 @@ from tilelang.autotuner import set_autotune_inputs
 _DEFAULT_CONFIG = {"CHUNK": 512, "threads": 128}
 _last_autotune_config: dict = {}
 _INV_127 = 1.0 / 127.0
+# int8 signedness on the device follows the host ABI (see the aarch64 kernel).
+_EXPLICIT_INT8_SIGN_EXTENSION = platform.machine() in ("aarch64", "arm64")
 
 
 def dequantize_rowwise_configs():
@@ -18,28 +22,57 @@ def dequantize_rowwise_configs():
     ]
 
 
-@tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
-def dequantize_rowwise_kernel(
-    x, state_x, output, in_dtype, state_dtype, out_dtype,
-    CHUNK: int = 512, threads: int = 128,
-):
-    rows = T.dynamic("rows")
-    cols = T.const("cols")
-    x: T.Tensor((rows, cols), in_dtype)
-    state_x: T.Tensor((rows,), state_dtype)
-    output: T.Tensor((rows, cols), out_dtype)
+if not _EXPLICIT_INT8_SIGN_EXTENSION:
+    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.jit
+    def dequantize_rowwise_kernel(
+        x, state_x, output, in_dtype, state_dtype, out_dtype,
+        CHUNK: int = 512, threads: int = 128,
+    ):
+        rows = T.dynamic("rows")
+        cols = T.const("cols")
+        x: T.Tensor((rows, cols), in_dtype)
+        state_x: T.Tensor((rows,), state_dtype)
+        output: T.Tensor((rows, cols), out_dtype)
 
-    with T.Kernel(rows, T.ceildiv(cols, CHUNK), threads=threads) as (row, chunk):
-        col_start = chunk * CHUNK
-        x_local = T.alloc_fragment((CHUNK,), in_dtype)
-        y_local = T.alloc_fragment((CHUNK,), out_dtype)
-        scale = T.cast(state_x[row], "float32") * _INV_127
+        with T.Kernel(rows, T.ceildiv(cols, CHUNK), threads=threads) as (row, chunk):
+            col_start = chunk * CHUNK
+            x_local = T.alloc_fragment((CHUNK,), in_dtype)
+            y_local = T.alloc_fragment((CHUNK,), out_dtype)
+            scale = T.cast(state_x[row], "float32") * _INV_127
 
-        T.copy(x[row, col_start:col_start + CHUNK], x_local)
-        for i in T.Parallel(CHUNK):
-            y_local[i] = T.cast(x_local[i], "float32") * scale
-        T.copy(y_local, output[row, col_start:col_start + CHUNK])
+            T.copy(x[row, col_start:col_start + CHUNK], x_local)
+            for i in T.Parallel(CHUNK):
+                y_local[i] = T.cast(x_local[i], "float32") * scale
+            T.copy(y_local, output[row, col_start:col_start + CHUNK])
+else:
+    # aarch64: the host ABI makes plain `char` unsigned, and TileLang lowers the
+    # vectorized int8 -> float32 cast through `(char)`, which then drops the sign.
+    # Read the raw byte as uint8 and sign-extend it explicitly (two's complement).
+    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.jit
+    def dequantize_rowwise_kernel(
+        x, state_x, output, in_dtype, state_dtype, out_dtype,
+        CHUNK: int = 512, threads: int = 128,
+    ):
+        rows = T.dynamic("rows")
+        cols = T.const("cols")
+        x: T.Tensor((rows, cols), in_dtype)
+        state_x: T.Tensor((rows,), state_dtype)
+        output: T.Tensor((rows, cols), out_dtype)
+
+        with T.Kernel(rows, T.ceildiv(cols, CHUNK), threads=threads) as (row, chunk):
+            col_start = chunk * CHUNK
+            x_local = T.alloc_fragment((CHUNK,), in_dtype)
+            y_local = T.alloc_fragment((CHUNK,), out_dtype)
+            scale = T.cast(state_x[row], "float32") * _INV_127
+
+            T.copy(x[row, col_start:col_start + CHUNK], x_local)
+            for i in T.Parallel(CHUNK):
+                byte = T.cast(T.reinterpret(x_local[i], "uint8"), "int32")
+                value = T.if_then_else(byte >= 128, byte - 256, byte)
+                y_local[i] = T.cast(value, "float32") * scale
+            T.copy(y_local, output[row, col_start:col_start + CHUNK])
 
 
 def run(x: torch.Tensor, state_x: torch.Tensor, autotune: bool = False, **kwargs) -> torch.Tensor:

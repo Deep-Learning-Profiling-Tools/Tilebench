@@ -4,6 +4,8 @@ from triton import language as tl
 from triton.testing import do_bench
 from triton.tools.tensor_descriptor import TensorDescriptor
 
+from tilebench.hardware import detect_arch
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 64, "GROUP_M": 8,
@@ -22,6 +24,22 @@ _SEARCH_SPACE = [
 
 
 _DT_IDS = {torch.float16: 0, torch.bfloat16: 1, torch.float32: 2}
+
+
+# fp32 on Hopper: the 128x128x64 default tile needs 262168 B of shared memory,
+# above sm_90's 232448 B per-block limit. Only BLOCK_K drops to 32, which gives
+# a config already in _SEARCH_SPACE: a legality fallback, not a tuned choice.
+_HOPPER_FP32_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "BLOCK_K": 32}
+_BUILTIN_DEFAULT_CONFIG = _DEFAULT_CONFIG
+
+
+def _default_config(dtype) -> dict:
+    # A config written into _DEFAULT_CONFIG (the NCU harness replaying an
+    # autotune winner) is used as given.
+    if (_DEFAULT_CONFIG is _BUILTIN_DEFAULT_CONFIG and dtype == torch.float32
+            and detect_arch() == "hopper"):
+        return _HOPPER_FP32_DEFAULT_CONFIG
+    return _DEFAULT_CONFIG
 
 
 _autotune_cache: dict = {}
@@ -236,7 +254,7 @@ def run(a: torch.Tensor, b: torch.Tensor,
         _last_autotune_config.clear()
         _last_autotune_config.update(cfg)
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = _default_config(a.dtype)
     BLK_M, BLK_N = cfg["BLOCK_M"], cfg["BLOCK_N"]
 
 
