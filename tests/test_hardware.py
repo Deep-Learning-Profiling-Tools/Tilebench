@@ -142,13 +142,22 @@ def test_hopper_keeps_using_the_runtime_l2(device):
     assert timer._flush_l2_buffer_mb() == flush_mb_before_refactor(60 * MB) == 120
 
 
-def test_no_llc_value_is_registered_for_any_architecture_yet():
-    assert hardware._LLC_BYTES == {}
+def test_only_the_calibrated_cdna3_llc_is_registered():
+    """256 MiB is the MI300X Infinity Cache validated by the eviction sweep
+    (see hardware._LLC_BYTES); no NVIDIA architecture has an entry."""
+    assert hardware._LLC_BYTES == {"cdna3": 256 * MB}
     assert hardware._LLC_CALIBRATION_REQUIRED == {"cdna3"}
 
 
-def test_cdna3_without_a_validated_llc_refuses_to_flush(device):
+def test_cdna3_uses_the_calibrated_llc(device):
     device(name="AMD Instinct MI300X", hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
+    assert hardware.last_level_cache_bytes() == 256 * MB            # not the 4 MiB runtime L2
+    assert timer._flush_l2_buffer_mb() == 512                        # 2x the LLC
+
+
+def test_cdna3_without_a_validated_llc_refuses_to_flush(device, monkeypatch):
+    device(name="AMD Instinct MI300X", hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
+    monkeypatch.delitem(hardware._LLC_BYTES, "cdna3")               # an uncalibrated arch
     msg = "CDNA3 LLC eviction size has not been calibrated yet."
     with pytest.raises(hardware.UncalibratedCacheError, match=msg):
         hardware.last_level_cache_bytes()
@@ -162,6 +171,7 @@ def test_cdna3_flushed_measurement_fails_before_running_anything(device, monkeyp
     """report_benchmark raises before timing anything when it must flush; the
     engine does not catch it around the torch baseline, so the run stops."""
     device(hip="6.2", gcn="gfx942:sramecc+:xnack-", l2=4 * MB)
+    monkeypatch.delitem(hardware._LLC_BYTES, "cdna3")               # an uncalibrated arch
     calls = []
     monkeypatch.setattr(timer, "proton", object())                  # never reached
     with pytest.raises(hardware.UncalibratedCacheError):
