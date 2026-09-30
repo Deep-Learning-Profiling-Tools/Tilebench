@@ -1,3 +1,7 @@
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -11,210 +15,124 @@ try:
 except ImportError:
     nki = None
 
-# Hardware constants (NeuronCore-v2/v3): SBUF partition count and the maximum
-# free-dimension size of an ``nc_matmul`` moving tile (== one fp32 PSUM bank).
 P_MAX = 128
-MOVING_FMAX = 512
-
-# Additive penalty applied to the log-sum-exp of out-of-range blocks. It has to
-# be large enough that ``exp(lse - max)`` underflows to exactly 0 in fp32, while
-# staying well inside the fp32 range so the subsequent subtraction cannot
-# overflow to -inf (which would produce NaNs in the exponential).
 NEG_BIG = 1.0e30
 
 
-def kernel_assert(condition: bool, error_text: str):
-    """Assert with NKI-formatted error message."""
-    assert condition, f"[INTERNAL_ERROR] [NCC_INKI016] Kernel validation exception: {error_text}"
-
-
-def div_ceil(n: int, d: int) -> int:
-    """Ceiling division: smallest integer >= n/d."""
-    return (n + d - 1) // d
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
 
 
 if nki is not None:
     @nki.jit
-    def flash_decode_kernel(mid_o_t, mid_o_lse, valid_blocks, block_size_seq):
-        """Flash-decode stage-2 combine for a single (batch, head) pair.
+    def flash_decode_kernel(mid_o, mid_o_lse, valid_blocks, block_chunk):
+        B, H, NB, D = mid_o.shape
+        assert D <= 512 and block_chunk <= P_MAX
+        out = nl.ndarray((B, H, D), dtype=mid_o.dtype, buffer=nl.shared_hbm)
 
-        Merges the ``num_blocks`` partial attention outputs produced by stage 1
-        into a single ``[head_dim, 1]`` result, weighting each block by a
-        numerically-stable softmax over its log-sum-exp::
+        pairs = B * H
+        n_prog = nl.num_programs()
+        pid = nl.program_id(0)
+        per_core = (pairs + n_prog - 1) // n_prog
+        p_lo = min(pairs, pid * per_core)
+        p_hi = min(pairs, p_lo + per_core)
 
-            mask   = arange(num_blocks) < valid_blocks
-            lse    = where(mask, mid_o_lse, -inf)
-            w      = where(mask, exp(lse - max(lse)), 0)
-            out[d] = sum_k mid_o_t[d, k] * w[k] / (sum_k w[k] + 1e-10)
-
-        Args:
-            mid_o_t: per-block partial outputs [head_dim, num_blocks] in HBM,
-                already transposed so that ``head_dim`` is the partition axis.
-            mid_o_lse: per-block log-sum-exp [1, num_blocks] in HBM.
-            valid_blocks: [1, 1] fp32 tensor holding the number of blocks that
-                actually contain data for this sequence. Its value is a runtime
-                (not compile-time) quantity, so the masking is done with an
-                ``iota``/compare on device rather than by sizing the tiles.
-
-        Returns:
-            [head_dim, 1] tensor in HBM with the same dtype as ``mid_o_t``.
-
-        Notes:
-            * Everything up to the softmax lives on a single partition
-              (``[1, num_blocks]`` tiles), so ``valid_blocks`` and the running
-              ``max``/``sum`` are ``[1, 1]`` tiles fed to ``tensor_scalar`` as
-              per-partition scalar operands -- the hardware broadcasts them
-              along the free axis for free.
-            * The normalized weights do need a genuine *partition* broadcast
-              (1 -> ``head_dim`` partitions) before they can be multiplied into
-              ``mid_o_t``. That is done with a single ``nc_matmul`` against a
-              row of ones (``ones[1, head_dim]^T @ w[1, K] -> [head_dim, K]``),
-              chunked to the 512-wide PSUM bank.
-            * Dividing by the softmax denominator is folded into the weights
-              while they are still a ``[1, num_blocks]`` row, so no second
-              partition broadcast is needed for it.
-        """
-        kernel_assert(len(mid_o_t.shape) == 2, "mid_o_t must be 2D [head_dim, num_blocks]")
-        head_dim, num_blocks = mid_o_t.shape
-        kernel_assert(head_dim <= P_MAX, "head_dim exceeds the SBUF partition count")
-        kernel_assert(num_blocks <= nl.tile_size.sbuf_fmax,
-                      "num_blocks exceeds the SBUF free dimension")
-
-        out_hbm = nl.ndarray((head_dim, 1), dtype=mid_o_t.dtype, buffer=nl.shared_hbm)
-
-        n_blk_tiles = div_ceil(num_blocks, block_size_seq)
-
-        # ---- block index row: 0, 1, ..., num_blocks - 1 (free axis) ---------
-        block_iota = nl.ndarray((1, num_blocks), dtype=nl.int32, buffer=nl.sbuf)
-        nisa.iota(dst=block_iota, pattern=[[1, num_blocks]], offset=0, channel_multiplier=0)
-
-        block_iota_f = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
+        block_iota = nl.ndarray((1, NB), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.iota(dst=block_iota, pattern=[[1, NB]], offset=0, channel_multiplier=0)
+        block_iota_f = nl.ndarray((1, NB), dtype=nl.float32, buffer=nl.sbuf)
         nisa.tensor_copy(dst=block_iota_f, src=block_iota)
+        one = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
+        nisa.memset(dst=one, value=1.0)
+        n_chunks = (NB + block_chunk - 1) // block_chunk
 
-        # ---- mask = block_index < valid_blocks (1.0 / 0.0) ------------------
-        valid_raw = nl.ndarray((1, 1), dtype=valid_blocks.dtype, buffer=nl.sbuf)
-        nisa.dma_copy(dst=valid_raw, src=valid_blocks[0:1, 0:1])
+        for p in range(p_lo, p_hi):
+            b = p // H
 
-        valid_f = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_copy(dst=valid_f, src=valid_raw)
+            valid_f = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.dma_copy(dst=valid_f, src=valid_blocks.ap(pattern=[[1, 1], [1, 1]], offset=b))
+            mask = nl.ndarray((1, NB), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=mask, data=block_iota_f, op0=nl.less, operand0=valid_f)
 
-        mask = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_scalar(dst=mask, data=block_iota_f, op0=nl.less, operand0=valid_f)
+            lse_raw = nl.ndarray((1, NB), dtype=mid_o_lse.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=lse_raw, src=mid_o_lse.ap(pattern=[[NB, 1], [1, NB]], offset=p * NB))
+            lse = nl.ndarray((1, NB), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=lse, src=lse_raw)
 
-        # ---- masked log-sum-exp row ----------------------------------------
-        lse_raw = nl.ndarray((1, num_blocks), dtype=mid_o_lse.dtype, buffer=nl.sbuf)
-        nisa.dma_copy(dst=lse_raw, src=mid_o_lse[0:1, 0:num_blocks])
+            penalty = nl.ndarray((1, NB), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=penalty, data=mask, op0=nl.subtract, operand0=1.0,
+                               op1=nl.multiply, operand1=NEG_BIG)
+            nisa.tensor_tensor(dst=lse, data1=lse, data2=mask, op=nl.multiply)
+            nisa.tensor_tensor(dst=lse, data1=lse, data2=penalty, op=nl.add)
 
-        lse_f = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_copy(dst=lse_f, src=lse_raw)
+            gmax = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=gmax, op=nl.maximum, data=lse, axis=(1,))
+            w = nl.ndarray((1, NB), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_scalar(dst=w, data=lse, op0=nl.subtract, operand0=gmax)
+            nisa.activation(dst=w, op=nl.exp, data=w)
+            nisa.tensor_tensor(dst=w, data1=w, data2=mask, op=nl.multiply)
+            denom = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.tensor_reduce(dst=denom, op=nl.add, data=w, axis=(1,))
+            nisa.tensor_scalar(dst=denom, data=denom, op0=nl.add, operand0=1.0e-10)
+            inv = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
+            nisa.reciprocal(dst=inv, data=denom)
+            nisa.tensor_scalar(dst=w, data=w, op0=nl.multiply, operand0=inv)
 
-        # masked_lse = lse * mask + (mask - 1) * NEG_BIG
-        #            = lse            where valid
-        #            = -NEG_BIG       where invalid
-        penalty = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_scalar(dst=penalty, data=mask,
-                           op0=nl.subtract, operand0=1.0,
-                           op1=nl.multiply, operand1=NEG_BIG)
+            acc = nl.ndarray((1, D), dtype=nl.float32, buffer=nl.psum)
+            for c in range(n_chunks):
+                c0 = c * block_chunk
+                cs = min(block_chunk, NB - c0)
+                wcol_ps = nl.ndarray((cs, 1), dtype=nl.float32, buffer=nl.psum)
+                nisa.nc_matmul(dst=wcol_ps, stationary=w[0:1, c0:c0 + cs], moving=one)
+                wcol = nl.ndarray((cs, 1), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.tensor_copy(dst=wcol, src=wcol_ps)
+                mo = nl.ndarray((cs, D), dtype=mid_o.dtype, buffer=nl.sbuf)
+                nisa.dma_copy(dst=mo, src=mid_o.ap(pattern=[[D, cs], [1, D]], offset=(p * NB + c0) * D))
+                nisa.nc_matmul(dst=acc, stationary=wcol, moving=mo, accumulate=(c > 0))
 
-        masked_lse = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_tensor(dst=masked_lse, data1=lse_f, data2=mask, op=nl.multiply)
-        nisa.tensor_tensor(dst=masked_lse, data1=masked_lse, data2=penalty, op=nl.add)
+            res = nl.ndarray((1, D), dtype=mid_o.dtype, buffer=nl.sbuf)
+            nisa.tensor_copy(dst=res, src=acc)
+            nisa.dma_copy(dst=out.ap(pattern=[[D, 1], [1, D]], offset=p * D), src=res)
 
-        # ---- stable softmax over the valid blocks ---------------------------
-        global_max = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_reduce(dst=global_max, op=nl.maximum, data=masked_lse, axis=(1,))
-
-        shifted = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_scalar(dst=shifted, data=masked_lse, op0=nl.subtract, operand0=global_max)
-
-        weights = nl.ndarray((1, num_blocks), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.activation(dst=weights, op=nl.exp, data=shifted)
-        # Re-mask: exp() of the penalized entries already underflows to 0, but
-        # forcing it keeps the semantics exact regardless of the lse magnitudes.
-        nisa.tensor_tensor(dst=weights, data1=weights, data2=mask, op=nl.multiply)
-
-        denom = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_reduce(dst=denom, op=nl.add, data=weights, axis=(1,))
-        nisa.tensor_scalar(dst=denom, data=denom, op0=nl.add, operand0=1.0e-10)
-
-        inv_denom = nl.ndarray((1, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.reciprocal(dst=inv_denom, data=denom)
-
-        # Fold the normalization into the weight row while it is still a single
-        # partition, so only one partition broadcast is needed below.
-        nisa.tensor_scalar(dst=weights, data=weights, op0=nl.multiply, operand0=inv_denom)
-
-        # ---- combine: out[d] = sum_k mid_o_t[d, k] * weights[k] -------------
-        ones_row = nl.ndarray((1, head_dim), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.memset(dst=ones_row, value=1.0)
-
-        acc = nl.ndarray((head_dim, 1), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.memset(dst=acc, value=0.0)
-
-        for blk_tile in range(n_blk_tiles):
-            blk_start = blk_tile * block_size_seq
-            blk_size = min(block_size_seq, num_blocks - blk_start)
-            blk_end = blk_start + blk_size
-
-            # partition broadcast: [1, blk_size] -> [head_dim, blk_size]
-            psum_w = nl.ndarray((head_dim, blk_size), dtype=nl.float32, buffer=nl.psum)
-            nisa.nc_matmul(dst=psum_w, stationary=ones_row,
-                           moving=weights[0:1, blk_start:blk_end])
-
-            weights_bcast = nl.ndarray((head_dim, blk_size), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_copy(dst=weights_bcast, src=psum_w)
-
-            mo_tile = nl.ndarray((head_dim, blk_size), dtype=mid_o_t.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=mo_tile, src=mid_o_t[0:head_dim, blk_start:blk_end])
-
-            weighted = nl.ndarray((head_dim, blk_size), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=weighted, data1=mo_tile, data2=weights_bcast,
-                               op=nl.multiply)
-
-            part = nl.ndarray((head_dim, 1), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_reduce(dst=part, op=nl.add, data=weighted, axis=(1,))
-            nisa.tensor_tensor(dst=acc, data1=acc, data2=part, op=nl.add)
-
-        out_tile = nl.ndarray((head_dim, 1), dtype=mid_o_t.dtype, buffer=nl.sbuf)
-        nisa.tensor_copy(dst=out_tile, src=acc)
-        nisa.dma_copy(dst=out_hbm[0:head_dim, 0:1], src=out_tile)
-
-        return out_hbm
+        return out
 
 
-_DEFAULT_CONFIG = SimpleNamespace(block_size_seq=MOVING_FMAX)
-_SEARCH_SPACE = [SimpleNamespace(block_size_seq=b) for b in (128, 256, 512)]
-_tuner = NkiAutotuner(flash_decode_kernel) if nki is not None else None
+_DEFAULT_CONFIG = SimpleNamespace(block_chunk=P_MAX)
+_SEARCH_SPACE = [SimpleNamespace(block_chunk=b) for b in (32, 64, 128)]
+_LNC = _lnc_degree()
+_kernel = flash_decode_kernel[_LNC] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
 def run(mid_o: torch.Tensor, mid_o_lse: torch.Tensor, b_seqlen: torch.Tensor,
         block_seq, block_size: int = None, autotune: bool = False, **kwargs) -> torch.Tensor:
-    if isinstance(block_seq, torch.Tensor):
-        block_seq = block_seq.item()
-
-    batch, heads, num_blocks, head_dim = mid_o.shape
-    valid_blocks_count = ((b_seqlen + block_seq - 1) // block_seq).to(torch.float32).reshape(batch, 1, 1)
-
-    mid_o_t = mid_o.permute(0, 1, 3, 2).contiguous()
-    lse_2d = mid_o_lse.reshape(batch, heads, 1, num_blocks)
-
+    batch = mid_o.shape[0]
+    valid = ((b_seqlen + block_seq - 1) // block_seq).to(torch.float32).reshape(batch, 1)
     if autotune:
         cfg = _tuner.tune_or_cached(
-            shape_key=(tuple(mid_o_t.shape), str(mid_o_t.dtype)),
+            shape_key=(tuple(mid_o.shape), str(mid_o.dtype)),
             search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (mid_o_t[0, 0], lse_2d[0, 0], valid_blocks_count[0], cfg.block_size_seq),
+            args_fn=lambda cfg: (mid_o, mid_o_lse, valid, cfg.block_chunk),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    out = torch.empty(batch, heads, head_dim, dtype=mid_o.dtype, device=mid_o.device)
-    for b in range(batch):
-        for h in range(heads):
-            res = flash_decode_kernel(mid_o_t[b, h], lse_2d[b, h], valid_blocks_count[b], cfg.block_size_seq)
-            out[b, h, :] = res.reshape(-1)
-    return out
+    return _kernel(mid_o, mid_o_lse, valid, cfg.block_chunk)
 
 
 def get_last_config() -> dict | None:
