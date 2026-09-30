@@ -26,6 +26,8 @@ _matrix_copy_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(matrix_copy_kernel)
 
 

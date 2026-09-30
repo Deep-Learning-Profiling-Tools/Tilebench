@@ -13,7 +13,7 @@ def vector_add_configs():
         for nt in threads
     ]
 
-@tilelang.autotune(configs=vector_add_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=vector_add_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 
 def add_kernel(x, y, output, dtype, BLOCK_SIZE: int =  1024, threads: int = 128 ):

@@ -16,7 +16,7 @@ def rope_config():
     ]
 
 
-@tilelang.autotune(configs=rope_config(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=rope_config(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def rope_embedding(Q, cos, sin, dtype, seq_len,
                    ROPE_GROUP_SIZE: int = 16,

@@ -25,6 +25,8 @@ _sigmoid_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["n_elements"],
+    warmup=1,
+    rep=3,
 )(sigmoid_kernel)
 
 

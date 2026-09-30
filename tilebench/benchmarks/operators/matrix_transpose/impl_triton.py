@@ -38,6 +38,8 @@ _transpose_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["m", "n"],
+    warmup=1,
+    rep=3,
 )(transpose_kernel)
 
 

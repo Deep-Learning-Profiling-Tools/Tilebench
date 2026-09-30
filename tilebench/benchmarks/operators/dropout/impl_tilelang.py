@@ -17,7 +17,7 @@ def dropout_configs():
     ]
 
 
-@tilelang.autotune(configs=dropout_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=dropout_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def dropout_kernel(x, x_keep, output, dtype, p: float, BLOCK_SIZE: int = 1024, threads: int = 128):
     n_elements = T.const("n_elements")

@@ -19,7 +19,7 @@ def jacobi_stencil_configs():
         for bc in BLOCK_SIZE_C
         for nt in threads
     ]
-@tilelang.autotune(configs=jacobi_stencil_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=jacobi_stencil_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def jacobi_stencil_kernel(input, output, dtype,
                           BLOCK_SIZE_R: int = 1, 

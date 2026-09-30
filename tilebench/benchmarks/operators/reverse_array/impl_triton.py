@@ -24,6 +24,8 @@ _reverse_kernel_autotuned = triton.autotune(
 
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(reverse_kernel)
 
 

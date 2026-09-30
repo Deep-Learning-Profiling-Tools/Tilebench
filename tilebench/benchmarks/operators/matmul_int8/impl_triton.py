@@ -103,8 +103,8 @@ matmul_kernel_autotuned = triton.autotune(
         if (bm * bk + bn * bk) * ns + bm * bn * 4 <= 220_000
     ],
     key=["M", "N", "K"],
-    warmup=3,
-    rep=10,
+    warmup=1,
+    rep=3,
 )(matmul_kernel)
 
 

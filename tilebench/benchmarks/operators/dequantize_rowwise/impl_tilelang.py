@@ -23,7 +23,7 @@ def dequantize_rowwise_configs():
 
 
 if not _EXPLICIT_INT8_SIGN_EXTENSION:
-    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=1, rep=3, timeout=60)
     @tilelang.jit
     def dequantize_rowwise_kernel(
         x, state_x, output, in_dtype, state_dtype, out_dtype,
@@ -49,7 +49,7 @@ else:
     # aarch64: the host ABI makes plain `char` unsigned, and TileLang lowers the
     # vectorized int8 -> float32 cast through `(char)`, which then drops the sign.
     # Read the raw byte as uint8 and sign-extend it explicitly (two's complement).
-    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=1, rep=3, timeout=60)
     @tilelang.jit
     def dequantize_rowwise_kernel(
         x, state_x, output, in_dtype, state_dtype, out_dtype,

@@ -52,6 +52,8 @@ _layernorm_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["N_SIZE"],
+    warmup=1,
+    rep=3,
 )(layernorm_kernel)
 
 

@@ -56,6 +56,8 @@ _rope_embedding_autotuned = triton.autotune(
         for ns in [2, 3]
     ],
     key=["seqlen", "head_dim"],
+    warmup=1,
+    rep=3,
     restore_value=["Q"],
 )(rope_embedding)
 

@@ -17,7 +17,7 @@ def interleave_configs():
     ]
 
 
-@tilelang.autotune(configs=interleave_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=interleave_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def interleave_kernel(A, B, output, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     n_elements = T.const("n_elements")

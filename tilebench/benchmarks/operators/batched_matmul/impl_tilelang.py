@@ -73,7 +73,7 @@ def bmm_configs():
 
 
 if supports_tmem():
-    @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.autotune(configs=bmm_configs(), warmup=1, rep=3, timeout=60)
     @tilelang.jit(
         pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
     )
@@ -131,7 +131,7 @@ if supports_tmem():
 else:
     # Hopper (sm_90) and any other architecture without tensor memory: every
     # dtype accumulates in a register fragment, as the fp32 path above does.
-    @tilelang.autotune(configs=bmm_configs(), warmup=20, rep=100, timeout=60)
+    @tilelang.autotune(configs=bmm_configs(), warmup=1, rep=3, timeout=60)
     @tilelang.jit(
         pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
     )

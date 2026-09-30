@@ -22,7 +22,7 @@ def destindex_config():
     ]
 
 
-@tilelang.autotune(configs=destindex_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=destindex_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def copy_by_dest_kernel(
         kv,

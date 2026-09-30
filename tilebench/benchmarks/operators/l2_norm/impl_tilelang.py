@@ -19,7 +19,7 @@ def l2_norm_fwd_configs():
     ]
 
 
-@tilelang.autotune(configs=l2_norm_fwd_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=l2_norm_fwd_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def l2_norm_fwd_kernel(X, Y, dtype, eps,
                        BLOCK_N: int = 1024, threads: int = 128,

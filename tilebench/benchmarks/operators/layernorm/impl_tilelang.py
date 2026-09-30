@@ -19,7 +19,7 @@ def layernorm_configs():
     ]
 
 
-@tilelang.autotune(configs=layernorm_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=layernorm_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def layernorm_kernel(X, weight, bias, Y, dtype, eps,
                      BLOCK_N: int = 1024, threads: int = 256,

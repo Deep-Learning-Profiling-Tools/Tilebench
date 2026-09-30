@@ -54,6 +54,8 @@ _max_pool2d_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["H_out", "W_out", "kernel_size", "stride", "padding"],
+    warmup=1,
+    rep=3,
 )(max_pool2d_kernel)
 
 

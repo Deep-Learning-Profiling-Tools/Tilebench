@@ -79,8 +79,8 @@ def matmul_configs():
 if supports_tmem():
     @tilelang.autotune(
         configs=matmul_configs(),
-        warmup=3,
-        rep=10,
+        warmup=1,
+        rep=3,
         timeout=60,
         ref_prog=_autotune_ref,
         manual_check_prog=_autotune_check,
@@ -154,8 +154,8 @@ else:
     # accumulator is a register fragment, cleared once before the K loop.
     @tilelang.autotune(
         configs=matmul_configs(),
-        warmup=3,
-        rep=10,
+        warmup=1,
+        rep=3,
         timeout=60,
         ref_prog=_autotune_ref,
         manual_check_prog=_autotune_check,

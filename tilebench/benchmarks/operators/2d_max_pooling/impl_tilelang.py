@@ -16,7 +16,7 @@ def max_pool2d_config():
     ]
 
 
-@tilelang.autotune(configs=max_pool2d_config(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=max_pool2d_config(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def max_pool2d_kernel(input, output, N, C, H, W, kernel_size, dtype,
                       stride, padding,

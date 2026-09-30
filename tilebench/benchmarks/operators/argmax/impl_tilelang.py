@@ -19,7 +19,7 @@ def argmax_rowwise_config():
     ]
 
 
-@tilelang.autotune(configs=argmax_rowwise_config(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=argmax_rowwise_config(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def argmax_rowwise_kernel(X, Out, dtype, BLOCK_N: int = 256, threads: int = 128, num_stages: int = 2):
     M = T.dynamic("M")
