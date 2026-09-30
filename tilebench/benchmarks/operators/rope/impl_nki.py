@@ -1,3 +1,7 @@
+import functools
+import os
+import re
+import subprocess
 from types import SimpleNamespace
 
 import torch
@@ -11,99 +15,108 @@ try:
     PMAX = nl.tile_size.pmax
 except ImportError:
     nki = None
+    PMAX = 128
+
+
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    if match:
+        return int(match.group(1))
+    try:
+        out = subprocess.run(["neuron-ls"], capture_output=True, text=True, timeout=10).stdout
+        lnc = re.search(r"logical-neuroncore-config:\s*(\d+)", out)
+        if lnc:
+            return int(lnc.group(1))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 1
+
 
 if nki is not None:
     @nki.jit
-    def rope_kernel(q, cos, sin, block_size):
-        """Rotary position embedding for one (seq_len, head_dim) slice of q.
+    def rope_kernel(q, cos, sin, group_size):
+        B, S, H, D = q.shape
+        half = D // 2
+        T = B * S
+        row = H * D
+        out = nl.ndarray((B, S, H, D), dtype=q.dtype, buffer=nl.shared_hbm)
 
-        cos/sin are (seq_len, head_dim // 2) -- the same shape as each half of q,
-        so this is a plain elementwise op, no broadcast needed.
+        n_tiles = (T + PMAX - 1) // PMAX
+        n_prog = nl.num_programs()
+        pid = nl.program_id(0)
+        per_core = (n_tiles + n_prog - 1) // n_prog
+        t_lo = min(n_tiles, pid * per_core)
+        t_hi = min(n_tiles, t_lo + per_core)
 
-        Per PMAX-row block:
-            q1_out = q1 * cos - q2 * sin
-            q2_out = q2 * cos + q1 * sin
-        """
-        seq_len, head_dim = q.shape
-        half = head_dim // 2
-        num_blocks = (seq_len + (block_size - 1)) // block_size
+        for t in range(t_lo, t_hi):
+            r0 = t * PMAX
+            rs = min(PMAX, T - r0)
+            s0 = r0 % S
+            assert s0 + rs <= S, "a token tile must not cross a batch boundary"
 
-        hbm_result = nl.ndarray((seq_len, head_dim), dtype=q.dtype, buffer=nl.shared_hbm)
+            cos_t = nl.ndarray((rs, half), dtype=cos.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=cos_t, src=cos.ap(pattern=[[half, rs], [1, half]], offset=s0 * half))
+            sin_t = nl.ndarray((rs, half), dtype=sin.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=sin_t, src=sin.ap(pattern=[[half, rs], [1, half]], offset=s0 * half))
 
-        for i in range(num_blocks):
-            p_start = i * block_size
-            p_end = min(p_start + block_size, seq_len)
-            p_sz = p_end - p_start
+            for h0 in range(0, H, group_size):
+                gs = min(group_size, H - h0)
+                w = gs * D
+                q_t = nl.ndarray((rs, w), dtype=q.dtype, buffer=nl.sbuf)
+                nisa.dma_copy(dst=q_t, src=q.ap(pattern=[[row, rs], [1, w]], offset=r0 * row + h0 * D))
 
-            # Tiles are sized to the clamped extent, so no masking is needed.
-            q1_tile = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=q1_tile, src=q[p_start:p_end, 0:half])
+                q1 = q_t.ap(pattern=[[w, rs], [D, gs], [1, half]], offset=0)
+                q2 = q_t.ap(pattern=[[w, rs], [D, gs], [1, half]], offset=half)
+                cos_b = cos_t.ap(pattern=[[half, rs], [0, gs], [1, half]], offset=0)
+                sin_b = sin_t.ap(pattern=[[half, rs], [0, gs], [1, half]], offset=0)
 
-            q2_tile = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=q2_tile, src=q[p_start:p_end, half:head_dim])
+                o_t = nl.ndarray((rs, w), dtype=q.dtype, buffer=nl.sbuf)
+                o1 = o_t.ap(pattern=[[w, rs], [D, gs], [1, half]], offset=0)
+                o2 = o_t.ap(pattern=[[w, rs], [D, gs], [1, half]], offset=half)
 
-            cos_tile = nl.ndarray((p_sz, half), dtype=cos.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=cos_tile, src=cos[p_start:p_end, 0:half])
+                a = nl.ndarray((rs, gs, half), dtype=nl.float32, buffer=nl.sbuf)
+                b = nl.ndarray((rs, gs, half), dtype=nl.float32, buffer=nl.sbuf)
+                nisa.tensor_tensor(dst=a, data1=q1, data2=cos_b, op=nl.multiply)
+                nisa.tensor_tensor(dst=b, data1=q2, data2=sin_b, op=nl.multiply)
+                nisa.tensor_tensor(dst=o1, data1=a, data2=b, op=nl.subtract)
+                nisa.tensor_tensor(dst=a, data1=q2, data2=cos_b, op=nl.multiply)
+                nisa.tensor_tensor(dst=b, data1=q1, data2=sin_b, op=nl.multiply)
+                nisa.tensor_tensor(dst=o2, data1=a, data2=b, op=nl.add)
 
-            sin_tile = nl.ndarray((p_sz, half), dtype=sin.dtype, buffer=nl.sbuf)
-            nisa.dma_copy(dst=sin_tile, src=sin[p_start:p_end, 0:half])
+                nisa.dma_copy(dst=out.ap(pattern=[[row, rs], [1, w]], offset=r0 * row + h0 * D), src=o_t)
 
-            # Products are accumulated in fp32 regardless of the input dtype.
-            q1_cos = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q1_cos, data1=q1_tile, data2=cos_tile, op=nl.multiply)
-
-            q2_sin = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q2_sin, data1=q2_tile, data2=sin_tile, op=nl.multiply)
-
-            q2_cos = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q2_cos, data1=q2_tile, data2=cos_tile, op=nl.multiply)
-
-            q1_sin = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q1_sin, data1=q1_tile, data2=sin_tile, op=nl.multiply)
-
-            q1_out = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q1_out, data1=q1_cos, data2=q2_sin, op=nl.subtract)
-
-            q2_out = nl.ndarray((p_sz, half), dtype=nl.float32, buffer=nl.sbuf)
-            nisa.tensor_tensor(dst=q2_out, data1=q2_cos, data2=q1_sin, op=nl.add)
-
-            # tensor_copy performs the cast back to q's dtype.
-            q1_out_c = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
-            nisa.tensor_copy(dst=q1_out_c, src=q1_out)
-
-            q2_out_c = nl.ndarray((p_sz, half), dtype=q.dtype, buffer=nl.sbuf)
-            nisa.tensor_copy(dst=q2_out_c, src=q2_out)
-
-            nisa.dma_copy(dst=hbm_result[p_start:p_end, 0:half], src=q1_out_c)
-            nisa.dma_copy(dst=hbm_result[p_start:p_end, half:head_dim], src=q2_out_c)
-
-        return hbm_result
+        return out
 
 
-_DEFAULT_CONFIG = SimpleNamespace(block_size=128)
-_SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
-_tuner = NkiAutotuner(rope_kernel) if nki is not None else None
+_DEFAULT_CONFIG = SimpleNamespace(group_size=16)
+_SEARCH_SPACE = [SimpleNamespace(group_size=g) for g in (1, 2, 4, 8, 16, 32)]
+_LNC = _lnc_degree()
+_kernel = rope_kernel[_LNC] if nki is not None else None
+_tuner = NkiAutotuner(_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
 
 
 def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, block_size: int = 1024,
         autotune: bool = False, **kwargs) -> torch.Tensor:
-    batch, seq_len, n_heads, head_dim = q.shape
+    B, S, H, D = q.shape
+    if S % PMAX and B > 1:
+        raise NotImplementedError("rope NKI: seq_len must be a multiple of 128 when batch > 1")
     if autotune:
+        space = [c for c in _SEARCH_SPACE if c.group_size <= H]
         cfg = _tuner.tune_or_cached(
             shape_key=(tuple(q.shape), str(q.dtype)),
-            search_space=_SEARCH_SPACE,
-            args_fn=lambda cfg: (q[0, :, 0, :].contiguous(), cos, sin, cfg.block_size),
+            search_space=space,
+            args_fn=lambda cfg: (q, cos, sin, cfg.group_size),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
     else:
         cfg = _DEFAULT_CONFIG
-    out = torch.empty_like(q)
-    for b in range(batch):
-        for h in range(n_heads):
-            out[b, :, h, :] = rope_kernel(q[b, :, h, :].contiguous(), cos, sin, cfg.block_size)
-    return out
+    return _kernel(q, cos, sin, min(cfg.group_size, H))
 
 
 def get_last_config() -> dict | None:
