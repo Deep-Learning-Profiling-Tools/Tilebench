@@ -16,7 +16,6 @@ except ImportError:
     nki = None
 
 PMAX = 128
-MOVING_FMAX = 512
 
 FREE_CAP = 8192
 FP32_FREE_CAP = 2048
@@ -67,19 +66,6 @@ if nki is not None:
                                op0=nl.multiply, operand0=-1.0, op1=nl.add, operand1=1.5)
             nisa.tensor_tensor(dst=dst, data1=dst, data2=correction, op=nl.multiply)
 
-    def _broadcast_weight(dst, weight_row, ones_row, col_start, col_size):
-        for bcast_tile in range(div_ceil(col_size, MOVING_FMAX)):
-            chunk_start = bcast_tile * MOVING_FMAX
-            chunk_size = min(MOVING_FMAX, col_size - chunk_start)
-            src_start = col_start + chunk_start
-            src_end = src_start + chunk_size
-
-            psum_weight = nl.ndarray((PMAX, chunk_size), dtype=nl.float32, buffer=nl.psum)
-            nisa.nc_matmul(dst=psum_weight, stationary=ones_row,
-                           moving=weight_row[0:1, src_start:src_end])
-            nisa.tensor_copy(dst=dst[0:PMAX, chunk_start:chunk_start + chunk_size],
-                             src=psum_weight)
-
     @nki.jit
     def rmsnorm_kernel(a_input, weight_input, eps, free_cap, block_size):
         kernel_assert(len(a_input.shape) == 2, "input must be 2D [rows, n_cols]")
@@ -98,21 +84,12 @@ if nki is not None:
         t_lo = min(n_row_tiles, pid * per_core)
         t_hi = min(n_row_tiles, t_lo + per_core)
 
-        weight_raw = nl.ndarray((1, n_cols), dtype=weight_input.dtype, buffer=nl.sbuf)
-        nisa.dma_copy(dst=weight_raw, src=weight_input[0:1, 0:n_cols])
-
-        weight_row = nl.ndarray((1, n_cols), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.tensor_copy(dst=weight_row, src=weight_raw)
-
-        ones_row = nl.ndarray((1, PMAX), dtype=nl.float32, buffer=nl.sbuf)
-        nisa.memset(dst=ones_row, value=1.0)
 
         inv_n_cols = 1.0 / float(n_cols)
 
-
         if n_cols <= free_cap:
-            weight_bcast = nl.ndarray((PMAX, n_cols), dtype=nl.float32, buffer=nl.sbuf)
-            _broadcast_weight(weight_bcast, weight_row, ones_row, 0, n_cols)
+            w_all = nl.ndarray((PMAX, n_cols), dtype=weight_input.dtype, buffer=nl.sbuf)
+            nisa.dma_copy(dst=w_all, src=weight_input.ap(pattern=[[0, PMAX], [1, n_cols]], offset=0))
 
             for row_tile in range(t_lo, t_hi):
                 row_start = row_tile * PMAX
@@ -123,10 +100,9 @@ if nki is not None:
                 nisa.dma_copy(dst=x_tile, src=a_input[row_start:row_end, 0:n_cols])
 
                 sq_tile = nl.ndarray((row_size, n_cols), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.activation(dst=sq_tile, op=nl.square, data=x_tile)
-
                 mean_sq = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.tensor_reduce(dst=mean_sq, op=nl.add, data=sq_tile, axis=(1,))
+                nisa.activation_reduce(dst=sq_tile, op=nl.square, data=x_tile,
+                                       reduce_op=nl.add, reduce_res=mean_sq)
                 nisa.tensor_scalar(dst=mean_sq, data=mean_sq,
                                    op0=nl.multiply, operand0=inv_n_cols,
                                    op1=nl.add, operand1=eps)
@@ -134,21 +110,17 @@ if nki is not None:
                 rstd = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
                 _rstd_newton(rstd, mean_sq, row_size)
 
-                normalized = nl.ndarray((row_size, n_cols), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.tensor_scalar(dst=normalized, data=x_tile,
-                                   op0=nl.multiply, operand0=rstd)
-
                 y_tile = nl.ndarray((row_size, n_cols), dtype=a_input.dtype, buffer=nl.sbuf)
-                nisa.tensor_tensor(dst=y_tile, data1=normalized,
-                                   data2=weight_bcast[0:row_size, 0:n_cols],
-                                   op=nl.multiply)
+                nisa.scalar_tensor_tensor(dst=y_tile, data=x_tile, op0=nl.multiply, operand0=rstd,
+                                          op1=nl.multiply, operand1=w_all[0:row_size, 0:n_cols])
 
                 nisa.dma_copy(dst=out_hbm[row_start:row_end, 0:n_cols], src=y_tile)
 
             return out_hbm
 
         n_col_tiles = div_ceil(n_cols, block_size)
-        weight_bcast = nl.ndarray((PMAX, block_size), dtype=nl.float32, buffer=nl.sbuf)
+        w_all = nl.ndarray((PMAX, n_cols), dtype=weight_input.dtype, buffer=nl.sbuf)
+        nisa.dma_copy(dst=w_all, src=weight_input.ap(pattern=[[0, PMAX], [1, n_cols]], offset=0))
 
         for row_tile in range(t_lo, t_hi):
             row_start = row_tile * PMAX
@@ -167,11 +139,9 @@ if nki is not None:
                 nisa.dma_copy(dst=x_tile, src=a_input[row_start:row_end, col_start:col_end])
 
                 sq_tile = nl.ndarray((row_size, col_size), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.activation(dst=sq_tile, op=nl.square, data=x_tile)
-
                 part_sq = nl.ndarray((row_size, 1), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.tensor_reduce(dst=part_sq, op=nl.add, data=sq_tile, axis=(1,))
-
+                nisa.activation_reduce(dst=sq_tile, op=nl.square, data=x_tile,
+                                       reduce_op=nl.add, reduce_res=part_sq)
                 nisa.tensor_tensor(dst=mean_sq, data1=mean_sq, data2=part_sq, op=nl.add)
 
             nisa.tensor_scalar(dst=mean_sq, data=mean_sq,
@@ -186,19 +156,12 @@ if nki is not None:
                 col_size = min(block_size, n_cols - col_start)
                 col_end = col_start + col_size
 
-                _broadcast_weight(weight_bcast, weight_row, ones_row, col_start, col_size)
-
                 x_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
                 nisa.dma_copy(dst=x_tile, src=a_input[row_start:row_end, col_start:col_end])
 
-                normalized = nl.ndarray((row_size, col_size), dtype=nl.float32, buffer=nl.sbuf)
-                nisa.tensor_scalar(dst=normalized, data=x_tile,
-                                   op0=nl.multiply, operand0=rstd)
-
                 y_tile = nl.ndarray((row_size, col_size), dtype=a_input.dtype, buffer=nl.sbuf)
-                nisa.tensor_tensor(dst=y_tile, data1=normalized,
-                                   data2=weight_bcast[0:row_size, 0:col_size],
-                                   op=nl.multiply)
+                nisa.scalar_tensor_tensor(dst=y_tile, data=x_tile, op0=nl.multiply, operand0=rstd,
+                                          op1=nl.multiply, operand1=w_all[0:row_size, col_start:col_end])
 
                 nisa.dma_copy(dst=out_hbm[row_start:row_end, col_start:col_end], src=y_tile)
 
