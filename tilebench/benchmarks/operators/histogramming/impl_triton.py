@@ -24,12 +24,12 @@ def histogram_partial_kernel(
     stride_pr,
     stride_pb,
     BLOCK_SIZE: tl.constexpr,
+    NUM_BINS: tl.constexpr,
 ):
     pid = tl.program_id(0)
 
     offs = tl.arange(0, BLOCK_SIZE)
-    row_base = partial_ptr + pid * stride_pr
-    one = tl.full((BLOCK_SIZE,), 1, dtype=tl.int32)
+    acc = tl.zeros((NUM_BINS,), dtype=tl.int32)
 
     for chunk_start in tl.range(pid * BLOCK_SIZE, N, num_partials * BLOCK_SIZE):
         idx = chunk_start + offs
@@ -38,8 +38,10 @@ def histogram_partial_kernel(
         vals = tl.load(input_ptr + idx, mask=mask, other=0)
         valid = mask & (vals >= 0) & (vals < num_bins)
 
-        safe_bins = tl.where(valid, vals, 0)
-        tl.atomic_add(row_base + safe_bins * stride_pb, one, mask=valid)
+        acc += tl.histogram(vals, NUM_BINS, mask=valid)
+
+    offs_b = tl.arange(0, NUM_BINS)
+    tl.store(partial_ptr + pid * stride_pr + offs_b * stride_pb, acc, mask=offs_b < num_bins)
 
 
 @triton.jit
@@ -80,9 +82,6 @@ _histogram_partial_kernel_autotuned = triton.autotune(
     key=["N", "num_bins"],
     warmup=1,
     rep=3,
-
-
-    reset_to_zero=["partial_ptr"],
 )(histogram_partial_kernel)
 
 
@@ -125,12 +124,14 @@ def run(input: torch.Tensor, N: int, num_bins: int,
 
 
     num_partials = min(NUM_PARTIAL, triton.cdiv(N, BLOCK_SIZE))
-    partial = torch.zeros((num_partials, num_bins), device=input.device, dtype=torch.int32)
+    partial = torch.empty((num_partials, num_bins), device=input.device, dtype=torch.int32)
+    NUM_BINS = triton.next_power_of_2(num_bins)
 
     if autotune:
         _histogram_partial_kernel_autotuned[(num_partials,)](
             input, partial, N, num_bins, num_partials,
             partial.stride(0), partial.stride(1),
+            NUM_BINS=NUM_BINS,
         )
         grid_reduce = lambda meta: (triton.cdiv(num_bins, meta["BLOCK_BINS"]),)
         _histogram_reduce_kernel_autotuned[grid_reduce](
@@ -142,6 +143,7 @@ def run(input: torch.Tensor, N: int, num_bins: int,
             input, partial, N, num_bins, num_partials,
             partial.stride(0), partial.stride(1),
             BLOCK_SIZE=BLOCK_SIZE,
+            NUM_BINS=NUM_BINS,
             num_warps=cfg["partial_num_warps"],
             num_stages=1,
         )
