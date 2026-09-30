@@ -124,6 +124,17 @@ def provenance_log_path(hardware: str, operator: str, mode: str, backends) -> Pa
     return results_logs_dir(hardware) / "provenance" / _log_name(operator, mode, backends)
 
 
+def tilelang_autotuner_log_dir(hardware: str) -> Path:
+    """TileLang autotuner logs collected per run (tilebench.core.tilelang_log)."""
+    return results_logs_dir(hardware) / "tilelang_autotuner"
+
+
+def tilelang_autotuner_log_path(hardware: str, operator: str, mode: str, backends) -> Path:
+    """The TileLang autotuner output of one run_bench.py run: same stem as the
+    run's timing log, <operator>_<mode>_<backend-tag>.log."""
+    return tilelang_autotuner_log_dir(hardware) / Path(_log_name(operator, mode, backends)).with_suffix(".log")
+
+
 def profiling_metadata_dir(hardware: str) -> Path:
     return PROFILING_METADATA_ROOT / hardware_label(hardware)
 

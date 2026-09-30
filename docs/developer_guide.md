@@ -73,9 +73,11 @@ The backend tag always lists the backends in the canonical order `triton`, `cuti
 | `software` | `python`, `torch`, `torch_cuda`, `torch_hip`, `triton`, `tilelang`, `cuda_tile` (`None` when not installed) |
 | `device` | `requested_label` (`--gpu`), `name`, `vendor`, `arch` (`detect_arch()`), `compute_capability`, `gcn_arch_name` |
 | `host` | `hostname`, `argv` |
-| `run` | `run_bench.py` only: operator, mode, backends, overrides, and the timing log, autotune log and summary CSV it describes |
+| `run` | `run_bench.py`: operator, mode, backends, overrides, the timing log, autotune log and summary CSV it describes, and `tilelang_autotuner_log` (with `tilelang_autotuner_log_note` when nothing was collected). `run_bench_all.py`: `tile_language` and `backends` |
 
 A field that cannot be determined is `None` (with `source.error` when Git is unavailable); collecting provenance never fails a run. The sidecar lives under `logs/`, so it is Git-ignored and archived with the raw logs.
+
+**TileLang autotuner log.** TileLang 0.1.11 writes `autotuner.log` to the working directory: the first `AutoTuner.run()` of a process (default mode included) truncates it, later tunings in that process append to it, cache hits write nothing, and a process that never tunes leaves an older file in place. The file is therefore Git-ignored and never archived as is. When TileLang runs, the runners copy the part of it that the current process wrote for the current operator (`tilebench/core/tilelang_log.py`: the byte range of this process's own log handler, refused if the file was replaced or written by another process) to `results/<gpu>/logs/tilelang_autotuner/`: `<op>_<mode>_<backends>.log` for `run_bench.py` (the timing log's stem; next to an explicit `--output` as `<output stem>.tilelang_autotuner.log`), and `<op>_<run-id>.log` for `run_bench_all.py`, whose `summary.json` lists them under `artifacts.tilelang_autotuner`. A run that tuned nothing (cache hit) leaves no file. `--logs` archives them with the other logs.
 
 **What a namespace holds.** The PyTorch, Triton, cuTile and TileLang columns of a CSV under `results/<gpu>/csv/` were measured on that GPU. A TileLang-only run is merged into the existing CSV of the same `--gpu`, leaving the frozen PyTorch, Triton and cuTile columns untouched. A backend that the platform does not support is reported as skipped or failed by the engine, with `nan` latency and `<backend>_ok = false`; never record it as a successful result.
 

@@ -14,8 +14,10 @@ if _REPO_ROOT not in sys.path:
 from tilebench.core.engine import run_benchmark_suite  # noqa: E402
 from tilebench.backends import parse_backends  # noqa: E402
 from tilebench import provenance  # noqa: E402
+from tilebench.core import tilelang_log  # noqa: E402
 from tilebench.paths import (autotune_log_path, hardware_label,  # noqa: E402
                              provenance_log_path, results_csv_dir, results_logs_dir,
+                             tilelang_autotuner_log_path,
                              timing_log_path)
 
 
@@ -306,6 +308,7 @@ def main():
     print(f"Starting benchmark for operator: {args.operator}")
     print(f"Tile-language backends: torch (baseline) + "
           f"{', '.join(sorted(enabled_backends)) or '(none)'}")
+    tilelang_log_start = tilelang_log.mark()
     results = run_benchmark_suite(
         args.operator, benchmark_overrides=overrides, enabled_backends=enabled_backends,
         logs_dir=results_logs_dir(args.gpu),
@@ -338,11 +341,23 @@ def main():
                        if args.output is None
                        else Path(output_path).with_suffix(".provenance.json"))
     provenance_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # The TileLang autotuner output this run wrote (never a stale autotuner.log).
+    tilelang_log_path = tilelang_log_note = None
+    if "tilelang" in active:
+        tilelang_log_path, tilelang_log_note = tilelang_log.collect(
+            tilelang_log_start,
+            tilelang_autotuner_log_path(args.gpu, args.operator, mode, active)
+            if args.output is None else Path(output_path).with_suffix(".tilelang_autotuner.log"))
+        print(f"TileLang autotuner log → {tilelang_log_path or f'not collected: {tilelang_log_note}'}")
+
     run_provenance["run"] = {
         "script": "scripts/run_bench.py", "operator": args.operator, "mode": mode,
         "backends": active, "overrides": overrides,
         "timing_log": str(output_path), "autotune_log": str(autotune_path),
         "summary_csv": str(csv_path),
+        "tilelang_autotuner_log": str(tilelang_log_path) if tilelang_log_path else None,
+        "tilelang_autotuner_log_note": tilelang_log_note,
     }
     with open(provenance_path, "w") as f:
         json.dump(run_provenance, f, indent=4)

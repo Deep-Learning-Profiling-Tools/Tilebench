@@ -13,6 +13,8 @@ import pytest
 import tilebench.paths as paths
 from tilebench import provenance
 
+REPO = paths.PACKAGE_ROOT.parent
+
 from test_results_layout import load_script, results, run_bench, fake_results  # noqa: F401
 
 needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
@@ -82,6 +84,26 @@ def test_only_results_changed_or_untracked_is_not_dirty(repo):
     state = provenance.source_state(repo)
     assert state["dirty"] is False and state["tracked_dirty"] is False
     assert state["dirty_files"] == [] and state["untracked_files"] == []
+
+
+@needs_git
+def test_an_ignored_autotuner_log_is_not_dirty_but_an_untracked_source_file_is(repo):
+    """The repository .gitignore decides what is not source: TileLang's
+    autotuner.log is ignored there, provenance has no list of its own."""
+    shutil.copy(REPO / ".gitignore", repo / ".gitignore")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-q", "-m", "gitignore")
+    (repo / "autotuner.log").write_text("tuning\n")
+    (repo / "tilebench/core/autotuner.log").write_text("tuning\n")      # written where run from
+    state = provenance.source_state(repo)
+    assert state["dirty"] is False and state["untracked_files"] == []
+    (repo / "tilebench/core/helper.py").write_text("x\n")
+    state = provenance.source_state(repo)
+    assert state["dirty"] is True and state["untracked_files"] == ["tilebench/core/helper.py"]
+
+
+def test_provenance_has_no_artifact_list_of_its_own():
+    assert "autotuner" not in (REPO / "tilebench/provenance.py").read_text()
 
 
 def test_no_checkout_is_recorded_not_raised(tmp_path):
@@ -188,7 +210,8 @@ def test_run_bench_writes_a_sidecar_and_leaves_the_logs_unchanged(run_bench, res
         "script": "scripts/run_bench.py", "operator": "mul2", "mode": "autotune",
         "backends": ["triton", "cutile"], "overrides": {"autotune": True},
         "timing_log": str(timing), "autotune_log": str(autotune),
-        "summary_csv": str(results / "GH200/csv/mul2_autotune.csv")}
+        "summary_csv": str(results / "GH200/csv/mul2_autotune.csv"),
+        "tilelang_autotuner_log": None, "tilelang_autotuner_log_note": None}   # tilelang not selected
 
 
 def test_an_explicit_output_takes_the_sidecar_with_it(run_bench, results, tmp_path):

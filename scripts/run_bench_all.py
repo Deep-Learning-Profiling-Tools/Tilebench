@@ -19,8 +19,9 @@ if _REPO_ROOT not in sys.path:
 from tilebench.core.engine import DEFAULT_ENABLED_BACKENDS, run_benchmark_suite  # noqa: E402
 from tilebench import provenance  # noqa: E402
 from tilebench.backends import canonical_backends, parse_backends  # noqa: E402
+from tilebench.core import tilelang_log  # noqa: E402
 from tilebench.paths import (OPERATOR_ROOT, hardware_label,  # noqa: E402
-                             results_logs_dir, results_runs_dir)
+                             results_logs_dir, results_runs_dir, tilelang_autotuner_log_dir)
 
 
 def discover_operators(operators_root: Path) -> list[str]:
@@ -197,6 +198,7 @@ def main() -> int:
         for op in operators:
             print(f"=== Running {op} ===")
             run_log.write(f"\n[{_now_utc_str()}] START operator={op}\n")
+            tilelang_log_start = tilelang_log.mark()
             try:
                 # Without --tile-language the engine is called exactly as before.
                 selection = {} if enabled_backends is None else {"enabled_backends": enabled_backends}
@@ -213,6 +215,12 @@ def main() -> int:
                 err_path.write_text(err, encoding="utf-8")
                 run_log.write(f"[{_now_utc_str()}] FAIL operator={op}\n{err}\n")
                 print(f"  FAILED: {op}")
+            if "tilelang" in backends:
+                # the autotuner output of this operator only, named by the run directory
+                path, note = tilelang_log.collect(
+                    tilelang_log_start, tilelang_autotuner_log_dir(args.gpu) / f"{op}_{run_dir.name}.log")
+                manifest["artifacts"].setdefault("tilelang_autotuner", {})[op] = {
+                    "path": str(path) if path else None, "note": note}
 
         copied_profiles = copy_profile_artifacts(args.profile_artifact, run_dir, repo_root)
         manifest["artifacts"]["profiles"] = copied_profiles
