@@ -4,11 +4,26 @@ from triton import language as tl
 from triton.testing import do_bench
 from triton.tools.tensor_descriptor import TensorDescriptor
 
+from tilebench.hardware import detect_arch
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 64, "GROUP_M": 8,
     "num_warps": 8, "num_stages": 3,
 }
+
+# Hardware-compatibility fallback, not AMD performance tuning. On CDNA3
+# (MI300X) the default above needs 131072 B of LDS for fp32, over gfx942's
+# 65536 B, so the non-autotuned path cannot launch. This keeps its 128x128
+# output tile, GROUP_M, num_warps and num_stages (fixed at 3 in the search
+# space) and only lowers the K tile from 64 to 32 (fp32: 65536 B). It is a
+# candidate of _SEARCH_SPACE, which is unchanged on every architecture.
+_CDNA3_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "BLOCK_K": 32}
+
+
+def _default_config() -> dict:
+    """Fixed config of the non-autotuned path, by the GPU actually present."""
+    return _CDNA3_DEFAULT_CONFIG if detect_arch() == "cdna3" else _DEFAULT_CONFIG
 
 
 _SEARCH_SPACE = [
@@ -236,7 +251,7 @@ def run(a: torch.Tensor, b: torch.Tensor,
         _last_autotune_config.clear()
         _last_autotune_config.update(cfg)
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = _default_config()
     BLK_M, BLK_N = cfg["BLOCK_M"], cfg["BLOCK_N"]
 
 

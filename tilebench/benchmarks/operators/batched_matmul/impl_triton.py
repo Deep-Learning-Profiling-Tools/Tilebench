@@ -3,6 +3,8 @@ import triton
 import triton.language as tl
 from triton.tools.tensor_descriptor import TensorDescriptor
 
+from tilebench.hardware import detect_arch
+
 _DEFAULT_CONFIG = {
     "BLOCK_SIZE_M": 128,
     "BLOCK_SIZE_N": 128,
@@ -11,6 +13,19 @@ _DEFAULT_CONFIG = {
     "num_warps": 4,
     "num_stages": 4,
 }
+
+# Hardware-compatibility fallback, not AMD performance tuning. On CDNA3
+# (MI300X) the default above needs 98304 B of LDS for fp32, over gfx942's
+# 65536 B, so the non-autotuned path cannot launch. This keeps its 128x128x32
+# tile, GROUPSIZE and num_warps and only lowers the pipeline depth from 4 to 3
+# stages, the first depth that fits (fp32: 65536 B). It is a candidate of the
+# autotune space below, which is unchanged on every architecture.
+_CDNA3_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "num_stages": 3}
+
+
+def _default_config() -> dict:
+    """Fixed config of the non-autotuned path, by the GPU actually present."""
+    return _CDNA3_DEFAULT_CONFIG if detect_arch() == "cdna3" else _DEFAULT_CONFIG
 
 
 _DT_IDS = {torch.float16: 0, torch.bfloat16: 1, torch.float32: 2}
@@ -125,7 +140,7 @@ def run(A: torch.Tensor, B: torch.Tensor,
         _bmm_kernel_autotuned[grid](a_desc, b_desc, c_desc, M, N, K,
                                     DT_ID=dt_id)
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = _default_config()
         bm, bn, bk = (cfg["BLOCK_SIZE_M"], cfg["BLOCK_SIZE_N"],
                       cfg["BLOCK_SIZE_K"])
         a_desc, b_desc, c_desc = _descriptors(a_3d, bt_3d, c_3d, bm, bn, bk)
