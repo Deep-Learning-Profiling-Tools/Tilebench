@@ -174,14 +174,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         try:
             inputs = generate_inputs(**params, dtype=dtype)
-        except (RuntimeError, TypeError) as e:
+        except (RuntimeError, TypeError, ValueError) as e:
             print(f"  Skipped: dtype={dtype_str} not supported for input generation ({type(e).__name__}: {e})")
             continue
 
         try:
             ref_output = impl_torch.run(*inputs)
             _sync()
-        except (RuntimeError, TypeError) as e:
+        except (RuntimeError, TypeError, ValueError) as e:
+            # e.g. torch._scaled_mm on gfx942 rejects float8_e4m3fn with a ValueError
             print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
