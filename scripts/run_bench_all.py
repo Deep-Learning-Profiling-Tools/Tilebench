@@ -207,6 +207,8 @@ def main() -> int:
                 with out_path.open("w", encoding="utf-8") as f:
                     json.dump(results, f, indent=2)
                 manifest["operators_succeeded"].append(op)
+                if results:   # requested vs. executed timing mode of this operator
+                    manifest["provenance"].setdefault("timing", {})[op] = results[0].get("timing")
                 run_log.write(f"[{_now_utc_str()}] DONE operator={op} output={out_path}\n")
             except Exception:
                 err = traceback.format_exc()

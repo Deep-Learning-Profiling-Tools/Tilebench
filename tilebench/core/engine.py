@@ -5,7 +5,7 @@ import os
 import torch
 import yaml
 from tilebench.core.dtypes import resolve_dtype
-from tilebench.core.timer import report_benchmark
+from tilebench.core.timer import report_benchmark, timing_mode
 from tilebench.core.verifier import verify
 from tilebench.data.tensors import expand_cases, get_generator, infer_problem_size
 from tilebench.paths import operator_config
@@ -26,6 +26,18 @@ if not HAS_CUDA:
 
 #: Backends run_benchmark_suite() tries when the caller names none.
 DEFAULT_ENABLED_BACKENDS = ("triton", "cutile", "tilelang", "nki")
+
+#: The ROCm graph-timing fallback is announced once per process, not per case.
+_timing_fallback_announced = False
+
+
+def _announce_timing_mode(mode: dict) -> None:
+    global _timing_fallback_announced
+    if mode["timing_note"] and not _timing_fallback_announced:
+        _timing_fallback_announced = True
+        print("ROCm timing fallback: requested CUDA graph execution, using eager Proton "
+              "timing because HIP Graph kernel attribution is unreliable in the current "
+              "Proton backend.")
 
 
 def _nki_artifact_paths(logs_dir) -> dict:
@@ -127,6 +139,11 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     flush_l2          = bool(bench_cfg.get("flush_l2", False))
     keep_proton_files = bool(bench_cfg.get("keep_proton_files", False))
     proton_output_dir = bench_cfg.get("proton_output_dir")
+    # requested (config/override) vs. executed timing mode; report_benchmark
+    # applies the same rule, this copy is for the logs.
+    timing = timing_mode(use_cuda_graph) if HAS_CUDA else None
+    if timing:
+        _announce_timing_mode(timing)
 
     cases = expand_cases(operator_name, config)
     case_indices = bench_cfg.get("case_indices")
@@ -174,14 +191,15 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
         try:
             inputs = generate_inputs(**params, dtype=dtype)
-        except (RuntimeError, TypeError) as e:
+        except (RuntimeError, TypeError, ValueError) as e:
             print(f"  Skipped: dtype={dtype_str} not supported for input generation ({type(e).__name__}: {e})")
             continue
 
         try:
             ref_output = impl_torch.run(*inputs)
             _sync()
-        except (RuntimeError, TypeError) as e:
+        except (RuntimeError, TypeError, ValueError) as e:
+            # e.g. torch._scaled_mm on gfx942 rejects float8_e4m3fn with a ValueError
             print(f"  Skipped: dtype={dtype_str} not supported by torch ({type(e).__name__}: {e})")
             continue
 
@@ -382,6 +400,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
             "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
+            "timing":                timing,
         })
 
     return results

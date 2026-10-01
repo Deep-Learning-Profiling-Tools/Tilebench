@@ -359,6 +359,10 @@ def main():
         "tilelang_autotuner_log": str(tilelang_log_path) if tilelang_log_path else None,
         "tilelang_autotuner_log_note": tilelang_log_note,
     }
+    # Requested vs. executed timing mode (eager on ROCm even when the config asks
+    # for CUDA graphs); the same for every case of the run. Absent for an engine
+    # that does not report it.
+    run_provenance["timing"] = results[0].get("timing")
     with open(provenance_path, "w") as f:
         json.dump(run_provenance, f, indent=4)
     print(f"Provenance      → {provenance_path}")
