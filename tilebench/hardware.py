@@ -26,7 +26,16 @@ _AMD_ARCH = {"gfx942": "cdna3"}
 #: Infinity Cache of CDNA3). Filled only with a value validated by an eviction
 #: sweep on the hardware itself; an architecture without an entry uses the
 #: runtime-reported L2 size, unless it is listed in _LLC_CALIBRATION_REQUIRED.
-_LLC_BYTES: dict[str, int] = {}
+#:
+#: cdna3: MI300X (gfx942:sramecc+:xnack-, ROCm 7.1). The runtime reports a 4 MiB
+#: L2 and a 256 MiB L3 (Infinity Cache) shared by all 304 CUs (rocminfo,
+#: amd-smi, KFD topology). Eviction sweep with timer._flush_l2_cache before each
+#: Proton-timed call of two HBM-bound probes (Triton add over 48 MiB, torch
+#: elementwise over 64 MiB), eager and CUDA-graph, randomized order, 10 rounds:
+#: <= 192 MiB leaves the probes warm, 256 MiB (1x L3) evicts only sometimes
+#: (round medians spread up to 38%), and from 384 MiB they are cold, with
+#: 512 and 768 MiB agreeing within 1.3%. The timer's 2x rule gives 512 MiB.
+_LLC_BYTES: dict[str, int] = {"cdna3": 256 * 1024 * 1024}
 
 #: Architectures whose runtime L2 is known not to be the last-level cache: a
 #: cold-cache measurement refuses to run on them until _LLC_BYTES holds their
