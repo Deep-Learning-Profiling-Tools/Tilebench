@@ -113,6 +113,8 @@ _apply_batch_norm_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["N"],
+    warmup=1,
+    rep=3,
 )(apply_batch_norm_kernel)
 
 

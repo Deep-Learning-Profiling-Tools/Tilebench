@@ -30,7 +30,7 @@ def pad_kernel(data, work, dtype, BLOCK: int = 1024, threads: int = 128):
             work[offs] = data[offs]
 
 
-@tilelang.autotune(configs=bitonic_step_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=bitonic_step_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def bitonic_step_kernel(M, dtype, BLOCK: int = 1024, threads: int = 128):
     @T.prim_func

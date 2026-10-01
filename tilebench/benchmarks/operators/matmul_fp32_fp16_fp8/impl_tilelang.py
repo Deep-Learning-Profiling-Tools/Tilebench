@@ -60,7 +60,7 @@ def matmul_configs():
         if not runtime_timeout_prone(128, 128, bk, nt, ns)
     ]
 
-@tilelang.autotune(configs=matmul_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=matmul_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit(
     pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
 )

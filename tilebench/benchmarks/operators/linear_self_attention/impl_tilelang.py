@@ -77,7 +77,7 @@ def phi_kernel(Y, X, dtype, BLOCK_M: int = 32, BLOCK_D: int = 32, threads: int =
         T.copy(y_frag, Y[m_start, d_start])
 
 
-@tilelang.autotune(configs=kv_kernel_configs(), rep=100, warmup=20, timeout=60)
+@tilelang.autotune(configs=kv_kernel_configs(), rep=3, warmup=1, timeout=60)
 @tilelang.jit(
     pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
 )
@@ -148,7 +148,7 @@ def z_kernel(Z, PhiK, dtype, BLOCK_M: int = 32, BLOCK_D: int = 32, threads: int 
         T.copy(acc, Z[d_start])
 
 
-@tilelang.autotune(configs=out_kernel_configs(), rep=100, warmup=20, timeout=60)
+@tilelang.autotune(configs=out_kernel_configs(), rep=3, warmup=1, timeout=60)
 @tilelang.jit(
     pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True},
 )

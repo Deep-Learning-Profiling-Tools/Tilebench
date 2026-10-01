@@ -43,6 +43,8 @@ _cross_entropy_kernel_autotuned = triton.autotune(
         for nw in [1, 2, 4, 8]
     ],
     key=["num_classes"],
+    warmup=1,
+    rep=3,
 )(cross_entropy_kernel)
 
 

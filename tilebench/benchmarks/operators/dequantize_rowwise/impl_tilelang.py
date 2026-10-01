@@ -18,7 +18,7 @@ def dequantize_rowwise_configs():
     ]
 
 
-@tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=dequantize_rowwise_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def dequantize_rowwise_kernel(
     x, state_x, output, in_dtype, state_dtype, out_dtype,

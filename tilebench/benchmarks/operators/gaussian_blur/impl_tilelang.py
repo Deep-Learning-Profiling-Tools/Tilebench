@@ -16,7 +16,7 @@ def gaussian_blur_configs():
     ]
 
 
-@tilelang.autotune(configs=gaussian_blur_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=gaussian_blur_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def gaussian_blur_kernel(
     input,

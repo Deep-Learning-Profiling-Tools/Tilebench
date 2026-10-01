@@ -23,6 +23,8 @@ _quantize_kernel_autotuned = triton.autotune(
         if bs >= nw * 32 * 4
     ],
     key=["n_elements"],
+    warmup=1,
+    rep=3,
 )(quantize_kernel)
 
 

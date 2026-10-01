@@ -16,7 +16,7 @@ def kl_divergence_config():
         for nt in threads
         for ns in num_stages
     ]
-@tilelang.autotune(configs=kl_divergence_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=kl_divergence_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def kl_divergence_kernel(log_y_pred, y_true, loss, dtype,
                          BLOCK_SIZE : int = 1024, threads : int = 128, num_stages : int = 3):

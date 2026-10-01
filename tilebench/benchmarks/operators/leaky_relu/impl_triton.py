@@ -23,6 +23,8 @@ _leaky_relu_kernel_autotuned = triton.autotune(
         for ns in [1, 2]
     ],
     key=["n_elements"],
+    warmup=1,
+    rep=3,
 )(leaky_relu_kernel)
 
 

@@ -12,7 +12,7 @@ def block_sparse_attention_configs():
     return [dict(threads=nt) for nt in [64, 128, 256]]
 
 
-@tilelang.autotune(configs=block_sparse_attention_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=block_sparse_attention_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit(
     pass_configs={
         tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
