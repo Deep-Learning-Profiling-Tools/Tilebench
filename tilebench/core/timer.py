@@ -38,36 +38,6 @@ def _build_profile_base(kind: str, output_dir: str | None, label: str | None = N
     return os.path.join(base_dir, f"tilebench_proton_{kind}{suffix}")
 
 
-#: Why a requested CUDA-graph measurement runs eagerly on ROCm.
-HIP_GRAPH_TIMING_NOTE = (
-    "ROCm HIP Graph timing fallback: Proton/roctracer does not reliably attribute "
-    "child kernels in graph replay")
-
-
-def effective_use_cuda_graph(requested: bool) -> bool:
-    """Whether a measurement that requests CUDA-graph replay actually uses it.
-
-    The config's use_cuda_graph is the requested behaviour; the runtime decides
-    the executed one. On ROCm (a HIP build of torch) the timed region always
-    runs eagerly: with Proton's roctracer backend a HIP Graph replay is
-    recorded as its first child kernel only (bitonic_sort: 1 of 191 kernels
-    per replay on MI300X), so graph timing would silently under-report
-    multi-kernel operators. NVIDIA keeps graph replay. Decided by the torch
-    build, never by the --gpu result label."""
-    return bool(requested) and not torch.version.hip
-
-
-def timing_mode(requested: bool) -> dict[str, Any]:
-    """Requested vs. effective execution mode of the timed region, for logs."""
-    effective = effective_use_cuda_graph(requested)
-    return {
-        "requested_use_cuda_graph": bool(requested),
-        "effective_use_cuda_graph": effective,
-        "timing_execution_mode": "graph" if effective else "eager",
-        "timing_note": HIP_GRAPH_TIMING_NOTE if requested and not effective else None,
-    }
-
-
 # Pre-allocated L2 flush buffer (lazily initialized on first use).
 _l2_flush_buf: torch.Tensor | None = None
 
@@ -78,10 +48,9 @@ def _flush_l2_buffer_mb() -> int:
     The cache is the one tilebench.hardware.last_level_cache_bytes() reports:
     the runtime L2 size on NVIDIA (so B200 still evicts 2x its 126.5 MB L2), or
     a measured device-level LLC for architectures whose L2 is not the last
-    level (CDNA3: the 256 MiB Infinity Cache, so MI300X evicts 512 MiB, not 2x
-    its 4 MiB L2); an architecture in hardware._LLC_CALIBRATION_REQUIRED
-    without a validated size raises UncalibratedCacheError, so a flushed
-    measurement fails instead of evicting only the L2. Hardcoding a size silently under-evicts on GPUs with a larger cache
+    level; on such an architecture without a validated size (CDNA3 for now) it
+    raises UncalibratedCacheError, so a flushed measurement fails instead of
+    evicting only the L2. Hardcoding a size silently under-evicts on GPUs with a larger cache
     than the author assumed (the previous 64 MB constant covered only half of
     B200's 126.5 MB L2, leaving small-input operators warm).
 
@@ -215,15 +184,11 @@ def report_benchmark(
     proton_output_dir: str | None = None,
     proton_file_label: str | None = None,
 ) -> dict[str, float]:
-    """Measure mean GPU kernel time (ms) using Proton (data="tree").
-
-    use_cuda_graph is the requested mode; effective_use_cuda_graph() decides
-    the executed one (eager on ROCm, before any graph is captured)."""
+    """Measure mean GPU kernel time (ms) using Proton (data="tree")."""
     if kwargs is None:
         kwargs = {}
     if proton is None:
         raise RuntimeError("triton.profiler (proton) is not available in this environment.")
-    use_cuda_graph = effective_use_cuda_graph(use_cuda_graph)
 
     # Warmup outside Proton session
     for _ in range(max(0, warmup)):

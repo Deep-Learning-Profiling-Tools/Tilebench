@@ -16,10 +16,6 @@ reader keeps working):
     summary CSV it describes.
   - run_bench_all.py adds it under the "provenance" key of the run's
     results/<gpu>/runs/<timestamp>/summary.json.
-Both callers add a "timing" entry (per operator for run_bench_all.py): the
-requested and the effective CUDA-graph mode of the timed region, see
-tilebench.core.timer.timing_mode (ROCm runs eagerly even when graphs are
-requested).
 """
 
 from __future__ import annotations
