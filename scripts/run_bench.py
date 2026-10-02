@@ -93,7 +93,8 @@ def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dic
         timing_keys |= {f"{b}_ms", f"{b}_stats", f"{b}_ok", f"{b}_err", f"speedup_{b}"}
         autotune_keys.add(f"{b}_autotune_cfg")
     if "nki" in active:
-        timing_keys |= {"torch_status", "nki_status"}
+        timing_keys |= {"torch_status", "nki_status", "requested_warmup", "requested_repeat",
+                        "actual_warmup", "actual_repeat", "actual_autotune"}
     timing = [{k: v for k, v in r.items() if k in timing_keys} for r in results]
     autotune = [{k: v for k, v in r.items() if k in autotune_keys} for r in results]
     return timing, autotune

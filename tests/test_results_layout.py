@@ -386,6 +386,41 @@ def test_measurement_runs_with_torch_compile_disabled_and_restores_it():
     assert torch._dynamo.config.disable == before
 
 
+def test_neuron_path_ignores_config_warmup_repeat_autotune(tmp_path, monkeypatch):
+    """mul2's config.yaml says warmup 20 / repeat 100: on a Neuron host every case still runs
+    1 / 3, without autotune, and each row records the executed counts."""
+    import torch
+    from tilebench.core import engine, neuron_native
+    if torch.cuda.is_available():
+        pytest.skip("Neuron path only")
+    calls = []
+
+    def fake_measure(fn, kw, inputs, ref, *, warmup, repeat, **_):
+        calls.append((warmup, repeat, kw.get("autotune")))
+        return {"ok": True, "unsupported": False, "err": "", "ms": 1.0,
+                "stats": {"actual_warmup": warmup, "actual_repeat": repeat}}
+
+    monkeypatch.setattr(neuron_native, "measure", fake_measure)
+    monkeypatch.setattr(neuron_native, "NativeNeuron", lambda: object())
+    monkeypatch.setattr(neuron_native, "prepare_environment", lambda cache: {"neuronx_cc": None})
+    rows = engine.run_benchmark_suite("mul2", benchmark_overrides={"case_indices": [0]},
+                                      enabled_backends={"nki"}, logs_dir=tmp_path)
+    assert calls and all(c[:2] == (1, 3) for c in calls)
+    assert rows[0]["actual_warmup"] == 1 and rows[0]["actual_repeat"] == 3
+    assert (rows[0]["requested_warmup"], rows[0]["requested_repeat"], rows[0]["actual_autotune"]) == (1, 3, False)
+
+
+def test_actual_settings_report_disagreement():
+    from tilebench.core import engine
+    nr = {"torch_stats": {"actual_warmup": 1, "actual_repeat": 3},
+          "nki_stats": {"actual_warmup": 1, "actual_repeat": 2}}
+    got = engine._actual_settings(nr, 1, 3, False)
+    assert got["actual_repeat"] == {"torch": 3, "nki": 2}             # never collapsed to one number
+    assert got["actual_warmup"] == {"torch": 1, "nki": 1}
+    nr = {"torch_stats": None, "nki_stats": {"actual_warmup": 1, "actual_repeat": 3}}   # unresolved baseline
+    assert engine._actual_settings(nr, 1, 3, False)["actual_repeat"] == 3
+
+
 def test_prepare_environment_pins_caches_and_keeps_user_settings(tmp_path, monkeypatch):
     from tilebench.core import neuron_native
     env = {k: v for k, v in os.environ.items()

@@ -278,10 +278,13 @@ def _measure(fn, kw: dict, inputs, ref_output, *, rt: NativeNeuron, warmup: int,
         return x
 
     try:
+        n_warm = 0
         for _ in range(warmup):
             a = args()
             fn(*a, **kw)
             rt.sync()
+            n_warm += 1
+        stats["actual_warmup"] = n_warm
         wall, dispatch = [], []
         for _ in range(repeat):
             a = args()
@@ -297,6 +300,8 @@ def _measure(fn, kw: dict, inputs, ref_output, *, rt: NativeNeuron, warmup: int,
         iters = []
         for i in range(repeat):
             iters.append(_device_call(rt, fn, args(), kw, profile_dir / f"iter{i}", f"{label}-{i}"))
+        # executed calls, counted (not the requested numbers): warmup, timed device calls, timed wall calls
+        stats.update(actual_repeat=len(iters), actual_repeat_wall=len(wall))
     except Exception as e:  # noqa: BLE001
         res["err"] = f"timed loop raised: {type(e).__name__}: {e}"[:2000]
         return res

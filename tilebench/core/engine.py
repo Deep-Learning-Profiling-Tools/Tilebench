@@ -51,6 +51,22 @@ def _torch_status(neuron_result) -> str | None:
     return "ok" if neuron_result.get("torch_ms", float("nan")) > 0 else "failed"
 
 
+def _actual_settings(neuron_result, warmup, repeat, autotune) -> dict:
+    """Requested and executed warmup / repeat of a Neuron case. actual_* is the count of calls
+    each measured backend really executed (warmup calls, timed device calls); it is a single
+    number when every backend agrees, else the per-backend dict."""
+    if neuron_result is None:
+        return {}
+    got = {b: (st.get("actual_warmup"), st.get("actual_repeat"))
+           for b, st in (("torch", neuron_result.get("torch_stats")), ("nki", neuron_result.get("nki_stats")))
+           if st and st.get("actual_repeat") is not None}
+    vals = set(got.values())
+    w, r = next(iter(vals)) if len(vals) == 1 else (None, None)
+    return {"requested_warmup": warmup, "requested_repeat": repeat, "actual_autotune": autotune,
+            "actual_warmup": w if len(vals) == 1 else {b: v[0] for b, v in got.items()},
+            "actual_repeat": r if len(vals) == 1 else {b: v[1] for b, v in got.items()}}
+
+
 def _nki_status(neuron_result) -> str | None:
     """"ok" (verified, device-timed), "unsupported" (the implementation declares the
     dtype/shape unsupported) or "failed"."""
@@ -142,12 +158,14 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
 
     warmup            = int(bench_cfg.get("warmup", 20))
     repeat            = int(bench_cfg.get("repeat", 100))
+    autotune          = bool(bench_cfg.get("autotune", False))
     if not HAS_CUDA:
-        # Trn2 convention: warmup 1 / repeat 3 unless given explicitly on the command line.
+        # Trn2 convention: warmup 1 / repeat 3 and no autotune unless given explicitly on the
+        # command line; the operator config.yaml's (GPU) warmup / repeat / autotune do not apply.
         overrides = benchmark_overrides or {}
         warmup = int(overrides.get("warmup", neuron_native.NEURON_DEFAULT_WARMUP))
         repeat = int(overrides.get("repeat", neuron_native.NEURON_DEFAULT_REPEAT))
-    autotune          = bool(bench_cfg.get("autotune", False))
+        autotune = bool(overrides.get("autotune", False))
 
     verify_cfg = config.get("verify", {})
     verify_atol = float(verify_cfg["atol"]) if "atol" in verify_cfg else None
@@ -426,6 +444,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             "speedup_nki":           (torch_ms / nki_ms if nki_ms > 0 else 0.0) if HAS_CUDA
                                      else neuron_native.speedup(torch_ms, nki_ms),
             "torch_status":          _torch_status(neuron_result),
+            **_actual_settings(neuron_result, warmup, repeat, autotune),
             "nki_status":            _nki_status(neuron_result),
         })
 
