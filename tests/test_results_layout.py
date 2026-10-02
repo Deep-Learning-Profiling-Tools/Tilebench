@@ -6,6 +6,8 @@ write goes to a temporary results root.
 import csv
 import importlib.util
 import json
+import math
+import os
 import shutil
 import subprocess
 import sys
@@ -156,6 +158,8 @@ def fake_results(enabled, torch_ms=2.0):
             r.update({f"{b}_ms": ms, f"{b}_stats": {}, f"{b}_ok": b in enabled, f"{b}_err": None,
                       f"speedup_{b}": torch_ms / ms if b in enabled else 0.0,
                       f"{b}_autotune_cfg": None})
+        if "nki" in enabled:
+            r.update(torch_status="ok", nki_status="ok")
         rows.append(r)
     return rows
 
@@ -172,6 +176,7 @@ def run_bench(results, tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "run_benchmark_suite", engine)
     monkeypatch.setattr(mod, "_detected_device", lambda: None)
+    monkeypatch.setattr(mod, "_neuron_identity", lambda: calls.get("identity"))
 
     def run(*argv):
         monkeypatch.setattr(sys, "argv", ["run_bench.py", *argv])
@@ -275,67 +280,122 @@ def campaign(run_bench, results):
     return results / "B200/csv/mul2_default.csv", results / "GH200/csv/mul2_default.csv"
 
 
-def test_nki_merges_into_the_csv_of_its_campaign(run_bench, results, campaign):
+def test_nki_never_writes_into_a_gpu_namespace(run_bench, results, campaign, capsys):
     b200, gh200 = campaign
-    frozen, gh200_before = frozen_view(b200), gh200.read_bytes()
-
-    run_bench.calls["torch_ms"] = 5.0          # torch on the Neuron device, not the B200's 2.0
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
-
-    header, rows = read_csv(b200)
-    assert header[-3:] == NKI_COLUMNS                              # appended, names unchanged
-    for r in rows:
-        assert (r["torch_nki_ms"], r["nki_ms"], r["speedup_nki"]) == ("5.0000", "2.5000", "2.00")
-        assert r["torch_ms"] == "2.0000"                           # the B200 baseline is a different number
-        assert float(r["speedup_nki"]) == float(r["torch_nki_ms"]) / float(r["nki_ms"])
-        assert float(r["speedup_nki"]) != float(r["torch_ms"]) / float(r["nki_ms"])    # never torch_ms / nki_ms
-    # nki_ms is written as measured: B200 drift scaling (2.0 / 5.0) would have given 1.0
-    assert frozen_view(b200) == frozen                             # frozen GPU columns untouched
-    assert gh200.read_bytes() == gh200_before                      # another namespace is untouched
+    before = b200.read_bytes(), gh200.read_bytes()
+    for gpu in ("B200", "GH200"):
+        with pytest.raises(SystemExit):
+            run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", "nki")
+    assert "Neuron hardware namespace" in capsys.readouterr().err
+    with pytest.raises(SystemExit):                                # nki never mixes with GPU backends
+        run_bench("--gpu", "TRN2", "--operator", "mul2", "--tile-language", "triton,nki")
+    assert (b200.read_bytes(), gh200.read_bytes()) == before
     assert sorted(p.name for p in results.iterdir()) == ["B200", "GH200"]
+    assert all("nki" not in b for b in run_bench.calls["backends"])
 
 
-def test_nki_logs_live_in_the_campaign_namespace(run_bench, results, campaign):
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
-    timing = json.loads((results / "B200/logs/time_measurement_logs/mul2_default_nki.json").read_text())
-    assert "nki_ms" in timing[0]
-    assert (results / "B200/logs/autotune_logs/mul2_default_nki.json").is_file()
-    # the engine is told where the Neuron profiling flow keeps its artifacts
-    assert run_bench.calls["logs_dir"][-1] == results / "B200" / "logs"
-
-
-def test_nki_columns_survive_a_later_tilelang_merge(run_bench, campaign):
+def test_nki_writes_its_own_neuron_namespace(run_bench, results, campaign):
     b200, _ = campaign
-    run_bench.calls["torch_ms"] = 5.0
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
-    nki = [[r[c] for c in NKI_COLUMNS] for r in read_csv(b200)[1]]
-    run_bench.calls["torch_ms"] = 2.0
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
-    header, rows = read_csv(b200)
-    assert [[r[c] for c in NKI_COLUMNS] for r in rows] == nki
-    assert "tilelang_ms" in header
+    before = b200.read_bytes()
+    run_bench.calls["torch_ms"] = 5.0          # PyTorch eager on the Neuron device
+    run_bench.calls["identity"] = {"label": "TRN2", "instance_type": "trn2.3xlarge"}
+    run_bench("--gpu", "TRN2", "--operator", "mul2", "--tile-language", "nki")
+    header, rows = read_csv(results / "TRN2/csv/mul2_default.csv")
+    assert header == ["params", "dtype", "torch_ms", "nki_ms", "speedup_nki", "torch_status", "nki_status"]
+    for r in rows:
+        assert (r["torch_ms"], r["nki_ms"], r["speedup_nki"]) == ("5.0000", "2.5000", "2.00")
+        assert float(r["speedup_nki"]) == float(r["torch_ms"]) / float(r["nki_ms"])
+        assert (r["torch_status"], r["nki_status"]) == ("ok", "ok")
+    assert b200.read_bytes() == before                             # the GPU namespace is untouched
+    timing = json.loads((results / "TRN2/logs/time_measurement_logs/mul2_default_nki.json").read_text())
+    assert "nki_ms" in timing[0] and timing[0]["torch_status"] == "ok"
+    prov = json.loads((results / "TRN2/logs/hardware_provenance/mul2_default_nki.json").read_text())
+    assert prov["hardware"]["label"] == "TRN2" and "eager" in prov["baseline"]
+    assert run_bench.calls["logs_dir"][-1] == results / "TRN2" / "logs"
+
+
+def test_nki_label_must_match_the_detected_neuron_device(run_bench, results):
+    run_bench.calls["identity"] = {"label": "TRN2", "instance_type": "trn2.3xlarge"}
+    with pytest.raises(SystemExit):
+        run_bench("--gpu", "TRN1", "--operator", "mul2", "--tile-language", "nki")
+    assert not (results / "TRN1").exists()
 
 
 def test_nki_runs_only_when_named(run_bench):
     run_bench("--gpu", "B200", "--operator", "mul2")
     run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "all")
     assert all("nki" not in b for b in run_bench.calls["backends"])
-    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "nki")
+    run_bench("--gpu", "TRN2", "--operator", "mul2", "--tile-language", "nki")
     assert run_bench.calls["backends"][-1] == {"nki"}
 
 
-def test_nki_profiling_artifacts_are_placed_under_the_namespace_logs():
-    import inspect
-    from tilebench.core import engine, nki_orchestrator
+def test_trn2_never_reads_gpu_peak_metadata():
+    from tilebench.core.metrics import load_peak_config
+    assert load_peak_config("TRN2").get("gpu") != load_peak_config("B200").get("gpu")
+    assert paths.is_neuron_hardware("TRN2") and not paths.is_neuron_hardware("B200")
+
+
+def test_neuron_artifacts_are_placed_under_the_namespace_logs():
+    from tilebench.core import engine
     logs = paths.results_logs_dir("B200")
-    assert engine._nki_artifact_paths(logs) == {
-        "base_dir": str(logs / "nki_profiles"),
-        "index_path": str(logs / "nki_neff_manifest.jsonl")}
+    assert engine._neuron_dirs(logs) == {"profiles": logs / "neuron_native_profiles",
+                                         "cache": logs / "neuron_native_cache"}
     with pytest.raises(ValueError):
-        engine._nki_artifact_paths(None)                          # no silent fallback location
-    params = inspect.signature(nki_orchestrator.profile_case_on_neuron).parameters
-    assert params["base_dir"].default is inspect.Parameter.empty
-    assert params["index_path"].default is inspect.Parameter.empty
+        engine._neuron_dirs(None)                                 # no silent fallback location
+
+
+def test_neuron_speedup_is_eager_over_nki_and_never_invented():
+    from tilebench.core import engine, neuron_native
+    assert neuron_native.speedup(4.0, 2.0) == 2.0                 # torch_eager_ms / nki_ms
+    for t, n in ((float("nan"), 2.0), (4.0, float("nan")), (0.0, 2.0)):
+        assert math.isnan(neuron_native.speedup(t, n))
+    assert set(neuron_native.BASELINE_UNRESOLVED) == {"bitonic_sort", "radix_sort",
+                                                      "block_sparse_attention", "flash_attention"}
+    assert (neuron_native.NEURON_DEFAULT_WARMUP, neuron_native.NEURON_DEFAULT_REPEAT) == (1, 3)
+    st = engine._torch_status
+    assert st(None) is None
+    assert st({"baseline_unresolved": True, "torch_ms": float("nan")}) == "unresolved"
+    assert st({"baseline_unresolved": False, "torch_ms": float("nan")}) == "failed"
+    assert st({"baseline_unresolved": False, "torch_ms": 1.5}) == "ok"
+    ns = engine._nki_status
+    assert ns({"nki_unsupported": True, "nki_ok": False}) == "unsupported"
+    assert ns({"nki_unsupported": False, "nki_ok": False}) == "failed"
+    assert ns({"nki_unsupported": False, "nki_ok": True}) == "ok"
+
+
+def test_neuron_formal_path_has_no_xla_or_compile():
+    import ast
+    import inspect
+    from tilebench.core import engine, neuron_native
+    for mod in (engine, neuron_native):
+        tree = ast.parse(inspect.getsource(mod))
+        imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+        imported |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+        attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+        assert not any(m.startswith("torch_xla") or m.endswith("nki_orchestrator") for m in imported), mod
+        assert not {"mark_step", "compile", "profile_case_on_neuron"} & attrs, mod
+
+
+def test_measurement_runs_with_torch_compile_disabled_and_restores_it():
+    import torch._dynamo
+    from tilebench.core import neuron_native
+    before = torch._dynamo.config.disable
+    with neuron_native.torch_compile_disabled():
+        assert torch._dynamo.config.disable is True
+        assert torch.compile(lambda x: x + 1)(torch.ones(2)).tolist() == [2.0, 2.0]   # runs eagerly
+    assert torch._dynamo.config.disable == before
+
+
+def test_prepare_environment_pins_caches_and_keeps_user_settings(tmp_path, monkeypatch):
+    from tilebench.core import neuron_native
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("TORCH_NEURONX_", "NKI_TRACE", "TORCHINDUCTOR_CACHE_DIR"))}
+    env["TORCH_NEURONX_NEFF_CACHE_DIR"] = "/user/choice"
+    monkeypatch.setattr(os, "environ", env)                      # nothing leaks into other tests
+    neuron_native.prepare_environment(tmp_path / "c")
+    assert os.environ["TORCH_NEURONX_NEFF_CACHE_DIR"] == "/user/choice"
+    assert os.environ["NKI_TRACE_CACHE_URL"] == str(tmp_path / "c" / "nki_trace")
+    assert os.environ["TORCH_NEURONX_HLO_CACHE_DIR"] == str(tmp_path / "c" / "hlo")
 
 
 # --------------------------------------------------------------------------
@@ -359,7 +419,7 @@ def test_backend_tag_is_canonical_and_order_free():
 
 def test_runs_of_one_operator_never_overwrite_each_others_raw_json(run_bench, results):
     runs = [("B200", "triton,cutile", False), ("B200", "triton,cutile", True),
-            ("B200", "tilelang", False), ("B200", "nki", False), ("GH200", "triton,cutile", False)]
+            ("B200", "tilelang", False), ("TRN2", "nki", False), ("GH200", "triton,cutile", False)]
     expected = {}
     for gpu, backends, autotune in runs:
         run_bench("--gpu", gpu, "--operator", "mul2", "--tile-language", backends,
@@ -371,10 +431,10 @@ def test_runs_of_one_operator_never_overwrite_each_others_raw_json(run_bench, re
     assert len(expected) == 10
     for path, content in expected.items():                         # ...and untouched by every later run
         assert path.read_bytes() == content, path
-    # NKI's raw JSON belongs to the B200 campaign namespace
-    assert (results / "B200/logs/time_measurement_logs/mul2_default_nki.json").is_file()
+    # NKI's raw JSON belongs to the Neuron namespace it was measured on, never to B200
+    assert (results / "TRN2/logs/time_measurement_logs/mul2_default_nki.json").is_file()
     written = sorted(p.name for p in (results / "B200/logs/time_measurement_logs").iterdir())
-    assert written == ["mul2_autotune_triton-cutile.json", "mul2_default_nki.json",
+    assert written == ["mul2_autotune_triton-cutile.json",
                        "mul2_default_tilelang.json", "mul2_default_triton-cutile.json"]
     assert "latest" not in " ".join(written)
 

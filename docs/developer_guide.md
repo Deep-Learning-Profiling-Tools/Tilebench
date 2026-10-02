@@ -13,6 +13,7 @@ This document contains implementation and maintenance details for extending Tile
 - [Dtype Handling](#dtype-handling)
 - [Metrics and Device Peaks](#metrics-and-device-peaks)
 - [Profiling](#profiling)
+- [Neuron Stack Diagnostics](#neuron-stack-diagnostics)
 - [LLM Code Generation](#llm-code-generation)
 - [Generated Outputs](#generated-outputs)
 - [Pre-Merge Checklist](#pre-merge-checklist)
@@ -284,6 +285,38 @@ python scripts/profiling/ncu_writeup.py --gpu GH200
 Generated NCU reports are written under `outputs/ncu/<gpu>/` and are ignored by Git, so the reports of two GPUs never collide. The released Hugging Face dataset holds the paper's 220 B200 reports; `hf_upload.py --gpu <gpu>` uploads under a per-GPU prefix and never writes over them.
 
 If the catalogue or `kernel_counts.json` of the requested GPU is missing, the tools fail with a clear error that names the command to produce it. They never fall back to another GPU's metadata, and never silently assume one kernel per launch. Missing metadata for an individual pair may fall back to one kernel with an explicit warning.
+
+## Neuron Stack Diagnostics
+
+**Formal Trn2 measurement.** `run_bench.py --gpu TRN2 --tile-language nki` on a Trainium host runs on the native PyTorch Neuron stack (`tilebench/core/neuron_native.py`): PyTorch eager `impl_torch.run` on `torch.device("neuron")` against the NKI `run()` with the same neuron tensors, warmup 1 / repeat 3 unless given on the command line. torch.compile is disabled for the whole run, so a `torch.compile` call inside an implementation runs eagerly; there is no torch-xla path and no best-baseline. Both outputs are verified against the CPU reference. The latency is the mean over the repeats of the device busy sum of one `run()` (the durations of its device executions added up, per-core copies of one execution merged; one `torch.profiler` `NeuronConfig(RUNTIME)` session per synchronized call), the same definition as the GPU path, where Proton adds up the CUDA kernel durations inside the scope. Host wall time is recorded next to it and never used in a speedup. `speedup_nki = torch_ms / nki_ms` (PyTorch eager device time over NKI device time).
+
+NKI results live only in their Neuron hardware namespace (`results/TRN2/`, the label must match the detected device): `csv/<op>_<mode>.csv` has the columns `params, dtype, torch_ms, nki_ms, speedup_nki, torch_status, nki_status`, and `logs/hardware_provenance/` records the instance type, LNC, driver and package versions. `run_bench.py` refuses to write NKI into a GPU namespace or to mix NKI with GPU backends. `torch_status` is `ok`, `failed` (did not verify, or no device time) or `unresolved` (`neuron_native.BASELINE_UNRESOLVED`, not run); `nki_status` is `ok`, `failed` or `unsupported` (the implementation raised `NotImplementedError`). Only `ok`/`ok` rows carry a speedup; the others are `nan`. Peak/roofline metadata is looked up by the namespace label, so TRN2 never reads a GPU's peak file. Compile caches and traces stay under `results/TRN2/logs/neuron_native_{cache,profiles}/` (not version controlled). Run it with the interpreter of the native environment, whose `neuronx-cc` is put first on `PATH`.
+
+`scripts/neuron_diag.py` is the diagnostics harness on the same stack (isolated worker per case, input bundles, row validity). It is a separate entry point: it does not change `run_bench.py`, the engine, or anything under `results/`.
+
+| Mode | Role | Meaning |
+|---|---|---|
+| `native_torch_eager` | benchmark | PyTorch baseline on the native `neuron` device, eager |
+| `native_nki` | benchmark | the NKI implementation called with native `neuron` tensors |
+| `native_torch_compiled` | diagnostic | the baseline under `torch.compile(backend="neuron")`, static shapes; `run --compile-diagnostics` only |
+| `xla_torch`, `xla_nki` | legacy diagnostics | PyTorch/XLA paths, kept only to read archived runs; `run --legacy-xla-diagnostics` only |
+
+```bash
+python scripts/neuron_diag.py env     --run-id R        # creates .local/neuron_native_diagnostics/R/
+python scripts/neuron_diag.py sources --run-id R        # pins each NKI PR head, builds overlays
+python scripts/neuron_diag.py run     --run-id R --ops rmsnorm --cases pilot --native-python <venv>/bin/python
+python scripts/neuron_diag.py report  --run-id R
+```
+
+- **Benchmark vs diagnostics.** Reports, speedups, coverage counts and tables use `native_torch_eager` and `native_nki` only (`report.benchmark_records`). `run` refuses the `xla_*` modes unless `--legacy-xla-diagnostics` is passed; `report --legacy-xla` writes their separate view to `legacy_xla/report.md`. A run directory containing `ARCHIVED_LEGACY_XLA.json` is frozen. Some `impl_torch.py` files keep a legacy `device.type == "xla"` branch; native runs the normal `neuron`/generic path and the branch does not affect comparability.
+- **Algorithm matching.** PyTorch is the semantic reference and practical baseline and need not use the same algorithm. Algorithm matching is judged among Triton, cuTile, TileLang and NKI on the high-level algorithm and math semantics only; core mapping, program_id split, tile shapes, SBUF residency and data reuse, kernel fusion and launch counts, DMA/PSUM/partition layout, hardware arithmetic primitives and backend tuning knobs are allowed to differ.
+
+- **Sources.** NKI implementations live on unmerged PR branches. `sources` pins each branch head, reads the operator files with `git show`, applies only an import-path patch for the pre-package layout (hashes before and after are recorded), and builds an overlay tree per operator: this checkout's `tilebench` package with that operator directory replaced. Both stacks import the same files. The static scan in the manifest reports what the source contains, not what the device executes.
+- **Inputs.** Each case gets two CPU bundles (seed and seed+1) with the CPU reference of the pinned `impl_torch.run`, saved with checksums and loaded by every mode. The second bundle checks that a changed input gives a correct new output. The correctness contract is `main`'s `config.yaml` `verify` section; a looser branch override is recorded and not applied.
+- **Timing.** `wall_ms` is host time of `run()` plus device synchronization after warmup (`wall_timing_method = wall_sync`), split into dispatch and sync wait. `device_ms` is filled only by a device trace with an executed-artifact identity (`timing_method = native_device_trace`: one `torch.profiler` `NeuronConfig(RUNTIME)` session per synchronized `run()`, busy sum of its executions; `neuron_rt_inspect` in legacy XLA rows); otherwise it is null with a reason. First-call (compile) time is recorded separately. Speedups are only formed within one stack and one timing method.
+- **CPU fallback.** On the native stack the state stays `unable_to_determine` until a fallback report API of the installed build has been verified.
+- **Runtime adapters.** `tilebench/neuron_diag/runtime.py` probes native APIs (device, synchronize, dynamo metrics) on the installed build and records which one it used. If a required API is missing, the mode is reported as `blocked_env`; nothing is stubbed.
+- **Storage.** A run directory is created exclusively, files are never overwritten, and `run` resumes by skipping only (operator, case, mode) rows finished with the same source and environment hash. Everything stays under the Git-ignored `.local/`.
 
 ## LLM Code Generation
 
