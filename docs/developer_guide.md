@@ -298,7 +298,14 @@ python scripts/profiling/ncu_driver.py --gpu GH200              # the whole cata
 python scripts/profiling/ncu_writeup.py --gpu GH200
 ```
 
-Generated NCU reports are written under `outputs/ncu/<gpu>/` and are ignored by Git, so the reports of two GPUs never collide. The released Hugging Face dataset holds the paper's 220 B200 reports; `hf_upload.py --gpu <gpu>` uploads under a per-GPU prefix and never writes over them.
+Generated NCU reports are written under `outputs/ncu/<gpu>/` and are ignored by Git, so the reports of two GPUs never collide. The Hugging Face dataset `bcui2/NCU_report` has one top-level folder per hardware; `NVIDIA_B200/` holds the paper's 220 B200 reports. `hf_upload.py` uploads the `*.ncu-rep` files of one GPU and nothing else. It takes two independent names: `--gpu`, the local TileBench label whose `outputs/ncu/<gpu>/` is read, and `--hf-folder`, the dataset folder to write, a single path component that is never derived from `--gpu` (there is no mapping between the two). Each operator keeps its directory, `<hf-folder>/<op>/`, and an operator argument uploads only that one:
+
+```bash
+python scripts/profiling/hf_upload.py --gpu GH200 --hf-folder NVIDIA_GH200            # outputs/ncu/GH200/ -> NVIDIA_GH200/
+python scripts/profiling/hf_upload.py --gpu GH200 --hf-folder NVIDIA_GH200 1d_conv    # outputs/ncu/GH200/1d_conv/ -> NVIDIA_GH200/1d_conv/
+```
+
+Profiler output of other hardware (AMD, Neuron) is not handled by this uploader.
 
 If the catalogue or `kernel_counts.json` of the requested GPU is missing, the tools fail with a clear error that names the command to produce it. They never fall back to another GPU's metadata, and never silently assume one kernel per launch. Missing metadata for an individual pair may fall back to one kernel with an explicit warning.
 
