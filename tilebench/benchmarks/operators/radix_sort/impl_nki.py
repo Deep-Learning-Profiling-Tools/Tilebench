@@ -235,7 +235,9 @@ if nki is not None:
         return out
 
 
-def _mark_step() -> None:
+def _mark_step(device=None) -> None:
+    if device is not None and device.type != "xla":
+        return
     from torch_xla.core import xla_model as xm
     xm.mark_step()
 
@@ -288,7 +290,7 @@ def run(input: torch.Tensor, N: int, block_size: int = 1024,
     for shift in range(0, KEY_BITS, RADIX_BITS):
         shift_t = torch.full((PMAX, 1), shift, dtype=torch.int32, device=device)
         work = radix_pass(work, shift_t, S, n_blocks)
-        _mark_step()
+        _mark_step(device)
 
     return work.reshape(-1)[:N].to(dtype)
 
