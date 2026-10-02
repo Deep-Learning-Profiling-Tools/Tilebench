@@ -87,9 +87,19 @@ def kernel_count_for(counts, key, default=1):
 _AUX_CHARS = " <>(),:*&{}[]"
 
 
+#: Runtime work that is not an operator kernel: the copy/fill engines as the
+#: profilers name them, and the ROCm runtime's blit kernels (on ROCm a
+#: device-to-device copy is a real dispatch, `__amd_rocclr_copyBuffer`, that a
+#: counter profiler sees like any kernel).
+_RUNTIME_MARKERS = ("memcpy", "memset")
+_RUNTIME_PREFIXES = ("__amd_rocclr_",)
+
+
 def is_aux_kernel(name: str) -> bool:
-    """True for non-op (ATen/library) kernels that must NOT be profiled."""
-    return (not name) or name.startswith("void") or any(c in name for c in _AUX_CHARS)
+    """True for non-op (ATen/library/runtime) kernels that must NOT be profiled."""
+    return ((not name) or name.startswith("void") or any(c in name for c in _AUX_CHARS)
+            or name.startswith(_RUNTIME_PREFIXES)
+            or any(m in name.lower() for m in _RUNTIME_MARKERS))
 
 
 def kernel_stems(names) -> list[str]:

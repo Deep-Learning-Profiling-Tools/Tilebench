@@ -137,7 +137,7 @@ python scripts/plot_sweep_max.py --gpu B200                   # -> results/B200/
 python scripts/profiling/ncu_catalogue.py --gpu B200          # -> outputs/profiling/B200/ncu_catalogue.json
 ```
 
-`ncu_catalogue` records the Triton and cuTile autotune winners, and reads them from exactly one file per operator: `results/<gpu>/logs/autotune_logs/<op>_autotune_triton-cutile.json`. Pass `--tile-language` to read the winners of another autotune run instead; the selection must include `triton` and `cutile`.
+`ncu_catalogue` records the Triton and cuTile autotune winners, and reads them from exactly one file per operator: `results/<gpu>/logs/autotune_logs/<op>_autotune_triton-cutile.json`. Pass `--tile-language` to read the winners of another autotune run instead; the selection must include `triton` or `cutile`, the backends the profilers replay (a GPU without cuTile, such as MI300X, passes `--tile-language triton`; its catalogue records no cuTile winners).
 
 Build result paths with the helpers in `tilebench/paths.py` (`results_root`, `results_csv_dir`, `results_logs_dir`, `results_figures_dir`, `results_aggregate_dir`, `results_runs_dir`), never by concatenating strings.
 
@@ -270,12 +270,16 @@ Profiling support is split by role, not by file type:
 ```text
 tilebench/profiling/     # importable library, installed with the package
 ├── ncu_kernel_select.py # kernel selection, capture validation, metadata loading
-└── ncu_catalogue.py     # sweep-max cases and catalogue entries
+├── ncu_catalogue.py     # sweep-max cases and catalogue entries
+├── replay.py            # one pair's inputs and exact autotune winner, shared by all harnesses
+└── rocprof_compute.py   # ROCm Compute Profiler environment, selection, capture validation
 scripts/profiling/       # command-line tools, run from a checkout, not installed
 ├── ncu_catalogue.py     # build a GPU's catalogue
 ├── probe_kernel_count.py
 ├── ncu_one.py, ncu_driver.py, ncu_writeup.py, hf_upload.py
-└── ncu_generic_harness.py   # the process NCU profiles; the drivers start it by path
+├── ncu_generic_harness.py   # the process NCU profiles; the drivers start it by path
+├── rocprof_compute_driver.py, hf_upload_rocm_compute.py
+└── rocprof_compute_harness.py   # the process rocprof-compute profiles
 ```
 
 A module belongs in `tilebench/profiling/` only if other code imports it: no `argparse`, no `__main__`, nothing that runs at import. A program goes under `scripts/`, and imports the library. Campaign-specific scripts, cluster job files and measured data do not belong in either: everything the tools generate goes under the Git-ignored `outputs/`. The tools put the repository root on `sys.path` themselves, so they run from any directory without `PYTHONPATH`.
@@ -285,14 +289,17 @@ NCU metadata is generated per hardware, because autotune winners, kernel launch 
 ```text
 outputs/profiling/<gpu>/
 ├── ncu_catalogue.json    # profiled operator/dtype cases and selected configurations
-└── kernel_counts.json    # expected kernel counts and names, used to validate NCU captures
+└── kernel_counts.json    # expected kernel counts and names, used to validate profiler captures
 ```
+
+`kernel_counts.json` holds one row per probed pair: `count` is the number of operator compute-kernel launches of ONE `impl.run()`, and `names` is that launch sequence in order with repeats kept (a pipeline `A, B, B, C` is four launches, never deduplicated). Memcpy/memset, ATen/library helpers and runtime blit kernels (on ROCm a device-to-device copy is a dispatch, `__amd_rocclr_copyBuffer`) are not operator kernels (`ncu_kernel_select.is_aux_kernel`); the probe lists them under `excluded`. `first_call_identical` records whether the first call of the pair launches the same compute sequence as a later call. The probe installs the exact autotune winner the way the harnesses do (`tilebench/profiling/replay.py`), so the counted configuration is the profiled one, and records a pair the GPU's autotune run has no result for (an unsupported dtype) as `skipped` instead of running it. `--tile-language` selects the probed backends (default `triton,cutile`; MI300X probes `triton`). torch.profiler reports HIP kernels on ROCm as well; on MI300X its names and counts match a rocprofv3 kernel trace.
 
 Nothing is committed for any GPU, and nothing here is needed to run benchmarks: only the NCU tools read these files. `scripts/plot_sweep_max.py` does not need them either; it derives each operator's sweep-max case from `config.yaml` with the same rule as the catalogue (`ncu_catalogue.sweep_max_cases`). Use `ncu_catalogue_path`, `kernel_counts_path` and `ncu_output_dir` from `tilebench/paths.py`; there is no global copy. Every tool that touches this metadata takes `--gpu`, required and without a default:
 
 ```bash
 python scripts/profiling/ncu_catalogue.py --gpu GH200           # writes outputs/profiling/GH200/ncu_catalogue.json
 python scripts/profiling/probe_kernel_count.py --gpu GH200      # writes outputs/profiling/GH200/kernel_counts.json
+python scripts/profiling/probe_kernel_count.py --gpu MI300X --tile-language triton
 python scripts/profiling/ncu_one.py --gpu GH200 mul2 fp16       # one operator
 python scripts/profiling/ncu_driver.py --gpu GH200              # the whole catalogue
 python scripts/profiling/ncu_writeup.py --gpu GH200
@@ -305,9 +312,31 @@ python scripts/profiling/hf_upload.py --gpu GH200 --hf-folder NVIDIA_GH200      
 python scripts/profiling/hf_upload.py --gpu GH200 --hf-folder NVIDIA_GH200 1d_conv    # outputs/ncu/GH200/1d_conv/ -> NVIDIA_GH200/1d_conv/
 ```
 
-Profiler output of other hardware (AMD, Neuron) is not handled by this uploader.
+Profiler output of other hardware is not handled by this uploader: ROCm Compute Profiler artifacts have their own (below), Neuron output is not handled.
 
 If the catalogue or `kernel_counts.json` of the requested GPU is missing, the tools fail with a clear error that names the command to produce it. They never fall back to another GPU's metadata, and never silently assume one kernel per launch. Missing metadata for an individual pair may fall back to one kernel with an explicit warning.
+
+### ROCm Compute Profiler (AMD)
+
+The AMD counterpart of the NCU pipeline keeps its invariants: the sweep-max case of the GPU's catalogue, the exact autotune winner, one profile per (operator, dtype, backend), input generation, warmup and cache eviction outside the profiled set, and every capture validated against `kernel_counts.json` of the same GPU, launch by launch. Every valid catalogue pair is profiled (a dtype without an autotune result on the GPU is excluded and listed, never replaced); the backend is Triton.
+
+`rocprof-compute` (ROCm Compute Profiler, 3.7.0 with ROCm 7.14 on MI300X) has no profiler start/stop range, and its dispatch filter `-d` counts iterations per kernel, not across a run: with three warmups of an `A, B, B, C` pipeline, `-d 4` captures the fourth dispatch of each kernel, one of them inside a warmup. No `-d` range selects one whole call after warmups when a call's kernels launch different numbers of times. `rocprof_compute_harness.py` therefore keeps the warmup out of the profiled process: `PROF_MODE=prime` runs the pair three times without a profiler (JIT warmup into Triton's cache), and the profiled process generates the inputs, evicts the last-level cache like the timer (2x the LLC, 512 MiB on MI300X) and runs ONE `impl.run()`, its first call. The kernel-name filter `-k` alone then selects exactly that call. The probe's `first_call_identical` guards the premise, and the capture is validated anyway. On the MI300X pilot the deterministic counters of this protocol and of an NCU-style warmed process (three warmups, eviction, target selected with `-d 4`, exact for a single-kernel operator) are identical, and duration, CU utilization and active CUs fall within the same run-to-run spread.
+
+Facts the driver relies on, measured with 3.7.0:
+
+- `-k` matches from the start of the kernel name. A regex containing `$` silently disables the filter and every dispatch is profiled, so the selection is `^(?:name|...)` and the validation checks exact names.
+- The default profile (no `--block`/`--set`, roofline on) runs one workload execution per counter pass (13 on MI300X) and collects every block gfx942 has: 0-2, 4-7, 10-18 and the roofline microbenchmark; the memory chart (3) is derived from the same counters. `--pc-sampling` turns a profile into a PC-sampling-only run (block 21), so PC sampling is a separate pass.
+- A workload whose HIP/HSA runtime comes from the PyTorch wheel aborts counter collection with `aqlprofile API table load failed` unless `<rocm>/lib` is on `LD_LIBRARY_PATH`, which rocprofv3 appends itself; the driver appends it too (torch and Triton keep the runtime from `torch/lib`). On a multi-version ROCm layout (`/opt/rocm/core-<ver>/`) it also sets `ROCM_VER`, which rocprof-compute reads when `/opt/rocm/.info/` is absent. rocprof-compute's Python requirements are installed apart from the benchmark environment; `--rocprof-compute-python` names that interpreter.
+
+One pair is `outputs/rocprof_compute/<gpu>/<op>/<backend>_<dtype>/` (`rocprof_compute_pair_dir`): `workload/` is the complete directory `rocprof-compute profile` wrote, the canonical artifact, never edited; `pc_sampling/` is the PC-sampling pass (stochastic, every 65536 cycles), a workload of its own whose `ps_file_results.json` holds each sample's PC, decoded instruction, source line and stall reason; `analysis/` holds output derived from both (`rocprof-compute analyze` text reports and CSV exports, made on copies because `analyze` writes its joined tables into the directory it reads, and `pc_sampling_instructions.csv`, the per-instruction PC-sampling table, which the CSV export lacks); `logs/` has the console output and `capture.json` the validation record. Validation requires, in every counter pass, exactly the manifest's launch sequence: non-empty, operator kernels only, same count and same order; the PC-sampling pass, which samples the whole process, must show the same operator dispatch sequence.
+
+```bash
+python scripts/profiling/rocprof_compute_driver.py --gpu MI300X \
+    --rocprof-compute /opt/rocm/bin/rocprof-compute --rocprof-compute-python <python> [--ops vector_add --dtypes fp32]
+python scripts/profiling/hf_upload_rocm_compute.py --gpu MI300X --hf-folder AMD_MI300X [vector_add] [--verify]
+```
+
+The driver is resumable: it writes `sweep_log.json` after every pair, skips a pair recorded ok only after its artifact validates again, keeps the error of a failed pair, and ends with `coverage.json` (valid pairs, successes, failures, exclusions). `hf_upload_rocm_compute.py` uploads complete pair directories, every file whatever its extension, of the pairs the sweep log records ok and that validate again, to `<hf-folder>/<op>/<backend>_<dtype>/` of `bcui2/NCU_report`, with the two records; `--hf-folder` is independent of `--gpu`. A download is re-analyzed with `rocprof-compute analyze -p <...>/workload` without running the kernel.
 
 ## LLM Code Generation
 
@@ -352,7 +381,7 @@ Writers should create these directories when needed; a fresh clone must not depe
 
 Running a benchmark only writes files under these paths. It performs no Git operation and backs nothing up. The paper's frozen raw logs, LLM trajectories and B200 NCU metadata are preserved on the `archive/raw-logs-2026-09-18` branch, which is frozen.
 
-TileBench++ artifacts are archived on `archive/tilebenchpp-2026-10`, by the maintenance tool that lives on that branch only (`scripts/archive_artifacts.sh`, with its tests). It snapshots `results/<gpu>/logs/` (`--logs`, provenance sidecars included), `outputs/profiling/<gpu>/` (`--profiling`) and `tilebench/benchmarks/llm_generated/` (`--llm`); `--all --gpu <gpu>` is all three. `--base` names the source commit the artifacts were produced from; it is recorded as an exact SHA and kept reachable from the archive. A run only adds or updates files, so the artifacts other machines archived are never dropped. Summary CSVs stay on the source branches, and NCU reports (`*.ncu-rep`) go to external storage:
+TileBench++ artifacts are archived on `archive/tilebenchpp-2026-10`, by the maintenance tool that lives on that branch only (`scripts/archive_artifacts.sh`, with its tests). It snapshots `results/<gpu>/logs/` (`--logs`, provenance sidecars included), `outputs/profiling/<gpu>/` (`--profiling`) and `tilebench/benchmarks/llm_generated/` (`--llm`); `--all --gpu <gpu>` is all three. `--base` names the source commit the artifacts were produced from; it is recorded as an exact SHA and kept reachable from the archive. A run only adds or updates files, so the artifacts other machines archived are never dropped. Summary CSVs stay on the source branches; NCU reports (`*.ncu-rep`) and ROCm Compute Profiler workloads (`outputs/rocprof_compute/`) go to external storage only:
 
 ```bash
 git show origin/archive/tilebenchpp-2026-10:scripts/archive_artifacts.sh > /tmp/archive_artifacts.sh

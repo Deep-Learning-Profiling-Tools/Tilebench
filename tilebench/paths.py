@@ -40,6 +40,9 @@ REPO_ROOT = Path(os.environ.get("TILEBENCH_REPO_ROOT") or PACKAGE_ROOT.parent).r
 OUTPUT_ROOT = REPO_ROOT / "outputs"
 #: Generated NCU reports, one directory per hardware: outputs/ncu/<hardware>/.
 NCU_OUTPUT_ROOT = OUTPUT_ROOT / "ncu"
+#: Generated ROCm Compute Profiler artifacts, one directory per hardware:
+#: outputs/rocprof_compute/<hardware>/ (see rocprof_compute_pair_dir).
+ROCPROF_COMPUTE_OUTPUT_ROOT = OUTPUT_ROOT / "rocprof_compute"
 #: NCU profiling metadata, one directory per hardware (see the helpers below):
 #:     outputs/profiling/<hardware>/{ncu_catalogue.json,kernel_counts.json}
 #: Autotune winners, kernel launch counts and kernel names are measured on one
@@ -160,6 +163,21 @@ def ncu_report_path(hardware: str, operator: str, backend: str, dtype: str) -> P
     The single rule shared by the sweep driver and the one-operator tool, so
     the reports of two GPUs can never collide."""
     return ncu_output_dir(hardware) / operator / f"{backend}_{dtype}.ncu-rep"
+
+
+def rocprof_compute_output_dir(hardware: str) -> Path:
+    """Generated ROCm Compute Profiler artifacts of this hardware:
+    outputs/rocprof_compute/<hardware>/."""
+    return ROCPROF_COMPUTE_OUTPUT_ROOT / hardware_label(hardware)
+
+
+def rocprof_compute_pair_dir(hardware: str, operator: str, backend: str, dtype: str) -> Path:
+    """The artifact of one profiled pair:
+        outputs/rocprof_compute/<hardware>/<operator>/<backend>_<dtype>/
+    holding workload/ (the complete rocprof-compute workload directory, the
+    canonical artifact), analysis/ (output derived from it) and capture.json
+    (the capture validation record). One rule for the driver and the uploader."""
+    return rocprof_compute_output_dir(hardware) / operator / f"{backend}_{dtype}"
 
 
 def operator_dir(operator: str) -> Path:
