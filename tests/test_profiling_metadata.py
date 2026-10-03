@@ -238,7 +238,8 @@ def test_a_regular_install_ships_source_without_experiment_data_or_cluster_scrip
     # no command-line tool, no harness that NCU executes, no data
     assert sorted(f for f in installed if f.startswith("tilebench/profiling/")) == [
         "tilebench/profiling/__init__.py", "tilebench/profiling/ncu_catalogue.py",
-        "tilebench/profiling/ncu_kernel_select.py"]
+        "tilebench/profiling/ncu_kernel_select.py", "tilebench/profiling/replay.py",
+        "tilebench/profiling/rocprof_compute.py"]
     assert not (site / "scripts").exists()                # scripts/ is not installed
     # the resources the framework does need at run time are still there
     assert "tilebench/data/peak_performance/B200.json" in installed
@@ -274,7 +275,8 @@ def _run_outside_the_repo(tmp_path, script, *args):
 
 @pytest.mark.parametrize("script", ["profiling/ncu_catalogue.py", "profiling/ncu_one.py",
                                     "profiling/ncu_driver.py", "profiling/ncu_writeup.py",
-                                    "profiling/probe_kernel_count.py", "aggregate_results.py"])
+                                    "profiling/probe_kernel_count.py",
+                                    "profiling/rocprof_compute_driver.py", "aggregate_results.py"])
 def test_tools_start_from_outside_the_repository_without_pythonpath(tmp_path, script):
     path = REPO / "scripts" / script
     assert _run_outside_the_repo(tmp_path, path, "--help").returncode == 0
@@ -297,3 +299,11 @@ def test_the_drivers_start_the_generic_harness_next_to_them(tmp_path):
     # started by path from elsewhere, it imports tilebench and stops at its first input, NCU_OP
     r = _run_outside_the_repo(tmp_path, harness)
     assert r.returncode != 0 and "NCU_OP" in r.stderr and "ModuleNotFoundError" not in r.stderr
+
+
+def test_the_rocprof_compute_harness_starts_from_outside_the_repository(tmp_path):
+    harness = TOOLS / "rocprof_compute_harness.py"
+    assert load_tool("rocprof_compute_driver").HARNESS == harness
+    # started by path from elsewhere, it imports tilebench and stops at its first input, PROF_OP
+    r = _run_outside_the_repo(tmp_path, harness)
+    assert r.returncode != 0 and "PROF_OP" in r.stderr and "ModuleNotFoundError" not in r.stderr
