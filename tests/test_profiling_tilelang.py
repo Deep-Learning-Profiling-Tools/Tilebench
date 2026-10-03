@@ -57,18 +57,11 @@ def test_without_strict_the_existing_merge_is_unchanged():
     assert vars(impl._DEFAULT_CONFIG) == {"block": 2048, "occupancy": 8, "K2": 16}
 
 
-def test_strict_replay_collapses_identical_per_launch_winners():
-    impl = fake_impl(_DEFAULT_CONFIG={"BLOCK_SIZE": 1024, "threads": 128})   # destindex: one kernel, two launches
-    apply_winner(impl, {"nope_BLOCK_SIZE": 512, "nope_threads": 64,
-                        "rope_BLOCK_SIZE": 512, "rope_threads": 64}, strict=True)
-    assert impl._DEFAULT_CONFIG == {"BLOCK_SIZE": 512, "threads": 64}
-
-
-def test_strict_replay_refuses_differing_per_launch_winners():
-    impl = fake_impl(_DEFAULT_CONFIG={"BLOCK_SIZE": 1024, "threads": 128})
-    with pytest.raises(ReplayError, match="cannot be replayed exactly"):
+def test_strict_replay_rejects_per_launch_keys_without_a_per_launch_config():
+    impl = fake_impl(_DEFAULT_CONFIG={"BLOCK_SIZE": 1024, "threads": 128})   # one config read for two launches
+    with pytest.raises(ReplayError, match="no place"):
         apply_winner(impl, {"nope_BLOCK_SIZE": 512, "nope_threads": 64,
-                            "rope_BLOCK_SIZE": 1024, "rope_threads": 64}, strict=True)
+                            "rope_BLOCK_SIZE": 512, "rope_threads": 64}, strict=True)
 
 
 def test_strict_replay_routes_prefixed_and_per_dtype_configs():

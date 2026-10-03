@@ -31,7 +31,6 @@ DTYPE_MAP = {
 
 
 _PREFIXED_CONFIG_RE = re.compile(r"^_DEFAULT_([A-Z0-9]+)_CONFIG$")
-_WINNER_PREFIX_RE = re.compile(r"^([A-Za-z0-9]+)_(.+)$")
 
 
 class ReplayError(RuntimeError):
@@ -109,41 +108,17 @@ def _config_keys(cur) -> set:
 
 def _strict_target(impl, cfg: dict, torch_dtype) -> dict:
     """Check that every remaining winner key has a place in the config run()
-    reads, and return the keys to install.
-
-    A winner whose keys carry a per-call prefix the module has no
-    `_DEFAULT_<PREFIX>_CONFIG` for (destindex: one kernel launched twice, tuned
-    once per launch as `nope_*` / `rope_*`) can be replayed through the single
-    default config only when every prefix tuned to the same values; those are
-    then installed unprefixed. Anything else raises ReplayError."""
+    reads, and return the keys to install; anything else raises ReplayError."""
     configs = getattr(impl, "_DEFAULT_CONFIGS", None)
     if getattr(impl, "_DEFAULT_CONFIG", None) is None and configs is not None:
         target = _config_keys(configs.get(torch_dtype))
     else:
         target = _config_keys(getattr(impl, "_DEFAULT_CONFIG", None))
-    if not target:
-        raise ReplayError(f"{impl.__name__} has no default config to install {sorted(cfg)} into")
-    plain = {k: v for k, v in cfg.items() if k in target}
-    groups: dict[str, dict] = {}
-    for key, val in cfg.items():
-        if key in target:
-            continue
-        m = _WINNER_PREFIX_RE.match(key)
-        if not m or m.group(2) not in target:
-            raise ReplayError(f"{impl.__name__}: winner key {key!r} has no place in the "
-                              f"config run() reads ({sorted(target)})")
-        groups.setdefault(m.group(1), {})[m.group(2)] = val
-    if groups:
-        variants = {tuple(sorted(g.items())) for g in groups.values()}
-        if len(variants) != 1:
-            raise ReplayError(f"{impl.__name__}: per-launch winners {groups} differ, but run() "
-                              f"reads one shared config; the winner cannot be replayed exactly")
-        shared = next(iter(groups.values()))
-        if any(plain.get(k, v) != v for k, v in shared.items()):
-            raise ReplayError(f"{impl.__name__}: prefixed winner {groups} contradicts {plain}")
-        print(f"  cfg: shared-kernel winner {sorted(groups)} -> {shared}")
-        plain.update(shared)
-    return plain
+    stray = sorted(k for k in cfg if k not in target)
+    if stray:
+        raise ReplayError(f"{impl.__name__}: winner keys {stray} have no place in the config "
+                          f"run() reads ({sorted(target) or 'none'})")
+    return cfg
 
 
 def apply_winner(impl, cfg: dict | None, torch_dtype=None, strict: bool = False) -> None:
