@@ -1,0 +1,45 @@
+# Batched Matmul: FP16, Batch 32, M = N = K = 640
+
+The printed autotuned CSV reports TileLang at **51.5 us**, **1.758x Triton**, **1.619x cuTile**, and **2.210x PyTorch**. PyTorch is the fastest available non-TileLang baseline among all three supplied reference columns. The supported operator-level explanation is **tensor-core underfeeding from the selected TileLang implementation's per-thread operand staging and completion synchronization**, inferred from the implementation and machine code together with matching activity counters. The evidence does not establish a compiler defect or quantify each component's latency cost.
+
+## Matched Case and Comparison
+
+CSV evidence is `results/csv/batched_matmul_autotune.csv:59`; exact helper output and denominator directions are in [csv_checks.json](csv_checks.json). The manifest and structured autotune-log selection agree on Batch 32, M 640, FP16, and all three configurations ([config_checks.json](config_checks.json)). The square problem has 16,777,216,000 FLOPs, matching the manifest's recorded problem size and config's expression. All winners have 128 x 128 output tiles and group size 1: 800 blocks with no output or reduction tail. TileLang and cuTile use K tiles of 64 (10 iterations); Triton uses 32 (20 iterations). TileLang requests two pipeline stages and 128 threads; Triton requests four stages and four warps; cuTile's occupancy hint is 4, with 256 actual launch threads. A hint is not an achieved occupancy measurement.
+
+| Evidence | TileLang | Triton | cuTile | PyTorch |
+|---|---:|---:|---:|---:|
+| CSV latency, us | 51.5 | 29.3 | 31.8 | 23.3 |
+| NCU kernel duration, ns | 49248.0 | 29952.0 | 29920.0 | uncaptured |
+| Dynamic warp instructions | 4011200.0 | 5448800.0 | 1521177.0 | uncaptured |
+| Tensor activity, % elapsed | 16.02203029165102 | 27.065373449291542 | 26.45376893872853 | uncaptured |
+| Active-warps activity, % active | 6.126669595849728 | 15.753589842539967 | 28.20691115085015 | uncaptured |
+| Registers/thread | 137 | 135 | 64 | uncaptured |
+| Shared memory/block, bytes | 67584 | 66608 | 50452 | uncaptured |
+| Register / shared-memory block limits | 3 / 3 | 3 / 3 | 4 / 4 | uncaptured |
+| DRAM read / write bytes | 31052288.0 / 3795968.0 | 28331264.0 / 1683968.0 | 25073664.0 / 1592832.0 | uncaptured |
+
+Every NCU number above refers to `evidence/reports/targeted_<backend>.ncu-rep`, range 0, action 0. Metric identifiers, in table order: `gpu__time_duration.sum`, `smsp__inst_executed.sum`, `sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed`, `sm__warps_active.avg.pct_of_peak_sustained_active`, `launch__registers_per_thread`, `launch__shared_mem_per_block`, `launch__occupancy_limit_registers`, `launch__occupancy_limit_shared_mem`, `dram__bytes_read.sum`, and `dram__bytes_write.sum`. [metrics.json](metrics.json) retains all 867 exact numeric records, units, and identities; direct report extraction matches every supplied record ([metric_validation.json](metric_validation.json)).
+
+## Mechanism and Competing Explanations
+
+TileLang allocates shared operand tiles and a tensor-memory accumulator, then performs two `T.copy` calls, `T.gemm`, and an explicit `T.sync_threads()` inside each FP16 reduction iteration (`evidence/implementations/impl_tilelang.py:105-120`). Warp specialization is explicitly disabled at line 75. In the captured SASS, operands use `LDGSTS.E.BYPASS.128` rather than TMA instructions (for example `output/tilelang.sass.txt:150-192`). The path issues a group of tensor instructions, commits completion, checks a completion barrier, and then synchronizes the block before the next loading region (lines 302-361). This is direct structural evidence of completion dependencies in the path supplying tensor work; the high-level two-stage loop alone does not guarantee that copy, compute, and synchronization costs are hidden.
+
+Triton instead uses descriptor loads and stores (`evidence/implementations/impl_triton.py:64-75`) over a cached transposed B tensor (lines 22-29), and its SASS contains `UTMALDG.3D` and `UTMASTG.3D`. cuTile's source performs tile loads and MMA (`evidence/implementations/impl_cutile.py:52-72`), and the emitted code also uses TMA. All three contain `UTCHMMA`: tensor-core absence is contradicted. TileLang's copying therefore performs explicit per-thread address/copy work where its peers have descriptor-based bulk transfers. Relative to cuTile, the dynamic instruction count is 2.637x, consistent with heavier staging and coordination. Relative to Triton it is only 0.736x: total instruction inflation cannot explain TileLang's slowdown against both peers.
+
+The expected consequence of the completion-dependent staging path is intermittent tensor work. TileLang's tensor activity is about 16%, versus about 27% for both peers, while its NCU duration is 1.644x Triton and 1.646x cuTile. The tensor-activity fraction multiplied by duration is similar across captures (approximately 7.9-8.1 us), consistent with similar tensor work spread over a longer interval in TileLang. This derived comparison supports underfeeding; it is not a dynamic MMA count or a proof of identical tensor cycles. Lower achieved active-warp activity is supporting evidence of the operating behavior, not proof of serial execution.
+
+**A theoretical occupancy collapse relative to Triton is rejected:** both have 128-thread blocks, about 135-137 registers/thread, similar shared memory, and identical three-block register/shared-memory limits. cuTile does have a higher four-block limit and more launched warps, which can contribute to better overlap and latency hiding, but cannot by itself explain the Triton comparison. The equal 800-block grids and exact tile divisibility also reject a TileLang-specific small-grid or padding-work explanation. There remains a common finite-grid scheduling tail; its exact contribution is not measured.
+
+**DRAM amplification is secondary evidence, not an established dominant cause.** TileLang reads about 1.096x Triton and 1.238x cuTile, and its measured writes are larger. Those differences are smaller than the duration gap for reads and occur under kernel replay with cache control `none`. Writes are also much smaller than the logical output allocation, so DRAM counters cannot substitute for total logical/L2 traffic. No bandwidth saturation, L2 transaction, coalescing, or bank-conflict metric is present in the report inventories. These explanations remain unresolved rather than being inferred from byte counts alone. Likewise, neither static barriers nor static instruction totals measure elapsed stall time: Triton actually has more listed block-barrier instructions than TileLang, yet is faster.
+
+## Coverage and Limits
+
+Each report contains one range and one BMM action, matching the manifest's kernel-only capture; names and complete metric inventories are saved in [report_inventory.json](report_inventory.json). All reports identify NVIDIA B200, compute capability 10.0, 148 SMs, and matching PCI device attributes. The supplied records do not certify an exact GPU UUID or capture-time package versions. `profile/env.sh` selects `/scratch/arustagi/tilebench_pdf_env/bin/python`, but its CUDA/NCU executable paths point to CUDA 13.2; this path alone cannot prove CUDA runtime or compiler versions. The manifest supplies capture-time implementation provenance, not an independently verified binary/source hash chain.
+
+NCU and CSV ratios remain separate. In particular, cuTile and Triton are nearly tied under NCU, while Triton leads cuTile in the printed CSV. Kernel replay excludes host launch costs and uncaptured work. Triton's B transpose is cached in the supplied implementation, but this evidence does not establish its exact inclusion in CSV timing. No PyTorch report is supplied, so the 2.210x fastest-baseline gap is observed but its library-kernel mechanism is unresolved.
+
+The main inference is specific to this FP16 scale and selected winner. Resolving its precise contribution would require matched copy/compute timelines or appropriate synchronization/issue and memory metrics; no new capture was performed. Compiler source inspection was unnecessary because no compiler-specific attribution is made.
+
+Static SASS totals (including NOPs) are TileLang 1015, Triton 630, and cuTile 1104. Each helper parsed one kernel with no warnings ([sass_checks.json](sass_checks.json)); these are listing sizes, distinct from the dynamic warp instructions above. Original supplied imports are preserved as `output/<backend>.sass.txt`. Rerun extraction with `source profile/env.sh; "$PY" output/extract.py` from the assigned worktree.
+
+Outside-worktree access was limited to the assigned Python environment and installed Nsight Compute Python API. Shell startup also automatically attempted the system Lmod installation under `/opt/ohpc/admin/lmod/` and system Lua module paths, producing a missing-`posix` warning; no contents from those paths were used in analysis. No internet, other worktrees, Git history, compiler source bundles, benchmark execution, compilation, autotuning, or profiling was used.
