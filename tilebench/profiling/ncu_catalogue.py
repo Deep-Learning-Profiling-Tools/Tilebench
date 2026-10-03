@@ -162,6 +162,8 @@ def collect_op(op_name: str, gpu: str, backends: list[str]) -> dict:
                 "triton":  best.get("triton_autotune_cfg"),
                 "cutile":  best.get("cutile_autotune_cfg"),
             }
+            if "tilelang_autotune_cfg" in best:       # only a run that tuned TileLang
+                autotune_by_dtype[dt]["tilelang"] = best["tilelang_autotune_cfg"]
 
     return {
         "op": op_name,

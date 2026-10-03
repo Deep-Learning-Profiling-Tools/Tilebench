@@ -9,6 +9,9 @@ the probe counts launches for is the configuration that gets profiled:
                                     it: per-kernel `_DEFAULT_<PREFIX>_CONFIG`
                                     dicts, the per-dtype `_DEFAULT_CONFIGS`, or
                                     `_DEFAULT_CONFIG`
+  - apply_winner(..., strict=True)  the same, but every winner key must land in
+                                    the config run() reads (used for TileLang),
+                                    else ReplayError instead of a silent default
 
 impl.run() is then called with its default arguments, which take the
 `_DEFAULT_CONFIG` path (no autotuning), so the replayed kernels are the winner's.
@@ -28,6 +31,11 @@ DTYPE_MAP = {
 
 
 _PREFIXED_CONFIG_RE = re.compile(r"^_DEFAULT_([A-Z0-9]+)_CONFIG$")
+_WINNER_PREFIX_RE = re.compile(r"^([A-Za-z0-9]+)_(.+)$")
+
+
+class ReplayError(RuntimeError):
+    """The autotune winner cannot be installed exactly where run() reads it."""
 
 
 def resolve_params(params: dict, dtype: str | None) -> dict:
@@ -91,17 +99,68 @@ def inject_prefixed(impl, cfg: dict) -> dict:
     return leftover
 
 
-def apply_winner(impl, cfg: dict | None, torch_dtype=None) -> None:
+def _config_keys(cur) -> set:
+    if isinstance(cur, dict):
+        return set(cur)
+    if isinstance(cur, SimpleNamespace):
+        return set(vars(cur))
+    return set()
+
+
+def _strict_target(impl, cfg: dict, torch_dtype) -> dict:
+    """Check that every remaining winner key has a place in the config run()
+    reads, and return the keys to install.
+
+    A winner whose keys carry a per-call prefix the module has no
+    `_DEFAULT_<PREFIX>_CONFIG` for (destindex: one kernel launched twice, tuned
+    once per launch as `nope_*` / `rope_*`) can be replayed through the single
+    default config only when every prefix tuned to the same values; those are
+    then installed unprefixed. Anything else raises ReplayError."""
+    configs = getattr(impl, "_DEFAULT_CONFIGS", None)
+    if getattr(impl, "_DEFAULT_CONFIG", None) is None and configs is not None:
+        target = _config_keys(configs.get(torch_dtype))
+    else:
+        target = _config_keys(getattr(impl, "_DEFAULT_CONFIG", None))
+    if not target:
+        raise ReplayError(f"{impl.__name__} has no default config to install {sorted(cfg)} into")
+    plain = {k: v for k, v in cfg.items() if k in target}
+    groups: dict[str, dict] = {}
+    for key, val in cfg.items():
+        if key in target:
+            continue
+        m = _WINNER_PREFIX_RE.match(key)
+        if not m or m.group(2) not in target:
+            raise ReplayError(f"{impl.__name__}: winner key {key!r} has no place in the "
+                              f"config run() reads ({sorted(target)})")
+        groups.setdefault(m.group(1), {})[m.group(2)] = val
+    if groups:
+        variants = {tuple(sorted(g.items())) for g in groups.values()}
+        if len(variants) != 1:
+            raise ReplayError(f"{impl.__name__}: per-launch winners {groups} differ, but run() "
+                              f"reads one shared config; the winner cannot be replayed exactly")
+        shared = next(iter(groups.values()))
+        if any(plain.get(k, v) != v for k, v in shared.items()):
+            raise ReplayError(f"{impl.__name__}: prefixed winner {groups} contradicts {plain}")
+        print(f"  cfg: shared-kernel winner {sorted(groups)} -> {shared}")
+        plain.update(shared)
+    return plain
+
+
+def apply_winner(impl, cfg: dict | None, torch_dtype=None, strict: bool = False) -> None:
     """Install the autotune winner `cfg` on the imported impl module.
 
     `torch_dtype` selects the `_DEFAULT_CONFIGS` entry of operators that keep
     one default config per dtype (matmul_fp32_fp16_fp8). No-op for an empty
-    or missing winner, which replays the operator's own default config."""
+    or missing winner, which replays the operator's own default config.
+    With `strict`, a winner key that run() would not read raises ReplayError
+    (see _strict_target) instead of being merged in and ignored."""
     if not cfg:
         return
     cfg = inject_prefixed(impl, cfg)
     if not cfg:
         return
+    if strict:
+        cfg = _strict_target(impl, cfg, torch_dtype)
     existing = getattr(impl, "_DEFAULT_CONFIG", None)
     configs = getattr(impl, "_DEFAULT_CONFIGS", None)  # per-dtype dict, optional
 

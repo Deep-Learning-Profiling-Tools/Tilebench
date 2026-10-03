@@ -52,7 +52,7 @@ def main() -> None:
     impl = importlib.import_module(f"tilebench.benchmarks.operators.{op}.impl_{backend}")
 
     if cfg_json:
-        apply_winner(impl, json.loads(cfg_json), params.get("dtype"))
+        apply_winner(impl, json.loads(cfg_json), params.get("dtype"), strict=(backend == "tilelang"))
 
     if op not in GENERATORS:
         raise RuntimeError(f"no GENERATORS entry for op={op}")

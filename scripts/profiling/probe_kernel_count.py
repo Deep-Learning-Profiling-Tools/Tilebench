@@ -57,7 +57,7 @@ from tilebench.data.tensors import GENERATORS  # noqa: E402
 from tilebench.profiling.replay import apply_winner, resolve_params  # noqa: E402
 
 #: The backends whose kernels the profilers capture (and so the probe counts).
-PROFILED_BACKENDS = ("triton", "cutile")
+PROFILED_BACKENDS = ("triton", "cutile", "tilelang")
 
 def _device_launches(prof) -> list[str]:
     """Device launches recorded by torch.profiler, in order. On ROCm torch
@@ -81,7 +81,7 @@ def count_one(op: str, backend: str, params: dict, cfg: dict | None, dtype: str)
     # overrides mutate module-level config dicts).
     impl = importlib.reload(importlib.import_module(
         f"tilebench.benchmarks.operators.{op}.impl_{backend}"))
-    apply_winner(impl, cfg, params.get("dtype"))
+    apply_winner(impl, cfg, params.get("dtype"), strict=(backend == "tilelang"))
 
     inputs = GENERATORS[op](**params)
     if not isinstance(inputs, tuple):
@@ -107,8 +107,9 @@ def main() -> None:
                     help="Hardware label of the GPU being probed (e.g. B200): reads and writes "
                          "outputs/profiling/<gpu>/ only")
     ap.add_argument("--tile-language", type=str, default="triton,cutile",
-                    help="Backends to probe, among the profiled ones (triton, cutile); "
-                         "default: triton,cutile. A GPU without cuTile (e.g. MI300X) uses triton")
+                    help="Backends to probe, among the profiled ones (triton, cutile, tilelang); "
+                         "default: triton,cutile. A GPU without cuTile (e.g. MI300X) uses triton. "
+                         "A run replaces only the rows of the backends it probes")
     args = ap.parse_args()
     try:
         backends = [b for b in parse_backends(args.tile_language) if b in PROFILED_BACKENDS]
@@ -120,6 +121,11 @@ def main() -> None:
         catalogue = ks.load_catalogue(args.gpu)
     except ks.MissingProfilingMetadataError as e:
         sys.exit(f"error: {e}")
+    if "tilelang" in backends and not any(
+            (w or {}).get("tilelang") for e in catalogue
+            for w in e.get("autotune_winner_per_dtype", {}).values()):
+        sys.exit(f"error: the {args.gpu} catalogue holds no TileLang winners; rebuild it with "
+                 f"ncu_catalogue.py --tile-language from a run that tuned TileLang")
     out_path = kernel_counts_path(args.gpu)
     counts: list[dict] = []
 
@@ -151,12 +157,14 @@ def main() -> None:
                     counts.append({"op": op, "dtype": dt, "backend": backend,
                                    "count": None, "error": f"{type(e).__name__}: {e}"[:200]})
 
-    if only_op and out_path.exists():
-        # Single-operator refresh: keep every other operator's rows. Without
-        # this an ONLY_OP run would replace the canonical file with one op.
+    if out_path.exists():
+        # A refresh replaces only what it probed: an ONLY_OP run keeps every
+        # other operator's rows, and a run over some backends (e.g. tilelang
+        # alone) keeps the rows of the others.
         probed = {(r["op"], r["dtype"], r["backend"]) for r in counts}
         kept = [r for r in json.loads(out_path.read_text())
-                if (r["op"], r["dtype"], r["backend"]) not in probed]
+                if (r["op"], r["dtype"], r["backend"]) not in probed
+                and (only_op or r["backend"] not in backends)]
         counts = sorted(kept + counts,
                         key=lambda r: (r["op"], r["dtype"], r["backend"]))
     out_path.parent.mkdir(parents=True, exist_ok=True)
