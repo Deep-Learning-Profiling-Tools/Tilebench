@@ -4,6 +4,10 @@ import triton.language as tl
 
 _DEFAULT_CONFIG = {"BLOCK": 1024, "num_warps": 4}
 
+# pad_kernel is not tuned: both paths launch it with this fixed block, so a
+# winner replayed into _DEFAULT_CONFIG changes only bitonic_step_kernel.
+_PAD_BLOCK = 1024
+
 
 @triton.jit
 def pad_kernel(data_ptr, work_ptr, N, M, BLOCK: tl.constexpr):
@@ -51,8 +55,8 @@ def run(data: torch.Tensor, N: int,
     cfg = _DEFAULT_CONFIG
 
 
-    grid_pad = (triton.cdiv(M, cfg["BLOCK"]),)
-    pad_kernel[grid_pad](data, work, N, M, BLOCK=cfg["BLOCK"])
+    grid_pad = (triton.cdiv(M, _PAD_BLOCK),)
+    pad_kernel[grid_pad](data, work, N, M, BLOCK=_PAD_BLOCK)
 
 
     if autotune:
