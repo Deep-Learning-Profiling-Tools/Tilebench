@@ -58,3 +58,27 @@ def test_the_autotune_search_spaces_are_unchanged():
     assert streamk._SEARCH_SPACE == [
         {"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk, "GROUP_M": 8, "num_warps": nw, "num_stages": 3}
         for bm in (64, 128) for bn in (128, 256) for bk in (32, 64) for nw in (4, 8)]
+
+
+# Precedence of the non-autotuned config: a replayed autotune winner (the
+# profiler harness rebinds _DEFAULT_CONFIG through replay.apply_winner) wins
+# over the CDNA3 fallback, which wins over the builtin default.
+BMM_WINNER = {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 32,
+              "GROUPSIZE": 1, "num_warps": 4, "num_stages": 2}
+STREAMK_WINNER = {"BLOCK_M": 128, "BLOCK_N": 256, "BLOCK_K": 64, "GROUP_M": 8,
+                  "num_warps": 4, "num_stages": 3}
+
+
+@pytest.mark.parametrize("mod,winner", [(bmm, BMM_WINNER), (streamk, STREAMK_WINNER)])
+@pytest.mark.parametrize("arch", ["cdna3", "blackwell", "hopper", None])
+def test_a_replayed_winner_is_used_as_given(mod, winner, arch, monkeypatch):
+    from tilebench.profiling.replay import apply_winner
+    monkeypatch.setattr(mod, "detect_arch", lambda: arch)
+    monkeypatch.setattr(mod, "_DEFAULT_CONFIG", mod._DEFAULT_CONFIG)  # restored after the test
+    apply_winner(mod, dict(winner))
+    assert mod._default_config() == winner
+
+
+@pytest.mark.parametrize("mod", [bmm, streamk])
+def test_the_builtin_default_is_the_sentinel(mod):
+    assert mod._BUILTIN_DEFAULT_CONFIG is mod._DEFAULT_CONFIG

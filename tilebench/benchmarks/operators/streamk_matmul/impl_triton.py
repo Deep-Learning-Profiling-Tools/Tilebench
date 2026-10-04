@@ -19,11 +19,18 @@ _DEFAULT_CONFIG = {
 # space) and only lowers the K tile from 64 to 32 (fp32: 65536 B). It is a
 # candidate of _SEARCH_SPACE, which is unchanged on every architecture.
 _CDNA3_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "BLOCK_K": 32}
+_BUILTIN_DEFAULT_CONFIG = _DEFAULT_CONFIG
 
 
 def _default_config() -> dict:
-    """Fixed config of the non-autotuned path, by the GPU actually present."""
-    return _CDNA3_DEFAULT_CONFIG if detect_arch() == "cdna3" else _DEFAULT_CONFIG
+    """Fixed config of the non-autotuned path, by the GPU actually present.
+
+    A config written into _DEFAULT_CONFIG (a profiler harness replaying an
+    autotune winner) is used as given: the CDNA3 fallback only replaces the
+    builtin default."""
+    if _DEFAULT_CONFIG is _BUILTIN_DEFAULT_CONFIG and detect_arch() == "cdna3":
+        return _CDNA3_DEFAULT_CONFIG
+    return _DEFAULT_CONFIG
 
 
 _SEARCH_SPACE = [
