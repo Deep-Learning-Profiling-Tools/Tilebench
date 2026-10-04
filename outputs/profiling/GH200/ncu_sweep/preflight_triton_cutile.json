@@ -1,0 +1,290 @@
+[
+ {
+  "op": "vector_add",
+  "dtype": "fp32",
+  "backend": "triton",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 123.67,
+  "captured": [
+   "add_kernel"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 1,
+  "observed_count": 1,
+  "params": {
+   "n": 20971520
+  },
+  "winner": {
+   "BLOCK_SIZE": 1024,
+   "num_warps": 4
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/vector_add/triton_fp32.ncu-rep"
+ },
+ {
+  "op": "matmul_fp32_fp16_fp8",
+  "dtype": "fp16",
+  "backend": "triton",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 124.15,
+  "captured": [
+   "matmul_kernel"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 1,
+  "observed_count": 1,
+  "params": {
+   "M": 4096,
+   "N": 4096,
+   "K": 20480
+  },
+  "winner": {
+   "BLOCK_SIZE_M": 128,
+   "BLOCK_SIZE_N": 128,
+   "BLOCK_SIZE_K": 128,
+   "GROUP_SIZE_M": 8,
+   "num_warps": 4,
+   "num_stages": 3
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/matmul_fp32_fp16_fp8/triton_fp16.ncu-rep"
+ },
+ {
+  "op": "batched_matmul",
+  "dtype": "fp32",
+  "backend": "cutile",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 120.52,
+  "captured": [
+   "bmm_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I10_I128_I128_I64_I5_I5_I1"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 1,
+  "observed_count": 1,
+  "params": {
+   "BATCH": 32,
+   "M": 640
+  },
+  "winner": {
+   "tile_m": 128,
+   "tile_n": 128,
+   "tile_k": 64,
+   "occupancy": 4,
+   "group_size": 1
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/batched_matmul/cutile_fp32.ncu-rep"
+ },
+ {
+  "op": "linear_self_attention",
+  "dtype": "fp32",
+  "backend": "triton",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 148.69,
+  "captured": [
+   "phi_kernel",
+   "phi_kernel",
+   "kv_gemm_kernel",
+   "z_kernel",
+   "out_gemm_kernel"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 5,
+  "observed_count": 5,
+  "params": {
+   "eps": 1e-06,
+   "M": 10000,
+   "D": 256
+  },
+  "winner": {
+   "kv_BLOCK_M": 64,
+   "kv_BLOCK_N": 32,
+   "kv_BLOCK_K": 64,
+   "kv_num_warps": 4,
+   "kv_num_stages": 3,
+   "out_BLOCK_M": 64,
+   "out_BLOCK_N": 128,
+   "out_BLOCK_K": 32,
+   "out_num_warps": 4,
+   "out_num_stages": 3
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/linear_self_attention/triton_fp32.ncu-rep"
+ },
+ {
+  "op": "streamk_matmul",
+  "dtype": "fp32",
+  "backend": "triton",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 135.38,
+  "captured": [
+   "first_wave",
+   "full_tiles"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 2,
+  "observed_count": 2,
+  "params": {
+   "k": 4096,
+   "m": 8192,
+   "n": 28672
+  },
+  "winner": {
+   "BLOCK_M": 128,
+   "BLOCK_N": 128,
+   "BLOCK_K": 32,
+   "GROUP_M": 8,
+   "num_warps": 4,
+   "num_stages": 3
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/streamk_matmul/triton_fp32.ncu-rep"
+ },
+ {
+  "op": "radix_sort",
+  "dtype": "int32",
+  "backend": "triton",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 494.55,
+  "captured": [
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel",
+   "radix_histogram_kernel",
+   "radix_sum_chunks_kernel",
+   "radix_scan_chunk_sums_kernel",
+   "radix_scan_chunks_kernel",
+   "radix_scatter_kernel"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 80,
+  "observed_count": 80,
+  "params": {
+   "n": 20000000
+  },
+  "winner": {
+   "num_warps": 8
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/radix_sort/triton_int32.ncu-rep"
+ },
+ {
+  "op": "top_k_selection",
+  "dtype": "fp32",
+  "backend": "cutile",
+  "ok": true,
+  "rc": 0,
+  "elapsed_s": 215.7,
+  "captured": [
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2t1_3i16_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2i16t1_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2i16t1_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2i16t1_p16_I1024",
+   "block_topk_kernel_b2048_Kt1_A1f32_1i16t1_p16_A2f32_1v4l0_2i16t1_p16_I1024"
+  ],
+  "validated": true,
+  "unexpected": [],
+  "stderr_tail": "",
+  "expected_count": 10,
+  "observed_count": 10,
+  "params": {
+   "N": 1048576,
+   "k": 1024
+  },
+  "winner": {
+   "block": 2048,
+   "occupancy": 4,
+   "K2": 1024
+  },
+  "rep": "/tmp/tilebench-gh200-ncu/preflight/top_k_selection/cutile_fp32.ncu-rep"
+ }
+]
