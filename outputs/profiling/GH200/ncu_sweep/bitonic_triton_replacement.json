@@ -1,0 +1,283 @@
+{
+ "what": "replacement of NVIDIA_GH200/bitonic_sort/triton_{fp16,fp32}.ncu-rep",
+ "launch_metadata_source": "A/B: torch.profiler CUDA trace of one impl.run() (grid, block); C: ncu --import --page raw launch__grid_size, launch__block_size. Entries are (kernel, grid_x, block_x); block_x = 32 * num_warps.",
+ "before_fix": {
+  "fp16": {
+   "winner": {
+    "BLOCK": 1024,
+    "num_warps": 8
+   },
+   "formal_autotune_A": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "replay_B": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "old_report_C": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "A==B": true,
+   "B==C": true
+  },
+  "fp32": {
+   "winner": {
+    "BLOCK": 512,
+    "num_warps": 8
+   },
+   "formal_autotune_A": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "replay_B": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     32768,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "old_report_C": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     32768,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "A==B": false,
+   "B==C": true
+  }
+ },
+ "after_fix": {
+  "fp16": {
+   "winner": {
+    "BLOCK": 1024,
+    "num_warps": 8
+   },
+   "autotune_picked_now": {
+    "BLOCK": 1024,
+    "num_warps": 8
+   },
+   "formal_autotune_A": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "replay_B": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "new_report_C": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      16384,
+      256
+     ]
+    ]
+   },
+   "A==B": true,
+   "A==C": true
+  },
+  "fp32": {
+   "winner": {
+    "BLOCK": 512,
+    "num_warps": 8
+   },
+   "autotune_picked_now": {
+    "BLOCK": 512,
+    "num_warps": 8
+   },
+   "formal_autotune_A": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "replay_B": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "new_report_C": {
+    "launches": 301,
+    "pad": [
+     "pad_kernel",
+     16384,
+     128
+    ],
+    "steps_distinct": [
+     [
+      "bitonic_step_kernel",
+      32768,
+      256
+     ]
+    ]
+   },
+   "A==B": true,
+   "A==C": true
+  }
+ },
+ "ncu_reruns": {
+  "fp16": {
+   "ok": true,
+   "validated": true,
+   "rc": 0,
+   "expected_count": 301,
+   "captured_count": 301,
+   "unexpected": [],
+   "elapsed_s": 1482.26,
+   "details_page_rc": 0,
+   "details_sections": 4213,
+   "sha256": "bfd52382c6d5c3f145ff972bcce7a112135d473e4629c09a0954c6fa71b0efa7",
+   "bytes": 1380104199
+  },
+  "fp32": {
+   "ok": true,
+   "validated": true,
+   "rc": 0,
+   "expected_count": 301,
+   "captured_count": 301,
+   "unexpected": [],
+   "elapsed_s": 1524.56,
+   "details_page_rc": 0,
+   "details_sections": 4213,
+   "sha256": "c3aa63fdfe0e1b05a5889b10d826ab75d06b7c1800496abab7dffa1844b66eac",
+   "bytes": 1424895044
+  }
+ },
+ "kernel_counts_refresh": "ONLY_OP=bitonic_sort probe_kernel_count.py --gpu GH200 --tile-language triton: kernel_counts.json byte-identical (count 301, same names and order, first_call_identical=True)",
+ "other_reports": "328 other local reports unchanged (sha256, mtime, size); remote: only these 2 sha256 differ from the previous manifest",
+ "tests": "tests/test_bitonic_sort_pad_block.py: 4 failed / 3 passed on d6ddb622, 7 passed on 5610f18f; full suite on 5610f18f: 349 passed, 6 skipped",
+ "replacement": {
+  "reason": "bitonic_sort Triton: replayed winner reached pad_kernel (see PROVENANCE.md)",
+  "hf_revision_before": "645591bbb808b4ceeecae2c4ec61b78151ad6249",
+  "gh200_upload_revision_before": "45ee6451ee770133202d8ed2ba3af41884b17dcb",
+  "hf_revision_after": "7cb810502bc6f668647c4c0d67caa491999b3563",
+  "files": [
+   {
+    "report": "bitonic_sort/triton_fp16.ncu-rep",
+    "old_sha256": "400048fa3f2c86bd70144d6f8a552e22fca9a23208160fd5493a90682d5cd74b",
+    "old_bytes": 1379408762,
+    "new_sha256": "bfd52382c6d5c3f145ff972bcce7a112135d473e4629c09a0954c6fa71b0efa7",
+    "new_bytes": 1380104199,
+    "profiling_source": "5610f18f1cc695168c85712e1ecd5bfcec5439bb"
+   },
+   {
+    "report": "bitonic_sort/triton_fp32.ncu-rep",
+    "old_sha256": "d7208a62eb5dcbe3b5259a452a61c132740d81d2bbb73d9c8fe9770aaf6fc9a5",
+    "old_bytes": 1424927857,
+    "new_sha256": "c3aa63fdfe0e1b05a5889b10d826ab75d06b7c1800496abab7dffa1844b66eac",
+    "new_bytes": 1424895044,
+    "profiling_source": "5610f18f1cc695168c85712e1ecd5bfcec5439bb"
+   }
+  ]
+ }
+}
