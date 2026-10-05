@@ -110,11 +110,17 @@ def test_streamk_search_space_and_default_are_unchanged(streamk):
     assert mod._DEFAULT_CONFIG == _STREAMK_DEFAULT
 
 
-@pytest.mark.parametrize("arch", ["blackwell", "cdna3", None])
+@pytest.mark.parametrize("arch", ["blackwell", None])
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
-def test_streamk_default_is_the_original_off_hopper(streamk, arch, dtype):
+def test_streamk_default_is_the_original_off_hopper_and_cdna3(streamk, arch, dtype):
     mod = streamk(arch)
     assert mod._default_config(dtype) == _STREAMK_DEFAULT
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32, None])
+def test_streamk_cdna3_fallback_covers_every_dtype(streamk, dtype):
+    mod = streamk("cdna3")
+    assert mod._default_config(dtype) is mod._CDNA3_DEFAULT_CONFIG
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
@@ -128,8 +134,9 @@ def test_streamk_hopper_fp32_only_lowers_block_k(streamk):
     assert cfg in _STREAMK_SEARCH_SPACE
 
 
-def test_streamk_replayed_default_override_is_used_as_given(streamk):
-    mod = streamk("hopper")
+@pytest.mark.parametrize("arch", ["hopper", "cdna3", "blackwell"])
+def test_streamk_replayed_default_override_is_used_as_given(streamk, arch):
+    mod = streamk(arch)
     replay = {**_STREAMK_DEFAULT, "BLOCK_M": 64}              # what the NCU harness writes
     mod._DEFAULT_CONFIG = replay
     assert mod._default_config(torch.float32) is replay

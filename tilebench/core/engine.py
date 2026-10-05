@@ -5,9 +5,10 @@ import os
 import torch
 import yaml
 from tilebench.core.dtypes import resolve_dtype
-from tilebench.core.timer import report_benchmark
-from tilebench.core.verifier import verify
+from tilebench.core.timer import report_benchmark, timing_mode
+from tilebench.core.verifier import config_tolerance, verify
 from tilebench.data.tensors import expand_cases, get_generator, infer_problem_size
+from tilebench.hardware import detect_arch
 from tilebench.paths import operator_config
 
 
@@ -26,6 +27,18 @@ if not HAS_CUDA:
 
 #: Backends run_benchmark_suite() tries when the caller names none.
 DEFAULT_ENABLED_BACKENDS = ("triton", "cutile", "tilelang", "nki")
+
+#: The ROCm graph-timing fallback is announced once per process, not per case.
+_timing_fallback_announced = False
+
+
+def _announce_timing_mode(mode: dict) -> None:
+    global _timing_fallback_announced
+    if mode["timing_note"] and not _timing_fallback_announced:
+        _timing_fallback_announced = True
+        print("ROCm timing fallback: requested CUDA graph execution, using eager Proton "
+              "timing because HIP Graph kernel attribution is unreliable in the current "
+              "Proton backend.")
 
 
 def _nki_artifact_paths(logs_dir) -> dict:
@@ -117,9 +130,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     repeat            = int(bench_cfg.get("repeat", 100))
     autotune          = bool(bench_cfg.get("autotune", False))
 
-    verify_cfg = config.get("verify", {})
-    verify_atol = float(verify_cfg["atol"]) if "atol" in verify_cfg else None
-    verify_rtol = float(verify_cfg["rtol"]) if "rtol" in verify_cfg else None
+    verify_atol, verify_rtol = config_tolerance(config.get("verify", {}), detect_arch())
     use_cuda_graph    = bool(bench_cfg.get("use_cuda_graph", False))
     proton_scope_name = str(bench_cfg.get("proton_scope_name", "launch"))
     proton_backend    = bench_cfg.get("proton_backend")
@@ -127,6 +138,11 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     flush_l2          = bool(bench_cfg.get("flush_l2", False))
     keep_proton_files = bool(bench_cfg.get("keep_proton_files", False))
     proton_output_dir = bench_cfg.get("proton_output_dir")
+    # requested (config/override) vs. executed timing mode; report_benchmark
+    # applies the same rule, this copy is for the logs.
+    timing = timing_mode(use_cuda_graph) if HAS_CUDA else None
+    if timing:
+        _announce_timing_mode(timing)
 
     cases = expand_cases(operator_name, config)
     case_indices = bench_cfg.get("case_indices")
@@ -383,6 +399,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
             "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
+            "timing":                timing,
         })
 
     return results

@@ -54,3 +54,13 @@ def verify(
                 return False, f"output[{i}]: {err}"
         return True, ""
     return _verify_single(output, reference, atol=atol, rtol=rtol)
+
+
+def config_tolerance(verify_cfg: dict, arch: str | None) -> tuple[float | None, float | None]:
+    """(atol, rtol) of an operator config's `verify:` section on `arch`
+    (tilebench.hardware.detect_arch()). An `arch_overrides: {<arch>: {...}}`
+    entry for that architecture replaces the operator-level values it names;
+    a value given nowhere is None, i.e. the per-dtype default."""
+    cfg = {**verify_cfg, **(verify_cfg.get("arch_overrides") or {}).get(arch, {})}
+    return (float(cfg["atol"]) if "atol" in cfg else None,
+            float(cfg["rtol"]) if "rtol" in cfg else None)
