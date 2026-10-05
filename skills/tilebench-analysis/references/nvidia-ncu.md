@@ -1,6 +1,8 @@
 # Saved NVIDIA Report Analysis
 
 Read only the requested implementation's report unless comparison is requested.
+For reasoning and candidate mechanisms, use [diagnosis.md](diagnosis.md). This
+reference covers extraction and interpretation, not a substitute for that workflow.
 Resolve a compatible NCU executable and `ncu_report` Python API from the workspace;
 configure its module path if needed without replacing the benchmark environment.
 GPU access is not required to inspect a saved report. Current installed versions
@@ -61,6 +63,10 @@ Read embedded SASS when it answers a specific question:
 Record failed imports/empty listings. Missing source-line correlation is different
 from missing machine code. Follow relevant compiler source only if emission or
 capability remains material; no mandatory source -> PTX -> SASS -> NCU chain.
+Parse a saved listing with `<python> <skill-dir>/scripts/sass_listing.py <listing>`.
+Inspect per-kernel opcode families, predicates, NOPs and parsing warnings, not just
+the total. Multiple kernel scopes are a notice, not necessarily a parsing failure;
+raw report action identity is authoritative when listing headers are truncated.
 
 ## Infer Carefully
 

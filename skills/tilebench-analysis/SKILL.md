@@ -1,11 +1,13 @@
 ---
 name: tilebench-analysis
-description: Navigate TileBench implementations, benchmark cases, selected configurations, and saved profiling artifacts to investigate one backend's kernel performance. Use for TileBench evidence discovery and diagnosis; compare backends only when requested.
+description: Investigate TileBench kernel performance by finding the matching benchmark/configuration/profile artifacts and connecting implementation or generated code to measured bottlenecks, competing explanations, and uncertainty. Default to one backend; compare only when requested.
 ---
 
 # TileBench Analysis
 
-Find the evidence for the requested TileBench case and explain what it supports.
+Find the evidence for the requested TileBench case and explain its performance,
+not just its utilization. Navigation establishes the evidence; diagnosis is the
+main deliverable when the user asks why a kernel is slow.
 Default to one implementation, whether Triton, cuTile, or TileLang. A comparison
 is optional, not a prerequisite or a reason to read other backends' code.
 
@@ -41,12 +43,21 @@ AMD and Trainium evidence can be located with the repository map, but diagnosis
 on those platforms is outside this version's tested scope. Do not interpret their
 artifacts with NCU counter definitions.
 
-Inspect the selected implementation/configuration and relevant generated code.
-Use counters to test mechanisms suggested by that evidence: work/traffic,
-resource limits, issue/dependencies, compute feeding, and launch geometry.
-Deepen only relevant paths; do not turn every category into a required diagnosis.
-Use SASS/PTX when it resolves a material question. Consult compiler source only
-for an unresolved lowering/capability question, with version/path evidence.
+For a performance explanation, read [the v7-derived diagnosis workflow](references/diagnosis.md).
+Start from the selected implementation's useful work, ownership, staging and
+operation boundaries. Inventory the diagnostic questions, then deepen only paths
+that could explain the observed behavior. Navigation-only requests need no full
+diagnosis or coverage artifact.
+
+Connect implementation/config/code -> extra work or resource/dependency effect ->
+matching measurements -> plausible latency consequence. Name the mechanism and
+test a serious alternative. Distinguish what creates work from what limits its
+execution: fewer instructions do not imply proportionally lower latency, and low
+utilization alone does not explain underfeeding or serial execution.
+
+Use SASS/PTX selectively to resolve instruction-family, access-width, duplication,
+or synchronization questions. Compiler source remains an optional route for a
+material unresolved emission/capability question, not a required proof chain.
 
 ## Report
 
@@ -61,5 +72,6 @@ separate from NCU duration. Save the extraction commands and exact records used
 alongside the analysis in the task's output directory. If comparison is requested,
 match hardware, useful work, and capture methodology; explicitly name its scope.
 
-This is a first navigation-skill draft, not a validated diagnostic system. B200 is
+This combines TileBench navigation/tooling with v7-derived analysis guidance, not
+a validated diagnostic system. B200 is
 the initial evaluation target; GH200 notes are an untested adaptation.
