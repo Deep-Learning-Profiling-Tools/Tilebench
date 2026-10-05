@@ -15,6 +15,7 @@ This document contains implementation and maintenance details for extending Tile
 - [Profiling](#profiling)
 - [LLM Code Generation](#llm-code-generation)
 - [Generated Outputs](#generated-outputs)
+- [Multi-Architecture Status (TileBench++)](#multi-architecture-status-tilebench)
 - [Pre-Merge Checklist](#pre-merge-checklist)
 
 ## CLI Reference
@@ -222,6 +223,8 @@ They go in the operator's `verify:` section (`atol`, `rtol`). An `arch_overrides
 
 ## Autotuning
 
+Every `triton.autotune`, `tilelang.autotune` and in-operator `do_bench` candidate loop times each candidate with `warmup=1, rep=3`; cuTile uses its native exhaustive search with crash isolation. The candidate lists are the same on every architecture. See [Common timing and autotune protocol](#common-timing-and-autotune-protocol) for details and for which campaigns used this budget.
+
 ### Triton
 
 Use Triton's native autotuning interface with an explicit candidate space. The selected configuration must be recoverable through `get_last_config()`.
@@ -368,7 +371,7 @@ Results are scoped by hardware. The repository tracks only per-case benchmark CS
 results/<gpu>/csv/
 ```
 
-The committed paper results are `results/B200/csv/`. Other artifacts are generated locally and ignored, including:
+The committed results are `results/B200/csv/` (the paper's measurements plus TileLang), `results/GH200/csv/` and `results/MI300X/csv/`; see [Multi-Architecture Status](#multi-architecture-status-tilebench). Other artifacts are generated locally and ignored, including:
 
 ```text
 results/<gpu>/logs/
@@ -400,6 +403,94 @@ python scripts/package_artifacts.py --artifact llm-aacl2026
 ```
 
 writes a reproducible `outputs/artifacts/<archive>.tar.gz` and prints its SHA256. Upload the archive, then put the file's share link and that checksum in the manifest. Readers restore it with `python scripts/fetch_artifacts.py --artifact <name>`.
+
+## Multi-Architecture Status (TileBench++)
+
+TileBench++ runs the same 45 operators, case grids and autotune candidate lists on three GPUs. `feature/tilebenchpp-multiarch` (f50f9225) integrates the two experiment branches `exp/gh200` (5610f18f) and `exp/mi300x` (124fdc94). Both are frozen. There is no B200 experiment branch: the B200 results are the ones committed on `main`.
+
+### Hardware coverage
+
+| | B200 | GH200 | MI300X |
+|---|---|---|---|
+| Device, `detect_arch()` | NVIDIA B200, sm_100, `blackwell` | NVIDIA GH200 480GB, sm_90, `hopper` | AMD Instinct MI300X, gfx942, `cdna3` |
+| Backends | PyTorch, Triton, cuTile, TileLang | PyTorch, Triton, cuTile, TileLang | PyTorch, Triton. cuTile and TileLang are not run |
+| Summary CSVs | 45 default + 45 autotune, 2200 cases per mode | 45 + 45, 2200 cases per mode | 45 + 45, 2180 cases per mode: the 20 `matmul_fp32_fp16_fp8` / `fp8_e4m3fn` cases are unsupported, because the PyTorch ROCm reference rejects e4m3fn |
+| Timing | Proton, CUDA graph | Proton, CUDA graph | Proton/roctracer, eager (graph requested, `effective_use_cuda_graph = false`) |
+| Eviction before each launch | 253 MB (2x 126.5 MB L2) in the current timer; not recorded for the committed CSVs | 120 MiB (2x 60 MiB L2) | 512 MiB (2x 256 MiB Infinity Cache) |
+| Final measurement (warmup / repeat) | not recorded; `config.yaml` has 20 / 100 | 1 / 3 (`--warmup 1 --repeat 3`) | 20 / 100 (`config.yaml`) |
+| Software | PyTorch/Triton/cuTile columns from the paper campaign (`cuda-tile` 1.3.0); TileLang 0.1.11 | torch 2.10.0+cu130, Triton 3.6.0, `cuda-tile` 1.5.0 (pip `tileiras` 13.4.92), TileLang 0.1.11 | torch 2.10.0+rocm7.1, Triton 3.6.0, ROCm 7.14.0 |
+| Benchmark source | not recorded; the CSVs predate `tilebench/provenance.py` | c882fe50 for 89 CSVs, 3c5eccbf for `batched_matmul_autotune.csv` | 005ab63b default, 4d08985a autotune |
+| Raw logs | `archive/raw-logs-2026-09-18` (frozen) | `archive/tilebenchpp-2026-10` 66046918 | `archive/tilebenchpp-2026-10` 06a8ed00 (default), 8e991537 (autotune) |
+
+GH200 TileLang dispatch on Hopper:
+- Nine operators have a Blackwell TileLang path that accumulates in tensor memory (TMEM, tcgen05), which sm_90 cannot compile: `1d_conv`, `2d_conv`, `3d_conv`, `batched_matmul`, `block_sparse_attention`, `flash_attention`, `matmul_fp32_fp16_fp8`, `matmul_int8` and `streamk_matmul`.
+- Each of them branches at module level on `supports_tmem()`. Blackwell keeps the TMEM path. Hopper builds a fragment-accumulator body with the same kernel names and the same candidate list.
+- `dequantize_rowwise` sign-extends int8 explicitly on aarch64 hosts (`_EXPLICIT_INT8_SIGN_EXTENSION`), because plain `char` is unsigned there. This depends on the host CPU, not on the GPU.
+
+### Common timing and autotune protocol
+
+- **Final measurement.** `config.yaml` sets warmup 20 / repeat 100 (iterations) for every operator; `--warmup` and `--repeat` override it. The formal campaigns did not all use the same setting: see the table above. Each run's provenance sidecar records its overrides (`run.overrides`, `host.argv`).
+- **Triton and TileLang autotune.** Every candidate is timed with `warmup=1, rep=3` (time budgets in ms). This covers all 103 `warmup`/`rep` settings in the operator sources. GH200 (since b7f69a24, included in c882fe50) and the MI300X autotune run (4d08985a) used this budget. The B200 autotune CSVs predate it. In the source on `main`, Triton uses its framework default (25 / 100 ms) in 27 operators, 3 / 10 in `kl_divergence` and `matmul_int8`, 5 / 20 in `softmax` and 1 / 3 in the remaining 15, and most TileLang operators use 20 / 100. This is inferred from the source, because B200 has no provenance.
+- **cuTile autotune.** `CutileAutotuner` wraps the native `ct.tune.exhaustive_search`, which exposes no warmup/rep setting.
+- **Crash isolation.**
+  - Every `exhaustive_search` call passes `single_run_timeout_sec=CRASH_ISOLATION_TIMEOUT_SEC` (60 s, `tilebench/core/cutile_autotune.py`). This covers `CutileAutotuner` and the direct call in `top_k_selection`.
+  - Each candidate's first warmup launch runs in a worker subprocess. A candidate that faults the device or runs longer than 60 s is recorded in `TuningResult.failures` and skipped. The remaining warmups and all timing run in the parent process, so the timing of successful candidates is unchanged.
+  - It was added in d6a6510e after a GH200 fp32 candidate of `batched_matmul` (tile 128x64x64, occupancy 4) raised a sticky CUDA illegal instruction. GH200 `batched_matmul_autotune.csv` was re-run with it (3c5eccbf). The other 44 GH200 autotune CSVs ran before it, on c882fe50, and hit no device fault.
+- **Candidate lists.** They are identical on every architecture and are never filtered by shared memory, LDS or wavefront size. A candidate that fails on a device is skipped by the error handling.
+
+### Architecture-specific legality fallbacks
+
+A fallback only replaces the builtin default config of the non-autotuned path, and only on an architecture where that default cannot launch. The replacement is always a member of the unchanged search space.
+
+| Operator (Triton) | Architecture | Builtin default | Fallback | Reason |
+|---|---|---|---|---|
+| `streamk_matmul` | Hopper, fp32 | 128x128x64, 3 stages | `BLOCK_K` 32 | 262168 B shared memory > 232448 B per block on sm_90 |
+| `streamk_matmul` | CDNA3, all dtypes | 128x128x64, 3 stages | `BLOCK_K` 32 | 131072 B LDS for fp32 > 65536 B on gfx942 |
+| `batched_matmul` | CDNA3, all dtypes | 128x128x32, 4 stages | 3 stages | 98304 B LDS for fp32 > 65536 B on gfx942 |
+
+`_default_config()` resolves the config in this order:
+1. A replayed winner, i.e. a config the profiling replay (`tilebench/profiling/replay.py`) wrote into `_DEFAULT_CONFIG`. It is detected by identity against `_BUILTIN_DEFAULT_CONFIG`.
+2. The architecture fallback.
+3. The builtin default.
+
+Before 124fdc94 the CDNA3 path returned the fallback unconditionally. The six MI300X reports of these two operators therefore profiled the fallback and not the winner, and were re-profiled.
+
+### bitonic_sort pad block
+
+- `pad_kernel` is not tuned. Both the default and the autotune path launch it with a fixed `_PAD_BLOCK = 1024`.
+- Only `bitonic_step_kernel` reads `_DEFAULT_CONFIG`, so a replayed autotune winner changes only the step kernel.
+- Before this fix (5610f18f on GH200, 124fdc94 on MI300X), the replay also changed the pad launch:
+  - GH200 fp32: BLOCK 512.
+  - MI300X fp16/fp32: BLOCK 2048/4096.
+- The four affected Triton reports were re-profiled and replaced. The formal CSVs were unaffected: the default and autotune launch sequences did not change.
+
+### 2d_conv tolerance
+
+`2d_conv` verifies with `atol: 1e-1` and `rtol: 1e-2` on B200 and GH200. On CDNA3, `verify.arch_overrides.cdna3` raises `atol` to `2e-1` for the ROCm/MIOpen fp16 reference. `verifier.config_tolerance` resolves the override by `detect_arch()`. `2d_conv` is the only operator with an override.
+
+### Profiling inventory
+
+| | B200 | GH200 | MI300X |
+|---|---|---|---|
+| Profiler | Nsight Compute | Nsight Compute 2025.4.0, `--set full` | ROCm Compute Profiler 3.7.0 (13 counter passes + roofline) and a separate PC-sampling pass |
+| Coverage | 220 reports: Triton 110, cuTile 110 (no TileLang) | 330 reports: Triton 110, cuTile 110, TileLang 110 | 109 Triton pairs, every valid pair; `matmul_fp32_fp16_fp8` / `fp8_e4m3fn` excluded |
+| `bcui2/NCU_report` folder | `NVIDIA_B200/` (layout commit 7316fd6c) | `NVIDIA_GH200/`, revision 7cb81050 | `AMD_MI300X/`, revision 645591bb |
+| Profiling source | not recorded | Triton/cuTile 638ea849; TileLang d6ddb622; Triton `bitonic_sort` fp16/fp32 5610f18f | 101 pairs 5b82f8af; 8 replaced pairs 124fdc94 |
+| Metadata archive | `archive/raw-logs-2026-09-18` 186c6caf (`outputs/profiling/B200/`) | `archive/tilebenchpp-2026-10` f71f7651, 3df90a5f | `archive/tilebenchpp-2026-10` 94e05ffe, 63748286 |
+
+Dataset revision 7cb81050 holds the current reports of all three folders. For GH200 and MI300X, the authoritative per-report record is `outputs/profiling/<gpu>/{ncu_sweep,rocprof_compute_sweep}/PROVENANCE.md` and `report_manifest.json` on the archive branch. It lists sources, HF commits, content hashes and the superseded versions of replaced reports.
+
+### Reading the results across GPUs
+
+- **B200 `tilelang_ms` is rebased.** A TileLang-only run re-times PyTorch and scales each case by the drift ratio `torch_frozen / torch_rerun`. The raw values stay in the JSON logs. On GH200 all four backends were measured in the same run.
+- **Read CSV columns by name, not by position.** The orders differ:
+  - B200: the frozen 8 columns followed by `tilelang_ms`, `speedup_tilelang`.
+  - GH200: the runner's 10-column order.
+  - MI300X: 5 columns.
+- **Line endings.** All GH200 and MI300X CSVs, and 56 of the 90 B200 CSVs, use CRLF.
+- **One dtype label differs.** `results/B200/csv/kl_divergence_default.csv` labels its dtype `float32`; every other CSV uses `fp32`. Normalize the label on read and do not edit the CSV.
+- **Peak metadata exists only for B200** (and Trainium2). Roofline and percentage-of-peak metrics are unavailable for GH200 and MI300X until a measured `<gpu>.json` is added.
+- **Timing modes differ.** The final-measurement repeat count differs between campaigns, and MI300X is timed eagerly while the NVIDIA GPUs replay CUDA graphs. State both whenever latencies are compared across GPUs.
 
 ## Pre-Merge Checklist
 
