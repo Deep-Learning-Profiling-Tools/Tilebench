@@ -1,0 +1,45 @@
+# Declared arithmetic mode per (operator, dtype) for the analytical SOL target
+# T_SOL = max(F / P_peak[mode], Q / BW_peak). Status `proposed` entries need
+# study-owner approval; a task whose mode has no peak value on a device gets
+# t_sol_status = peak_missing and no E(B) until resolved (never silently
+# substituted by another ceiling).
+#
+# Conventions
+#   tc_<dtype>   tensor-core dense throughput for that input dtype
+#   tf32         tensor-core TF32 (fp32 inputs that the manual kernels run as tf32 tl.dot / ct.mma)
+#   fp32_vector  non-tensor-core fp32 FMA throughput (elementwise, reductions, sorts)
+#   int_vector   integer ALU throughput; F counts operations, not FLOPs (audit flag)
+#   memory_only  F term declared negligible: T_SOL = Q / BW_peak  (requires approval)
+status: proposed
+
+default_by_dtype:          # used when an operator does not override
+  fp16: tc_fp16
+  bf16: tc_bf16
+  fp8_e4m3fn: tc_fp8
+  int8: tc_int8
+  fp32: fp32_vector        # NOT tf32 unless the operator says so
+  int32: int_vector
+
+operators:
+  # tensor-core GEMM family: fp32 inputs run as TF32 in the manual kernels
+  batched_matmul:        {fp32: tf32}
+  matmul_fp32_fp16_fp8:  {fp32: tf32}
+  streamk_matmul:        {fp32: tf32}
+  linear_self_attention: {fp32: tf32}
+  1d_conv:               {fp32: tf32}
+  2d_conv:               {fp32: tf32}
+  3d_conv:               {fp32: tf32}
+  block_sparse_attention: {}
+  flash_attention:       {}
+  flash_decode:          {}
+  matmul_int8:           {}
+  # integer / data-movement work whose flops_expr is an operation count, not FLOPs
+  radix_sort:            {int32: int_vector, _audit: work_metric_not_flops}
+  histogramming:         {int32: int_vector, _audit: work_metric_not_flops}
+  bitonic_sort:          {_audit: work_metric_not_flops}
+  top_k_selection:       {_audit: work_metric_not_flops}
+  matrix_copy:           {_audit: memory_bound_candidate}
+  matrix_transpose:      {_audit: memory_bound_candidate}
+  reverse_array:         {_audit: memory_bound_candidate}
+  interleave:            {_audit: memory_bound_candidate}
+  destindex:             {_audit: memory_bound_candidate}

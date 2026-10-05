@@ -1,0 +1,175 @@
+operator: flash_decode
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/flash_decode/impl_cutile.py
+    functions:
+      - name: fwd_kernel_flash_decode_stage2
+        lines: [16, 68]
+        role: kernel
+      - name: run
+        lines: [74, 111]
+        role: host-driver
+      - name: __main__ standalone profiling harness (not executed on import)
+        lines: [113, 169]
+        role: helper
+      - name: get_last_config
+        lines: [171, 172]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [71, 71]
+        role: tuner
+  - path: tilebench/benchmarks/operators/flash_decode/impl_torch.py
+    functions:
+      - name: run
+        lines: [3, 47]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/flash_decode/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_flash_decode_stage2_inputs
+        lines: [252, 262]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Flash-decoding stage 2: combine split-KV partial attention outputs. Inputs (generator,
+  tensors.py 252-262): mid_o (batch, heads, num_blocks, head_dim) partial outputs, mid_o_lse
+  (batch, heads, num_blocks) per-split log-sum-exp, b_seqlen (batch,) int32 all equal to seq_len,
+  block_seq a 0-d CPU int32 tensor; num_blocks = ceil(seq_len / block_seq). Reference
+  (impl_torch.py 3-47): valid = ceil(b_seqlen[b] / block_seq); blocks k >= valid are masked
+  (lse -> -inf, weight -> 0); M = max_k lse; w_k = exp(lse_k - M); out[b,h,:] =
+  sum_k mid_o[b,h,k,:] * w_k / (sum_k w_k + 1e-10). Output (batch, heads, head_dim) in mid_o's
+  dtype (fp32 in config). The reference is two-pass (global max, then weighted sum).
+run_signature:
+  text: |
+    def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
+  positional_inputs: [mid_o, mid_o_lse, b_seqlen, block_seq_tensor]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `out` of shape (batch, head_num, head_dim), dtype mid_o.dtype
+  get_last_config: present
+inputs:
+  - name: mid_o
+    shape: "(batch, heads, num_blocks, head_dim)"
+    dtype: fp32 (config); kernel written generically
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded one (1,1,1,HEAD_DIM) tile per split k (line 47), no padding_mode given
+  - name: mid_o_lse
+    shape: "(batch, heads, num_blocks)"
+    dtype: same as mid_o
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded one (1,1,1) tile per split k (line 45)
+  - name: b_seqlen
+    shape: "(batch,)"
+    dtype: int32
+    layout: contiguous
+    mutated_in_place: false
+    notes: one (1,) tile per program (line 31); drives the per-batch valid-block count
+  - name: block_seq_tensor
+    shape: 0-d
+    dtype: int32 CPU tensor (or Python int)
+    layout: n/a
+    mutated_in_place: false
+    notes: converted with .item() on the host (lines 76-79) and passed as ConstInt BLOCK_SEQ
+outputs:
+  - name: out
+    shape: "(batch, head_num, head_dim)"
+    dtype: mid_o.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: block_seq = block_seq_tensor.item() (CPU tensor, no device sync)
+    lines: [76, 79]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: same conversion as the reference (impl_torch.py lines 6-7)
+  - description: out = torch.empty((batch, head_num, head_dim)); out_view = out.view(batch, head_num, 1, head_dim)
+    lines: [82, 85]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: the 4-D view lets the kernel store a (1,1,1,HEAD_DIM) tile at (b, h, 0, 0)
+  - description: HEAD_DIM = head_dim and TOTAL_BLOCKS = num_blocks taken from mid_o.shape, passed as ConstInt
+    lines: [81, 89]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: TOTAL_BLOCKS changes with seq_len, so each sweep case compiles its own specialisation
+stages:
+  - id: s1
+    description: >
+      Grid (batch, head_num, 1) (line 86): one program per (b, h). Load seq_len = b_seqlen[b] and
+      compute real_num_blocks = ceil(seq_len / BLOCK_SEQ) (lines 31-33). Initialise acc (1,1,1,HEAD_DIM)
+      fp32 zeros, max_logic (1,1,1) = -inf, sum_exp (1,1,1) = 0 (lines 36-39). For k in range(TOTAL_BLOCKS)
+      (compile-time trip count; lines 41-63): is_valid = k < real_num_blocks; load curr_lse (1,1,1) and curr_o
+      (1,1,1,HEAD_DIM); replace by -inf / 0.0 when invalid (lines 49-50); new_max = maximum(max_logic, curr_lse);
+      scale = exp(max_logic - new_max); curr_weight = exp(curr_lse - new_max); acc = acc*scale + curr_o*curr_weight;
+      sum_exp = sum_exp*scale + curr_weight; max_logic = new_max (lines 52-63). Epilogue final_out = acc / sum_exp
+      (no epsilon) stored at (b, h, 0, 0) of the 4-D output view (lines 66-68).
+    kind: kernel
+    lines: [16, 68]
+    launches: "1 (batch * head_num programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: out
+algorithm_family: >
+  Online (single-pass, rescaling) log-sum-exp merge of split-KV partial results, one program per
+  (batch, head), sequential over the num_blocks splits.
+reduction_scan_sort_structure: >
+  Sequential recurrence over splits k = 0 .. TOTAL_BLOCKS-1 in increasing order with running
+  max / rescale (the reference instead takes a global max first, then one weighted sum).
+  Invalid splits contribute weight exp(-inf) = 0 and value 0. No tree reduction; the head_dim
+  axis is purely element-wise.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 (acc, max_logic, sum_exp initialised as float32 tiles; with fp32 inputs all arithmetic is fp32)
+  output_dtype: mid_o.dtype (final_out stored without an explicit cast, line 68)
+  special_modes: "natural ct.exp; no epsilon in the final division (reference adds 1e-10 to the denominator)"
+  masking_or_padding_values: "-inf substituted for the lse of invalid splits and 0.0 for their values via ct.where (lines 49-50); max_logic initialised to -inf; no padding_mode on loads (TOTAL_BLOCKS equals the actual number of splits so loads are in bounds)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh out each call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over the occupancy hint only, keyed by
+  (batch, head_num, head_dim, num_blocks, block_seq, dtype). Audit only.
+implementation_freedoms_observed: >
+  Occupancy; whether splits are visited one at a time (as here, one (1,1,1,HEAD_DIM) tile per
+  iteration) or in tiles of several splits with a two-pass max/sum; whether the loop trip count
+  is compile-time (ConstInt TOTAL_BLOCKS) or runtime; mapping of (batch, head) to programs.
+  `block_size` is accepted but unused (line 74).
+algorithm_constraints_observed: >
+  Numerically stable merge equivalent to softmax-weighted averaging of the splits by their lse,
+  with invalid splits (k >= ceil(b_seqlen/block_seq)) excluded; fp32 arithmetic; output
+  (batch, heads, head_dim) in the input dtype; the only host work is reading the scalar
+  block_seq and allocating the output.
+fq_boundary:
+  bytes_expr: "batch * heads * (seq_len // block_seq) * head_dim * dtype_size"
+  flops_expr: "4 * batch * heads * (seq_len // block_seq) * head_dim"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read of mid_o only; it omits the reads of mid_o_lse
+    (batch*heads*num_blocks*dtype_size) and b_seqlen, and the output write
+    (batch*heads*head_dim*dtype_size), all of which are small relative to mid_o for the sweep's
+    head_dim = 128. run() performs no data preprocessing; nothing is assumed prepacked.
+notes_for_review:
+  - The kernel denominator has no epsilon (reference uses + 1e-10); harmless here because sum_exp >= 1 after the running-max rescale.
+  - TOTAL_BLOCKS (= num_blocks = seq_len/128, up to 320) is a ConstInt loop bound, so each seq_len case is a separate compilation and the loop may be fully unrolled by the compiler (unclear from source).
+  - Each split is processed as a single (1,1,1,HEAD_DIM) tile, i.e. the kernel issues num_blocks dependent load-compute steps per (b, h) program with no tiling over splits.
+  - The file contains an `if __name__ == "__main__"` profiling harness (lines 113-169) between run() and get_last_config(); it is inert on import.
+  - Only fp32 is in the config; behaviour of ct.where(is_valid, curr_o, 0.0) and the implicit promotions for fp16/bf16 inputs is not exercised.

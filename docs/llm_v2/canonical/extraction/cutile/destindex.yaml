@@ -1,0 +1,224 @@
+operator: destindex
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/destindex/impl_cutile.py
+    functions:
+      - name: _cached_out
+        lines: [27, 32]
+        role: helper
+      - name: copy_by_dest_kernel
+        lines: [35, 61]
+        role: kernel
+      - name: run
+        lines: [67, 135]
+        role: host-driver
+      - name: get_last_config
+        lines: [138, 139]
+        role: helper
+      - name: _tuner (CutileAutotuner instance, shared by both launches)
+        lines: [64, 64]
+        role: tuner
+  - path: tilebench/benchmarks/operators/destindex/impl_torch.py
+    functions:
+      - name: _cached_out
+        lines: [7, 12]
+        role: helper
+      - name: run
+        lines: [15, 27]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/destindex/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_destindex_inputs
+        lines: [128, 154]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  KV-cache "copy to destination index" (MLA-style, with a nope part and a rope part).
+  Reference (impl_torch.py 15-27): out_nope = clone(o_nope) (cloned once per distinct input
+  tensor object and cached in a WeakTensorKeyDictionary, lines 4-12), then
+  out_nope.index_copy_(0, dest_loc, kv_nope); likewise out_rope.index_copy_(0, dest_loc, kv_rope);
+  returns (out_nope, out_rope). I.e. out[dest_loc[t], h, d] = kv[t, h, d] for every token t.
+  Rows of o_* not addressed by dest_loc keep their original values, but the generator's
+  dest_loc is a randperm of all total_tokens (tensors.py line 151), so every row is overwritten.
+  Shapes (tensors.py 138-154): kv_nope / o_nope = (total_tokens, kv_nope_head_num,
+  kv_nope_head_dim), kv_rope / o_rope = (total_tokens, kv_rope_head_num, kv_rope_head_dim),
+  total_tokens = batch_size * seq_len, dest_loc int64 (total_tokens,). Values are randn in
+  the case dtype or randint(-64, 65) for int8.
+run_signature:
+  text: |
+    def run(
+        kv_nope: torch.Tensor,
+        kv_rope: torch.Tensor,
+        dest_loc: torch.Tensor,
+        o_nope: torch.Tensor,
+        o_rope: torch.Tensor,
+        autotune: bool = False,
+    ):
+  positional_inputs: [kv_nope, kv_rope, dest_loc, o_nope, o_rope]
+  keyword_params: [autotune]
+  returns: tuple (out_nope, out_rope) of two tensors with the shapes/dtypes of o_nope / o_rope
+  get_last_config: present
+inputs:
+  - name: kv_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)"
+    dtype: fp16 | bf16 | fp32 | int8 (case dtype)
+    layout: contiguous; run() does kv_nope.contiguous().view(-1) (line 80), a metadata-only flatten for generator inputs
+    mutated_in_place: false
+    notes: read as 1-D (BLOCK_SIZE,) tiles with PaddingMode.ZERO (lines 59-60)
+  - name: kv_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: same as kv_nope
+    layout: contiguous; flattened by .contiguous().view(-1) (line 81)
+    mutated_in_place: false
+    notes: processed by a second launch of the same kernel
+  - name: dest_loc
+    shape: "(total_tokens,)"
+    dtype: int64
+    layout: contiguous
+    mutated_in_place: false
+    notes: gathered per element via ct.gather(dest_loc, token, padding_value=0) then cast to int32 (line 55); every element of a token re-gathers the same index
+  - name: o_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)"
+    dtype: same as kv_nope
+    layout: contiguous
+    mutated_in_place: false
+    notes: never written; used only as the identity key and initial contents of the cached clone out_nope (lines 27-32, 75)
+  - name: o_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: same as kv_rope
+    layout: contiguous
+    mutated_in_place: false
+    notes: same role as o_nope for out_rope (line 76)
+outputs:
+  - name: out_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)"
+    dtype: dtype of kv_nope / o_nope
+    allocated_by: run
+    aliasing: none
+  - name: out_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: dtype of kv_rope / o_rope
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: out_nope / out_rope = clone of o_nope / o_rope, created on the first call for a given input tensor object and reused afterwards (WeakTensorKeyDictionary cache)
+    lines: [24, 32]
+    kind: copy
+    inside_run: true
+    cached_across_calls: true
+    notes: the clone (a full copy of o_*) is timed only on the first call per input identity; subsequent calls reuse the same buffer, which is then overwritten in place by the kernels; same pattern as impl_torch.py lines 4-12
+  - description: flatten kv_nope / kv_rope with .contiguous().view(-1) and out_* with .view(-1)
+    lines: [80, 83]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no data movement for contiguous generator inputs
+  - description: read head counts/dims from kv shapes and element counts
+    lines: [78, 85]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: head_num and head_dim are passed as ConstInt, so the kernel is specialised per (head_num, head_dim) pair (one specialisation for nope, one for rope)
+stages:
+  - id: s1
+    description: >
+      Launch copy_by_dest_kernel on the flattened nope tensors, grid (cdiv(nope_total, BLOCK_SIZE), 1, 1)
+      (lines 123-127). Each program takes BLOCK_SIZE consecutive flat source offsets offs = pid*BLOCK + arange,
+      masks offs < total, decomposes offs into (token, head, d) with d = offs % head_dim, head = (offs // head_dim)
+      % head_num, token = offs // (head_dim*head_num) (lines 45-52), gathers dest = dest_loc[token] (int64 -> int32,
+      line 55), forms dst_off = (dest*head_num + head)*head_dim + d and sets dst_off = -1 for masked lanes
+      (lines 56-57), loads the source values as a (BLOCK_SIZE,) tile with zero padding (lines 59-60) and
+      ct.scatter(out_flat, dst_off, v) writes them (line 61). The -1 lanes rely on ct.scatter's default
+      bounds checking to be dropped (no explicit mask argument in source).
+    kind: kernel
+    lines: [35, 61]
+    launches: "1 (cdiv(nope_total, BLOCK_SIZE) programs)"
+    depends_on: []
+    fusable_with: [s2]
+    produces: out_nope (in place into the cached clone)
+  - id: s2
+    description: >
+      Same kernel launched again on the flattened rope tensors with rope head_num/head_dim and its own
+      block size / occupancy, grid (cdiv(rope_total, BLOCK_SIZE), 1, 1) (lines 129-133). Independent of s1
+      (disjoint buffers) but issued after it on the same stream.
+    kind: kernel
+    lines: [35, 61]
+    launches: "1 (cdiv(rope_total, BLOCK_SIZE) programs)"
+    depends_on: []
+    fusable_with: [s1]
+    produces: out_rope (in place into the cached clone)
+algorithm_family: >
+  Flat element-wise gather-of-index + scatter copy (index_copy along dim 0), one kernel launched
+  twice (nope and rope), each thread-block handling a contiguous 1-D slab of the source.
+reduction_scan_sort_structure: >
+  None. Destinations are unique (randperm) so scatter writes never collide and no atomics are used.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (pure copy; values are never cast)
+  output_dtype: same as input
+  special_modes: exact copy for every dtype including int8
+  masking_or_padding_values: "0 for out-of-range source lanes (PaddingMode.ZERO on load, padding_value=0 on the dest_loc gather); such lanes get dst_off = -1 and are not scattered"
+intermediate_storage: >
+  The two output buffers themselves are persistent module-level state: _out_cache
+  (WeakTensorKeyDictionary, line 24) holds one clone per distinct o_nope / o_rope tensor object
+  for as long as that input tensor is alive. No other scratch.
+mutation_rules: >
+  No positional input is modified (o_nope / o_rope are cloned, kv_* and dest_loc are read-only).
+  The returned out_* buffers are mutated in place on every call; since the same values are
+  written to the same (unique) destinations, repeated calls are idempotent. dest_loc must be
+  int64 as generated (the torch reference asserts this, impl_torch.py line 22); the kernel casts
+  gathered indices to int32, so total_tokens must fit in int32.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: nope_block_size
+    role: tile size (elements per program) for the nope launch
+    default_present: true
+  - name: nope_occupancy
+    role: occupancy hint for the nope launch
+    default_present: true
+  - name: rope_block_size
+    role: tile size for the rope launch
+    default_present: true
+  - name: rope_occupancy
+    role: occupancy hint for the rope launch
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached called twice on the same tuner with distinct shape keys
+  ("nope", total, head_num, head_dim, dtype) and ("rope", ...), each over a (block_size, occupancy)
+  grid; get_last_config reports prefixed keys nope_*/rope_* matching _DEFAULT_CONFIG. Audit only.
+implementation_freedoms_observed: >
+  Block size and occupancy per launch; whether nope and rope are handled by two launches of one
+  kernel or by a single fused launch; whether the flat-offset decomposition is replaced by a
+  (token, head) 2-D tiling; whether dest_loc is gathered once per token instead of once per element;
+  int64 -> int32 index narrowing.
+algorithm_constraints_observed: >
+  Semantics of index_copy_ along dim 0 for both tensors; output buffers are clones of o_* that are
+  reused across calls (first-call clone cost, later calls in place); dest_loc consumed as int64 with
+  no host-side conversion; no atomics (unique destinations); every dtype handled as an opaque copy.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: unclear
+  notes: >
+    `n` is not a case parameter in config.yaml (cases are seq_len, dtype plus case_defaults
+    batch_size / head counts / head dims); how the engine derives `n` for this operator cannot be
+    determined from the files permitted here. If n is the total element count of kv_nope + kv_rope,
+    the formula counts one read and one write per element, which matches the two kernels, but omits
+    the dest_loc index reads (8 bytes per token, gathered redundantly per element) and the one-time
+    clone of o_* on the first call. No prepacking is assumed.
+notes_for_review:
+  - The output buffers are cached clones keyed by input tensor identity; the first call per case pays a full copy of o_nope / o_rope that later calls do not, so warmup vs timed iterations differ in work.
+  - dest_loc[token] is gathered once per element (head_num * head_dim times per token) rather than once per token.
+  - Masked lanes are given scatter index -1 and the source relies on ct.scatter's default bounds checking to drop them; no explicit mask is passed.
+  - head_num and head_dim are ConstInt, so the kernel is compiled separately for the nope and rope shapes.
+  - bytes_expr references `n`, which is not defined in config.yaml for this operator.

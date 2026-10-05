@@ -1,0 +1,155 @@
+operator: swiglu
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/swiglu/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: swiglu_kernel
+        lines: [21, 28]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [31, 31]
+        role: tuner
+      - name: run
+        lines: [34, 64]
+        role: host-driver
+      - name: get_last_config
+        lines: [67, 68]
+        role: helper
+  - path: tilebench/benchmarks/operators/swiglu/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/swiglu/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_swiglu_inputs
+        lines: [193, 196]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Elementwise SwiGLU gate: out = silu(x) * y = x * sigmoid(x) * y, with
+  sigmoid(x) = 1/(1+exp(-x)). Reference (impl_torch.py lines 4-5):
+  torch.nn.functional.silu(x) * y. Generator (tensors.py lines 193-196):
+  x and y are independent torch.randn(M, N) tensors in the case dtype;
+  config.yaml fixes M via case_defaults and sweeps N and dtype in
+  {fp16, bf16, fp32}.
+run_signature:
+  text: "def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x, y]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape x.shape and dtype x.dtype (a view of the flat buffer allocated by run)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: "case dtype: fp16 | bf16 | fp32"
+    layout: contiguous; flattened to 1D via x.contiguous().view(-1) (line 37)
+    mutated_in_place: false
+    notes: x.shape == y.shape is asserted (line 36).
+  - name: y
+    shape: "(M, N)"
+    dtype: same as x (assumed, not checked)
+    layout: contiguous; flattened via y.contiguous().view(-1) (line 38)
+    mutated_in_place: false
+    notes: null
+outputs:
+  - name: output
+    shape: x.shape (returned as output.view(x.shape), line 64)
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: flatten x and y to 1D views
+    lines: [37, 38]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no copy for the generator's contiguous inputs.
+  - description: output = torch.empty_like(x_flat) (1D), later viewed back to x.shape
+    lines: [39, 39]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      swiglu_kernel, grid = (ceil(n_elements/TILE), 1, 1) (line 61). Each
+      CTA loads one (TILE,) tile of x and of y (no padding_mode given,
+      lines 24-25), upcasts both to fp32, computes sigmoid_x = 1/(1+exp(-x))
+      and out = x * sigmoid_x * y in fp32 (lines 26-27), downcasts to
+      x.dtype and stores (lines 27-28).
+    kind: kernel
+    lines: [21, 28]
+    launches: "1 (grid = ceil(M*N/TILE) CTAs)"
+    depends_on: []
+    fusable_with: none
+    produces: output (final result)
+algorithm_family: >
+  Elementwise fused gate (silu(x) * y) with flat 1D tiling over the
+  flattened (M, N) tensors.
+reduction_scan_sort_structure: >
+  None; purely elementwise.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: n/a; all arithmetic (exp, add, reciprocal, two multiplies) in fp32 after an explicit upcast of both inputs
+  output_dtype: x.dtype (single downcast before the store)
+  special_modes: none visible
+  masking_or_padding_values: "no padding_mode on either load; the swept sizes (M*N a multiple of the tile) never produce a partial tile, so cuTile's default out-of-bounds load value is never consumed by a stored lane"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x and y are not modified; output is fully overwritten; idempotent.
+  Tuning launches write into the real output buffer (args_fn, line 49),
+  which the final launch overwrites.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per CTA)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over
+  the tile x occupancy cartesian space (_SEARCH_SPACE, lines 14-18), keyed
+  by (n_elements, dtype) (line 45); winner applied via the memoised
+  kernel_with_hints kernel (line 60). get_last_config written only on the
+  autotune path (lines 52-56). Audit only.
+implementation_freedoms_observed: >
+  Tile size, occupancy, 1D vs 2D tiling, the sigmoid formulation, and
+  whether half-precision inputs are evaluated in fp32 (this implementation
+  does).
+algorithm_constraints_observed: >
+  Keep: out = x * sigmoid(x) * y elementwise with x as the gated operand
+  and y as the multiplier, fp32 evaluation with a single downcast, output in
+  a fresh buffer of x's shape and dtype (default per-dtype verify
+  tolerances apply; config.yaml has no verify override).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: unclear
+  notes: >
+    The case parameters are M, N and dtype (config.yaml lines 8-14) but the
+    expressions use lowercase `n`, whose derivation is not visible in the
+    files read here. If n = M*N the byte count (read x, read y, write out)
+    matches exactly what run() does: there is no extra data movement inside
+    run() (views and one allocation only).
+notes_for_review:
+  - The metric expressions use `n` while the case grid defines uppercase N (one matrix dimension) and M; the mapping n -> M*N is assumed, not visible in the files read.
+  - block_size is accepted but ignored; the default path uses _DEFAULT_CONFIG.tile.
+  - Loads carry no padding_mode, so inputs whose element count is not a multiple of the tile would read cuTile's default out-of-bounds value (not exercised by the config sweep).
+  - y's dtype is assumed to equal x's; only the shapes are asserted.

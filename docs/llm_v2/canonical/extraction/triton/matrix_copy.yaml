@@ -1,0 +1,131 @@
+operator: matrix_copy
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matrix_copy/impl_triton.py
+    functions:
+      - name: matrix_copy_kernel
+        lines: [8, 18]
+        role: kernel
+      - name: _matrix_copy_kernel_autotuned
+        lines: [21, 31]
+        role: tuner
+      - name: run
+        lines: [34, 52]
+        role: host-driver
+      - name: get_last_config
+        lines: [55, 59]
+        role: helper
+  - path: tilebench/benchmarks/operators/matrix_copy/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/matrix_copy/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matrix_copy_inputs
+        lines: [334, 339]
+        role: helper
+functional_semantics: >
+  B = A + 0 (impl_torch.py lines 4-6): an element-wise identity copy of a square
+  N x N matrix A into a freshly allocated tensor B of the same shape and dtype.
+  The reference uses torch.Tensor.__add__ with the Python scalar 0 and does no
+  preprocessing. The second positional argument N is the matrix side length
+  (A.shape == (N, N)); the reference ignores it.
+run_signature:
+  text: "def run(A: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [A, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor B of shape (N, N) with the dtype of A
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(N, N)"
+    dtype: "one of fp16, bf16, fp32, int8 (config.yaml line 11)"
+    layout: "contiguous row-major from the generator; the kernel addresses A as a flat buffer of N*N elements and ignores strides"
+    mutated_in_place: false
+    notes: "int8 values drawn from randint(-64, 65), other dtypes from randn (tensors.py 334-339)"
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "used on the host for total = N*N (line 37) and passed to the kernel for the tail mask offsets < N*N (line 16)"
+outputs:
+  - name: B
+    shape: "(N, N)"
+    dtype: same as A
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "allocate the output B = torch.empty_like(A) and compute total = N*N on the host"
+    lines: [36, 37]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast, transpose or packing of A"
+stages:
+  - id: s1
+    description: "flat 1-D copy: each program loads BLOCK_SIZE consecutive elements of A (mask offsets < N*N) and stores them unchanged at the same flat offsets of B"
+    kind: kernel
+    lines: [8, 18]
+    launches: "ceil(N*N / BLOCK_SIZE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "B (final output)"
+algorithm_family: >
+  Flat 1-D streaming memory copy with a tail mask. The 2-D structure of the
+  matrix is not used by the kernel.
+reduction_scan_sort_structure: >
+  None (no reduction, scan or sort).
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (values are moved without arithmetic)
+  output_dtype: same as input
+  special_modes: "none; the copy is bit-exact for every dtype"
+  masking_or_padding_values: "tail lanes are masked on both load and store; masked loads use tl.load's default fill and are never stored"
+intermediate_storage: >
+  None. Only the output buffer B is allocated.
+mutation_rules: >
+  A is read-only. Every call allocates a fresh B, so repeated calls are
+  idempotent and independent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over a BLOCK_SIZE x num_warps x num_stages grid (lines 21-31),
+  key=["N"], warmup=1, rep=3. autotune=True launches the autotuned wrapper
+  (lines 40-41); otherwise the raw kernel is launched with _DEFAULT_CONFIG
+  (lines 43-50). get_last_config reads best_config (lines 55-59). Audit only.
+implementation_freedoms_observed: >
+  Tile size, warp count, pipelining depth, vector width and whether the copy is
+  tiled in 1-D or 2-D are all open; both A and B are contiguous (N, N) so any
+  traversal order that touches each element once is equivalent.
+algorithm_constraints_observed: >
+  A single streaming pass that reads every element of A exactly once and writes
+  every element of B exactly once, in the input dtype, with no arithmetic. B must
+  be a newly allocated buffer, not a view of A. Tail handling must not read or
+  write beyond N*N elements.
+fq_boundary:
+  bytes_expr: "N * N * dtype_size * 2"
+  flops_expr: "N * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() performs exactly one read of N*N elements and one write of
+    N*N elements (plus the output allocation); bytes_expr matches that traffic.
+    flops_expr counts one nominal operation per element although the kernel does
+    no arithmetic. No prepacked inputs are assumed.
+notes_for_review:
+  - "The block_size keyword is accepted but unused; the tile size comes from _DEFAULT_CONFIG or the autotuner."
+  - "The kernel treats A as a flat contiguous buffer; a non-contiguous A would be copied incorrectly, but the generator always yields a contiguous tensor."
+  - "The reference A + 0 is an arithmetic identity (IEEE addition maps -0.0 to +0.0) while the Triton kernel is a bitwise copy; randn inputs make this distinction irrelevant for verification."

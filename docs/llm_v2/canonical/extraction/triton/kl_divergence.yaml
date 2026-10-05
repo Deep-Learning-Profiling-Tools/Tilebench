@@ -1,0 +1,155 @@
+operator: kl_divergence
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/kl_divergence/impl_triton.py
+    functions:
+      - name: kl_divergence_kernel
+        lines: [9, 34]
+        role: kernel
+      - name: _kl_divergence_kernel_autotuned
+        lines: [37, 49]
+        role: tuner
+      - name: run
+        lines: [52, 76]
+        role: host-driver
+      - name: get_last_config
+        lines: [79, 87]
+        role: helper
+  - path: tilebench/benchmarks/operators/kl_divergence/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/kl_divergence/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_kl_divergence_inputs
+        lines: [157, 164]
+        role: helper
+      - name: infer_problem_size (kl_divergence branch, rows*cols)
+        lines: [679, 680]
+        role: helper
+functional_semantics: >
+  Row-wise (unreduced over rows) KL divergence of y_true against a
+  log-probability prediction. Reference impl_torch.run (lines 4-5):
+  loss = (y_true * (torch.log(y_true) - log_y_pred)).sum(dim=-1), natural
+  log, result shape (rows,) in the input dtype. Generator (tensors.py
+  157-164): log_y_pred = log_softmax(randn(rows, cols)), y_true =
+  softmax(randn(rows, cols)); dtype defaults to fp32 because config.yaml has
+  no dtype axis. No reference-side preprocessing. The reference does not
+  guard y_true == 0 (0 * (-inf - x) would be NaN); generated softmax values
+  are strictly positive so this never triggers.
+run_signature:
+  text: |-
+    def run(log_y_pred: torch.Tensor, y_true: torch.Tensor,
+            autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [log_y_pred, y_true]
+  keyword_params: [autotune, "**kwargs (absorbs block_size, unused)"]
+  returns: single fp32 tensor of shape (rows,)
+  get_last_config: present
+inputs:
+  - name: log_y_pred
+    shape: "(rows, cols)"
+    dtype: fp32 (generator default; config has no dtype sweep)
+    layout: row stride passed (stride(0), line 60/68); unit column stride assumed
+    mutated_in_place: false
+    notes: loaded in column chunks with mask and other=0.0, cast to fp32 (line 25).
+  - name: y_true
+    shape: "(rows, cols)"
+    dtype: fp32
+    layout: row stride passed; unit column stride assumed
+    mutated_in_place: false
+    notes: loaded with other=0.0, cast to fp32 (line 26); log guarded by y_true > 0 (line 29).
+outputs:
+  - name: loss
+    shape: "(rows,)"
+    dtype: "fp32 (fixed: torch.empty(rows, dtype=torch.float32), line 55)"
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: read rows, cols from log_y_pred.shape; allocate fp32 loss vector; grid = (rows,)
+    lines: [54, 56]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no copies, no casts on the host.
+stages:
+  - id: s1
+    description: >
+      One program per row (grid (rows,)). Advance both row pointers by
+      pid * row stride (lines 18-19). Loop over columns in BLOCK_SIZE chunks
+      (lines 22-31): load both chunks (mask, other=0.0) as fp32; safe_log =
+      where(y_true > 0, log(y_true), 0); chunk = y_true * (safe_log -
+      log_y_pred); acc += where(mask, chunk, 0) into a BLOCK_SIZE-lane fp32
+      accumulator. After the loop, row_sum = tl.sum(acc, axis=0) and a
+      scalar store to loss[pid] (lines 33-34).
+    kind: kernel
+    lines: [9, 34]
+    launches: "1 launch, grid (rows,)"
+    depends_on: []
+    fusable_with: "none"
+    produces: loss (rows,) fp32 -- no intermediates
+algorithm_family: >
+  Row-wise fused element-wise map + full-row reduction in one kernel:
+  sequential chunked loop with a lane-wise fp32 partial accumulator, one
+  final cross-lane tree sum per row.
+reduction_scan_sort_structure: >
+  Per row: element-wise accumulation into a BLOCK_SIZE-lane vector across
+  ceil(cols / BLOCK_SIZE) sequential chunks, then a single tl.sum over the
+  lanes (tree order defined by Triton). The reference uses torch's own
+  sum(dim=-1) reduction tree; config verify atol/rtol 1e-4 absorbs the
+  order difference.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 (explicit .to(tl.float32) on both loads, lines 25-26)
+  output_dtype: fp32 (fixed)
+  special_modes: "natural log via tl.log; 0*log(0) convention = 0 through the y_true > 0 guard (line 29), which differs from the reference only at exact zeros"
+  masking_or_padding_values: "other=0.0 for both tail loads; additional where(mask, chunk, 0.0) on the accumulate (redundant given zero-filled loads yield 0*(0-0)=0)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (column chunk)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps x num_stages with a filter
+  bs >= nw * 32 (key ["n_cols"], warmup=1, rep=3), lines 37-49. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 66-75).
+  get_last_config reads best_config (lines 79-87).
+implementation_freedoms_observed: >
+  Chunk size, warps, stages, vector width; whether a row is split across
+  several programs with a second-level reduction (not done here); the
+  tl.log lowering (libdevice vs approximate) is left to the compiler.
+algorithm_constraints_observed: >
+  Keep: per-row full reduction of y_true * (log(y_true) - log_y_pred) with
+  natural log; fp32 accumulation; fp32 output vector of length rows; each
+  input read exactly once; no scratch; the 0*log(0)=0 guard (safe for the
+  generated data, and strictly more robust than the reference).
+fq_boundary:
+  bytes_expr: "rows * cols * 4 * 2 + rows * 4"
+  flops_expr: "4 * rows * cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation and one kernel that reads both
+    (rows, cols) inputs once and writes the (rows,) fp32 result. The
+    formula counts exactly that, hard-coding 4 bytes per element instead
+    of dtype_size; this is correct only because the config has no dtype
+    axis and everything is fp32. No preprocessing or prepacking performed
+    or assumed.
+notes_for_review:
+  - bytes_expr hard-codes 4-byte elements rather than dtype_size; fine for the fp32-only config, wrong if a dtype sweep is ever added.
+  - The kernel assumes unit column stride (only stride(0) is passed).
+  - Semantics differ from the reference at y_true == 0 (Triton gives 0, torch gives NaN); unreachable with the softmax-generated inputs.
+  - The where(mask, chunk, 0) after zero-filled loads is redundant.
+  - block_size (if passed by the engine) is swallowed by **kwargs and unused.

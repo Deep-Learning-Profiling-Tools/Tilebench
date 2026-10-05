@@ -1,0 +1,200 @@
+operator: bitonic_sort
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/bitonic_sort/impl_triton.py
+    functions:
+      - name: pad_kernel
+        lines: [12, 16]
+        role: kernel
+      - name: bitonic_step_kernel
+        lines: [19, 33]
+        role: kernel
+      - name: _bitonic_step_kernel_autotuned
+        lines: [36, 45]
+        role: tuner
+      - name: run
+        lines: [48, 85]
+        role: host-driver
+      - name: get_last_config
+        lines: [88, 95]
+        role: helper
+  - path: tilebench/benchmarks/operators/bitonic_sort/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 40]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/bitonic_sort/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_bitonic_sort_inputs
+        lines: [106, 108]
+        role: helper
+functional_semantics: >
+  Ascending sort of a 1-D array of N values. The reference (impl_torch.py
+  lines 4-40) does not call torch.sort; it executes the same bitonic sorting
+  network with tensor indexing: it pads the data with +inf to M = the next
+  power of two >= N (lines 8-10), then for k = 2, 4, ..., M and
+  j = k/2, k/4, ..., 1 performs compare-exchange between every index i and its
+  partner i XOR j (for i with partner > i), ascending when (i & k) == 0 and
+  descending otherwise, swapping only when strictly out of order (lines
+  12-38), and returns work[:N] (line 40). The result equals the values of
+  torch.sort(data) ascending. N <= 1 returns a clone (lines 5-6). The
+  generator (tensors.py 106-108) produces torch.randn (n,) and passes n
+  positionally.
+run_signature:
+  text: |
+    def run(data: torch.Tensor, N: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [data, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single 1-D tensor of N sorted values (a view of the run-allocated work buffer), dtype of data
+  get_last_config: present
+inputs:
+  - name: data
+    shape: "(N,)"
+    dtype: case dtype (fp16 or fp32)
+    layout: contiguous
+    mutated_in_place: false
+    notes: copied into the padded work buffer by pad_kernel; never written
+  - name: N
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+outputs:
+  - name: sorted
+    shape: "(N,)"
+    dtype: data dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: early return data.clone() when N <= 1
+    lines: [50, 51]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: unreachable for the sweep sizes
+  - description: M = triton.next_power_of_2(N) and allocation of the work buffer (M,) with torch.empty
+    lines: [53, 54]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      pad_kernel: copies data[0:N] into work[0:M] and fills work[N:M] with
+      +inf (loads beyond N use other=inf, stores masked to M), lines 12-16,
+      launched at lines 58-59 with a fixed (untuned) block.
+    kind: kernel
+    lines: [12, 16]
+    launches: "1 launch; ceil(M / pad block) programs"
+    depends_on: []
+    fusable_with: unclear
+    produces: work (M,) padded copy of data
+  - id: s2
+    description: >
+      bitonic_step_kernel, one launch per (k, j) stage of the network: the
+      host loops k = 2, 4, ..., M (outer) and j = k/2 down to 1 (inner)
+      (lines 64-70 autotuned, 73-83 fixed). Each program covers a contiguous
+      block of indices (lines 21-22); for each index i it computes the partner
+      i XOR j (line 23), is active only when partner > i and both are < M
+      (line 25), loads both elements (lines 26-27), decides the direction from
+      (i & k) == 0 (line 28), swaps when strictly out of order for that
+      direction (lines 29-31) and stores both elements back in place (lines
+      32-33). Each launch is a grid-wide barrier between stages.
+    kind: kernel
+    lines: [19, 33]
+    launches: "log2(M) * (log2(M) + 1) / 2 launches, each ceil(M / BLOCK) programs"
+    depends_on: [s1]
+    fusable_with: unclear
+    produces: work (M,) sorted in place
+  - id: s3
+    description: >
+      work[:N].contiguous() (line 85): a zero-copy view because the slice
+      starts at offset 0 with unit stride; no device work.
+    kind: host
+    lines: [85, 85]
+    launches: "0"
+    depends_on: [s2]
+    fusable_with: none
+    produces: the returned view
+algorithm_family: >
+  Global bitonic sorting network on a +inf-padded power-of-two buffer in
+  global memory: one kernel launch per (k, j) compare-exchange stage, every
+  stage reading and writing the whole buffer, with no shared-memory or
+  register-local sorting phase.
+reduction_scan_sort_structure: >
+  Standard bitonic network: outer k doubles from 2 to M, inner j halves from
+  k/2 to 1, partner = i XOR j, the lower index of each pair performs the
+  exchange, direction ascending iff (i & k) == 0. Comparisons are strict
+  (a > b for ascending, a < b for descending) in the element dtype, so equal
+  elements are never swapped; only values are sorted, so stability is
+  unobservable. +inf padding sorts to the tail and is dropped. Total
+  L*(L+1)/2 stages for L = log2 M, each separated by a kernel boundary. This
+  is the same comparator schedule as the reference.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: n/a (comparisons and moves in the native dtype, no upcast)
+  output_dtype: input dtype
+  special_modes: none
+  masking_or_padding_values: "+inf for positions N..M-1 (line 15); inactive lanes load other=0.0 but are never stored (lines 26-27, 32-33)"
+intermediate_storage: >
+  work (M,) in the input dtype with M = next_power_of_2(N) >= N, allocated
+  with torch.empty inside run() on every call (line 54), filled by s1 and
+  sorted in place by s2; the returned tensor is a view of it, so it lives as
+  long as the output.
+mutation_rules: >
+  data is never written. work is mutated in place across the stages but is
+  private to the call. Repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK
+    role: tile size (indices per program of bitonic_step_kernel)
+    default_present: true
+  - name: num_warps
+    role: warps (bitonic_step_kernel)
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 36-45) on bitonic_step_kernel only, over BLOCK x
+  num_warps, keyed on M, warmup=1, rep=3. Because every stage of a call
+  shares the key M, the tuner benchmarks candidates on the first launch
+  (k = 2, j = 1) and reuses that winner for all later stages. pad_kernel is
+  not tuned and both paths launch it with the fixed _PAD_BLOCK = 1024 (lines
+  7-9, 58-59). The non-autotuned path uses _DEFAULT_CONFIG (lines 5, 72-83).
+  get_last_config reads best_config of the step kernel (lines 88-95). Audit
+  only.
+implementation_freedoms_observed: >
+  Block size and warps of the step kernel; the pad block; whether the pad is
+  a separate launch; vectorisation. Fusing several consecutive small-j stages
+  into one launch (register/shared-memory local sorting) would preserve the
+  comparator set and the result but changes the launch structure; whether the
+  canonical contract allows that is a reconciliation decision, not something
+  this source settles.
+algorithm_constraints_observed: >
+  The comparator network of the reference (same k/j schedule, partner by XOR,
+  direction from (i & k), strict comparisons, no swap on equality), +inf
+  padding to a power of two, in-place exchange in a scratch buffer that the
+  input never aliases, values compared in the native dtype, ascending output
+  of length N in the input dtype.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts one read and one write of n elements, the compulsory
+    traffic of a sort, and n nominal flops; nothing is assumed prepacked
+    outside run(). The timed boundary (pad launch plus every network stage,
+    each a full read and write of M >= n elements, plus the zero-copy final
+    slice) therefore performs far more traffic than the formula, so the
+    reported bandwidth is an effective (algorithmic) bandwidth, not achieved
+    traffic. The padded size M is also not reflected in the formula.
+notes_for_review:
+  - The returned tensor is a view of the run-allocated work buffer, so the output is backed by scratch that is larger than N.
+  - The autotuner selects the step-kernel config on the j = 1 stage only (same key M for all stages), which may not be representative of large-j stages with strided partners.
+  - Every stage is a separate launch (log2(M)*(log2(M)+1)/2 of them), so launch count grows quadratically in log M and all launches are inside the timed region.
+  - The block_size keyword is accepted but unused.
+  - fp16 inputs use float("inf") padding, which is representable in fp16.

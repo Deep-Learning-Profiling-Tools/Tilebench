@@ -1,0 +1,244 @@
+operator: matmul_int8
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matmul_int8/impl_triton.py
+    functions:
+      - name: _b_transposed (and module-level _bt_cache WeakTensorKeyDictionary, line 16)
+        lines: [19, 24]
+        role: helper
+      - name: _tma_set_block_size_hook
+        lines: [27, 33]
+        role: tuner
+      - name: matmul_kernel
+        lines: [36, 79]
+        role: kernel
+      - name: matmul_kernel_autotuned
+        lines: [82, 108]
+        role: tuner
+      - name: _descriptors
+        lines: [111, 115]
+        role: helper
+      - name: run
+        lines: [118, 153]
+        role: host-driver
+      - name: get_last_config
+        lines: [156, 167]
+        role: helper
+  - path: tilebench/benchmarks/operators/matmul_int8/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 19]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/matmul_int8/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matmul_int8_inputs
+        lines: [439, 448]
+        role: helper
+      - name: infer_problem_size (matmul_int8 branch, 2*M*N*K)
+        lines: [703, 704]
+        role: helper
+functional_semantics: >
+  Integer GEMM against a 2-bit-packed weight matrix. Inputs: A int8 (M, K);
+  B uint8 (K_b, N) with K_b = K / 4, every byte holding four 2-bit fields.
+  Reference impl_torch.run (lines 4-19): for i in 0..3, field i of B[k, n]
+  is ((B[k, n] & (3 << 2i)) >> 2i) - 1, an int8 value in {-1, 0, 1, 2},
+  placed at logical row i*K_b + k of an unpacked int8 matrix B_unpacked
+  (K, N) (lines 10-14). The result is C = A @ B_unpacked (M, N) as int32;
+  the reference evaluates it as an fp32 torch.matmul with
+  torch.backends.cuda.matmul.allow_tf32 = False (set process-wide inside
+  run(), line 17, never restored) and casts to int32, which is exact for
+  the generated ranges (|A| <= 64, |b| <= 2, K <= 20480 gives |C| <
+  2^24). Generator (tensors.py 439-448): a = randint(-64, 65) int8 (M, K),
+  b = randint(0, 256) uint8 (K_b, N); the config's dtype 'int8' is ignored
+  by the generator; asserts K % 4 == 0. Config: M = N = 2048, K = 1024*i.
+run_signature:
+  text: |-
+    def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
+            autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [a, b]
+  keyword_params: [block_size, autotune]
+  returns: single int32 tensor c of shape (M, N)
+  get_last_config: present
+inputs:
+  - name: a
+    shape: "(M, K)"
+    dtype: int8
+    layout: row-major contiguous (asserted, line 123); host TensorDescriptor built directly on it (line 112)
+    mutated_in_place: false
+    notes: TMA-loaded as [BLOCK_M, BLOCK_K] tiles at column offset i*K_b + j*BLOCK_K (lines 73-74), i.e. four disjoint K-slices per packed-B tile.
+  - name: b
+    shape: "(K_b, N) with K_b = K / 4 (asserted a.shape[1] == 4 * b.shape[0], line 120)"
+    dtype: uint8 (four 2-bit fields per byte)
+    layout: row-major as supplied; NEVER read by the kernel directly -- consumed only through bt = b.t().contiguous() of shape (N, K_b) (lines 19-24, 128)
+    mutated_in_place: false
+    notes: the (N, K_b) copy is cached across calls, keyed weakly by the tensor object.
+outputs:
+  - name: c
+    shape: "(M, N)"
+    dtype: int32 (torch.empty(..., dtype=torch.int32), line 127; int32 accumulator stored without cast, line 79)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: >
+      bt = _b_transposed(b): b.t().contiguous() -> (N, K_b) uint8, so the
+      packed B is K-major and TMA-loadable as [BLOCK_N, BLOCK_K] tiles.
+      Cached in a module-level torch.utils.weak.WeakTensorKeyDictionary
+      keyed by the tensor object b.
+    lines: [16, 24]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: true
+    notes: >
+      Called at line 128 on every run(), but the transpose copy (read +
+      write of K*N/4 bytes, one torch copy launch) executes only on the
+      first call per live B tensor -- i.e. during warmup -- and all later
+      (timed) calls hit the cache. The weak key means the entry dies with
+      b, so there is no stale-address hazard and no unbounded retention,
+      unlike matmul_fp32_fp16_fp8's dict.
+  - description: shape/contiguity asserts; c = torch.empty((M, N), dtype=torch.int32)
+    lines: [120, 127]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: fresh output per call.
+  - description: >
+      Host-side TMA descriptors via _descriptors(a, bt, c, bm, bn, bk)
+      (lines 111-115): dummy [1, 1] shapes in the autotune path (line 132)
+      rewritten by the pre_hook _tma_set_block_size_hook (lines 27-33) per
+      candidate and before the final launch; concrete shapes in the default
+      path (line 141).
+    lines: [132, 141]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: cheap host metadata; rebuilt every call.
+stages:
+  - id: s1
+    description: bt cache lookup (transpose only on first sight of b), output allocation, descriptor construction
+    kind: host
+    lines: [120, 142]
+    launches: "0 in steady state (1 torch transpose-copy launch on the first call per distinct b)"
+    depends_on: []
+    fusable_with: "none"
+    produces: bt (N, K_b) cached; c (M, N) int32; a_desc, b_desc, c_desc
+  - id: s2
+    description: >
+      matmul_kernel: static_assert K % (4 * BLOCK_K) == 0 (lines 46-49);
+      1-D grid with grouped tile ordering (lines 50-62); int32 accumulator
+      (line 63); K_b = K // 4 as a constexpr (line 65). Outer loop j over
+      cdiv(K_b, BLOCK_K) packed tiles (line 68): one TMA load of b_uint8
+      [BLOCK_N, BLOCK_K] from bt (line 71); inner static loop i = 0..3
+      (line 72): TMA load of a [BLOCK_M, BLOCK_K] at column i*K_b +
+      j*BLOCK_K (lines 73-74), decode field i as ((b_uint8 & (3 << 2i)) >>
+      2i).to(int8) - 1 (lines 75-76), accumulator = tl.dot(a, b.T,
+      accumulator, out_dtype=int32) (line 77). Epilogue: TMA store of the
+      int32 tile (line 79). Each packed-B tile is loaded once and reused
+      for four int8 MMAs.
+    kind: kernel
+    lines: [36, 79]
+    launches: "1 launch, grid ceil(M / BLOCK_M) * ceil(N / BLOCK_N)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: c (M, N) int32 (returned) -- no intermediates
+algorithm_family: >
+  Single-kernel blocked int8 GEMM with in-register 2-bit weight unpacking:
+  TMA-fed NT layout (A row-major, packed B pre-transposed to K-major and
+  cached), each packed tile decoded into four int8 operand tiles that
+  multiply four disjoint K-slices of A (logical K index i*K_b + k), int32
+  accumulation, grouped 1-D tile ordering; no split-K, no persistence.
+reduction_scan_sort_structure: >
+  Reduction over the logical K inside tl.dot per [BLOCK_K] chunk,
+  accumulated in int32 across the j (packed tile) x i (field) loop nest;
+  the visiting order of logical k is therefore not monotone (slices
+  i*K_b + [j*BLOCK_K, ...) interleaved over i), which is irrelevant
+  because integer accumulation is exact. The reference reduces in fp32
+  via cuBLAS (also exact for the generated ranges); verify atol/rtol 0.1
+  is effectively exact for integer outputs.
+precision:
+  input_dtypes: [int8 (A), uint8 packed 2-bit (B)]
+  accumulation: int32 (tl.dot out_dtype=tl.int32, line 77)
+  output_dtype: int32
+  special_modes: "exact integer arithmetic; B fields decoded to int8 in {-1, 0, 1, 2}; int8 x int8 MMA; K is a tl.constexpr (line 40) so the kernel is specialised per K; legality: K % (4 * BLOCK_K) == 0 enforced by static_assert"
+  masking_or_padding_values: "no explicit masks; out-of-bounds handled by TMA descriptors (zero-filled loads, clipped stores); the config sweep (M = N = 2048, K multiples of 1024) is tile-aligned and satisfies the divisibility constraint for every search-space BLOCK_K"
+intermediate_storage: >
+  bt (N, K_b) uint8 per live B tensor, held in a weak-keyed module cache
+  (lifetime = B's lifetime). No other scratch; c is the returned output.
+mutation_rules: >
+  a and b are never written; c is fresh per call; idempotent. Safe against
+  storage reuse because the cache key is the tensor object, not its
+  address.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE_M
+    role: tile size
+    default_present: true
+  - name: BLOCK_SIZE_N
+    role: tile size
+    default_present: true
+  - name: BLOCK_SIZE_K
+    role: tile size (packed K_b chunk; logical K chunk is 4x)
+    default_present: true
+  - name: GROUP_SIZE_M
+    role: tile ordering / L2 swizzle group
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 82-108) over BLOCK_M x BLOCK_N x BLOCK_K x
+  num_warps x num_stages with two filters (a tile-area cap and a
+  shared-memory budget estimate, lines 100-103), keyed on ["M", "N", "K"],
+  warmup=1, rep=3, with pre_hook _tma_set_block_size_hook rewriting the
+  descriptors' block_shape per candidate. Default path uses
+  _DEFAULT_CONFIG (lines 6-13, 138-152). get_last_config reads best_config
+  (lines 156-167).
+implementation_freedoms_observed: >
+  Tile sizes, warps, stages, grouped ordering, pipelining; TMA descriptors
+  versus pointer loads; whether packed B is consumed K-major through a
+  cached transpose (as here) or read in its native (K_b, N) layout; decode
+  strategy (shift/mask in registers vs lookup) and loop nesting (fields
+  inner vs outer); split-K or persistent scheduling; whether K is a
+  constexpr.
+algorithm_constraints_observed: >
+  Keep: packed-B decoding semantics (field i at bits 2i..2i+1, value =
+  field - 1, logical K index i*K_b + k); int8 x int8 products accumulated
+  exactly in int32; int32 (M, N) output; A read once per N-tile column and
+  each packed-B byte read once per M-tile row (the 4x operand reuse is the
+  point of the packing); inputs read-only; K % 4 == 0 (and in this source
+  K % (4 * BLOCK_K) == 0). Whether the K-major repack of B belongs to the
+  timed algorithm is the open boundary question: here it runs once and is
+  cached, so the steady-state timed region is the GEMM alone.
+fq_boundary:
+  bytes_expr: "M * K + K * N // 4 + 4 * M * N"
+  flops_expr: "2 * M * N * K"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula uses explicit byte counts (not dtype_size): A once as int8
+    (M*K bytes), the packed B once (K*N/4 bytes) and C once as int32
+    (4*M*N bytes). In the steady-state timed region that is exactly the
+    kernel's compulsory traffic, but only because the transposition of the
+    packed B into bt is cached across calls (executed once at warmup, never
+    timed); the formula thus assumes a prepacked K-major packed B. A
+    re-implementation that transposes per call would carry an extra
+    2*K*N/4 bytes of uncounted, timed traffic; one reading B in its native
+    layout would match the formula without a cache. The formula correctly
+    assumes B arrives packed (the generator produces it packed; the
+    reference's unpacking to a full int8 (K, N) matrix and fp32 conversion
+    happens on the reference side only). flops_expr counts the logical
+    unpacked GEMM, which is what the kernel executes (four MMAs per packed
+    tile).
+notes_for_review:
+  - The K-major prepack of packed B is cached in a WeakTensorKeyDictionary: no stale-pointer hazard, but it still moves the transpose out of the steady-state timed region (same F/Q boundary as matmul_fp32_fp16_fp8).
+  - impl_torch sets torch.backends.cuda.matmul.allow_tf32 = False inside run() and never restores it (process-wide side effect on other operators' fp32 references, notably matmul_fp32_fp16_fp8 which sets it True at import).
+  - Reference unpack layout (row i*K_b + k) and the kernel's k_pos = i*K_b + j*BLOCK_K agree, so both sides use the same logical K ordering.
+  - K is a tl.constexpr with static_assert K % (4 * BLOCK_K) == 0: one compile per sweep point and arbitrary K is unsupported; the config's K = 1024*i satisfies it for every search-space BLOCK_K.
+  - Decoded field values span {-1, 0, 1, 2} (the generator comment says 'ternary-ish'); not a symmetric ternary code.
+  - The case dtype 'int8' in config.yaml is a label only; the generator ignores it and bytes_expr does not use dtype_size.
+  - TMA descriptors require 16-byte-aligned strides and a TMA-capable GPU; no fallback branch exists.
+  - run() has no **kwargs; the engine must pass only block_size/autotune.

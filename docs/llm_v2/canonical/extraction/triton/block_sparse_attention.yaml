@@ -1,0 +1,317 @@
+operator: block_sparse_attention
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/block_sparse_attention/impl_triton.py
+    functions:
+      - name: block_sparse_attention_kernel
+        lines: [9, 119]
+        role: kernel
+      - name: _block_sparse_attention_kernel_autotuned
+        lines: [122, 131]
+        role: tuner
+      - name: _make_descriptors
+        lines: [134, 139]
+        role: helper
+      - name: run
+        lines: [142, 188]
+        role: host-driver
+      - name: get_last_config
+        lines: [190, 194]
+        role: helper
+  - path: tilebench/benchmarks/operators/block_sparse_attention/impl_torch.py
+    functions:
+      - name: _build_block_mask
+        lines: [16, 42]
+        role: helper
+      - name: run
+        lines: [45, 61]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/block_sparse_attention/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_block_sparse_attention_inputs
+        lines: [265, 326]
+        role: helper
+functional_semantics: >
+  Block-sparse causal attention with grouped-query heads. For batch b, query
+  head h and query position m, with kv head h_kv = h // (num_heads //
+  num_kv_heads) and layout head lh = h % num_layout:
+  out[b, h, m, :] = sum_{n in A} softmax_n(scale * q[b,h,m,:] . k[b,h_kv,n,:]) v[b,h_kv,n,:],
+  where the admissible key set A = { n < total_seq_len : n <= m and the block
+  (m // BLOCK_M, n // BLOCK_N) is listed in the CSR layout of lh }. The
+  reference (impl_torch.py) builds a flex_attention BlockMask from the CSR
+  layout ANDed with q_idx >= kv_idx (lines 16-42, cached per col-index tensor
+  at lines 13, 52-58) and calls a torch.compile'd flex_attention with
+  scale=softmax_scale and enable_gqa=True (lines 11, 60-61). The generator
+  (tensors.py 265-326) produces torch.randn Q (B, H, M, D), K and V
+  (B, H_kv, M, D), a single shared layout (num_layout = 1) that for row block
+  r lists the key blocks max(0, r - 2) .. r (causal local window, lines
+  294-311), int32 CSR row pointers and zero-padded column indices (lines
+  314-317), softmax_scale = 1/sqrt(D), and EVEN_M/EVEN_N flags.
+run_signature:
+  text: |
+    def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices,
+            layout_csr_row_stride_h, layout_csr_col_stride_h,
+            num_layout, softmax_scale, num_heads, num_kv_heads,
+            total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS,
+            block_size: int = None, autotune: bool = False):
+  positional_inputs: [Q, K, V, layout_csr_row_indices, layout_csr_col_indices, layout_csr_row_stride_h, layout_csr_col_stride_h, num_layout, softmax_scale, num_heads, num_kv_heads, total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS]
+  keyword_params: [block_size, autotune]
+  returns: single tensor out of shape (B, num_heads, total_seq_len, D), dtype of Q
+  get_last_config: present
+inputs:
+  - name: Q
+    shape: "(B, H, M, D)"
+    dtype: fp16 (the only dtype in the case grid)
+    layout: contiguous (run() calls .contiguous(), a no-op for the generator's tensors); consumed through a 4-D TMA TensorDescriptor
+    mutated_in_place: false
+    notes: null
+  - name: K
+    shape: "(B, H_kv, M, D)"
+    dtype: same as Q
+    layout: contiguous; 4-D TMA descriptor, tiles transposed in-register (line 74)
+    mutated_in_place: false
+    notes: null
+  - name: V
+    shape: "(B, H_kv, M, D)"
+    dtype: same as Q
+    layout: contiguous; 4-D TMA descriptor
+    mutated_in_place: false
+    notes: null
+  - name: layout_csr_row_indices
+    shape: "(num_layout * (num_rows + 1),)"
+    dtype: int32
+    layout: contiguous, CSR row pointers per layout head, stride layout_csr_row_stride_h
+    mutated_in_place: false
+    notes: read by every program for its row block (lines 64-66)
+  - name: layout_csr_col_indices
+    shape: "(num_layout * num_rows * num_cols,)"
+    dtype: int32
+    layout: contiguous, zero-padded key-block indices, stride layout_csr_col_stride_h
+    mutated_in_place: false
+    notes: read one entry per visited key block (line 70)
+  - name: layout_csr_row_stride_h
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: layout_csr_col_stride_h
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: num_layout
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: softmax_scale
+    shape: scalar float
+    dtype: python float (tl.constexpr, so the kernel specialises per value)
+    layout: n/a
+    mutated_in_place: false
+    notes: applied to the raw scores before masking (line 82)
+  - name: num_heads
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: num_kv_heads
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: GQA mapping h // (num_heads // num_kv_heads) (lines 42-43)
+  - name: total_seq_len
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: equals M (= N) from the generator; bounds both the query and key masks (lines 86-87)
+  - name: BLOCK_M
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: query-block granularity of the CSR layout; also the per-program query tile (not a tunable)
+  - name: EVEN_M
+    shape: scalar bool
+    dtype: python bool (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: passed through but unused in the kernel body
+  - name: BLOCK_N
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: key-block granularity of the CSR layout; also the per-iteration key tile (not a tunable)
+  - name: EVEN_N
+    shape: scalar bool
+    dtype: python bool (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: passed through but unused in the kernel body
+  - name: BLOCK_D
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: head-dim chunk; D = BLOCK_D * NUM_D_BLOCKS (generator lines 274-282)
+  - name: NUM_D_BLOCKS
+    shape: scalar int
+    dtype: python int (tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: number of head-dim chunks; the kernel body only supports 1 or 2 (a second accumulator acc2 is hard-coded, lines 53-54, 58-59, 78-80, 100-101, 107-109, 117-119)
+outputs:
+  - name: out
+    shape: "(B, H, M, D)"
+    dtype: Q.dtype (line 157)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: Q, K, V .contiguous() calls (no copy for the generator's contiguous tensors)
+    lines: [148, 150]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: conditional copy; never materialises in the benchmark
+  - description: grid computation and output allocation with torch.empty
+    lines: [152, 157]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: host-side TMA TensorDescriptor construction for Q, K, V and out with 4-D block shapes [1, 1, rows, BLOCK_D]
+    lines: [134, 139]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: called at line 159 on every run(); host-only
+stages:
+  - id: s1
+    description: >
+      Flash-attention-style kernel. Grid axis 0 is the query block, axis 1 is
+      (batch, head) (lines 35-39, 155). The program maps its head to the kv
+      head (GQA, lines 42-43) and to the layout head (line 61), initialises
+      running max m_i = -inf, running sum l_i = 0 and one fp32 accumulator per
+      head-dim chunk (lines 50-54), loads its query tile per chunk through the
+      descriptor (lines 57-59), reads the CSR row range [start_l, end_l) for
+      its query block (lines 64-66) and loops over the listed key blocks
+      (lines 69-112): loads the K tile per chunk and transposes it (lines 74,
+      79), accumulates S = q . k^T over chunks (lines 75-80), scales (line
+      82), masks query/key positions beyond total_seq_len and non-causal
+      entries to -inf (lines 85-90), performs the online-softmax update with a
+      -1e30 guard on the new max (lines 93-97), rescales the accumulators
+      (lines 99-101), casts P to the query dtype (line 102), loads V per chunk
+      and accumulates P . V (lines 104-109), then commits l_i and m_i (lines
+      111-112). After the loop it divides by l_i (guarded to 1 when 0, lines
+      114-115, 118) and stores each chunk through the output descriptor
+      (lines 116, 119). Launched at lines 161-187.
+    kind: kernel
+    lines: [9, 119]
+    launches: "1 launch; ceil(total_seq_len / BLOCK_M) x (B * num_heads) programs"
+    depends_on: []
+    fusable_with: none
+    produces: out
+algorithm_family: >
+  Online-softmax (flash-attention style) attention restricted to a CSR
+  block-sparse layout: each query block visits only the key blocks listed for
+  its row, applies causal and sequence-bound masking inside those blocks,
+  maps query heads to kv heads (GQA), splits the head dimension into chunks
+  with separate accumulators, and loads tiles through TMA descriptors.
+reduction_scan_sort_structure: >
+  Key blocks are visited in the order stored in the CSR column list
+  (increasing block index for the generator's layout). Per block: new max
+  m_new = max(m_old, rowmax(S)); m_safe = max(m_new, -1e30); alpha =
+  exp(m_old - m_safe); p = exp(S - m_safe); l = l*alpha + rowsum(p);
+  acc = acc*alpha + P.V (per head-dim chunk). Final out = acc / l with l
+  replaced by 1 where it is 0, so rows with no admissible key yield zeros
+  instead of NaN. Natural exp (tl.exp) with the scale applied to S before
+  the max, not exp2 with folded log2(e). The head-dim reduction of S is the
+  sum of per-chunk dots in chunk order.
+precision:
+  input_dtypes: [fp16]
+  accumulation: fp32 for S, the running max and sum, and the output accumulators (lines 50-54, 75); dots use the default input precision for fp16 operands with fp32 accumulation
+  output_dtype: Q dtype (cast at lines 116, 119)
+  special_modes: "P is cast to the query dtype (fp16) before the P.V dot (line 102); max guarded at -1e30 (line 94) and normaliser guarded at 1.0 (line 114)"
+  masking_or_padding_values: "-inf for masked score entries (line 90): key or query index >= total_seq_len, or key index > query index (causal)"
+intermediate_storage: >
+  None beyond the output; S, P, the statistics and the accumulators live in
+  registers. The CSR layout is an input, built by the generator outside
+  run().
+mutation_rules: >
+  No input is modified; the output is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches:
+  - condition: "host-side TensorDescriptor / TMA used unconditionally (lines 134-139), no code branch"
+    lines: [134, 139]
+    changes: >
+      Not a branch: the descriptor path is taken on every architecture; on a
+      GPU without TMA the behaviour depends on Triton's own lowering, outside
+      this file.
+    algorithmic: false
+tunable_parameters:
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 122-131) over num_warps x num_stages with empty
+  Config kwargs, keyed on total_seq_len, warmup=1, rep=3. No tile size is
+  tuned: BLOCK_M, BLOCK_N, BLOCK_D and NUM_D_BLOCKS are inputs fixed by the
+  generator / config.yaml case_defaults because they define the sparsity
+  block granularity and head-dim split. The non-autotuned path uses
+  _DEFAULT_CONFIG (lines 6, 174-187). get_last_config reads best_config
+  (lines 190-194). Audit only.
+implementation_freedoms_observed: >
+  Warps and pipeline depth; load mechanism (descriptor/TMA vs pointer loads);
+  whether the head dimension is chunked (the generator's BLOCK_D /
+  NUM_D_BLOCKS are inputs, but the reference ignores them and a single
+  full-D accumulator would compute the same result); exp vs exp2 formulation;
+  how the mask is expressed; use or non-use of the EVEN_M / EVEN_N flags;
+  the -1e30 / l == 0 guards (only observable for fully masked rows, which the
+  generator's layout never produces).
+algorithm_constraints_observed: >
+  The query tile must coincide with the layout's BLOCK_M row blocks and key
+  tiles with its BLOCK_N column blocks, because the CSR layout is indexed in
+  those units and only listed blocks may be visited; within a visited block
+  the causal (key <= query) and sequence-bound masks apply; GQA mapping
+  h // (num_heads // num_kv_heads) and layout mapping h % num_layout; online
+  softmax with fp32 statistics and accumulators, softmax scale applied to the
+  scores; P in the input dtype for the P.V product (precision class of the
+  verify tolerance atol 5e-2 / rtol 5e-3, config.yaml lines 22-24); output
+  (B, H, M, D) in the Q dtype.
+fq_boundary:
+  bytes_expr: "2 * B * (H + H_kv) * M * D * dtype_size"
+  flops_expr: "12 * B * H * BLOCK_N * D * (M - BLOCK_M)"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes = one read of Q, K and V and one write of out, which is the
+    compulsory traffic of the single kernel inside run(); the kernel re-reads
+    each K/V block once per query block that lists it and once per query head
+    sharing the kv head, served by cache and not counted. flops encodes the
+    generator's layout density: with window_blocks = 2 each row block visits
+    3 key blocks except the first two rows, i.e. 3 * (M / BLOCK_M - 1) blocks
+    per head, at 4 * BLOCK_M * BLOCK_N * D flops per block (QK and PV), and it
+    counts the diagonal block in full despite causal masking. It is therefore
+    tied to the generator's layout and to M being a multiple of BLOCK_M, not
+    derived from the CSR input. run() performs no copies (the .contiguous()
+    calls are no-ops) and builds only host-side descriptors; the CSR layout
+    and the reference's BlockMask are built outside the timed region.
+notes_for_review:
+  - flops_expr hard-codes the generator's causal local-window density (3 blocks per row) rather than counting the CSR layout, so any layout change silently breaks the TFLOPS metric.
+  - EVEN_M and EVEN_N are accepted as constexpr arguments but never used in the kernel body.
+  - The kernel supports NUM_D_BLOCKS of 1 or 2 only (acc2 is hard-coded); larger head-dim splits would need more accumulators.
+  - run() has no **kwargs, so any extra engine keyword would raise TypeError, unlike the other operators.
+  - softmax_scale is a tl.constexpr float, so each distinct scale value triggers a recompilation; harmless here because D is fixed.
+  - The autotune key is total_seq_len only; batch and head counts are constexpr so they also specialise the kernel, but they are fixed in the sweep.

@@ -1,0 +1,144 @@
+operator: sigmoid
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/sigmoid/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [10, 16]
+        role: tuner
+      - name: sigmoid_kernel
+        lines: [19, 28]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [31, 31]
+        role: tuner
+      - name: run
+        lines: [34, 60]
+        role: host-driver
+      - name: get_last_config
+        lines: [63, 64]
+        role: helper
+  - path: tilebench/benchmarks/operators/sigmoid/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/sigmoid/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_sigmoid_inputs
+        lines: [111, 113]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Elementwise logistic sigmoid y[i] = 1 / (1 + exp(-x[i])) over a 1D
+  vector. Reference (impl_torch.py lines 4-5): torch.sigmoid(X); the
+  integer argument N is accepted and ignored. Generator (tensors.py lines
+  111-113): X = torch.randn(n) in the case dtype, returned together with n.
+  config.yaml sweeps n and dtype in {fp16, bf16, fp32}.
+run_signature:
+  text: "def run(X: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [X, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor `output`, same shape and dtype as X (allocated by run)
+  get_last_config: present
+inputs:
+  - name: X
+    shape: "(n,)"
+    dtype: "case dtype: fp16 | bf16 | fp32"
+    layout: contiguous (passed straight to the kernel, no view or copy)
+    mutated_in_place: false
+    notes: null
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: used only to size the grid (ct.cdiv(N, tile), lines 44 and 56); not checked against X.numel().
+outputs:
+  - name: output
+    shape: X.shape
+    dtype: X.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(X)
+    lines: [36, 36]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      sigmoid_kernel, grid = (ceil(N/TILE), 1, 1) (line 56). Each CTA loads
+      one (TILE,) tile of X with ZERO padding (line 22), casts to fp32 (line
+      23), computes 1.0 / (1.0 + ct.exp(-x)) in fp32 (line 25), casts to the
+      output dtype (line 27) and stores the tile (line 28).
+    kind: kernel
+    lines: [19, 28]
+    launches: "1 (grid = ceil(N/TILE) CTAs)"
+    depends_on: []
+    fusable_with: none
+    produces: output (final result)
+algorithm_family: >
+  Elementwise map with flat 1D tiling; direct formula 1/(1+exp(-x)) in fp32.
+reduction_scan_sort_structure: >
+  None; purely elementwise.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: n/a; the exp, add and reciprocal are evaluated in fp32 after an explicit upcast
+  output_dtype: X.dtype (single downcast before the store)
+  special_modes: none (plain ct.exp and a true division; no fast-math flag visible)
+  masking_or_padding_values: "ZERO padding on the X load for the last partial tile; padded lanes evaluate to sigmoid(0) but lie outside the output range"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  X is not modified; output is fully overwritten each call; idempotent. The
+  tuning launches write into the same output buffer (args_fn, line 45),
+  which the final launch overwrites.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per CTA)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over the
+  tile x occupancy cartesian space (_SEARCH_SPACE, lines 11-15), keyed by
+  (N, dtype) (line 41); winner applied via the memoised kernel_with_hints
+  kernel (line 57). get_last_config written only on the autotune path
+  (lines 48-52). Audit only.
+implementation_freedoms_observed: >
+  Tile size and occupancy; whether to use the direct 1/(1+exp(-x)) form or a
+  numerically different but equivalent form (e.g. via tanh or a sign-split);
+  whether to evaluate in fp32 or natively for half dtypes.
+algorithm_constraints_observed: >
+  Keep: elementwise sigmoid producing the same shape/dtype as X in a fresh
+  buffer; fp32 evaluation before a single downcast is what this
+  implementation does and what keeps half-precision cases within the default
+  verify tolerances (no verify override in config.yaml).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    One read of X and one write of output; run() performs no other data
+    movement (a single empty allocation). flops_expr counts one nominal
+    operation per element (the actual exp/add/div count is higher, which is
+    the usual convention for elementwise ops).
+notes_for_review:
+  - block_size is accepted but ignored; the default path always uses _DEFAULT_CONFIG.tile.
+  - N is trusted for the grid size and never validated against X.numel().
+  - "**kwargs is accepted and discarded, so unknown framework knobs do not raise."

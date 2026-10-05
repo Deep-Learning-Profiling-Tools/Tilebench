@@ -1,0 +1,57 @@
+# Proposed A/B/C operator folds for source-device skill distillation.
+# status: proposed  — drawn up from operator family/category BEFORE any Base
+# result exists; must be approved (status: frozen) by the study owner before
+# a distillation or Enhanced campaign may start. Never regrouped on results.
+#
+# Rule: operators that are close variants of one another sit in the SAME fold,
+# so a held-out operator never has a near-twin in the training folds. Families
+# are then distributed so that every fold mixes memory-bound and compute-bound
+# work and holds 15 operators.
+status: proposed
+proposed_on: "2026-10-05"
+approved_by: null
+
+families:
+  activations:        [relu, leaky_relu, sigmoid, fused_activation, swiglu]
+  convolutions:       [1d_conv, 2d_conv, 3d_conv]
+  gemm:               [batched_matmul, matmul_fp32_fp16_fp8, matmul_int8, streamk_matmul]
+  attention:          [flash_attention, flash_decode, block_sparse_attention, linear_self_attention]
+  row_normalization:  [layernorm, rmsnorm, l2_norm, batch_normalization]
+  row_reduction:      [softmax, cross_entropy, kl_divergence, argmax, mean_reduction, moe_topk_gating]
+  sort_select:        [bitonic_sort, radix_sort, top_k_selection]
+  histogram:          [histogramming]
+  copy_layout:        [matrix_copy, matrix_transpose, reverse_array, interleave, destindex]
+  elementwise_binary: [mul2, vector_add, dropout]
+  quantization:       [quantize_global, dequantize_rowwise, weight_dequant]
+  stencil_pool:       [gaussian_blur, jacobi_stencil_2d, 2d_max_pooling]
+  rope:               [rope]
+
+folds:
+  A:
+    families: [activations, gemm, sort_select, stencil_pool]
+    operators: [relu, leaky_relu, sigmoid, fused_activation, swiglu,
+                batched_matmul, matmul_fp32_fp16_fp8, matmul_int8, streamk_matmul,
+                bitonic_sort, radix_sort, top_k_selection,
+                gaussian_blur, jacobi_stencil_2d, 2d_max_pooling]
+  B:
+    families: [attention, row_normalization, copy_layout, rope, histogram]
+    operators: [flash_attention, flash_decode, block_sparse_attention, linear_self_attention,
+                layernorm, rmsnorm, l2_norm, batch_normalization,
+                matrix_copy, matrix_transpose, reverse_array, interleave, destindex,
+                rope, histogramming]
+  C:
+    families: [convolutions, row_reduction, elementwise_binary, quantization]
+    operators: [1d_conv, 2d_conv, 3d_conv,
+                softmax, cross_entropy, kl_divergence, argmax, mean_reduction, moe_topk_gating,
+                mul2, vector_add, dropout,
+                quantize_global, dequantize_rowwise, weight_dequant]
+
+rationale: >
+  Variant groups are kept whole (the three convolutions, the four GEMMs, the
+  four attention kernels, the three sorts, the activation family) so that a
+  held-out operator's near-twin is never in the training data of the skill
+  that is evaluated on it. Each fold then receives one compute-bound family
+  (gemm / attention / convolutions), one reduction-style family and one or
+  two memory-bound families, giving 15 operators per fold and a comparable
+  mix of arithmetic intensities. All dtype, model and device instances of an
+  operator inherit its fold.

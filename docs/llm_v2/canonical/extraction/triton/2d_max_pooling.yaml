@@ -1,0 +1,200 @@
+operator: 2d_max_pooling
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/2d_max_pooling/impl_triton.py
+    functions:
+      - name: max_pool2d_kernel
+        lines: [8, 46]
+        role: kernel
+      - name: _max_pool2d_kernel_autotuned
+        lines: [49, 59]
+        role: tuner
+      - name: run
+        lines: [62, 104]
+        role: host-driver
+      - name: get_last_config
+        lines: [107, 115]
+        role: helper
+  - path: tilebench/benchmarks/operators/2d_max_pooling/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 8]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/2d_max_pooling/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_2d_max_pooling_inputs
+        lines: [481, 489]
+        role: helper
+functional_semantics: >
+  2-D max pooling over a flat NCHW tensor. The reference (impl_torch.py lines
+  5-8) views the flat input as (N, C, H, W), applies
+  torch.nn.functional.max_pool2d(x, kernel_size, stride=stride, padding=padding)
+  and returns the result flattened to 1-D. Semantically
+  out[n, c, oh, ow] = max_{kh < k, kw < k} x[n, c, oh*stride + kh - padding,
+  ow*stride + kw - padding] with out-of-range positions treated as -inf,
+  H_out = (H + 2*padding - k) // stride + 1 and likewise W_out. The generator
+  (tensors.py 481-489) produces a flat torch.randn tensor of N*C*H*W elements
+  with W = H and passes N, C, H, W, kernel_size, stride, padding positionally.
+run_signature:
+  text: |
+    def run(input, N, C, H, W, kernel_size, stride, padding,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, N, C, H, W, kernel_size, stride, padding]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single 1-D tensor of N*C*H_out*W_out elements (NCHW order), dtype of input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N*C*H*W,) flat"
+    dtype: case dtype (fp16, bf16 or fp32)
+    layout: contiguous 1-D, interpreted as NCHW planes of H*W elements (line 29)
+    mutated_in_place: false
+    notes: null
+  - name: N
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: C
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: H
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument
+  - name: W
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument (generator sets W = H)
+  - name: kernel_size
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: tl.constexpr in the kernel (line 16); problem parameter, not a tunable
+  - name: stride
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: tl.constexpr (line 17)
+  - name: padding
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: tl.constexpr (line 18)
+outputs:
+  - name: output
+    shape: "(N*C*H_out*W_out,) flat"
+    dtype: input dtype (line 71)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: H_out / W_out / total_out arithmetic and an early return of an empty tensor when total_out <= 0
+    lines: [64, 69]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: the early-return path is unreachable for the sweep shapes
+  - description: flat output allocation with torch.empty
+    lines: [71, 71]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      Direct stencil max-pooling kernel. Grid axis 0 is the (n, c) plane,
+      axes 1 and 2 tile the output rows and columns (lines 22-27). The program
+      initialises a running tile to -inf in the input dtype (lines 30-31),
+      then for every (kh, kw) tap in two fully unrolled static loops computes
+      the input coordinates (lines 35-36), masks positions outside the plane
+      (lines 37-38), loads with other=-inf (lines 39-40) and folds with
+      tl.maximum (line 41). The tile is stored to the flat output plane with a
+      bounds mask (lines 43-46). Launched at lines 73-102.
+    kind: kernel
+    lines: [8, 46]
+    launches: "1 launch; N*C x ceil(H_out / BLOCK_rows) x ceil(W_out / BLOCK_cols) programs"
+    depends_on: []
+    fusable_with: none
+    produces: output
+algorithm_family: >
+  Direct (stencil) 2-D max pooling: each program owns a 2-D tile of one output
+  plane and takes the elementwise maximum over the kernel_size**2 taps with
+  unrolled loops, reading the input in place; out-of-plane taps are masked to
+  -inf. No unfold/im2col, single kernel.
+reduction_scan_sort_structure: >
+  Max over kernel_size**2 taps, fixed order kh outer / kw inner (lines 33-34),
+  folded elementwise into a running tile with tl.maximum. The order is
+  irrelevant for the result except for NaN behaviour.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: native input dtype, no upcast (tl.full with input_ptr.dtype.element_ty at lines 30-31); max is exact in any dtype
+  output_dtype: input dtype
+  special_modes: none
+  masking_or_padding_values: "-inf for out-of-plane taps (lines 30, 40), which matches max_pool2d's implicit -inf padding"
+intermediate_storage: >
+  None beyond the output buffer.
+mutation_rules: >
+  No input is modified; the output is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_R
+    role: tile size (output rows per program)
+    default_present: true
+  - name: BLOCK_C
+    role: tile size (output columns per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 49-59) over a fixed list of (BLOCK_R, BLOCK_C) pairs
+  times num_warps, keyed on H_out, W_out, kernel_size, stride, padding,
+  warmup=1, rep=3. The non-autotuned path launches the undecorated kernel with
+  _DEFAULT_CONFIG (lines 5, 87-102). get_last_config reads best_config (lines
+  107-115). Audit only.
+implementation_freedoms_observed: >
+  Tile shape and warp count; whether the output plane is tiled 1-D or 2-D;
+  tap unrolling; load vectorisation; grid-to-plane mapping.
+algorithm_constraints_observed: >
+  Single kernel reading the flat input in place (no padded copy or unfold);
+  -inf padding semantics identical to max_pool2d; max computed in a precision
+  that preserves the exact result (native dtype suffices); output is the
+  flattened NCHW pooled tensor in the input dtype; kernel_size, stride and
+  padding are problem parameters supplied by the generator.
+fq_boundary:
+  bytes_expr: >
+    N * C * H * H * dtype_size
+    + N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size
+  flops_expr: >
+    N * C
+    * ((H + 2 * padding - kernel_size) // stride + 1) ** 2
+    * kernel_size ** 2
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts one read of the input (W = H per the generator) and one
+    write of the output, plus one comparison per tap per output element. run()
+    only allocates the output and launches the kernel, so the timed boundary
+    is exactly the modelled work and nothing is prepacked. The stencil re-reads
+    each input element up to ceil(k/stride)**2 times through the cache, which
+    the compulsory-traffic formula ignores.
+notes_for_review:
+  - The block_size keyword is accepted but unused.
+  - NaN semantics may differ from max_pool2d (which propagates NaN); tl.maximum behaviour on NaN is not specified here and randn inputs never exercise it.
+  - The early return for total_out <= 0 returns a 0-element tensor rather than raising; unreachable in the sweep.
+  - flops_expr counts comparisons, not arithmetic flops.

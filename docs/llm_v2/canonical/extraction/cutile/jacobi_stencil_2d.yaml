@@ -1,0 +1,201 @@
+operator: jacobi_stencil_2d
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/impl_cutile.py
+    functions:
+      - name: jacobi_stencil_kernel
+        lines: [21, 49]
+        role: kernel
+      - name: run
+        lines: [55, 94]
+        role: host-driver
+      - name: get_last_config
+        lines: [97, 98]
+        role: helper
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [10, 16]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [52, 52]
+        role: tuner
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_jacobi_stencil_2d_inputs
+        lines: [120, 125]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  One Jacobi iteration of the 2-D four-point stencil on a (rows, cols) grid.
+  The reference (impl_torch.py lines 7-13) does output = input.clone() and
+  then overwrites the interior output[1:rows-1, 1:cols-1] with
+  0.25 * (input[i-1, j] + input[i+1, j] + input[i, j-1] + input[i, j+1]);
+  the centre value is NOT part of the sum. Border rows and columns are
+  copied unchanged from input. The reference does the arithmetic with torch
+  elementwise ops on the input dtype. The generator (tensors.py lines
+  120-125) draws input = randn(rows, cols) with cols defaulting to rows, and
+  returns (input, rows, cols); config.yaml sweeps only rows, so cols == rows.
+run_signature:
+  text: "def run(input: torch.Tensor, rows: int, cols: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, rows, cols]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor of shape (rows, cols) and dtype input.dtype
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(rows, cols)"
+    dtype: "T in {fp16, bf16, fp32}"
+    layout: contiguous row-major 2-D
+    mutated_in_place: false
+    notes: read in the kernel through five ct.gather calls with 2-D integer index grids (lines 39-43), not through a tile load
+  - name: rows
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument used for the interior mask (line 33) and for the host grid size (lines 67, 86)
+  - name: cols
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument used for the interior mask (line 34) and the host grid size (lines 68, 87)
+outputs:
+  - name: output
+    shape: "(rows, cols)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate the uninitialised output buffer torch.empty_like(input)
+    lines: [58, 58]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no cast, copy, padding or halo preparation of input on the host
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [58, 58]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output buffer (rows, cols) uninitialised
+  - id: s1
+    description: >
+      One program per (TILE_R, TILE_C) output block on a 2-D grid
+      (ceil(rows/TILE_R), ceil(cols/TILE_C), 1), launched at lines 85-92.
+      The program builds int32 row and column index vectors for its block
+      (lines 26-29), an interior mask requiring 1 <= r <= rows-2 and
+      1 <= c <= cols-2 (lines 32-35), gathers the top, bottom, left, right
+      and centre elements of input at those shifted index grids with
+      padding_value 0.0 for out-of-range coordinates (lines 39-43), forms
+      avg = 0.25 * (top + bottom + left + right) (line 45), selects avg on
+      interior positions and the centre value elsewhere (line 46), and
+      stores the (TILE_R, TILE_C) tile by block index (line 49; elements
+      beyond rows/cols are clipped by the store). A second mask
+      mask_center (line 36) is computed but never used.
+    kind: kernel
+    lines: [21, 49]
+    launches: "ceil(rows/TILE_R) * ceil(cols/TILE_C)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Single-pass, single-iteration 2-D four-point Jacobi stencil (von Neumann
+  neighbourhood without the centre term) with the boundary passed through
+  unchanged. Neighbour access is gather-based (five independent gathers at
+  shifted index grids with zero fill), i.e. no explicit halo tile load, no
+  shared-memory staging, and no multi-iteration time loop.
+reduction_scan_sort_structure: >
+  None beyond the fixed four-term sum per element. The sum is evaluated as
+  ((top + bottom) + left) + right, then multiplied by 0.25 (line 45). The
+  reference sums in the same left-to-right order (lines 8-13).
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: >
+    performed on the gathered tiles in the input dtype; there is no explicit
+    ct.astype to fp32 in the kernel (line 45), so whether low-precision
+    inputs are promoted internally is unclear
+  output_dtype: input.dtype
+  special_modes: none
+  masking_or_padding_values: >
+    gathers use padding_value=0.0 for out-of-range coordinates (lines 39-43);
+    the interior mask selects avg versus the untouched centre value (line
+    46); the store clips elements beyond (rows, cols) (line 49)
+intermediate_storage: >
+  None. The five gathered tiles, the masks and the result are register
+  resident; no global scratch.
+mutation_rules: >
+  input is never written (the kernel reads it only through gathers). output
+  is freshly allocated per call; repeated calls are idempotent. Note that
+  the reference writes into a clone of input, which the cuTile version
+  reproduces with the where() select rather than a copy-then-overwrite.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_r
+    role: tile size (rows per program; ConstInt kernel argument)
+    default_present: true
+  - name: tile_c
+    role: tile size (columns per program; ConstInt kernel argument)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 11-16) with the
+  closures at lines 62-75, cached per shape_key (rows, cols, dtype). The
+  winner's occupancy is applied with kernel_with_hints (line 90) and the
+  tile shape is passed as ConstInt arguments (lines 91-92). Default path
+  uses _DEFAULT_CONFIG (line 10). get_last_config returns tile_r, tile_c,
+  occupancy (lines 76-81, 97-98). Audit only.
+implementation_freedoms_observed: >
+  Block shape and occupancy; neighbour access strategy (gathers at shifted
+  indices versus one halo-extended tile load or shared-memory staging);
+  whether the boundary is handled by a select or by copying input first;
+  whether rows/cols are runtime or compile-time arguments; grid ordering.
+algorithm_constraints_observed: >
+  Exactly one stencil iteration in a single kernel; interior value is
+  0.25 times the sum of the four edge neighbours (no centre term); the
+  first/last row and column are copied from input; output dtype equals
+  input dtype; the output is allocated inside run(); no halo preprocessing
+  and no scratch buffers.
+fq_boundary:
+  bytes_expr: "2 * rows * rows * dtype_size"
+  flops_expr: "4 * rows * rows"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formulas assume cols == rows (true for the generator default when
+    cols is omitted and for the config.yaml sweep, which sets only rows).
+    They count one compulsory read of input and one write of output plus
+    four flops (three adds, one multiply) per element. run() performs no
+    preprocessing beyond the output allocation, which is also timed, and
+    does not assume prepacked or halo-padded inputs. The kernel actually
+    issues five gathers per output element (the four neighbour re-reads are
+    expected to be served from cache), so the byte formula is the
+    compulsory-traffic lower bound, not the issued-load count.
+notes_for_review:
+  - mask_center (line 36) is computed but unused; dead code in the kernel.
+  - The kernel does no explicit fp32 upcast for fp16/bf16 inputs; rounding behaviour relative to the reference (which also computes in the input dtype) is unclear.
+  - Neighbour access uses five ct.gather calls rather than a halo tile load; this is a mapping choice, not an algorithmic requirement.
+  - bytes_expr/flops_expr use rows*rows, so they would be wrong if a case ever set cols != rows.
+  - block_size is accepted by run() but unused.

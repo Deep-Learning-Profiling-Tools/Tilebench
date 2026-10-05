@@ -1,0 +1,139 @@
+operator: dequantize_rowwise
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/impl_cutile.py
+    functions:
+      - name: dequantize_rowwise_kernel
+        lines: [22, 35]
+        role: kernel
+      - name: run
+        lines: [41, 65]
+        role: host-driver
+      - name: get_last_config
+        lines: [68, 69]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [38, 38]
+        role: tuner
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 7]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_dequantize_rowwise_inputs
+        lines: [179, 184]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  bitsandbytes-style row-wise int8 dequantisation. Reference (impl_torch.py line 7):
+  out = (state_x.unsqueeze(1) * x * (1.0 / 127.0)).to(torch.float16), i.e.
+  out[r, c] = state_x[r] * x[r, c] / 127 for x of shape (rows, cols) int8 and per-row
+  fp32 scale state_x of shape (rows,). Torch promotes int8 * fp32 to fp32 and rounds once
+  to fp16 at the end. Generator (tensors.py 179-184): x = randint(-128, 127) int8,
+  state_x = rand(rows) * 10 fp32.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, state_x: torch.Tensor,
+            autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, state_x]
+  keyword_params: [autotune, "**kwargs (block_size etc. ignored)"]
+  returns: single tensor `output` of shape (rows, cols), dtype float16
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(rows, cols)"
+    dtype: int8 (fixed by generator; config dtype list is ["int8"])
+    layout: row-major contiguous (as generated; run() does not call contiguous())
+    mutated_in_place: false
+    notes: loaded as (1, CHUNK) tiles at index (row, col_tile) with PaddingMode.ZERO (lines 27-30)
+  - name: state_x
+    shape: "(rows,)"
+    dtype: fp32
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded as a (1,) tile at index (row,) (line 32)
+outputs:
+  - name: output
+    shape: "(rows, cols)"
+    dtype: float16 (fixed, independent of input dtype)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output torch.empty(rows, cols, dtype=float16)
+    lines: [45, 45]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no casts, copies or layout changes are performed on the inputs
+stages:
+  - id: s1
+    description: >
+      2-D grid (rows, ceil(cols / CHUNK), 1) (line 63). Each program loads one (1, CHUNK) int8
+      tile of x with zero padding, casts it to fp32, loads the row's scale as a (1,) tile and
+      casts to fp32, computes x_f32 * scale * (1/127) (the constant _INV_127 is a Python float,
+      line 19) and stores the tile cast to float16 at (row, col_tile) (lines 27-35). Lanes past
+      cols are dropped by ct.store's bounds handling (no explicit mask in source).
+    kind: kernel
+    lines: [22, 35]
+    launches: "1 (rows * ceil(cols/CHUNK) programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output
+algorithm_family: >
+  Element-wise row-scaled dequantisation (int8 -> fp32 multiply -> fp16), one row-chunk per program.
+reduction_scan_sort_structure: >
+  None; purely element-wise.
+precision:
+  input_dtypes: [int8 (x), fp32 (state_x)]
+  accumulation: fp32 for the two multiplies (ct.astype to float32 at lines 31 and 33)
+  output_dtype: float16 (ct.astype(out, ct.float16), line 35)
+  special_modes: none
+  masking_or_padding_values: "0 for out-of-range x lanes (PaddingMode.ZERO); padded lanes produce 0 and are not stored"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: chunk
+    role: tile size (columns per program; also sets grid dim 1)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over (chunk, occupancy) pairs, keyed by (rows, cols, dtype);
+  grid_fn and args_fn rebuild the grid/args per candidate. Audit only.
+implementation_freedoms_observed: >
+  Column chunk size, number of rows per program (source uses exactly one), occupancy hint,
+  whether the scale is broadcast from a scalar load or a (1,) tile. The COLS ConstInt kernel
+  parameter (line 23) is received but never used in the body, so a re-implementation need not
+  specialise on cols.
+algorithm_constraints_observed: >
+  Multiply order (x * scale) * (1/127) evaluated in fp32 with a single final rounding to fp16;
+  int8 input read once; fp16 output of shape (rows, cols); no host-side casts of x or state_x.
+fq_boundary:
+  bytes_expr: "rows * cols * 1 + rows * 4 + rows * cols * 2"
+  flops_expr: "2 * rows * cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    Byte sizes are hard-coded (1 byte int8 in, 4 bytes fp32 scale, 2 bytes fp16 out) and match
+    exactly what the single kernel reads and writes; nothing in run() moves data outside the
+    kernel. The formula does not depend on dtype_size, which is appropriate since dtype is
+    fixed to int8. Padded lanes (cols not a multiple of CHUNK) are not read from memory.
+notes_for_review:
+  - COLS is passed as a ConstInt (cols) but unused inside the kernel, so every distinct cols value triggers a separate specialisation for no functional reason.
+  - Output dtype is hard-wired to float16 to match the reference's final .to(torch.float16).
+  - Out-of-bounds columns rely on ct.store's implicit bounds clipping (no explicit mask in the source).

@@ -1,0 +1,51 @@
+# Model configuration. Every live role needs an explicit model_id approved by
+# the study owner. `null` means "not set": the preflight blocks a live campaign
+# and the mock provider is used for tests. Legacy CLI defaults (gpt-5.5,
+# claude-opus-4-7, effort xhigh) are NOT inherited here.
+providers:
+  openai:
+    api: responses
+    usage_schema: openai_responses_v1
+    sdk_package: openai
+  anthropic:
+    api: messages
+    usage_schema: anthropic_messages_v1
+    sdk_package: anthropic
+
+roles:
+  generator:
+    gpt:
+      provider: openai
+      model_id: null
+      reasoning_effort: null
+      max_output_tokens: null
+      temperature: null          # Responses API with reasoning ignores it; recorded as given
+      status: unset
+    claude:
+      provider: anthropic
+      model_id: null
+      thinking: null             # e.g. {type: adaptive}
+      output_effort: null
+      max_output_tokens: null
+      status: unset
+  distiller:
+    provider: null
+    model_id: null
+    max_output_tokens: null
+    status: unset
+  reviewer:                      # optional LLM compliance reviewer
+    enabled: false
+    provider: null
+    model_id: null
+    status: unset
+
+transport:
+  timeout_s: 1800
+  max_transport_retries: 3       # recorded separately from candidate attempts
+  retry_backoff_s: 30
+
+pricing:                         # money is a separate axis; never mixed with tokens
+  source: null
+  currency: USD
+  checked_at: null
+  rates: {}

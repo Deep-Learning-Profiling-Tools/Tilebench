@@ -1,0 +1,131 @@
+operator: vector_add
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/vector_add/impl_triton.py
+    functions:
+      - name: add_kernel
+        lines: [8, 16]
+        role: kernel
+      - name: _add_kernel_autotuned
+        lines: [19, 28]
+        role: tuner
+      - name: run
+        lines: [31, 45]
+        role: host-driver
+      - name: get_last_config
+        lines: [48, 52]
+        role: helper
+  - path: tilebench/benchmarks/operators/vector_add/impl_torch.py
+    functions:
+      - name: run
+        lines: [1, 2]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/vector_add/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_vector_add_inputs
+        lines: [58, 66]
+        role: helper
+functional_semantics: >
+  Elementwise addition out = x + y of two 1-D tensors of n elements with
+  the same dtype (impl_torch.py line 2, the torch `+` operator). For int8
+  the sum wraps on overflow; the generator keeps values in [-32, 32]
+  (tensors.py lines 59-62) so no overflow occurs in the benchmark. No
+  reference-side preprocessing.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [x, y]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape x.shape and dtype x.dtype (fresh allocation)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "fp16 | bf16 | fp32 | int8 (config.yaml dtype grid)"
+    layout: contiguous (generator torch.randn / randint, tensors.py lines 61-65)
+    mutated_in_place: false
+    notes: n_elements = x.numel() (line 32).
+  - name: y
+    shape: "(n,)"
+    dtype: same as x
+    layout: contiguous
+    mutated_in_place: false
+    notes: Assumed to have x's length and dtype; not checked.
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: n_elements = x.numel(); output = torch.empty_like(x)
+    lines: [32, 33]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: Only host work before the launch.
+stages:
+  - id: s1
+    description: >
+      add_kernel, grid = ceil(n_elements / BLOCK_SIZE) (lines 35, 39).
+      Each program loads BLOCK_SIZE contiguous elements of x and y under
+      the mask offsets < n_elements (no `other` value), adds them in the
+      native dtype and stores under the same mask (lines 14-16).
+    kind: kernel
+    lines: [8, 16]
+    launches: "ceil(n/BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (final output)
+algorithm_family: >
+  Memory-bound 1-D elementwise add with flat contiguous blocking, one
+  launch.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: "n/a; the add is performed in the input dtype with no upcast (fp16 add in fp16, int8 add in int8 with wraparound)"
+  output_dtype: same as input
+  special_modes: "exact integer arithmetic for int8 (relies on the generator's value range to avoid overflow)"
+  masking_or_padding_values: "none (tl.load without `other`; masked lanes are never stored)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 19-28) over BLOCK_SIZE x num_warps,
+  key=["n_elements"], warmup=1, rep=3; no num_stages. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 37-44). The
+  block_size keyword of run() is ignored. get_last_config() reads
+  best_config (lines 48-52). Audit only.
+implementation_freedoms_observed: >
+  Block size, warps, vectorisation width and grid shape.
+algorithm_constraints_observed: >
+  Elementwise x + y over all n elements in the input dtype (no upcast
+  needed; an fp32 upcast would still round identically to a single native
+  add for fp16/bf16 and would be exact for int8); one read of each input
+  and one write; out-of-place; no input mutation.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() only allocates the output and launches the kernel; two reads
+    plus one write of n elements is exactly the kernel's traffic. n is the
+    case parameter and equals x.numel(). One flop per element is exact.
+notes_for_review:
+  - "block_size keyword is accepted but ignored."
+  - "No upcast: fp16/bf16 adds happen in the native dtype, matching torch."
+  - "int8 correctness relies on the generator bounding inputs to avoid wraparound."
+  - "y's length and dtype are not validated against x."

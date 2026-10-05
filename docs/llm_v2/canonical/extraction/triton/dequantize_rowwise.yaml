@@ -1,0 +1,140 @@
+operator: dequantize_rowwise
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/impl_triton.py
+    functions:
+      - name: dequantize_rowwise_kernel
+        lines: [11, 28]
+        role: kernel
+      - name: _dequantize_rowwise_kernel_autotuned
+        lines: [31, 40]
+        role: tuner
+      - name: run
+        lines: [43, 61]
+        role: host-driver
+      - name: get_last_config
+        lines: [64, 68]
+        role: helper
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 7]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/dequantize_rowwise/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_dequantize_rowwise_inputs
+        lines: [179, 184]
+        role: helper
+functional_semantics: >
+  bitsandbytes-style row-wise int8 dequantisation. Reference impl_torch.run
+  (lines 4-7): out = (state_x.unsqueeze(1) * x * (1.0 / 127.0)).to(torch.float16),
+  i.e. out[r, c] = fp16( state_x[r] * x[r, c] * (1/127) ), computed in fp32
+  by PyTorch type promotion (int8 tensor times fp32 tensor gives fp32), then
+  cast once to fp16. Reference ops: broadcast multiply, scalar multiply,
+  Tensor.to(float16). No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(x: torch.Tensor, state_x: torch.Tensor,
+            autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, state_x]
+  keyword_params: [autotune, "**kwargs (absorbs block_size etc., unused)"]
+  returns: single fp16 tensor of shape (rows, cols)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(rows, cols)"
+    dtype: int8 (config dtype list is ["int8"]; generator torch.randint(-128, 127))
+    layout: assumed contiguous row-major; the kernel computes offsets as row * COLS + col (line 22) and receives no strides
+    mutated_in_place: false
+    notes: cast to fp32 in-kernel after load (line 24); masked lanes load 0.
+  - name: state_x
+    shape: "(rows,)"
+    dtype: fp32 (generator torch.rand * 10.0)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: one scalar per row (per-row absmax scale); loaded once per program (line 25).
+outputs:
+  - name: output
+    shape: "(rows, cols)"
+    dtype: fp16 (fixed, torch.empty(..., dtype=torch.float16) line 46; kernel stores out.to(tl.float16) line 28)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate the (rows, cols) fp16 output
+    lines: [46, 46]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: torch.empty; every element is written by the kernel.
+stages:
+  - id: s1
+    description: >
+      2-D grid (rows, ceil(cols / CHUNK)). Each program takes one row and
+      one CHUNK-wide column slice: load int8 slice (mask cols < COLS, other
+      0) -> fp32; load the row scale -> fp32; out = x * scale * (1/127) in
+      fp32; store as fp16 under the same mask.
+    kind: kernel
+    lines: [11, 28]
+    launches: "1 launch, grid (rows, ceil(cols/CHUNK)) programs"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (rows, cols) fp16 -- no intermediates
+algorithm_family: >
+  Element-wise row-scaled dequantisation (memory-bound streaming map with a
+  per-row broadcast scalar). One read of int8 data, one read of per-row fp32
+  scale, one fp16 write.
+reduction_scan_sort_structure: >
+  None. Purely element-wise; no reduction, scan or sort.
+precision:
+  input_dtypes: [int8 (x), fp32 (state_x)]
+  accumulation: fp32 (x and scale are cast to fp32 before the two multiplies, lines 24-27)
+  output_dtype: fp16
+  special_modes: "multiply by a compile-time constant reciprocal _INV_127 = tl.constexpr(1.0/127.0) (line 8) rather than divide by 127; the reference also multiplies by the Python float 1.0/127.0"
+  masking_or_padding_values: "0 for masked (col >= COLS) int8 loads; stores masked"
+intermediate_storage: >
+  None. No global scratch; the result is written directly.
+mutation_rules: >
+  No input is modified; the output is freshly allocated each call; calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: CHUNK
+    role: tile size (columns per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over CHUNK x num_warps (key ["ROWS", "COLS"], warmup=1,
+  rep=3), lines 31-40; grid is a lambda of meta["CHUNK"] (line 49). Default
+  path launches the undecorated kernel with _DEFAULT_CONFIG (lines 53-60).
+  get_last_config returns CHUNK and num_warps from best_config.
+implementation_freedoms_observed: >
+  Column chunk width, warp count, work-to-program mapping (one row x one
+  chunk here; a program could also cover several rows), vectorisation, and
+  the order of the two fp32 multiplies (x*scale*inv vs scale*inv first --
+  the source does x*scale first, then *inv).
+algorithm_constraints_observed: >
+  Keep: int8 -> fp32 conversion, per-row fp32 scale broadcast, scaling by
+  1/127 (as a multiply by the reciprocal), single rounding to fp16 at the
+  store, output dtype fp16 regardless of input, (rows, cols) output shape,
+  no scratch, one pass over the data.
+fq_boundary:
+  bytes_expr: "rows * cols * 1 + rows * 4 + rows * cols * 2"
+  flops_expr: "2 * rows * cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation plus one kernel. The formula counts one
+    int8 read of x (1 B/elt), one fp32 read of state_x (4 B/row) and one
+    fp16 write (2 B/elt), which matches the kernel's compulsory traffic
+    exactly. It is written with literal byte widths rather than dtype_size,
+    so it is correct for the single int8 case in config.yaml. No preprocessing
+    or prepacked inputs are assumed.
+notes_for_review:
+  - The kernel takes no stride arguments and assumes x is contiguous row-major (line 22); the generator provides contiguous inputs, but run() does not call .contiguous().
+  - Per-row scale loaded once per program (one program per (row, chunk)); with cols >> CHUNK this re-reads the same scale cdiv(cols, CHUNK) times, which the bytes formula does not count (negligible).
+  - Generator torch.randint(-128, 127) excludes +127 (exclusive upper bound); irrelevant to the algorithm.
+  - config.yaml verify atol=rtol=1e-3, consistent with a single fp16 rounding at the output.

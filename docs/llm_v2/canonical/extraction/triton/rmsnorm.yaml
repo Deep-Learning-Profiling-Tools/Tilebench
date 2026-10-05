@@ -1,0 +1,182 @@
+operator: rmsnorm
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/rmsnorm/impl_triton.py
+    functions:
+      - name: rmsnorm_kernel
+        lines: [8, 36]
+        role: kernel
+      - name: _rmsnorm_kernel_autotuned
+        lines: [39, 49]
+        role: tuner
+      - name: run
+        lines: [52, 86]
+        role: host-driver
+      - name: get_last_config
+        lines: [89, 97]
+        role: helper
+  - path: tilebench/benchmarks/operators/rmsnorm/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/rmsnorm/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_rmsnorm_inputs
+        lines: [207, 210]
+        role: helper
+functional_semantics: >
+  Row-wise RMS normalisation over the last dimension. For x of shape
+  (batch, M, K) and weight w of shape (K,):
+  y[b, m, k] = x[b, m, k] * rsqrt(mean_k(x[b, m, k]^2) + eps) * w[k],
+  with eps = 1e-6 (the default of both run() functions; the engine passes only
+  the generator outputs x and rms_w, so eps is never overridden). The
+  reference is torch.nn.functional.rms_norm(x, x.shape[-1:], weight=rms_w,
+  eps=eps) (impl_torch.py lines 5-6). No reference-side preprocessing.
+run_signature:
+  text: |
+    def run(
+        x: torch.Tensor,
+        rms_w: torch.Tensor,
+        eps: float = 1e-6,
+        autotune: bool = False,
+    ) -> torch.Tensor:
+  positional_inputs: [x, rms_w]
+  keyword_params: [eps, autotune]
+  returns: single tensor of shape x.shape and dtype x.dtype (a fresh allocation)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(batch, M, K)"
+    dtype: "fp16 | bf16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous row-major (generator torch.randn, tensors.py line 208)
+    mutated_in_place: false
+    notes: >
+      Normalised dimension is the last one (K). run() reshapes it to
+      (batch*M, K) (line 63) and passes x_2d.stride(0) as the row stride;
+      a unit column stride is assumed, not checked.
+  - name: rms_w
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous
+    mutated_in_place: false
+    notes: Per-column weight applied after normalisation.
+  - name: eps
+    shape: scalar
+    dtype: python float
+    layout: n/a
+    mutated_in_place: false
+    notes: Always the default 1e-6 in the benchmark.
+outputs:
+  - name: out
+    shape: "(batch, M, K)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: reshape x to a 2-D (batch*M, K) view and compute K / batch_M
+    lines: [58, 63]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: View only for the contiguous inputs the generator produces.
+  - description: allocate out = torch.empty_like(x) and take its 2-D view
+    lines: [64, 65]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: Output allocation is inside the timed run().
+stages:
+  - id: s1
+    description: >
+      Single kernel, one program per row (grid = (batch*M,), line 67).
+      Pass A (lines 22-28): loop over the row in BLOCK_N_SIZE-wide chunks;
+      each chunk is loaded with mask other=0.0, upcast to fp32 and its
+      square is accumulated element-wise into a BLOCK_N_SIZE-wide fp32
+      lane vector `var`; after the loop tl.sum reduces the lane vector,
+      the result is divided by N_SIZE (= K), eps is added and
+      tl.math.rsqrt gives the scalar rstd. Pass B (lines 31-36): loop over
+      the same chunks again, re-load x (other=0.0) and rms_w (other=1.0),
+      upcast to fp32, and store x * rstd * rms_w (tl.store casts the fp32
+      value to the output dtype) under the same mask.
+    kind: kernel
+    lines: [8, 36]
+    launches: "1 (grid = batch*M programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (writes the final output directly)
+algorithm_family: >
+  Row-wise RMS normalisation, two-pass within one kernel (sum-of-squares
+  sweep, then normalise-and-scale sweep), one program per row, chunked loop
+  over the normalised dimension; the row is read twice from memory.
+reduction_scan_sort_structure: >
+  Sum of squares per row in fp32: chunk-sequential accumulation into a
+  lane vector (lane j accumulates x[j], x[j+BLOCK], ...; masked lanes add
+  0), followed by a single tl.sum tree reduction across the lanes. The
+  divisor is the true row length K (N_SIZE), not the padded length. rstd is
+  obtained with tl.math.rsqrt (exact-vs-approximate rsqrt lowering is
+  Triton-internal; unclear). No scan or sort.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for all input dtypes (explicit .to(tl.float32) on every load, lines 26 and 34-35; var vector is tl.float32, line 22)
+  output_dtype: same as input (implicit cast at tl.store, line 36)
+  special_modes: none (tl.math.rsqrt; eps added inside the rsqrt argument)
+  masking_or_padding_values: "x loads other=0.0 (both passes); rms_w load other=1.0; masked lanes are never stored"
+intermediate_storage: >
+  None. The only global allocation is the output tensor (torch.empty_like,
+  line 64). The per-row partial sums live in registers.
+mutation_rules: >
+  No input is modified. The output is a fresh tensor each call. Repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_N_SIZE
+    role: tile size (chunk width along K)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 39-49) over a BLOCK_N_SIZE x num_warps x
+  num_stages grid, key=["N_SIZE"], warmup=1, rep=3. The default path
+  launches the undecorated kernel with the explicit _DEFAULT_CONFIG
+  (lines 75-84); get_last_config() reads
+  _rmsnorm_kernel_autotuned.best_config (lines 89-97). Audit only.
+implementation_freedoms_observed: >
+  Chunk width along K, warp and stage counts, whether the second sweep
+  re-reads x from global memory (as here) or keeps the row in registers
+  when it fits, lane-vector-then-tree versus other fp32 reduction orders,
+  the grid mapping (one row per program here), and vectorisation width.
+algorithm_constraints_observed: >
+  One normalisation per row over the last dimension K; sum of squares and
+  rstd computed in fp32 regardless of input dtype; the mean divides by the
+  true K; eps is added before rsqrt; the weight multiplies after
+  normalisation; output has the input dtype and shape; no global scratch;
+  no input mutation; the output is allocated by run().
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "4 * n"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() performs no preprocessing other than views and the output
+    allocation, so the timed region is the kernel itself. The 3n byte count
+    matches "x read twice (two passes) + out written once" if the second
+    read misses cache, or over-counts by about n when the re-read is served
+    from L1/L2; the weight traffic (K elements, re-read by every row) is not
+    counted. `n` is not a config.yaml parameter; it is supplied by the
+    engine (presumably the element count batch*M*K) and was not verified in
+    this extraction. 4 flops per element (square, add, scale, weight) is
+    nominal.
+notes_for_review:
+  - "`n` in bytes_expr/flops_expr is engine-provided, not a case parameter; its definition was not read here."
+  - "The second pass re-reads x; whether that is HBM or cache traffic depends on the row size, so the 3n byte model is only approximately the ideal traffic."
+  - "eps is effectively fixed at 1e-6 because the engine passes only (x, rms_w)."
+  - "run() has no block_size keyword, unlike most other operators; a caller that passes block_size would raise TypeError."
+  - "tl.math.rsqrt lowering (approximate vs exact) may differ from torch's rsqrt at the ulp level; per-dtype verification tolerances absorb this."
+  - "rms_w masked lanes use other=1.0, which is harmless because those lanes are not stored."

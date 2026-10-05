@@ -1,0 +1,221 @@
+operator: 1d_conv
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/1d_conv/impl_triton.py
+    functions:
+      - name: conv1d_kernel
+        lines: [14, 106]
+        role: kernel
+      - name: _conv1d_kernel_autotuned
+        lines: [109, 132]
+        role: tuner
+      - name: run
+        lines: [135, 206]
+        role: host-driver
+      - name: get_last_config
+        lines: [209, 219]
+        role: helper
+  - path: tilebench/benchmarks/operators/1d_conv/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/1d_conv/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_1d_conv_inputs
+        lines: [366, 377]
+        role: helper
+functional_semantics: >
+  Grouped 1-D cross-correlation without bias, as computed by
+  torch.nn.functional.conv1d(input, weight, bias=None, stride, padding, groups)
+  (impl_torch.py lines 7-14). With Cin_g = in_channels // groups and
+  Cout_g = out_channels // groups, for group g = oc // Cout_g:
+  out[b, oc, ol] = sum_{ic_local < Cin_g} sum_{kl < kL}
+  input[b, g*Cin_g + ic_local, ol*stride + kl - padding] * weight[oc, ic_local, kl],
+  where input positions outside [0, L) contribute zero (implicit zero padding),
+  and out_L = (L + 2*padding - kL) // stride + 1. No kernel flip. The reference
+  performs no preprocessing and sets no precision flags; the generator
+  (tensors.py 366-377) produces input (batch, in_channels, L) and weight
+  (out_channels, in_channels // groups, kernel_size) with torch.randn and
+  passes stride, padding, groups as positional scalars.
+run_signature:
+  text: |
+    def run(
+        input: torch.Tensor,
+        weight: torch.Tensor,
+        stride: int = 1,
+        padding: int = 1,
+        groups: int = 1,
+        block_size: int = 1024,
+        autotune: bool = False,
+        **kwargs,
+    ):
+  positional_inputs: [input, weight, stride, padding, groups]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor output of shape (batch, out_channels, out_L), dtype of input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(batch, in_channels, L)"
+    dtype: case dtype (fp16 or fp32 in the sweep)
+    layout: contiguous row-major (asserted at line 145; strides passed explicitly to the kernel, lines 169-171)
+    mutated_in_place: false
+    notes: read in place by the kernel via computed pointers; no im2col copy
+  - name: weight
+    shape: "(out_channels, in_channels // groups, kernel_size)"
+    dtype: same as input
+    layout: contiguous (asserted at line 145; strides passed at lines 172-174)
+    mutated_in_place: false
+    notes: null
+  - name: stride
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument stride_l (line 164)
+  - name: padding
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument pad_l (line 165)
+  - name: groups
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: becomes the third grid axis (lines 184, 194)
+outputs:
+  - name: output
+    shape: "(batch, out_channels, out_L)"
+    dtype: input dtype (line 153)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: contiguity assertions, shape unpacking, out_L / out_channels_per_group arithmetic
+    lines: [145, 151]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host-only; no device work
+  - description: output allocation with torch.empty (no memset)
+    lines: [153, 153]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: assembling the scalar/stride kernel argument dict and the grid
+    lines: [155, 195]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      Implicit-GEMM convolution kernel. Grid axis 0 tiles the flattened
+      (batch, out_L) row space, axis 1 tiles the output channels of one group,
+      axis 2 is the group index (lines 33-49). Each program keeps an fp32
+      accumulator tile (line 51) and loops over the flattened reduction axis
+      R = in_channels_per_group * kL in tiles (lines 54-96): for each tile it
+      derives (ic_local, kl) from the flat index (lines 59-60), computes the
+      input position il = ol*stride + kl - pad (line 66), builds a mask for
+      out-of-range rows/positions/features (lines 69-73), gathers the input
+      patch tile with other=0.0 and clamped pointers (lines 76-82), gathers the
+      matching weight tile (lines 85-93), and accumulates with tl.dot (line 96).
+      The accumulator is cast to the output dtype and stored with a mask
+      (lines 99-106). Launched at lines 180-204 (autotune or fixed config).
+    kind: kernel
+    lines: [14, 106]
+    launches: "1 launch; ceil(batch*out_L / BLOCK_rows) x ceil(out_channels_per_group / BLOCK_oc) x groups programs"
+    depends_on: []
+    fusable_with: none
+    produces: output
+algorithm_family: >
+  Implicit-GEMM (im2col-free) grouped 1-D convolution: the output is viewed as
+  a (batch*out_L) x out_channels matrix per group, the reduction dimension is
+  the flattened (input channel, kernel tap) pair, and input patches are
+  gathered on the fly with masked loads so that zero padding is realised by
+  masking rather than by a padded copy. Single kernel, tensor-core dot.
+reduction_scan_sort_structure: >
+  Reduction over R = (in_channels // groups) * kL, flattened channel-major /
+  tap-minor (ic_local = r // kL, kl = r % kL, lines 59-60), consumed
+  sequentially in increasing r in fixed-width tiles; each tile is folded into
+  the fp32 accumulator by one tl.dot (line 96). No split-K, no atomics; the
+  intra-tile summation order is that of the MMA hardware.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 (tl.zeros float32 at line 51; tl.dot accumulates in fp32)
+  output_dtype: input dtype (cast at line 106)
+  special_modes: "tl.dot(..., input_precision=\"tf32\") at line 96: fp32 operands are rounded to TF32 inside the MMA; fp16 operands are used natively"
+  masking_or_padding_values: "other=0.0 for out-of-range input positions (zero padding) and for out-of-range feature/channel lanes (lines 82, 93); pointers clamped with tl.where (line 80)"
+intermediate_storage: >
+  None. The only device buffer created is the output; the accumulator lives in
+  registers.
+mutation_rules: >
+  No input is modified. The output is freshly allocated on every call, so
+  repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE_BATCH_LENGTH
+    role: tile size (rows of the flattened batch x out_L space)
+    default_present: true
+  - name: BLOCK_SIZE_IN_FEAT
+    role: tile size (reduction dimension)
+    default_present: true
+  - name: BLOCK_SIZE_OUT_FEAT
+    role: tile size (output channels)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 109-132) over a cartesian product of the three tile
+  sizes, num_warps and num_stages filtered by a tile-area bound, keyed on
+  batch, in_channels, out_channels, in_L, kL, groups, stride_l, pad_l, with
+  warmup=1 and rep=3. The non-autotuned path launches the undecorated kernel
+  with _DEFAULT_CONFIG (lines 5-11, 188-204). get_last_config reads
+  best_config from the decorated kernel (lines 209-219). Audit only.
+implementation_freedoms_observed: >
+  Tile sizes, warp count and pipeline depth; grid raster order; the ordering
+  of the flattened reduction axis (channel-major vs tap-major only changes the
+  summation order); the load mechanism (pointer gathers here, descriptors or
+  shared-memory staging would be alternatives); how masks and pointer clamping
+  are expressed.
+algorithm_constraints_observed: >
+  One kernel, no materialised im2col or padded copy of the input; the
+  convolution is a cross-correlation with implicit zero padding, grouped via a
+  grid axis; fp32 accumulation over the full (channel x tap) reduction with the
+  result cast to the input dtype; tensor-core dot with TF32 operand precision
+  for fp32 inputs (the verify tolerance atol 1e-1 / rtol 1e-2 in config.yaml
+  lines 1-3 is sized for this); output layout (batch, out_channels, out_L)
+  contiguous.
+fq_boundary:
+  bytes_expr: >
+    batch * in_channels * L * dtype_size
+    + out_channels * (in_channels // groups) * kernel_size * dtype_size
+    + batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * dtype_size
+  flops_expr: >
+    2 * batch * out_channels
+    * ((L + 2 * padding - kernel_size) // stride + 1)
+    * (in_channels // groups) * kernel_size
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts one read of input and weight, one write of output, and
+    2 flops per multiply-accumulate. run() performs only host metadata work,
+    an uninitialised output allocation and the single kernel launch, so the
+    timed boundary contains exactly the work the formula models and assumes
+    nothing prepacked outside run(). The kernel's kL-fold redundant gathering
+    of overlapping input windows and its padded-tile MMAs are not counted,
+    which is the usual compulsory-traffic convention.
+notes_for_review:
+  - The block_size keyword is accepted but unused.
+  - All sweep cases use groups=1 and batch=1 (config.yaml case_defaults), so the grouped path and the batch index arithmetic are present but unexercised.
+  - The flattened reduction tile mixes channels and taps; a re-implementation that loops taps outside channels is numerically different only in summation order.
+  - The autotune key does not include out_L, which is derived from the keyed shape parameters, so this is harmless.

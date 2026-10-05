@@ -1,0 +1,204 @@
+operator: batched_matmul
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/batched_matmul/impl_cutile.py
+    functions:
+      - name: bmm_kernel
+        lines: [25, 72]
+        role: kernel
+      - name: run
+        lines: [78, 130]
+        role: host-driver
+      - name: get_last_config
+        lines: [133, 134]
+        role: helper
+      - name: _tuner (CutileAutotuner instance) + _DEFAULT_CONFIG/_SEARCH_SPACE
+        lines: [10, 22]
+        role: tuner
+  - path: tilebench/benchmarks/operators/batched_matmul/impl_torch.py
+    functions:
+      - name: run
+        lines: [7, 12]
+        role: host-driver
+      - name: module-level torch.backends.cuda.matmul.allow_tf32 = True
+        lines: [4, 4]
+        role: helper
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_batched_matmul_inputs
+        lines: [86, 94]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 7-12): A_3d = A.view(BATCH, M, K); B_3d = B.view(BATCH, K, N);
+  C = torch.matmul(A_3d, B_3d); return C.view(-1). I.e. C[b] = A[b] @ B[b] for each batch,
+  C[b, m, n] = sum_k A[b, m, k] * B[b, k, n]. The reference module sets
+  torch.backends.cuda.matmul.allow_tf32 = True at import (line 4), so fp32 reference
+  GEMMs may use TF32. Generator (tensors.py 86-94) returns flat randn A (BATCH*M*K,)
+  and B (BATCH*K*N,) plus (BATCH, M, N, K); config gives BATCH fixed and N = K = M
+  (square, generator defaults when N/K omitted).
+run_signature:
+  text: "def run(A: torch.Tensor, B: torch.Tensor, BATCH: int, M: int, N: int, K: int, block_size: int = 1024, autotune: bool = False, **kwargs)"
+  positional_inputs: [A, B, BATCH, M, N, K]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single flat tensor of BATCH*M*N elements (c_3d.reshape(-1)), dtype = A.dtype
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(BATCH*M*K,) flat; viewed as (BATCH, M, K) at line 82"
+    dtype: fp16, bf16 or fp32 (config case_grid dtype)
+    layout: contiguous (A.contiguous() is a no-op for generator tensors)
+    mutated_in_place: false
+    notes: row-major (b, m, k).
+  - name: B
+    shape: "(BATCH*K*N,) flat; viewed as (BATCH, K, N) at line 83"
+    dtype: same as A
+    layout: contiguous
+    mutated_in_place: false
+    notes: row-major (b, k, n); no transpose or repacking.
+  - name: BATCH, M, N, K
+    shape: scalar ints
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: logical shapes.
+outputs:
+  - name: C
+    shape: "(BATCH*M*N,) flat view of c_3d (BATCH, M, N)"
+    dtype: A.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: contiguous() + view of A and B to 3-D (no copy for contiguous inputs)
+    lines: [82, 83]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: contiguous() would copy only for non-contiguous callers; not the case here.
+  - description: allocate c_3d (BATCH, M, N) in A's dtype
+    lines: [84, 84]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: grid and K_TILES arithmetic (ct.cdiv) on the host
+    lines: [118, 121]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: K_TILES, GRID_M, GRID_N are passed as ConstInt kernel arguments.
+stages:
+  - id: s1
+    description: allocate c_3d
+    kind: allocation
+    lines: [84, 84]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: c_3d (BATCH, M, N)
+  - id: s2
+    description: >
+      single GEMM kernel bmm_kernel. Grid = (grid_m*grid_n, BATCH, 1) (line 120); axis 1
+      is the batch index, axis 0 a linearised (m, n) tile index that is de-linearised
+      with a grouped ("super-grouping" / swizzled) ordering controlled by GROUP_SIZE
+      (lines 38-44) — a launch-order mapping detail only. acc = zeros (TILE_M, TILE_N)
+      fp32 (line 47). mma_dtype = tfloat32 when the inputs are fp32, else the native dtype
+      (line 50). K loop `for bid_k in range(K_TILES)` with K_TILES a ConstInt (ConstInt +
+      range, line 52): a tile (1, TILE_M, TILE_K) of a_3d at tile index (bid_b, bid_m, bid_k)
+      and a tile (1, TILE_K, TILE_N) of b_3d at (bid_b, bid_k, bid_n) are read with ct.load
+      and ct.PaddingMode.ZERO (out-of-range rows/cols/K read as 0, lines 53-62), reshaped
+      to 2-D and cast to mma_dtype (64-65), then acc = ct.mma(a, b, acc) (68). Epilogue
+      reshapes acc to (1, TILE_M, TILE_N), casts to c_3d.dtype and ct.store()s at tile index
+      (bid_b, bid_m, bid_n) (70-72); ct.store clips partial edge tiles.
+    kind: kernel
+    lines: [25, 72]
+    launches: "ceil(M/TILE_M)*ceil(N/TILE_N) x BATCH programs, one launch (lines 118-128)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: c_3d (written directly)
+  - id: s3
+    description: return c_3d.reshape(-1) (view, no copy)
+    kind: host
+    lines: [130, 130]
+    launches: "1"
+    depends_on: [s2]
+    fusable_with: "none"
+    produces: flat view of c_3d
+algorithm_family: >
+  tiled batched GEMM: one output tile per program, full K reduction in one program
+  (no split-K), zero-padded structured tile loads, tensor-core MMA with fp32
+  accumulation, grouped tile ordering for launch locality.
+reduction_scan_sort_structure: >
+  Sequential loop over K tiles in increasing k order; summation order inside each ct.mma
+  is unspecified. One fp32 accumulator per output element; no atomics, no split-K.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 (ct.zeros(..., dtype=ct.float32), line 47)
+  output_dtype: input dtype (ct.astype(acc_3d, c_3d.dtype), line 72; c_3d allocated as A.dtype)
+  special_modes: >
+    fp32 operands are cast to ct.tfloat32 (lines 50, 64-65): TF32 tensor-core math with
+    fp32 accumulate. The reference also enables TF32 (impl_torch.py line 4). fp16/bf16
+    native. config.yaml verify atol 1.0 / rtol 1e-2 (lines 1-3).
+  masking_or_padding_values: "0 for out-of-range A/B tile elements (ct.PaddingMode.ZERO), which contribute nothing to the sum; output edge tiles clipped by ct.store"
+intermediate_storage: >
+  None. Accumulator in tile/register space; output written once.
+mutation_rules: >
+  No input is modified; output freshly allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_m
+    role: tile size (M rows per program)
+    default_present: true
+  - name: tile_n
+    role: tile size (N cols per program)
+    default_present: true
+  - name: tile_k
+    role: tile size (K chunk per MMA step)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints
+    default_present: true
+  - name: group_size
+    role: grouped tile-ordering (launch swizzle) width
+    default_present: true
+  - name: K_TILES / GRID_M / GRID_N
+    role: derived ConstInt values (ceil(K/tile_k), ceil(M/tile_m), ceil(N/tile_n)); not independently tunable
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py 98-128) over _SEARCH_SPACE
+  (impl_cutile.py 13-21: tile_m, tile_n in {32,64,128}, tile_k in {32,64}, group_size in
+  {1,8}, occupancy in {4,8,16}), keyed by (BATCH, M, N, K, dtype) (lines 87-106). Default
+  at lines 10-12 (tile_m=128, tile_n=128, tile_k=64, occupancy=4, group_size=1). Winner
+  exported via _last_autotune_config (107-114) and get_last_config (133-134); occupancy
+  applied via kernel_with_hints (line 122).
+implementation_freedoms_observed: >
+  Tile shapes, occupancy, tile launch ordering (grouping), K-loop pipelining depth,
+  whether K_TILES is compile-time, use of structured loads vs gathers. block_size
+  keyword unused.
+algorithm_constraints_observed: >
+  Single kernel, no scratch, no split-K; one program owns a full (m-tile, n-tile) output
+  for one batch and reduces all of K sequentially; fp32 accumulation; TF32 operands for
+  fp32 inputs (matching the reference's allow_tf32); zero padding for edges; row-major
+  (b, m, k) / (b, k, n) inputs without repacking; output dtype = input dtype returned flat.
+fq_boundary:
+  bytes_expr: "3 * BATCH * M * M * dtype_size"
+  flops_expr: "2 * BATCH * M * M * M"
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 20-22. Assumes square N = K = M (generator
+    defaults). flops = 2*BATCH*M*N*K; bytes = one read of A and B plus one write of C.
+    run() performs no copy/cast/pack (views only) and no scratch traffic, so the timed
+    boundary (allocation + one kernel + view) matches the formula. Tile re-reads of A/B
+    across the N/M tile grid are treated as cache-absorbed.
+notes_for_review:
+  - The reference enables TF32 globally at import (impl_torch.py line 4); both sides therefore use TF32 for fp32, and config atol 1.0 reflects that.
+  - K_TILES, GRID_M, GRID_N are host-computed ConstInt arguments (lines 118-128), so each (M, N, K, tiles) combination compiles its own specialisation (mapping detail).
+  - The grouped (bid_m, bid_n) de-linearisation (lines 38-44) only changes program ordering, not results.
+  - The search space includes tile_m values smaller than the tensor-core-path threshold documented for this DSL (audit-only concern).
+  - A.contiguous()/B.contiguous() (lines 82-83) would silently copy inside the timed region for non-contiguous callers; not the case for generator inputs.
+  - block_size keyword unused.

@@ -1,0 +1,144 @@
+operator: fused_activation
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/fused_activation/impl_cutile.py
+    functions:
+      - name: fused_activation_kernel
+        lines: [21, 38]
+        role: kernel
+      - name: run
+        lines: [44, 73]
+        role: host-driver
+      - name: get_last_config
+        lines: [76, 77]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [41, 41]
+        role: tuner
+  - path: tilebench/benchmarks/operators/fused_activation/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/fused_activation/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_fused_activation_inputs
+        lines: [167, 172]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Fused element-wise activation: reference (impl_torch.py line 6) out = F.silu(x * gate + bias),
+  i.e. z = x*gate + bias, out = z * sigmoid(z) = z / (1 + exp(-z)). Inputs (tensors.py 167-172):
+  three randn vectors x, gate, bias of length n in the case dtype; config fixes dtype = fp32
+  (case_defaults) and sweeps n only. Reference output has x's dtype and shape.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
+            autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, gate, bias]
+  keyword_params: [autotune, "**kwargs (block_size etc. ignored)"]
+  returns: single tensor `out` of x's shape, dtype float32 (fixed)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: fp32 (config); kernel casts any input to fp32
+    layout: contiguous (run() calls .contiguous(), line 49)
+    mutated_in_place: false
+    notes: loaded as (TILE,) tiles with PaddingMode.ZERO (line 25)
+  - name: gate
+    shape: "(n,)"
+    dtype: same as x
+    layout: contiguous (line 50)
+    mutated_in_place: false
+    notes: PaddingMode.ZERO (line 29)
+  - name: bias
+    shape: "(n,)"
+    dtype: same as x
+    layout: contiguous (line 51)
+    mutated_in_place: false
+    notes: PaddingMode.ZERO (line 33); element-wise bias (same length as x), not a broadcast scalar
+outputs:
+  - name: out
+    shape: "(n,)"
+    dtype: float32 (torch.empty(..., dtype=torch.float32), line 52, regardless of input dtype)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: x, gate, bias = .contiguous() (no-ops for generator inputs)
+    lines: [49, 51]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: no data movement when inputs are already contiguous
+  - description: allocate out as float32 of x.shape
+    lines: [52, 52]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      1-D grid ceil(n / TILE) (line 71). Each program loads (TILE,) tiles of x, gate and bias
+      with zero padding, casts each to fp32 (lines 24-35), computes z = x*gate + bias and
+      out = z / (1.0 + exp(-z)) (lines 36-37) and stores the fp32 tile at (bid,) (line 38) with
+      no cast (out is fp32).
+    kind: kernel
+    lines: [21, 38]
+    launches: "1 (ceil(n/TILE) programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: out
+algorithm_family: >
+  Element-wise fused multiply-add followed by SiLU written explicitly as z / (1 + exp(-z)).
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 for the FMA, exp and division (ct.astype to float32 on all three loads)
+  output_dtype: float32 (hard-coded)
+  special_modes: "SiLU evaluated as z / (1 + exp(-z)) with plain ct.exp (no sigmoid intrinsic, no fast-math flags)"
+  masking_or_padding_values: "0 for out-of-range lanes of all three loads (PaddingMode.ZERO); padded lanes evaluate silu(0) = 0 and are dropped by ct.store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh out each call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per program)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over (tile, occupancy), keyed by (n, dtype). Audit only.
+implementation_freedoms_observed: >
+  Tile size and occupancy; the algebraic form of SiLU (z*sigmoid(z) vs z/(1+exp(-z))); use of
+  exp vs exp2; padding handling.
+algorithm_constraints_observed: >
+  Single element-wise kernel reading x, gate, bias once and writing out once; FMA then SiLU in
+  fp32; output dtype float32 (equal to the input dtype in the only configured case).
+fq_boundary:
+  bytes_expr: "4 * n * dtype_size"
+  flops_expr: "5 * n"
+  consistent_with_timed_boundary: true
+  notes: >
+    Three reads plus one write of n elements, matching the kernel exactly for fp32 (the output is
+    always fp32; for a non-fp32 input dtype the formula would undercount the output write, but
+    the config only runs fp32). The contiguous() calls are no-ops and nothing is prepacked.
+notes_for_review:
+  - Output dtype is hard-coded to float32 (line 52); it matches the reference only because config fixes dtype = fp32.
+  - exp(-z) can overflow to +inf for large negative z, giving z/inf = -0.0, which is the correct SiLU limit.
+  - The **kwargs catch-all swallows any block_size the engine passes; it is never used.

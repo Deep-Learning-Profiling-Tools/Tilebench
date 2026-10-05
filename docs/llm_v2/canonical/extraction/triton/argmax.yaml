@@ -1,0 +1,158 @@
+operator: argmax
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/argmax/impl_triton.py
+    functions:
+      - name: argmax_rowwise_kernel
+        lines: [8, 29]
+        role: kernel
+      - name: _argmax_rowwise_kernel_autotuned
+        lines: [32, 42]
+        role: tuner
+      - name: run
+        lines: [45, 66]
+        role: host-driver
+      - name: get_last_config
+        lines: [69, 77]
+        role: helper
+  - path: tilebench/benchmarks/operators/argmax/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/argmax/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_argmax_inputs
+        lines: [456, 458]
+        role: helper
+functional_semantics: >
+  Row-wise argmax: torch.argmax(x, dim=dim) (impl_torch.py line 5). The
+  generator (tensors.py 456-458) always passes a torch.randn (M, N) matrix and
+  dim=1, so out[m] = the index of the first maximal element of row m
+  (torch.argmax returns the first occurrence on ties), as an int64 vector of
+  length M. No reference preprocessing.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, dim]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single int64 tensor of shape (M,)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: case dtype (fp16 or fp32)
+    layout: contiguous row-major (made contiguous at line 49; the kernel indexes row*N + col, line 20)
+    mutated_in_place: false
+    notes: must be on CUDA (assert at line 46)
+  - name: dim
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: always 1 from the generator; dim != 1 triggers a transpose+copy at line 51 (untimed path never taken in the sweep)
+outputs:
+  - name: out
+    shape: "(M,)"
+    dtype: int64 (line 54)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: CUDA assertion and x.contiguous() (no copy for the contiguous generator input); for dim != 1 a transpose + contiguous copy
+    lines: [46, 51]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: the copy only materialises on the dim != 1 branch, which the benchmark never takes
+  - description: output allocation (int64, M elements) with torch.empty
+    lines: [54, 54]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      One program per row (grid (M,), lines 57, 60). The program keeps a
+      scalar running best value (fp32, initialised to -inf) and best index
+      (int64, initialised to 0) (lines 14-15), walks the row in column tiles
+      of BLOCK_N in increasing column order (line 17), loads each tile with
+      other=-inf and upcasts to fp32 (line 20), reduces the tile with tl.max
+      and tl.argmax (lines 22-23), and replaces the running best only when the
+      tile max is strictly greater (lines 25-27). The final index is stored
+      (line 29).
+    kind: kernel
+    lines: [8, 29]
+    launches: "1 launch; M programs, each looping ceil(N / BLOCK_N) tiles"
+    depends_on: []
+    fusable_with: none
+    produces: out
+algorithm_family: >
+  Row-wise argmax by sequential tiled scan: one program per row, tile-local
+  max/argmax reduction merged across tiles with a strict greater-than test so
+  the earliest tile keeps the winner.
+reduction_scan_sort_structure: >
+  Per row, tiles are consumed in increasing column order. Within a tile
+  tl.max and tl.argmax over axis 0 give the tile maximum and (per Triton's
+  default tie_break_left) its lowest index. Across tiles the update uses
+  'tile_max > best_val' (strict), so on equal maxima the earlier tile wins.
+  Combined, the result is the first occurrence of the row maximum, matching
+  torch.argmax. Masked lanes hold -inf and can only win in an all -inf row,
+  where the index stays 0 (also torch's answer). Indices are formed as
+  start + tile_arg in int64.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: comparisons in fp32 after an exact upcast of each tile (line 20); index arithmetic in int64
+  output_dtype: int64
+  special_modes: none
+  masking_or_padding_values: "-inf for columns beyond N (line 20) and as the initial best value (lines 12-14)"
+intermediate_storage: >
+  None beyond the output vector; the running best lives in registers.
+mutation_rules: >
+  No input is modified (the dim != 1 path would copy, not mutate); the output
+  is freshly allocated per call; repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_N
+    role: tile size (columns per loop iteration)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 32-42) over BLOCK_N x num_warps x num_stages, keyed
+  on N, warmup=1, rep=3. The non-autotuned path launches the undecorated
+  kernel with _DEFAULT_CONFIG (lines 5, 59-65). get_last_config reads
+  best_config (lines 69-77). Audit only.
+implementation_freedoms_observed: >
+  Column tile width, warps, stages; whether a row is split across several
+  programs (which would require a second merge step with the same
+  first-occurrence rule); vectorisation; whether values are upcast before
+  comparison (any order-preserving representation is fine).
+algorithm_constraints_observed: >
+  Single pass over x; first-occurrence tie-breaking (lowest index within a
+  chunk, strict '>' when merging chunks in increasing column order); -inf as
+  the identity so that padded lanes never win; output is an int64 vector of
+  length M; no scratch buffers.
+fq_boundary:
+  bytes_expr: "M * N * dtype_size"
+  flops_expr: "M * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts one read of x, which is exactly what the single kernel
+    does; run() adds only an uninitialised output allocation (the 8*M-byte
+    index write is not in the formula but is negligible relative to M*N input
+    elements). For dim=1 no copy is performed inside run(); the dim != 1
+    branch would add a timed transpose copy that the formula does not model,
+    but the generator never takes it.
+notes_for_review:
+  - The dim != 1 branch (transpose + contiguous copy inside the timed region) is dead for the benchmark but would distort timing if exercised.
+  - NaN handling is unclear; torch.argmax treats NaN as the maximum, while the behaviour of tl.max / tl.argmax on NaN is not established from the code and randn inputs never produce NaN.
+  - The block_size keyword is accepted but unused.
+  - Each program reads a single row, so for small N the kernel is latency-bound by design (one program per row, no cross-row batching).

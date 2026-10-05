@@ -1,0 +1,139 @@
+operator: quantize_global
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/quantize_global/impl_triton.py
+    functions:
+      - name: quantize_kernel
+        lines: [8, 14]
+        role: kernel
+      - name: _quantize_kernel_autotuned
+        lines: [17, 28]
+        role: tuner
+      - name: run
+        lines: [31, 46]
+        role: host-driver
+      - name: get_last_config
+        lines: [49, 53]
+        role: helper
+  - path: tilebench/benchmarks/operators/quantize_global/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/quantize_global/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_quantize_global_inputs
+        lines: [175, 176]
+        role: helper
+functional_semantics: >
+  out = x.to(torch.float16) (impl_torch.py lines 4-5): an element-wise
+  down-conversion of a float32 tensor to float16 with torch's default rounding
+  (round to nearest even), no scaling, no absmax, no clamping (values outside the
+  float16 range would become inf; randn inputs never are). Despite the operator
+  name, at this SHA neither the reference nor the Triton source computes a
+  global absmax or emits a scale: the whole operator is one cast. The reference
+  accepts and ignores block_size and **kwargs.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single float16 tensor with the shape of x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "float32 (fixed: the generator always produces float32 regardless of the dtype argument, tensors.py 175-176, and config.yaml line 9 pins dtype to fp32)"
+    layout: "1-D contiguous from the generator; run() calls x.contiguous() (line 32), a no-op here"
+    mutated_in_place: false
+    notes: "values from randn"
+outputs:
+  - name: out
+    shape: "(n,)"
+    dtype: float16 (fixed)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "x = x.contiguous() (returns x itself for contiguous input; would copy otherwise)"
+    lines: [32, 32]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: "no-op for benchmark inputs"
+  - description: "allocate out = torch.empty(x.shape, dtype=torch.float16) and read n_elements = x.numel()"
+    lines: [33, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no other host work"
+stages:
+  - id: s1
+    description: "flat element-wise cast kernel: each program loads BLOCK_SIZE consecutive float32 elements (mask offsets < n_elements, other=0.0), converts them with .to(tl.float16) and stores them at the same offsets of the float16 output"
+    kind: kernel
+    lines: [8, 14]
+    launches: "ceil(n_elements / BLOCK_SIZE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "out (final result)"
+algorithm_family: >
+  Single-stage flat streaming dtype conversion (float32 to float16). There is no
+  reduction stage: no absmax, no scale factor, no second pass.
+reduction_scan_sort_structure: >
+  None. Explicitly: the Triton source contains no absmax or any other reduction
+  (the kernel on lines 8-14 is the only kernel and performs only load, cast,
+  store).
+precision:
+  input_dtypes: [fp32]
+  accumulation: none
+  output_dtype: fp16
+  special_modes: "float32-to-float16 narrowing via tl's .to(tl.float16) (line 14); both this and torch's .to(torch.float16) default to round-to-nearest-even, so outputs are expected to match bit-for-bit for in-range values (stated from the APIs' documented defaults, not verified by running)"
+  masking_or_padding_values: "0.0 for masked loads (line 13); masked store (line 14)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x is read-only. A fresh out is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true (in _DEFAULT_CONFIG, but not passed on the default launch path)
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps x num_stages filtered by a minimum
+  elements-per-thread condition (lines 17-28; the BLOCK_SIZE list contains one
+  duplicated entry), key=["n_elements"], warmup=1, rep=3. autotune=True launches
+  the wrapper (lines 36-37); otherwise the raw kernel is launched with
+  _DEFAULT_CONFIG's BLOCK_SIZE and num_warps only, num_stages is not forwarded
+  (lines 39-45). get_last_config (49-53) reports BLOCK_SIZE and num_warps.
+  Audit only.
+implementation_freedoms_observed: >
+  Tile size, warp count, pipelining depth, vector width and elements per program
+  are open. Any conversion that produces the same round-to-nearest-even float16
+  result is acceptable.
+algorithm_constraints_observed: >
+  One read of n float32 elements and one write of n float16 elements into a new
+  buffer; per-element conversion with round-to-nearest-even; no scaling or
+  clamping; correct tail masking. A faithful re-implementation must NOT add an
+  absmax pass or a scale output, because the reference does not have one.
+fq_boundary:
+  bytes_expr: "n * dtype_size + n * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    With dtype_size = 4 (fp32 input) the formula counts the n*4-byte read plus
+    the n*2-byte float16 write, which is exactly the timed kernel's traffic; the
+    contiguous() call is a no-op and the allocation has no traffic. flops_expr
+    counts one conversion per element. No prepacked inputs are assumed.
+notes_for_review:
+  - "MISMATCH WITH THE EXTRACTION BRIEF: the brief asked for a two-stage absmax reduction + quantize structure, but at this SHA impl_torch.py and impl_triton.py both implement only a float32-to-float16 cast; no absmax, no scale, no int8. The operator and kernel names are misleading and the reconciliation step should confirm the cuTile side before any contract mentions absmax."
+  - "The generator ignores the dtype argument and always emits float32, and config.yaml pins dtype to fp32; the operator is single-dtype."
+  - "The default launch path drops num_stages from _DEFAULT_CONFIG, and the autotune BLOCK_SIZE list contains a duplicate entry (audit only)."
+  - "The block_size keyword is accepted but unused."

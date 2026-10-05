@@ -1,0 +1,264 @@
+operator: radix_sort
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/radix_sort/impl_triton.py
+    functions:
+      - name: radix_histogram_kernel
+        lines: [13, 31]
+        role: kernel
+      - name: radix_sum_chunks_kernel
+        lines: [34, 41]
+        role: kernel
+      - name: radix_scan_chunk_sums_kernel
+        lines: [44, 51]
+        role: kernel
+      - name: radix_scan_chunks_kernel
+        lines: [54, 62]
+        role: kernel
+      - name: radix_scatter_kernel
+        lines: [65, 84]
+        role: kernel
+      - name: _radix_scatter_kernel_autotuned
+        lines: [87, 95]
+        role: tuner
+      - name: run
+        lines: [98, 138]
+        role: host-driver
+      - name: get_last_config
+        lines: [141, 145]
+        role: helper
+  - path: tilebench/benchmarks/operators/radix_sort/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/radix_sort/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_radix_sort_inputs
+        lines: [116, 119]
+        role: helper
+functional_semantics: >
+  out = torch.sort(input).values (impl_torch.py lines 4-5): the 1-D int32 input
+  sorted in ascending order along its only dimension; only the values are
+  returned (no indices), so stability is unobservable. The second positional
+  argument N is the length (input.shape == (N,)); the reference ignores it. The
+  generator draws keys uniformly from [0, 2**31) (tensors.py 116-119), i.e.
+  non-negative int32 whose signed and unsigned orders coincide.
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: "single int32 tensor of shape (N,) containing the sorted keys: the ping-pong buffer that holds the result after the final pass (for N <= 1, a clone of the input)"
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: "int32 (the only dtype in config.yaml line 15)"
+    layout: 1-D contiguous
+    mutated_in_place: false
+    notes: "never passed to a kernel; it is read exactly once by the device-to-device clone on line 103. Kernels reinterpret the key buffers as uint32 pointers (lines 17, 69-70), so ordering is unsigned bit order; the generator's non-negative keys make that equal to signed order"
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "number of keys; drives the early return (line 100), the block count K = cdiv(N, _BLOCK_SIZE) (line 106) and the kernel tail masks"
+outputs:
+  - name: sorted
+    shape: "(N,)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "early return input.clone() when N <= 1"
+    lines: [100, 101]
+    kind: other
+    inside_run: true
+    cached_across_calls: false
+    notes: "not taken for benchmark sizes"
+  - description: "work = input.clone(): a device-to-device copy of the N keys that becomes the first ping-pong buffer and, after the even number of passes, the returned result"
+    lines: [103, 103]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: "this copy is what keeps the caller's input unmodified; it is timed"
+  - description: "output = torch.empty_like(input): the second ping-pong buffer"
+    lines: [104, 104]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "scratch; discarded at the end"
+  - description: "host metadata: K = number of key blocks, M = RADIX * K histogram entries, G2 = number of _BLOCK_SIZE chunks of the histogram, BB = power-of-two scan width covering G2 with a fixed floor"
+    lines: [106, 109]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: "all derived from N and the module constants"
+  - description: "allocate hist (M,) int32 and chunk_sums (G2,) int32"
+    lines: [111, 112]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "reused in place by every pass"
+stages:
+  - id: s1
+    description: "per-pass block histogram: grid (K,), one program per _BLOCK_SIZE-key block of the current 'work' buffer. Reinterprets the keys as uint32 (line 17), extracts the 2-bit digit d = (key >> shift) & (RADIX-1) (line 23), builds per lane an int64 one-hot value 1 << (d * FIELD_BITS) with masked lanes contributing 0 (line 26), reduces it with a single tl.sum so that the four digit counts of the block land in four 16-bit fields of one int64 (line 27), unpacks the four fields (line 30) and stores them digit-major at hist[d * K + pid] (line 31)"
+    kind: kernel
+    lines: [13, 31]
+    launches: "K programs per pass, 16 passes"
+    depends_on: [s0]
+    fusable_with: "unclear"
+    produces: "hist (RADIX*K,) int32 counts, digit-major"
+  - id: s2
+    description: "scan level 1: grid (G2,), each program sums one _BLOCK_SIZE chunk of hist (masked to M, other=0) and writes the chunk total to chunk_sums[pid]"
+    kind: kernel
+    lines: [34, 41]
+    launches: "G2 programs per pass, 16 passes"
+    depends_on: [s1]
+    fusable_with: [s3, s4]
+    produces: "chunk_sums (G2,) int32"
+  - id: s3
+    description: "scan level 2: a single program loads all G2 chunk totals into a BLOCK_BB-wide tile (other=0) and overwrites chunk_sums in place with the exclusive prefix sum (tl.cumsum - vals)"
+    kind: kernel
+    lines: [44, 51]
+    launches: "1 program per pass, 16 passes"
+    depends_on: [s2]
+    fusable_with: [s2, s4]
+    produces: "chunk_sums rewritten as exclusive chunk bases"
+  - id: s4
+    description: "scan level 3: grid (G2,), each program replaces its hist chunk in place with the chunk-local exclusive prefix sum plus chunk_sums[pid]. After s4, hist[d * K + b] equals the number of keys whose digit is < d plus the number of keys with digit == d in blocks < b, i.e. the global write base for (digit d, block b)"
+    kind: kernel
+    lines: [54, 62]
+    launches: "G2 programs per pass, 16 passes"
+    depends_on: [s3]
+    fusable_with: [s2, s3]
+    produces: "hist rewritten in place as exclusive global offsets"
+  - id: s5
+    description: "per-pass stable scatter: grid (K,), one program per key block of 'work'. Recomputes the digit per lane (lines 75-76), rebuilds the int64 one-hot packed value (line 79), takes the in-block exclusive cumsum of the packed values and extracts the field of the lane's own digit, giving the lane's rank among same-digit keys that precede it in the block (lines 80-81); loads base = hist[d * K + pid] (line 83) and stores the key to output[base + rank] (line 84), masked to N. Ranks follow in-block element order, so the pass is stable"
+    kind: kernel
+    lines: [65, 84]
+    launches: "K programs per pass, 16 passes"
+    depends_on: [s4]
+    fusable_with: "unclear"
+    produces: "'output' buffer fully permuted by the current digit"
+  - id: s6
+    description: "host ping-pong: swap the work and output references so the next pass reads what this pass wrote"
+    kind: host
+    lines: [136, 136]
+    launches: "once per pass, 16 passes"
+    depends_on: [s5]
+    fusable_with: "none"
+    produces: "role swap of the two N-key buffers"
+  - id: s0
+    description: "pass loop: for shift in range(0, 32, _RADIX_BITS), i.e. 16 passes over digit positions 0, 2, ..., 30 of the 32-bit key, each running s1-s6 in order; after the loop the 'work' reference (the original clone buffer, because the pass count is even) is returned"
+    kind: host
+    lines: [116, 138]
+    launches: "16 iterations, 5 kernel launches each (80 launches) plus the clone memcpy"
+    depends_on: []
+    fusable_with: "none"
+    produces: "sorted result in the clone buffer"
+algorithm_family: >
+  LSD (least-significant-digit-first) stable counting radix sort over the full
+  32-bit key reinterpreted as unsigned: 2-bit digits (radix 4), 16 passes; each
+  pass = block-local digit counting with packed int64 one-hot sums, a three-kernel
+  (chunk-sum / single-block scan / chunk-scan) exclusive scan of the digit-major
+  (digit, block) histogram, and a block-local stable rank + global scatter;
+  ping-pong between two N-key buffers.
+reduction_scan_sort_structure: >
+  Counting: inside a block, one tl.sum over int64 one-hot values whose 16-bit
+  fields hold one counter per digit value (exact, order-independent). Histogram
+  layout: digit-major, hist[digit * K + block], so a plain forward exclusive scan
+  over the flat array yields the LSD write bases. Scan: forward exclusive
+  prefix sum in three levels (chunk totals, single-program exclusive scan of
+  chunk totals, per-chunk exclusive scan plus chunk base), all exact int32.
+  Ranking: in-block forward exclusive tl.cumsum over the packed int64 one-hots,
+  field-extracted per lane, so equal-digit keys keep their block order; blocks
+  are laid out in increasing block index by the histogram order. Hence each pass
+  is a stable partition by the digit, and 16 LSD passes give a fully sorted
+  sequence. Tie handling is irrelevant for the values-only reference. The sort
+  always runs all 16 passes even when high digits are uniformly zero.
+precision:
+  input_dtypes: [int32]
+  accumulation: "exact integer: int32 digit/count/offset arithmetic, int64 for the packed one-hot sums and cumsums"
+  output_dtype: int32
+  special_modes: "keys reinterpreted as uint32 (tl.pointer_type(tl.uint32), lines 17, 69-70), so the order is unsigned; correct for the generator's non-negative keys, and negative int32 keys would sort after all non-negative ones. Verification is exact (config.yaml atol 0, rtol 0)"
+  masking_or_padding_values: "other=0 on all masked loads; masked lanes contribute 0 to the packed counts via tl.where(mask, 1, 0); tail lanes are never stored"
+intermediate_storage: >
+  Four per-call global buffers, all allocated inside run(): work (N,) int32 (the
+  clone, lines 103; returned as the result), output (N,) int32 (line 104; the
+  ping-pong partner, discarded), hist (RADIX*K,) int32 (line 111; overwritten
+  twice per pass: counts by s1, exclusive offsets by s4) and chunk_sums (G2,)
+  int32 (line 112; overwritten twice per pass by s2 and s3). None persist across
+  calls.
+mutation_rules: >
+  The caller's input is never written: no kernel receives it and the only read
+  of it is the clone on line 103. hist and chunk_sums are scratch overwritten
+  each pass. Each call allocates its own buffers, so repeated calls are
+  idempotent and produce a new result tensor each time.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: num_warps
+    role: warps (applied only to the scatter kernel; the other four kernels are launched without a num_warps argument and use Triton's default)
+    default_present: true
+  - name: _BLOCK_SIZE
+    role: tile size (keys per program for the histogram and scatter kernels, and histogram entries per program for the chunk-sum and chunk-scan kernels); a fixed module constant, not autotuned
+    default_present: true
+  - name: BLOCK_BB
+    role: tile size of the single-program chunk-sum scan; derived per call as max(fixed floor, next_power_of_2(G2))
+    default_present: true
+  - name: _FIELD_BITS
+    role: width of each packed per-digit counter field in the int64 one-hot sums (fixed module constant; bounds _BLOCK_SIZE at 2**_FIELD_BITS - 1 keys)
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over num_warps only, applied only to radix_scatter_kernel
+  (lines 87-95), key=["N"], warmup=1, rep=3. With autotune=True the scatter
+  launch goes through the wrapper (lines 123-127); otherwise it uses
+  _DEFAULT_CONFIG["num_warps"] (lines 129-133). The histogram, chunk-sum and both
+  scan kernels are launched identically in both modes with no num_warps argument.
+  _RADIX_BITS, _BLOCK_SIZE and _FIELD_BITS are module constants (lines 6-10) and
+  are not searched. Audit only.
+implementation_freedoms_observed: >
+  Keys per block, warp counts, how the per-block digit counts are computed
+  (packed int64 one-hot vs separate per-digit reductions), the scan
+  implementation (three chunked kernels vs a single decoupled-look-back or
+  single-program scan when the histogram is small), fusing the next pass's
+  histogram into the scatter, the histogram memory layout (as long as the scan
+  produces the same write bases), and whether the N <= 1 early return exists.
+  Digit width (and hence pass count) is a structural choice of this source
+  rather than a requirement of the reference, but see fq_boundary: bytes_expr
+  hard-codes 16 passes.
+algorithm_constraints_observed: >
+  Out-of-place sort returning a new (N,) int32 tensor; the input must not be
+  mutated (this source achieves that with a timed clone); stable LSD radix
+  passes over the unsigned bit pattern that together cover all 32 bits; each
+  pass consists of a counting stage, an exclusive scan giving global write bases
+  per (digit, block), and a stable scatter; two N-key buffers alternated
+  between passes; exact integer arithmetic throughout; masked tail keys must
+  not be counted or written.
+fq_boundary:
+  bytes_expr: "16 * 3 * n * dtype_size"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula models 16 passes, each reading the keys once in the histogram
+    kernel and reading plus writing them once in the scatter kernel (3 * n
+    elements of dtype_size = 4 bytes). That matches the structure timed inside
+    run() with these omissions: the input clone (one extra read and write of n
+    keys, about 4 percent of the modelled traffic), the histogram and
+    chunk_sums traffic (O(n / _BLOCK_SIZE) per pass), and the per-key gathers
+    of hist in the scatter kernel (4 distinct addresses per block, cache
+    resident). The constant 16 ties the metric to this source's 2-bit digit
+    choice: a re-implementation with wider digits would do less traffic than
+    the formula credits. flops_expr is nominal. No prepacked inputs are assumed.
+notes_for_review:
+  - "Digit width is 2 bits, so there are 16 passes and 80 kernel launches per call; bytes_expr hard-codes that pass count, which makes the FQ metric implementation-specific rather than problem-specific."
+  - "The input is never mutated; the protection is a device-to-device clone executed inside the timed run(), and that clone buffer is what gets returned after the even number of ping-pong swaps."
+  - "Keys are compared as uint32, so negative int32 inputs would be ordered after non-negative ones; the generator avoids negatives, but a contract must state the non-negative (or unsigned-order) assumption."
+  - "The packed-counter scheme relies on each 16-bit field never overflowing, i.e. keys per block below 65536; a re-implementation that changes the block size must respect that bound or change the field width."
+  - "The level-2 scan is a single program over all G2 chunk totals padded to BLOCK_BB; it is a scalability limit for much larger N than the sweep but correct for every swept size because BLOCK_BB is at least next_power_of_2(G2)."
+  - "Only the scatter kernel is autotuned and only over num_warps; the other four kernels always run with Triton's default warp count (audit only)."
+  - "The block_size keyword is accepted but unused; the kernels use the module constant _BLOCK_SIZE instead."
+  - "All 16 passes execute even though bit 31 is always zero for the generator's keys, so the last pass is a stable identity permutation that still moves every key."
