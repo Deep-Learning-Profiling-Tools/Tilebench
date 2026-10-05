@@ -11,9 +11,10 @@ C[b, m, n] = sum over k < K of A[b, m, k] * B[b, k, n]
 exactly `torch.matmul(A.view(BATCH, M, K), B.view(BATCH, K, N)).view(-1)`.
 The reference enables TF32 for fp32 matrix products.
 
-The entry point is called as `run(A, B, BATCH, M, N, K, **kwargs)`; the
-four ints are positional. It must accept and ignore `block_size` and
-`autotune`.
+The entry point is called as `run(A, B, BATCH, M, N, K)`; the four ints are
+positional. The entry point is called positionally with exactly the inputs listed below;
+no keyword arguments are passed (declared keyword parameters, if any, must
+have defaults and must not affect the computation).
 
 ## Inputs and outputs
 

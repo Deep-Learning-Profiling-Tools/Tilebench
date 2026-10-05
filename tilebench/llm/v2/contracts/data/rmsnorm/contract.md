@@ -17,9 +17,8 @@ length. There is no reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(x, rms_w, eps=1e-6, autotune=False)`:
-`x` and `rms_w` positional, `eps` and `autotune` keywords. This operator has
-no `block_size` keyword; unknown keywords need not be accepted.
+The entry point is called as `run(x, rms_w)`: `x` and `rms_w` positional;
+`eps` keeps its default of `1e-6` and no keyword arguments are passed.
 
 - `x`: `(batch, M, K)`, contiguous row-major, dtype one of fp16, bf16, fp32.
   Read-only.

@@ -18,9 +18,10 @@ Input positions outside `[0, H) x [0, W)` contribute exactly zero (implicit
 symmetric zero padding). `out_H = (H + 2*padding - kH) // stride + 1` and
 likewise `out_W`. The kernel is not flipped. There is no bias.
 
-The entry point is called as `run(input, weight, stride, padding, groups,
-**kwargs)` with the three scalars positional; it must accept and ignore the
-framework keywords `block_size` and `autotune` and any extra keywords.
+The entry point is called as `run(input, weight, stride, padding, groups)` with the three scalars positional.
+The entry point is called positionally with exactly the inputs listed below;
+no keyword arguments are passed (declared keyword parameters, if any, must
+have defaults and must not affect the computation).
 
 ## Inputs and outputs
 

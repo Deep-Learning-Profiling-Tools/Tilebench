@@ -14,8 +14,10 @@ contain no NaN.
 
 The entry point is called as `run(x, dim, **kwargs)`. `dim` is `1` in every
 benchmark case; the implementation may assert `dim == 1` or handle other
-values by any means, but the `dim == 1` path must not copy `x`. It must
-accept and ignore `block_size` and `autotune`.
+values by any means, but the `dim == 1` path must not copy `x`.
+The entry point is called positionally with exactly the inputs listed below;
+no keyword arguments are passed (declared keyword parameters, if any, must
+have defaults and must not affect the computation).
 
 ## Inputs and outputs
 

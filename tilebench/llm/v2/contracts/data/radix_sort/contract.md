@@ -12,9 +12,8 @@ ordering by the unsigned 32-bit pattern coincides with signed ascending
 order. An implementation may order by the unsigned pattern directly or
 handle the sign bit explicitly; either is acceptable.
 
-The entry point is called as `run(input, N, **kwargs)` with
-`N == input.numel()`. Keyword arguments such as `block_size` and `autotune`
-may be accepted and ignored.
+The entry point is called as `run(input, N)` with `N == input.numel()`. No
+keyword arguments are passed.
 
 ## Inputs and outputs
 

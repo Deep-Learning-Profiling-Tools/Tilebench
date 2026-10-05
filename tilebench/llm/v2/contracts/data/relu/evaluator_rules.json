@@ -7,14 +7,14 @@
     {"id": "elementwise_clamp", "description": "One kernel pass that reads each element of x once, replaces negatives by zero (select or max), and stores once at the same position, with correct tail handling for n elements."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.relu\\(|torch\\.relu_\\(|torch\\.nn\\.functional\\.relu\\(|F\\.relu\\(|torch\\.clamp\\(|torch\\.clamp_min\\(|torch\\.clip\\(|torch\\.maximum\\(|torch\\.max\\(|torch\\.where\\(|torch\\.threshold\\(", "message": "The clamp must be performed by the kernel, not by a PyTorch op.", "level": "confirmed"},
-    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.clamp\\(|\\.clamp_\\(|\\.clamp_min\\(|\\.relu\\(|\\.relu_\\(|(?<!tl)(?<!ct)(?<!nl)\\.maximum\\(|\\.copy_\\(", "message": "Tensor-method clamp/relu/maximum or a host copy inside run() replaces the whole computation.", "level": "suspicious"},
-    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\.", "message": "Returning the input, a view of it, or a host-side expression on it replaces the whole computation.", "level": "suspicious"},
-    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in relu.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros\\(|torch\\.zeros_like\\(|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator (an in-kernel zero tile is fine; a torch zero tensor is not needed).", "level": "suspicious"}
+    {"pattern": "torch\\.relu\\(|torch\\.relu_\\(|torch\\.nn\\.functional\\.relu\\(|F\\.relu\\(|torch\\.clamp\\(|torch\\.clamp_min\\(|torch\\.clip\\(|torch\\.maximum\\(|torch\\.max\\(|torch\\.where\\(|torch\\.threshold\\(", "message": "The clamp must be performed by the kernel, not by a PyTorch op.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.clamp\\(|\\.clamp_\\(|\\.clamp_min\\(|\\.relu\\(|\\.relu_\\(|(?<!tl)(?<!ct)(?<!nl)\\.maximum\\(|\\.copy_\\(", "message": "Tensor-method clamp/relu/maximum or a host copy inside run() replaces the whole computation.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\.", "message": "Returning the input, a view of it, or a host-side expression on it replaces the whole computation.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in relu.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros\\(|torch\\.zeros_like\\(|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator (an in-kernel zero tile is fine; a torch zero tensor is not needed).", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["tl\\.where", "ct\\.where", "tl\\.maximum", "ct\\.maximum", "tl\\.clamp", "T\\.max", "T\\.if_then_else", "nl\\.maximum", "nl\\.where", "nisa\\.tensor_scalar", "where", "maximum", "max\\(", "clamp", ">=\\s*0", ">\\s*0"], "message": "No compare/select or maximum against zero found inside the kernel.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [

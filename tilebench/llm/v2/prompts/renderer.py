@@ -102,8 +102,34 @@ def render_initial(ctx: TaskContext) -> str:
     return render(load_template("initial"), ctx.base_values())
 
 
+def _prev_block(ctx: TaskContext, prev: dict, limits: dict, fallback: dict | None) -> str:
+    """The previous-round section. A round that ended without a compliant
+    candidate (three contract violations) or without a parsable file is
+    described by its outcome only: its rejected code is never shown as a
+    starting point; the last compliant implementation (if any) is."""
+    status = prev.get("status")
+    source = prev.get("source")
+    if status == "contract_violation" or source is None:
+        head = (f"## Previous round (round {prev['round']}): no compliant implementation\n\n"
+                f"Outcome: {outcome_text(prev)}\n{diagnostics_block(prev, limits)}")
+        if status == "contract_violation":
+            head += ("\nThe candidates of that round were rejected for contract violations and are not shown; "
+                     "a rejected candidate must not serve as the basis of your next implementation.\n")
+        if fallback is not None and fallback.get("source"):
+            head += (f"\n## Last compliant implementation (round {fallback['round']})\n\n"
+                     f"```python title=\"{ctx.output_file}\"\n{fallback['source'].rstrip()}\n```\n\n"
+                     "You may start from it; it is the most recent candidate that satisfied the contract.\n")
+        else:
+            head += "\nNo compliant implementation exists yet in this task; start again from the contract.\n"
+        return head
+    return (f"## Previous candidate (round {prev['round']})\n\n"
+            f"```python title=\"{ctx.output_file}\"\n{source.rstrip()}\n```\n\n"
+            f"Configuration reported by `get_last_config()`: `{json.dumps(prev.get('config'))}`\n\n"
+            f"Outcome: {outcome_text(prev)}\n{diagnostics_block(prev, limits)}")
+
+
 def render_refinement(ctx: TaskContext, *, round_index: int, prev: dict, best_valid: dict | None,
-                      history: list[dict], limits: dict) -> str:
+                      history: list[dict], limits: dict, fallback: dict | None = None) -> str:
     v = ctx.base_values()
     best_block = ""
     if best_valid is not None and best_valid.get("round") != prev.get("round"):
@@ -111,10 +137,8 @@ def render_refinement(ctx: TaskContext, *, round_index: int, prev: dict, best_va
                       f"{best_valid['latency_ms_mean']:.4f} ms)\n\n```python title=\"{ctx.output_file}\"\n"
                       f"{best_valid['source'].rstrip()}\n```\n\nConfiguration: `{json.dumps(best_valid.get('config'))}`\n")
     v.update({
-        "round": str(round_index), "prev_round": str(prev["round"]),
-        "prev_source": (prev.get("source") or "# (no parsable file was returned)").rstrip("\n"),
-        "prev_config": json.dumps(prev.get("config")),
-        "prev_outcome": outcome_text(prev), "prev_diagnostics_block": diagnostics_block(prev, limits),
+        "round": str(round_index),
+        "prev_block": _prev_block(ctx, prev, limits, fallback),
         "best_valid_block": best_block, "runtime_history": runtime_history(history),
     })
     return render(load_template("refinement"), v)
@@ -154,3 +178,16 @@ def render_dev_extraction(values: dict) -> str:
 
 def render_dev_reconciliation(values: dict) -> str:
     return render(load_template("dev_contract_reconciliation"), values)
+
+
+def templates_sha256(names: tuple[str, ...] | None = None) -> str:
+    """Hash of the actual template contents (not their names)."""
+    import hashlib
+    names = names or tuple(sorted(p.stem for p in TEMPLATE_DIR.glob("*.md")))
+    h = hashlib.sha256()
+    for n in names:
+        h.update(n.encode())
+        h.update(b"\0")
+        h.update(load_template(n).encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()

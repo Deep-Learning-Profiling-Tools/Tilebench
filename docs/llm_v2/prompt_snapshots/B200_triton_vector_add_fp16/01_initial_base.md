@@ -822,9 +822,8 @@ exact integer sum. There is no reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(x, y, block_size=..., autotune=False)`:
-`x`, `y` positional; `block_size` carries an integer default the
-implementation may ignore, and both keywords may be ignored.
+The entry point is called as `run(x, y)`: `x`, `y` positional; no keyword
+arguments are passed.
 
 - `x`: `(n,)`, contiguous, dtype one of fp16, bf16, fp32, int8. Read-only.
 - `y`: `(n,)`, contiguous, same dtype and length as `x` (not validated by

@@ -16,8 +16,8 @@ The entry point is called as `run(x, dim, **kwargs)`. The benchmark always
 passes a 2-D `x` and `dim == 1` (reduce the contiguous last axis). Other
 values of `dim` are outside the benchmark; an implementation may reject them
 or handle them, but any re-layout it performs for them happens inside
-`run()` and is timed. Keyword arguments such as `block_size` and `autotune`
-may be accepted and ignored.
+`run()` and is timed. The entry point is called positionally; no keyword
+arguments are passed.
 
 ## Inputs and outputs
 

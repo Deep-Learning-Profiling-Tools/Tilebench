@@ -135,16 +135,14 @@ def test_fresh_inputs_catch_output_cache():
         if key not in cache:
             cache[key] = a + b
         return cache[key]
-    res = anticache.run_numerical_checks(cached, lambda a, b: a + b, _gen, atol=1e-6, rtol=1e-6,
-                                         restore_required=False, sync=lambda: None)
+    res = anticache.run_numerical_checks(cached, lambda a, b: a + b, _gen, atol=1e-6, rtol=1e-6, sync=lambda: None)
     names = [r.name for r in res]
     assert names[0] == "fresh_storage" and res[0].ok
     assert names[1] == "same_address_new_values" and not res[1].ok
 
 
 def test_honest_implementation_passes_all_three():
-    res = anticache.run_numerical_checks(lambda a, b: a + b, lambda a, b: a + b, _gen, atol=1e-6, rtol=1e-6,
-                                         restore_required=False, sync=lambda: None)
+    res = anticache.run_numerical_checks(lambda a, b: a + b, lambda a, b: a + b, _gen, atol=1e-6, rtol=1e-6, sync=lambda: None)
     assert [r.ok for r in res] == [True, True, True]
 
 
@@ -152,15 +150,14 @@ def test_undeclared_input_mutation_fails_and_declared_is_restored():
     def mutating(a, b):
         a.add_(1)
         return a + b
-    res = anticache.run_numerical_checks(mutating, lambda a, b: a + 1 + b, _gen, atol=1e-6, rtol=1e-6,
-                                         restore_required=False, sync=lambda: None)
+    res = anticache.run_numerical_checks(mutating, lambda a, b: a + 1 + b, _gen, atol=1e-6, rtol=1e-6, sync=lambda: None)
     assert not res[0].ok and res[0].inputs_mutated == [0]
 
     def sort_inplace(x):
         x.copy_(torch.sort(x)[0])
         return x.clone()
     res2 = anticache.run_numerical_checks(sort_inplace, lambda x: torch.sort(x)[0], lambda: (torch.randn(32),),
-                                          atol=0, rtol=0, restore_required=True, sync=lambda: None)
+                                          atol=0, rtol=0, mutable_indices={0}, sync=lambda: None)
     assert [r.ok for r in res2] == [True, True, True] and res2[2].inputs_mutated == [0]
 
 
@@ -169,7 +166,8 @@ def test_launcher_scrubs_secrets_and_redirects_caches(tmp_path, monkeypatch):
     monkeypatch.setenv("HUGGING_FACE", "hf-x")
     monkeypatch.setenv("HOME", "/home/u")
     env = scrubbed_env(tmp_path)
-    assert "OPENAI_API_KEY" not in env and "HUGGING_FACE" not in env and env["HOME"] == "/home/u"
+    assert "OPENAI_API_KEY" not in env and "HUGGING_FACE" not in env
+    assert env["HOME"] == str(tmp_path / "home") and env["TMPDIR"] == str(tmp_path / "tmp")   # never the user's home
     assert env["TILEBENCH_V2_SANDBOX"] == "1" and env["TRITON_CACHE_DIR"].startswith(str(tmp_path))
 
 
@@ -192,6 +190,12 @@ def test_worker_classifies_without_gpu(tmp_path, monkeypatch):
     infrastructure_incomplete, not unsupported, when no device is visible."""
     from tilebench.llm.v2.evaluation import worker
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    res = worker.run_job({"operator": "vector_add", "dtype": "fp16", "params": {"n": 16}, "dsl": "triton",
-                          "source_path": str(tmp_path / "x.py"), "atol": 1e-3, "rtol": 1e-3})
+    from tilebench.llm.v2.evaluation.job import build_evaluation_job
+    from tilebench.llm.v2.manifests import schema as ms
+    job = build_evaluation_job(operator="vector_add", dtype="fp16", params={"n": 16}, dsl="triton", device="B200",
+                               arch=None, rules={}, study=ms.load_study())
+    wjob = job.worker_job(source_path=str(tmp_path / "x.py"), sandbox_dir=str(tmp_path), seed=1, round_index=1, attempt=1)
+    res = worker.run_job(wjob)
     assert res["status"] == "infrastructure_incomplete" and "no CUDA/HIP device" in res["diagnostic"]
+    bad = worker.run_job({"operator": "vector_add"})
+    assert bad["status"] == "infrastructure_incomplete" and "invalid job" in bad["diagnostic"]

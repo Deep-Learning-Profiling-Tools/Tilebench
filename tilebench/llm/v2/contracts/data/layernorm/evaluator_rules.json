@@ -8,9 +8,9 @@
     {"id": "row_apply", "description": "Per row: (X - mean) * rstd * WEIGHT + BIAS in fp32, cast once to X.dtype, stored."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.(nn\\.functional\\.)?layer_norm\\(|F\\.layer_norm\\(|torch\\.nn\\.LayerNorm\\(", "message": "library layer normalisation computes the operator", "level": "confirmed"},
-    {"pattern": "torch\\.(mean|var|var_mean|std)\\(|\\.(mean|var|std)\\(\\s*(dim|-1|1|\\))|torch\\.rsqrt\\(|torch\\.sum\\(", "message": "PyTorch computation of the row statistics on the data path", "level": "suspicious"},
-    {"pattern": "weight\\.(float|to)\\(|bias\\.(float|to)\\(", "message": "host-side cast of the affine parameters", "level": "suspicious"}
+    {"pattern": "torch\\.(nn\\.functional\\.)?layer_norm\\(|F\\.layer_norm\\(|torch\\.nn\\.LayerNorm\\(", "message": "library layer normalisation computes the operator", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(mean|var|var_mean|std)\\(|\\.(mean|var|std)\\(\\s*(dim|-1|1|\\))|torch\\.rsqrt\\(|torch\\.sum\\(", "message": "PyTorch computation of the row statistics on the data path", "level": "suspicious", "scope": "host"},
+    {"pattern": "weight\\.(float|to)\\(|bias\\.(float|to)\\(", "message": "host-side cast of the affine parameters", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "a device-side row reduction", "level": "suspicious"},

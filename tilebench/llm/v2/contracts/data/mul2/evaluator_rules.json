@@ -7,13 +7,13 @@
     {"id": "elementwise_double", "description": "One kernel pass that reads each element of x once, doubles it, and stores it once at the same position of the output, with correct tail handling for n elements."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|torch\\.add\\(|torch\\.lerp\\(|\\.mul\\(|\\.mul_\\(|\\.add_\\(|\\.copy_\\(", "message": "The doubling must be performed by the kernel, not by a PyTorch arithmetic op or copy.", "level": "confirmed"},
-    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\s*\\+|return\\s+2\\s*\\*\\s*x\\b", "message": "Returning the input or a host-side expression on it replaces the whole computation.", "level": "confirmed"},
-    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in mul2.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious"}
+    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|torch\\.add\\(|torch\\.lerp\\(|\\.mul\\(|\\.mul_\\(|\\.add_\\(|\\.copy_\\(", "message": "The doubling must be performed by the kernel, not by a PyTorch arithmetic op or copy.", "level": "confirmed", "scope": "host"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\s*\\+|return\\s+2\\s*\\*\\s*x\\b", "message": "Returning the input or a host-side expression on it replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in mul2.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["\\*\\s*2\\b", "2\\s*\\*", "\\+\\s*x", "<<\\s*1", "\\*\\s*2\\.0"], "message": "No doubling arithmetic found inside the kernel.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [

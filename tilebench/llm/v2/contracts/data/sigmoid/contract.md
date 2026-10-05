@@ -12,9 +12,8 @@ reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(X, N, block_size=..., autotune=False,
-**kwargs)`: `X` and `N` positional; `block_size` carries an integer default
-the implementation may ignore, and unknown keywords must be accepted.
+The entry point is called as `run(X, N)`: `X` and `N` positional; no keyword
+arguments are passed.
 
 - `X`: `(N,)`, contiguous, dtype one of fp16, bf16, fp32. Read-only.
 - `N`: Python int, the number of elements to process; it sizes the grid and

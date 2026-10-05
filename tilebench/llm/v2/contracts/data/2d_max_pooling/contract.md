@@ -17,8 +17,10 @@ exactly `torch.nn.functional.max_pool2d(input.view(N, C, H, W),
 kernel_size, stride=stride, padding=padding).reshape(-1)`.
 
 The entry point is called as `run(input, N, C, H, W, kernel_size, stride,
-padding, **kwargs)`; the seven ints are positional problem parameters, not
-tunables. It must accept and ignore `block_size` and `autotune`.
+padding)`; the seven ints are positional problem parameters, not tunables.
+The entry point is called positionally with exactly the inputs listed below;
+no keyword arguments are passed (declared keyword parameters, if any, must
+have defaults and must not affect the computation).
 
 ## Inputs and outputs
 

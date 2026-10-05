@@ -22,9 +22,8 @@ out-of-range targets is unspecified and need not be handled.
 - Output: exactly one tensor of shape (batch_size,) in `logits.dtype`,
   freshly allocated inside run() on every call. It must not alias any input.
 - No input may be modified.
-- Call form: `run(logits, targets, block_size=..., autotune=False)`.
-  `block_size` and `autotune` are framework knobs; they may be ignored and
-  must never trigger any configuration search.
+- Call form: `run(logits, targets)`, positional; no keyword arguments are
+  passed. Never run a configuration search.
 
 ## Required logical stages
 1. Row statistics: for each row, the maximum over the class axis and the sum

@@ -7,15 +7,15 @@
     {"id": "fused_gate", "description": "One kernel pass over all M*N elements: load x and y, upcast both to fp32, compute x * sigmoid(x) * y (any equivalent sigmoid formulation), downcast once, masked store."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.nn\\.functional\\.silu\\(|F\\.silu\\(|torch\\.silu\\(|nn\\.SiLU\\(|\\.silu\\(\\s*\\)|torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|F\\.gelu\\(|torch\\.nn\\.functional\\.gelu\\(", "message": "The gate (or its activation) is computed by a PyTorch routine instead of the kernel.", "level": "confirmed"},
-    {"pattern": "torch\\.(exp|tanh|reciprocal|neg|div|add|mul|multiply)\\(|torch\\.special\\.", "message": "Host-side PyTorch elementwise arithmetic computing the gate outside the kernel.", "level": "suspicious"},
-    {"pattern": "swiglu|geglu|gated_mlp|liger|xformers|apex", "message": "A library SwiGLU / gated-MLP routine may replace the kernel.", "level": "suspicious"},
-    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp\\(|exp\\([^\\n]*\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half)", "message": "The exponential appears to be evaluated in half precision; it must be fp32.", "level": "suspicious"},
-    {"pattern": "y\\s*\\*\\s*sigmoid\\(\\s*y|silu\\(\\s*y\\s*\\)|sigmoid\\(\\s*y_?\\w*\\s*\\)\\s*\\*", "message": "The multiplier y appears to be gated instead of x.", "level": "suspicious"},
-    {"pattern": "return\\s+(x|y)\\b|return\\s+(x|y)\\.|\\b(x|y)\\.copy_\\(|\\b(x|y)\\.mul_\\(|\\b(x|y)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious"}
+    {"pattern": "torch\\.nn\\.functional\\.silu\\(|F\\.silu\\(|torch\\.silu\\(|nn\\.SiLU\\(|\\.silu\\(\\s*\\)|torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|F\\.gelu\\(|torch\\.nn\\.functional\\.gelu\\(", "message": "The gate (or its activation) is computed by a PyTorch routine instead of the kernel.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(exp|tanh|reciprocal|neg|div|add|mul|multiply)\\(|torch\\.special\\.", "message": "Host-side PyTorch elementwise arithmetic computing the gate outside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "swiglu|geglu|gated_mlp|liger|xformers|apex", "message": "A library SwiGLU / gated-MLP routine may replace the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp\\(|exp\\([^\\n]*\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half)", "message": "The exponential appears to be evaluated in half precision; it must be fp32.", "level": "suspicious", "scope": "host"},
+    {"pattern": "y\\s*\\*\\s*sigmoid\\(\\s*y|silu\\(\\s*y\\s*\\)|sigmoid\\(\\s*y_?\\w*\\s*\\)\\s*\\*", "message": "The multiplier y appears to be gated instead of x.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+(x|y)\\b|return\\s+(x|y)\\.|\\b(x|y)\\.copy_\\(|\\b(x|y)\\.mul_\\(|\\b(x|y)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the gate must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the gate must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["tl\\.sigmoid", "tl\\.exp", "tl\\.exp2", "ct\\.exp", "ct\\.exp2", "T\\.exp", "T\\.exp2", "nl\\.exp", "nl\\.sigmoid", "nl\\.silu", "nisa\\.activation", "sigmoid", "silu", "exp"], "message": "No exponential / sigmoid primitive found in the kernel.", "level": "suspicious"},
     {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 upcast evidence; the gate must be evaluated in fp32.", "level": "suspicious"}
   ],

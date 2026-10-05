@@ -20,8 +20,8 @@ the same head; adjacent-pair (interleaved) rotation is a different operator.
 
 ## Inputs and outputs
 
-The entry point is called as `run(q, cos, sin, block_size=None,
-autotune=False)`: the three tensors positional, keywords may be ignored.
+The entry point is called as `run(q, cos, sin)`: the three tensors positional;
+no keyword arguments are passed.
 
 - `q`: `(B, S, H, D)`, contiguous row-major, dtype fp16 or fp32, `D` even.
   Read-only.

@@ -5,12 +5,30 @@
     E_bar(B) = mean_over_operators(mean_over_eligible_dtypes(E_{o,d}(B)))
 
 Inputs are round records: {"round": i, "attempts": [{"cost": c or None}],
-"valid": bool, "latency_ms": T_i or None}. Costs are logical tokens from the
-ledger. A round whose cost is unknown makes every later C_i unknown: the
-curve is then exact only up to the last fully-known round, which is reported
-as `cost_known_through_round`."""
+"valid": bool, "latency_ms": T_i or None, "latency_ms_samples": [...]}.
+Costs are logical tokens from the ledger.
+
+What is a number and what is unknown:
+- a complete trajectory whose valid rounds are all above the budget (or
+  that has no valid round) has E(B) = 0: a real zero;
+- a round whose cost is unknown makes every later C_i unknown; E(B) is then
+  exact only for budgets up to the last fully-known cumulative cost
+  (`cost_known_through_round`), and `None` (undetermined) beyond it
+  whenever a later valid round could lie under B;
+- a task without T_SOL (`sol_unavailable`), without a trajectory, or whose
+  trajectory is incomplete has no E(B): `None`, never 0.
+- a valid round needs a finite positive latency; when samples are present
+  there must be three finite positive ones whose mean is the latency.
+
+The aggregate therefore carries two series: `mean` (exact; None at any
+budget where some included task is undetermined) and `lower_bound_mean`
+(undetermined, missing and incomplete tasks counted as 0; labelled as a
+conservative lower bound, never as E_bar). Rounds timed in a different
+execution mode than the campaign expects are kept and listed in
+`audit_flags` (timing_mode_differs)."""
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Iterable
 
@@ -29,7 +47,7 @@ class TrajectoryCurve:
     t_sol_ms: float | None
     points: list[RoundPoint]
     cost_known_through_round: int
-    best_efficiency: float
+    best_efficiency: float | None
     audit_flags: list[str] = field(default_factory=list)
     status: str = "complete"          # complete | incomplete | unsupported | sol_unavailable
 
@@ -37,6 +55,29 @@ class TrajectoryCurve:
         return {"t_sol_ms": self.t_sol_ms, "points": [asdict(p) for p in self.points],
                 "cost_known_through_round": self.cost_known_through_round,
                 "best_efficiency": self.best_efficiency, "audit_flags": self.audit_flags, "status": self.status}
+
+
+def _finite_positive(x) -> bool:
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(v) and v > 0
+
+
+def round_is_valid(r: dict) -> tuple[bool, str | None]:
+    if not r.get("valid"):
+        return False, None
+    lat = r.get("latency_ms")
+    if not _finite_positive(lat):
+        return False, f"round {r.get('round')}: marked valid but latency {lat!r} is not finite positive"
+    samples = r.get("latency_ms_samples")
+    if samples is not None:
+        if len(samples) != 3 or not all(_finite_positive(s) for s in samples):
+            return False, f"round {r.get('round')}: marked valid without three finite positive samples"
+        if abs(float(lat) - sum(float(s) for s in samples) / 3) > 1e-9 * max(1.0, float(lat)):
+            return False, f"round {r.get('round')}: latency is not the mean of its three samples"
+    return True, None
 
 
 def cumulative_costs(rounds: list[dict]) -> tuple[list[int | None], int]:
@@ -66,27 +107,38 @@ def cumulative_costs(rounds: list[dict]) -> tuple[list[int | None], int]:
 def curve(t_sol_ms: float | None, rounds: list[dict], *, status: str = "complete") -> TrajectoryCurve:
     costs, known = cumulative_costs(rounds)
     points: list[RoundPoint] = []
-    best = 0.0
+    best: float | None = None
     flags: list[str] = []
+    sol_ok = t_sol_ms is not None and _finite_positive(t_sol_ms)
     for r, c in zip(rounds, costs):
-        valid = bool(r.get("valid")) and r.get("latency_ms") is not None and r["latency_ms"] > 0
+        valid, why = round_is_valid(r)
+        if why:
+            flags.append(why)
         eff = None
-        if valid and t_sol_ms is not None:
-            eff = t_sol_ms / float(r["latency_ms"])
+        if valid and sol_ok:
+            eff = float(t_sol_ms) / float(r["latency_ms"])
             if eff > 1.0:
                 flags.append(f"round {r.get('round')}: efficiency {eff:.3f} > 1 (audit measurement/model; not an automatic hacking verdict)")
-            best = max(best, eff)
+            best = eff if best is None else max(best, eff)
+        if valid and r.get("timing_mode_differs"):
+            flags.append(f"round {r.get('round')}: timing_mode_differs (measured {r.get('timing_execution_mode')}; see capture_failure_policy)")
         points.append(RoundPoint(round=int(r.get("round", len(points) + 1)), cumulative_cost=c, valid=valid,
                                  latency_ms=r.get("latency_ms"), efficiency=eff))
-    if t_sol_ms is None:
+    if not sol_ok:
         status = "sol_unavailable"
+        best = None
+    elif status == "complete" and best is None:
+        best = 0.0
     return TrajectoryCurve(t_sol_ms=t_sol_ms, points=points, cost_known_through_round=known,
-                           best_efficiency=best if t_sol_ms is not None else 0.0, audit_flags=flags, status=status)
+                           best_efficiency=best, audit_flags=flags, status=status)
 
 
 def efficiency_at(curve_: TrajectoryCurve, budget: int) -> float | None:
     """E(B): best efficiency among valid rounds with C_i <= B. None when the
-    answer is not determinable (a round with unknown cost could lie under B)."""
+    answer is not determinable: no T_SOL, an incomplete trajectory, or a
+    round with unknown cost that could lie under B."""
+    if curve_.status in ("sol_unavailable", "incomplete", "unsupported"):
+        return None
     best = 0.0
     last_known = 0
     for p in curve_.points:
@@ -122,13 +174,21 @@ def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budget
     """Operator-balanced E_bar(B).
 
     task_curves: {(operator, dtype): curve or None}; eligible: {(op, dtype): status}
-    where status in {eligible, unsupported, incomplete}. Eligible tasks without
-    a curve or without a valid round count as 0. Unsupported tasks are excluded
-    and listed; incomplete tasks are listed and excluded from the mean (the
-    mean is then flagged as partial)."""
+    where status in {eligible, unsupported, incomplete}.
+
+    - unsupported tasks are excluded and listed;
+    - incomplete tasks are listed, excluded from the exact mean (partial);
+    - eligible tasks without a curve are `missing`, eligible tasks whose
+      curve is `sol_unavailable` are `sol_unavailable`: both make the exact
+      mean undetermined (None) for every budget and are counted as 0 only in
+      `lower_bound_mean`;
+    - a task whose E(B) is undetermined at some budget makes `mean` None at
+      that budget and is listed in `undetermined`.
+    Only an eligible, complete trajectory with no valid round under B
+    contributes a real 0."""
     budgets = list(budgets)
     by_op: dict[str, dict[str, TrajectoryCurve | None]] = {}
-    unsupported, incomplete, undetermined = [], [], []
+    unsupported, incomplete, missing, sol_unavailable, undetermined = [], [], [], [], []
     for (op, dt), status in eligible.items():
         if status == "unsupported":
             unsupported.append((op, dt))
@@ -136,31 +196,59 @@ def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budget
         if status == "incomplete":
             incomplete.append((op, dt))
             continue
-        by_op.setdefault(op, {})[dt] = task_curves.get((op, dt))
-    result = {"budgets": budgets, "mean": [], "per_operator": {}, "unsupported": unsupported,
-              "incomplete": incomplete, "n_operators": len(by_op), "partial": bool(incomplete)}
+        c = task_curves.get((op, dt))
+        if c is None:
+            missing.append((op, dt))
+        elif c.status == "sol_unavailable":
+            sol_unavailable.append((op, dt))
+        elif c.status == "incomplete":
+            incomplete.append((op, dt))
+        by_op.setdefault(op, {})[dt] = c
+    tasks_included = sorted((op, dt) for op, dts in by_op.items() for dt in dts)
+    result = {"budgets": budgets, "mean": [], "lower_bound_mean": [], "per_operator": {},
+              "per_operator_lower_bound": {}, "unsupported": unsupported, "incomplete": incomplete,
+              "missing": missing, "sol_unavailable": sol_unavailable, "n_operators": len(by_op),
+              "tasks_included": tasks_included,
+              "partial": bool(incomplete or missing or sol_unavailable)}
     for B in budgets:
-        op_means = []
+        op_means: list[float | None] = []
+        op_lower: list[float] = []
         for op, dts in by_op.items():
-            vals = []
+            vals: list[float | None] = []
+            lower: list[float] = []
             for dt, c in dts.items():
-                if c is None:
-                    vals.append(0.0)
+                if c is None or c.status in ("sol_unavailable", "incomplete"):
+                    vals.append(None)
+                    lower.append(0.0)
                     continue
                 e = efficiency_at(c, B)
                 if e is None:
                     undetermined.append((op, dt, B))
-                    e = 0.0
-                vals.append(e)
-            m = sum(vals) / len(vals)
+                    vals.append(None)
+                    lower.append(0.0)
+                else:
+                    vals.append(e)
+                    lower.append(e)
+            m = None if any(v is None for v in vals) else sum(vals) / len(vals)  # type: ignore[arg-type]
             op_means.append(m)
+            op_lower.append(sum(lower) / len(lower))
             result["per_operator"].setdefault(op, []).append(m)
-        result["mean"].append(sum(op_means) / len(op_means) if op_means else 0.0)
+            result["per_operator_lower_bound"].setdefault(op, []).append(op_lower[-1])
+        exact = None if (not op_means or any(m is None for m in op_means)) else sum(op_means) / len(op_means)  # type: ignore[arg-type]
+        result["mean"].append(exact)
+        result["lower_bound_mean"].append(sum(op_lower) / len(op_lower) if op_lower else None)
     result["undetermined"] = undetermined
+    result["partial"] = result["partial"] or bool(undetermined)
+    result["lower_bound_note"] = ("lower_bound_mean counts undetermined, missing, sol_unavailable and incomplete "
+                                  "tasks as 0; it is a conservative bound, not E_bar(B)")
     return result
 
 
-def paired_difference(enhanced: dict, base: dict) -> list[float]:
+def paired_difference(enhanced: dict, base: dict) -> list[float | None]:
+    """Enhanced - Base per budget; requires the same budget grid and the same
+    task coverage; None where either side is undetermined."""
     if enhanced["budgets"] != base["budgets"]:
         raise ValueError("paired comparison needs identical budget grids")
-    return [e - b for e, b in zip(enhanced["mean"], base["mean"])]
+    if enhanced.get("tasks_included") != base.get("tasks_included"):
+        raise ValueError("paired comparison needs identical task coverage")
+    return [None if (e is None or b is None) else e - b for e, b in zip(enhanced["mean"], base["mean"])]

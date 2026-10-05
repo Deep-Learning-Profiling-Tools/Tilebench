@@ -7,9 +7,8 @@ matrix `out` of shape `(n, m)` with `out[j, i] == x[i, j]` for every element.
 This is the reference `x.transpose(0, 1).contiguous()`: an out-of-place,
 materialised transpose, not a strided view.
 
-The entry point is called as `run(x, **kwargs)`; `m` and `n` are read from
-`x.shape`. Keyword arguments such as `block_size` and `autotune` may be
-accepted and ignored. Input that is not 2-D is outside the benchmark.
+The entry point is called as `run(x)`; `m` and `n` are read from `x.shape`.
+No keyword arguments are passed. Input that is not 2-D is outside the benchmark.
 
 ## Inputs and outputs
 

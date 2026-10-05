@@ -12,9 +12,8 @@ clamping and no integer quantisation is part of this operator at this
 revision: the whole computation is one elementwise dtype conversion. An
 implementation must not add any of those steps.
 
-The entry point is called as `run(x, **kwargs)`; `n` is `x.numel()`.
-Keyword arguments such as `block_size` and `autotune` may be accepted and
-ignored.
+The entry point is called as `run(x)`; `n` is `x.numel()`. No keyword
+arguments are passed.
 
 ## Inputs and outputs
 

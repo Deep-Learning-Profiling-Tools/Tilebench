@@ -21,8 +21,7 @@ with C of shape (M, N) in int32.
 - C: a freshly allocated (M, N) int32 tensor allocated inside the entry
   point. No aliasing.
 - K is a multiple of 4 (K_b = K / 4). The entry point takes (A, B)
-  positionally plus the keywords `block_size` and `autotune`; the benchmark
-  passes nothing else.
+  positionally; no keyword arguments are passed.
 
 ## Required logical stages
 1. Output allocation.

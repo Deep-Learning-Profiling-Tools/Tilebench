@@ -8,11 +8,11 @@
     {"id": "s3", "description": "Cross-partial reduction: per bin, exact int32 sum of the P rows into the freshly allocated (num_bins,) int32 output; starts only after all of s2 completes (separate launch unless a grid barrier is guaranteed)."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.bincount|torch\\.histc|torch\\.histogram|torch\\.histogramdd|torch\\.unique|torch\\.unique_consecutive|\\.bincount\\(|\\.histc\\(", "message": "library histogram replaces the whole computation", "level": "confirmed"},
-    {"pattern": "torch\\.(sort|argsort|scatter_add|index_add|cumsum|searchsorted|bucketize)\\(|\\.scatter_add_?\\(|\\.index_add_?\\(|\\.sort\\(", "message": "host-side sort/scatter-based counting replaces the private-histogram kernels", "level": "suspicious"},
-    {"pattern": "input\\.(to|float|long|int|double|clone)\\(|torch\\.(float32|float16|int64)", "message": "conversion of the int32 input is forbidden (exact int32 path)", "level": "suspicious"},
-    {"pattern": "WeakTensorKeyDictionary|_cache\\b|lru_cache|global _scratch|_partial_buf", "message": "scratch or partial result cached across calls is forbidden", "level": "suspicious"},
-    {"pattern": "torch\\.(ones|full|arange|empty_like)\\(", "message": "extra buffer beyond the output and the (P, num_bins) scratch", "level": "suspicious"}
+    {"pattern": "torch\\.bincount|torch\\.histc|torch\\.histogram|torch\\.histogramdd|torch\\.unique|torch\\.unique_consecutive|\\.bincount\\(|\\.histc\\(", "message": "library histogram replaces the whole computation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(sort|argsort|scatter_add|index_add|cumsum|searchsorted|bucketize)\\(|\\.scatter_add_?\\(|\\.index_add_?\\(|\\.sort\\(", "message": "host-side sort/scatter-based counting replaces the private-histogram kernels", "level": "suspicious", "scope": "host"},
+    {"pattern": "input\\.(to|float|long|int|double|clone)\\(|torch\\.(float32|float16|int64)", "message": "conversion of the int32 input is forbidden (exact int32 path)", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|_cache\\b|lru_cache|global _scratch|_partial_buf", "message": "scratch or partial result cached across calls is forbidden", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(ones|full|arange|empty_like)\\(", "message": "extra buffer beyond the output and the (P, num_bins) scratch", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["atomic_add", "atomic", "tl\\.histogram", "nisa\\.", "T\\.atomic_add", "nl\\.atomic"], "message": "private-row count updates", "level": "suspicious"},

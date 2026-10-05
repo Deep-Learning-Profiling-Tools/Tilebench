@@ -14,8 +14,7 @@ scales), so mathematically C = A @ B for every dtype.
   repacked copy is provided.
 - C: a freshly allocated (M, N) tensor of A's dtype allocated inside the
   entry point (fp8 output for fp8 inputs). No aliasing.
-- The entry point takes (A, B) positionally plus the keywords `block_size`
-  and `autotune`; the benchmark passes nothing else.
+- The entry point takes (A, B) positionally; no keyword arguments are passed.
 
 ## Required logical stages
 1. Output allocation.

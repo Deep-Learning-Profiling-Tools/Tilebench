@@ -8,9 +8,8 @@ realises this with an explicit bitonic sorting network on a `+inf`-padded
 power-of-two buffer, and the result equals the ascending values of a sort
 of `data`. For `N <= 1` a copy of `data` is returned (never exercised).
 
-The entry point is called as `run(data, N, **kwargs)`; `N` is positional and
-equals `data.shape[0]`. It must accept and ignore `block_size` and
-`autotune`.
+The entry point is called as `run(data, N)`; `N` is positional and equals
+`data.shape[0]`. The entry point is called positionally with exactly the inputs listed below; no keyword arguments are passed.
 
 ## Inputs and outputs
 

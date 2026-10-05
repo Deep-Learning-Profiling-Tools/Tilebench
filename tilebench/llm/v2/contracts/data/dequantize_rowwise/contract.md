@@ -19,9 +19,8 @@ scale.
   is fixed to fp16 and does not follow the input dtype), freshly allocated
   inside run() on every call; no aliasing with any input.
 - No input may be modified.
-- Call form: `run(x, state_x, autotune=False, **kwargs)`. `autotune` and any
-  `block_size` keyword are framework knobs: ignore them and never run a
-  configuration search.
+- Call form: `run(x, state_x)`, positional; no keyword arguments are passed.
+  Never run a configuration search.
 
 ## Required logical stages
 1. Element-wise dequantise: for each element, convert the int8 value to fp32,

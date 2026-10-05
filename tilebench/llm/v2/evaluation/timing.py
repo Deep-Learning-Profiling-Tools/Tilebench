@@ -7,13 +7,24 @@ wrapped in its own Proton scope (`launch_1..3`) so that the three raw samples
 are recoverable from the hatchet tree (core.timer.report_benchmark only
 returns the mean of a single scope).
 
+What is measured: the GPU time of the kernels launched inside f() (Proton
+device time summed per scope). Host-side work inside f() (allocation calls,
+metadata, Python) is not GPU time; extra kernels, fills, copies or casts
+launched by f() are counted.
+
 CUDA-graph policy follows tilebench.core.timer.effective_use_cuda_graph
 (NVIDIA replays a graph, ROCm times eagerly). Unlike core.timer._prepare_runner,
 a failed graph capture is NOT silently hidden: the record says
-capture_succeeded=False and timing_execution_mode="eager", and the number of
-eager preparation launches before capture is reported."""
+capture_succeeded=False and timing_execution_mode="eager", the number of
+eager preparation launches before capture is reported, and the study's
+capture_failure_policy names what the consumers do with such a record
+(evaluation.job.timing_settings). Capture preparation launches obey the
+same input-restore contract as every other launch (before_launch runs
+before each of them)."""
 from __future__ import annotations
 
+import math
+import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
@@ -34,22 +45,28 @@ class TimingRecord:
     effective_use_cuda_graph: bool
     capture_succeeded: bool | None       # None when no capture was attempted
     capture_error: str | None
-    graph_prep_runs: int                 # eager runs consumed by capture preparation
+    graph_prep_runs: int                 # eager runs consumed by capture preparation (incl. the capture run)
     timing_execution_mode: str           # graph | eager
     flush_before_each_launch: bool
     flush_buffer_mb: int | None
     scope_names: list[str] = field(default_factory=list)
     note: str | None = None
+    profile_path: str | None = None      # retained Proton profile (hatchet JSON) when keep_profile=True
+    measured_quantity: str = "gpu_kernel_time_per_launch_ns_from_proton"
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
-def _capture(f: Callable[[], Any]) -> tuple[Callable[[], Any] | None, str | None]:
+def _capture(f: Callable[[], Any], before_each: Callable[[], None] | None) -> tuple[Callable[[], Any] | None, str | None]:
     try:
         for _ in range(GRAPH_PREP_RUNS):
+            if before_each is not None:
+                before_each()
             f()
         torch.cuda.synchronize()
+        if before_each is not None:
+            before_each()
         graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(graph):
             static_out = f()
@@ -63,11 +80,18 @@ def _capture(f: Callable[[], Any]) -> tuple[Callable[[], Any] | None, str | None
         return None, f"{type(e).__name__}: {e}"
 
 
+def _finite_positive(x: float) -> bool:
+    return isinstance(x, (int, float)) and math.isfinite(x) and x > 0
+
+
 def measure(f: Callable[[], Any], *, warmup: int = 1, repeat: int = 3, use_cuda_graph: bool = True,
             flush: bool = True, before_launch: Callable[[], None] | None = None,
-            proton_output_dir: str | None = None, label: str | None = None) -> TimingRecord:
+            proton_output_dir: str | None = None, label: str | None = None,
+            keep_profile: bool = False) -> TimingRecord:
     """f() runs the whole operator on fixed inputs. before_launch() restores
-    mutated inputs (outside the timed scope) when the contract requires it."""
+    mutated inputs (outside the timed scope) when the contract requires it;
+    it runs before the warmup, before every capture-preparation launch and
+    before every timed launch."""
     proton = core_timer.proton
     if proton is None:
         raise RuntimeError("triton.profiler (proton) is not available")
@@ -88,8 +112,9 @@ def measure(f: Callable[[], Any], *, warmup: int = 1, repeat: int = 3, use_cuda_
     runner, capture_error, prep = f, None, 0
     captured: bool | None = None
     if effective:
-        pre()
-        runner, capture_error = _capture(f)
+        if flush:
+            core_timer._flush_l2_cache()
+        runner, capture_error = _capture(f, before_launch)
         prep = GRAPH_PREP_RUNS + 1
         captured = runner is not None
         if runner is None:
@@ -108,11 +133,14 @@ def measure(f: Callable[[], Any], *, warmup: int = 1, repeat: int = 3, use_cuda_
     finally:
         proton.finalize(session=session)
     data, path = core_timer._load_profile_data(base)
-    try:
-        import os
-        os.remove(path)
-    except OSError:
-        pass
+    profile_path = None
+    if keep_profile:
+        profile_path = path
+    else:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
     roots = data if isinstance(data, list) else [data]
     samples = []
     for name in scopes:
@@ -122,10 +150,12 @@ def measure(f: Callable[[], Any], *, warmup: int = 1, repeat: int = 3, use_cuda_
             if ns > 0:
                 break
         samples.append(ns / 1e6)
-    mean = sum(samples) / len(samples) if all(s > 0 for s in samples) else None
+    ok = bool(samples) and all(_finite_positive(s) for s in samples)
+    mean = sum(samples) / len(samples) if ok else None
     return TimingRecord(warmup_runs=warmup, timed_runs=repeat, samples_ms=samples, mean_ms=mean,
                         requested_use_cuda_graph=bool(use_cuda_graph), effective_use_cuda_graph=effective and bool(captured),
                         capture_succeeded=captured, capture_error=capture_error, graph_prep_runs=prep,
                         timing_execution_mode="graph" if (effective and captured) else "eager",
                         flush_before_each_launch=flush, flush_buffer_mb=flush_mb, scope_names=scopes,
-                        note=None if samples and all(s > 0 for s in samples) else "a scope reported zero time")
+                        note=None if ok else "a scope reported zero, negative or non-finite time",
+                        profile_path=profile_path)

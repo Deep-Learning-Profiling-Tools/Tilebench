@@ -828,9 +828,8 @@ reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(a, b, block_size=None, autotune=False,
-**kwargs)`: `a`, `b` positional; keywords may be ignored and unknown
-keywords must be accepted.
+The entry point is called as `run(a, b)`: `a`, `b` positional; no keyword
+arguments are passed.
 
 - `a`: `(M, K)`, contiguous row-major, dtype one of fp16, bf16, fp32.
   Read-only.

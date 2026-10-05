@@ -101,10 +101,16 @@ assigned to any task; assigning it requires approval per task.
 
 ## C. Study configuration
 
-C1. **Model ids and decoding settings** — `manifests/models.yaml`: generator
-`gpt`/`claude`, distiller, (optional) reviewer. All `null`, status `unset`.
-The legacy defaults (`gpt-5.5`, `claude-opus-4-7`, effort `xhigh`,
-`max_tokens 128000`) are NOT inherited.
+C1. **Model ids and decoding settings** — `manifests/models.yaml` now
+carries the owner's instruction of 2026-10-05 as `status: candidate`:
+`gpt` = `gpt-6.1-sol`, `reasoning.effort=xhigh`, `max_output_tokens=128000`
+(`OPENAI_API_KEY`); `claude` = `claude-opus-5-5`, `output_config.effort=xhigh`
+(not `max`), adaptive thinking, `max_tokens=128000` (`CLAUDE_API_KEY`). Both
+were verified live on 2026-10-05 (`outputs/llm_v2/probes/*_probe.json`:
+echoed model ids, `completed` / `end_turn`). Validation runs accept
+`candidate`; formal campaigns still require the owner to set
+`status: approved` (nothing was approved by the framework). The distiller
+role stays `unset` (role/settings pending; no Base data exists).
 
 C2. **Fold assignment** — `manifests/folds.yaml` is `proposed` (families
 kept whole; 15/15/15). Set `status: frozen` + `approved_by` before any
@@ -138,9 +144,19 @@ API-sendability, and whether generated NKI kernels / distilled skills may
 leave the private repository (`docs/llm_v2/NKI_HANDOFF.md §4`).
 
 D4. **Approval of drafts**: Reference (3) and Device (4) skills are `draft`;
-the loader injects only `approved`/`frozen` in live mode. Device snapshots
-for GH200/MI300X/Trn2 are `verified_on_device: false` until the capture
-checklist is run there.
+formal campaigns inject only `approved`/`frozen` (validation runs record
+the draft hashes they used). Device snapshots for GH200/MI300X/Trn2 are
+`verified_on_device: false` until the capture checklist is run there.
+
+D6. **Provider and publication grants** (`skills/manifest.json`:
+`sendable_to`, `publishable`; independent of `status`). Set on 2026-10-05:
+public Triton/cuTile references and the four device snapshots are granted
+to `openai` and `anthropic` and are publishable (they derive from public
+documentation and the repository's own public skills, which the paper
+campaign already sent to both providers); the TileLang reference
+(`internal`, from a local unlicensed guide) and NKI (`private`) carry no
+grant, so no TileLang/NKI body can be sent or published until the owner
+grants it explicitly. Confirm or revoke the public grants.
 
 D5. **B200 peak inconsistency** (see B2) also appears in the B200 Device
 Context text (both figures quoted, [S2] kept authoritative).
@@ -149,17 +165,66 @@ Context text (both figures quoted, [S2] kept authoritative).
 
 E1. The generated `run()` is called positionally with the operator's
 generator outputs, exactly like `impl_torch.run`; no `block_size`/`autotune`
-kwargs are passed (stated in the system prompt). Many draft contracts still
-describe the manual call form with those framework keywords ("may be
-accepted and ignored"); `top_k_selection`'s draft says an implementation
-"may honour `block_size`". Decide whether to strip these mentions from the
-contracts before approval (they are not tunables, but they are legacy
-interface noise). **[protocol: "核对 run() 的真实签名"]**
+kwargs are passed (stated in the system prompt). Done on 2026-10-05 per the
+owner's instruction: all 45 contracts now state the positional call form
+and the legacy "accept and ignore `block_size`/`autotune`" sentences were
+removed (contract hashes changed; all still `draft`/`needs-review`). The
+semantic keyword defaults that the generator does not pass (`causal=True`
+for flash_attention, `eps` for layernorm/rmsnorm) are named as defaults.
 
-E2. Graph timing: a failed CUDA-graph capture is recorded and the launch
-runs eagerly (`timing_execution_mode: eager`, `capture_succeeded: false`);
-such a candidate is still valid. If the owner prefers "capture failure =
-timing_error", change `evaluation/timing.py`. **[protocol]**
+E6. **Interface errors** are an ordinary round-consuming failure
+(`interface_error`): no callable `run`/`get_last_config`, a
+`get_last_config()` that raises, returns a non-dict or a non-serializable
+dict, or a configuration that differs between reads (after the first
+execution, after the numerical checks, after timing). Not a repair
+trigger, not a hacking verdict. Confirm. **[protocol: round outcome set]**
+
+E7. **Execution-confirmed violations** (an autotuner object reachable from
+the generated module; an output that shares storage with an input where the
+contract requires a fresh output) are treated as confirmed violations after
+the candidate cleared the static check: the attempt verdict becomes
+`confirmed_violation` and the same-round repair rule applies (≤3
+generations). Confirm. **[protocol]**
+
+E8. **Capture-failure policy** is versioned in `study.yaml`
+(`timing.capture_failure_policy: time_eagerly_and_flag`): the candidate is
+timed eagerly, the record says so, metrics/exports flag the round
+(`timing_mode_differs`); the round stays valid. Alternative: declare such a
+round `timing_error`. Rule. **[protocol]** (supersedes E2)
+
+E9. **Run types** (`study.yaml:run_types`): `validation` = engineering
+acceptance of the execution chain with real models and real devices,
+unscored, draft assets allowed and recorded, never a distillation source;
+`formal` = scored. The validation campaign of 2026-10-05 ran under this
+label. Confirm the separation and the label.
+
+E10. **Static-check corroboration**: a contract regex of level `confirmed`
+is confirmed only when it hits in its declared scope (host code by default;
+kernel bodies are tile arithmetic) on a computational line of comment- and
+string-stripped text; otherwise it is downgraded to `review_required`.
+Rule scopes were assigned to all 250 rules (233 host, 17 any). Confirm.
+
+E12. **Evaluation wall-clock limit per candidate.** The launcher kills the
+isolated worker after `--worker-timeout` seconds (default 1800). When the
+worker's progress marker shows the candidate had been loaded, the round is
+an ordinary `runtime_error` ("candidate exceeded the evaluation wall-clock
+limit during phase X"; the round is consumed, no repair, the model is
+told); before that point it is `infrastructure_incomplete` and may be
+re-opened with `--resume --retry-incomplete` (re-evaluation only, no new
+request). Observed in the validation campaign: a cuTile candidate whose
+unrolled kernel produced a 20 MB PTX kept `ptxas` busy for the full 30
+minutes while holding the device lock. Decide the formal limit (the
+validation campaign used 1800 s, then 600 s for the re-opened round) and
+whether it belongs in `study.yaml`. **[protocol: round outcome set]**
+
+E11. **Review decisions during validation runs** were made by the operator
+running the campaign and are recorded with the evidence in each
+trajectory's `reviews.jsonl` and `trajectory.json.notes`. Decide whether a
+formal campaign needs a second reviewer or an enabled LLM reviewer.
+
+E2. (superseded by E8) Graph timing: a failed CUDA-graph capture is
+recorded and the launch runs eagerly (`timing_execution_mode: eager`,
+`capture_succeeded: false`); such a candidate is still valid and flagged.
 
 E3. Unknown usage: a round with unknown cost makes E(B) undetermined only
 for budgets above the last known cumulative cost (every later attempt costs

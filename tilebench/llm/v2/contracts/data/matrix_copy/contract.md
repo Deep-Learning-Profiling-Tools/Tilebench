@@ -8,9 +8,8 @@ reference computes `A + 0`; for every value the benchmark supplies this is an
 identity, so a bit-exact copy satisfies the reference (a signed zero copied
 bitwise compares equal by value).
 
-The entry point is called as `run(A, N, **kwargs)`. `N` is the side length and
-equals `A.shape[0] == A.shape[1]`. Keyword arguments such as `block_size` and
-`autotune` may be accepted and ignored.
+The entry point is called as `run(A, N)`. `N` is the side length and equals
+`A.shape[0] == A.shape[1]`. No keyword arguments are passed.
 
 ## Inputs and outputs
 

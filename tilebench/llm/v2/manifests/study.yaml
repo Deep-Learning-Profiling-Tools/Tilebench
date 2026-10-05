@@ -29,6 +29,33 @@ timing:
   cache_flush: operator_boundary_outside_timed_scope
   cuda_graph_requested: true      # NVIDIA replays a graph; ROCm times eagerly
   record_prep_runs: true          # graph-capture/warm runs are counted and reported
+  # Versioned policy for a failed CUDA-graph capture on a device whose adapter
+  # requests graph replay: the candidate is timed eagerly, the timing record
+  # states capture_succeeded=false / timing_execution_mode=eager, and metrics
+  # and exports flag the round (timing_mode_differs) instead of comparing it
+  # silently with graph-timed rounds. Changing the policy changes the config
+  # hash. (The worker reads the normalized keys produced by
+  # evaluation.job.timing_settings; these names are the study's, not the
+  # worker's.)
+  capture_failure_policy: time_eagerly_and_flag
+  measured_quantity: >
+    GPU time of every kernel launched inside run() (Proton device time,
+    summed per launch). Host-side work inside run() (allocation calls,
+    metadata, Python) is not GPU time and is not counted; any extra kernel,
+    copy, fill or cast launched by run() is.
+
+# Run types. Both use the identical execution chain; only gating and the
+# downstream use of the results differ.
+run_types:
+  formal:
+    description: scored Base/Enhanced campaign; results enter E(B) curves and distillation
+    requires: [approved_contracts, approved_or_frozen_skills, approved_models, frozen_folds_for_enhanced]
+  validation:
+    description: >
+      engineering acceptance of the execution chain with real models on real
+      devices; unscored; never a distillation source; never mixed into formal
+      curves; draft contracts and draft skills are accepted and recorded
+    requires: [existing_contracts, draft_or_better_skills, candidate_or_approved_models, provider_sendable_assets]
 
 conditions:
   base: [reference_skill, device_context_skill, algorithm_contract]

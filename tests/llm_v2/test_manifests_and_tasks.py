@@ -47,9 +47,18 @@ def test_training_folds():
         ms.training_folds("D")
 
 
-def test_models_manifest_blocks_live_until_ids_are_set():
-    blockers = ms.blockers_models(ms.load_models())
-    assert any("model_id is not set" in b for b in blockers)
+def test_models_manifest_gates_by_status():
+    models = ms.load_models()
+    formal = ms.blockers_models(models)
+    assert any("status is 'candidate'" in b for b in formal)          # formal runs need owner approval
+    assert not ms.blockers_models(models, accept_status=("approved", "candidate"))
+    assert any("distiller" in b for b in ms.blockers_models(models, roles=("distiller",)))
+    for name, key_env in (("gpt", "OPENAI_API_KEY"), ("claude", "CLAUDE_API_KEY")):
+        cfg = models["roles"]["generator"][name]
+        assert cfg["api_key_env"] == key_env and cfg["max_output_tokens"] == 128000
+    assert models["roles"]["generator"]["gpt"]["reasoning_effort"] == "xhigh"
+    assert models["roles"]["generator"]["claude"]["output_effort"] == "xhigh"
+    assert models["roles"]["generator"]["claude"]["thinking"] == {"type": "adaptive"}
 
 
 def test_case_selection_takes_largest_expanded_case_not_combined_maxima():

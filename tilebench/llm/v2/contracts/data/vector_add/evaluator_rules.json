@@ -7,15 +7,15 @@
     {"id": "elementwise_add", "description": "One kernel pass over exactly n elements: load x and y, add in the native dtype (or a wider type cast back once), masked store."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.add\\(|(?<!tl)(?<!ct)(?<!nl)\\.add\\(|\\.add_\\(|\\+=", "message": "A PyTorch add on the host (or in-place accumulation into an input) replaces the kernel.", "level": "suspicious"},
-    {"pattern": "return\\s+[A-Za-z_]\\w*\\s*\\+\\s*[A-Za-z_]\\w*|output\\s*=\\s*x\\s*\\+\\s*y|out\\s*=\\s*x\\s*\\+\\s*y|\\.copy_\\(\\s*x\\s*\\+\\s*y", "message": "The whole operator is performed by the PyTorch + operator on the input tensors.", "level": "confirmed"},
-    {"pattern": "return\\s+(x|y)\\b|return\\s+(x|y)\\.|\\b(x|y)\\.copy_\\(|\\b(x|y)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious"},
-    {"pattern": "\\.(to|astype)\\(\\s*(torch|tl|ct|T|nl)?\\.?(float32|float16|bfloat16|int32|int8|half|bf16|fp16|fp32)\\b", "message": "A dtype conversion; permitted only as a widen-then-cast-back that reproduces the native-dtype result (exact for int8).", "level": "suspicious"},
-    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious"}
+    {"pattern": "torch\\.add\\(|(?<!tl)(?<!ct)(?<!nl)\\.add\\(|\\.add_\\(|\\+=", "message": "A PyTorch add on the host (or in-place accumulation into an input) replaces the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+(x\\s*\\+\\s*y|y\\s*\\+\\s*x)\\b|\\b(output|out|result|res|z)\\s*=\\s*(x\\s*\\+\\s*y|y\\s*\\+\\s*x)\\b|\\.copy_\\(\\s*(x\\s*\\+\\s*y|y\\s*\\+\\s*x)", "message": "The whole operator is performed by the PyTorch + operator on the input tensors.", "level": "confirmed", "scope": "host"},
+    {"pattern": "return\\s+(x|y)\\b|return\\s+(x|y)\\.|\\b(x|y)\\.copy_\\(|\\b(x|y)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(torch|tl|ct|T|nl)?\\.?(float32|float16|bfloat16|int32|int8|half|bf16|fp16|fp32)\\b", "message": "A dtype conversion; permitted only as a widen-then-cast-back that reproduces the native-dtype result (exact for int8).", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the add must be done by a kernel.", "level": "suspicious"},
-    {"any_of": ["tl\\.load", "ct\\.load", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the add must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.load", "ct\\.load", "load_offset", "get_raw_memory", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"},
     {"any_of": ["mask", "padding_mode", "PaddingMode", "boundary", "n_elements", "numel"], "message": "No bounds-handling evidence for a last partial block.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [

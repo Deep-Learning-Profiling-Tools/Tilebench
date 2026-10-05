@@ -98,25 +98,25 @@ def test_mock_ten_rounds_persist_and_resume_without_new_requests(tmp_path):
 
 
 def test_resume_mid_trajectory_reuses_archived_responses(tmp_path, study, folds):
-    ctx, task, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
+    ctx, job, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
     e = eligibility("vector_add", "fp16", "B200", "triton", study, folds)
     st = new_trajectory_state(e, ctx, "m", "base", "h", "c", "t")
     script = [{"text": scripted_text("impl_triton.py", f"# MOCK: valid {1.0 + i / 10}\ndef run(*a): pass\ndef get_last_config(): return {{}}")} for i in range(10)]
     cfg = RunnerConfig(model_id="m", provider_name="mock", settings={}, feedback_limits=study["feedback"])
     tdir = tmp_path / "t"
-    r1 = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider(script[:4]), evaluator=MockEvaluator(), rules=rules, cfg=cfg)
+    r1 = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider(script[:4]), evaluator=MockEvaluator(), job=job, cfg=cfg)
     for _ in range(8):      # 4 generations + 4 evaluations
         r1.step()
     assert len(st.rounds) == 4 and st.rounds[-1].status == "valid"
     # resume from disk with a provider holding only the remaining 6 responses
     st2 = TrajectoryState.load(tdir / "trajectory.json")
-    r2 = TrajectoryRunner(state=st2, tdir=tdir, ctx=ctx, provider=MockProvider(script[4:]), evaluator=MockEvaluator(), rules=rules, cfg=cfg)
+    r2 = TrajectoryRunner(state=st2, tdir=tdir, ctx=ctx, provider=MockProvider(script[4:]), evaluator=MockEvaluator(), job=job, cfg=cfg)
     assert r2.run() == "complete"
     assert len(st2.rounds) == 10 and len((tdir / "usage.jsonl").read_text().splitlines()) == 10
 
 
 def test_resume_refuses_foreign_archived_response(tmp_path, study, folds):
-    ctx, task, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
+    ctx, job, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
     e = eligibility("vector_add", "fp16", "B200", "triton", study, folds)
     st = new_trajectory_state(e, ctx, "m", "base", "h", "c", "t")
     tdir = tmp_path / "t"
@@ -124,37 +124,45 @@ def test_resume_refuses_foreign_archived_response(tmp_path, study, folds):
     adir.mkdir(parents=True)
     (adir / "response.json").write_text(json.dumps({"request_hash": "not-this-request", "result": {}}))
     cfg = RunnerConfig(model_id="m", provider_name="mock", settings={}, feedback_limits=study["feedback"])
-    r = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider([]), evaluator=MockEvaluator(), rules=rules, cfg=cfg)
+    r = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider([]), evaluator=MockEvaluator(), job=job, cfg=cfg)
     with pytest.raises(ConfigMismatch):
         r.step()
 
 
 def test_transport_exhaustion_is_incomplete_not_fabricated(tmp_path, study, folds):
-    ctx, task, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
+    ctx, job, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
     e = eligibility("vector_add", "fp16", "B200", "triton", study, folds)
     st = new_trajectory_state(e, ctx, "m", "base", "h", "c", "t")
     cfg = RunnerConfig(model_id="m", provider_name="mock", settings={}, max_transport_retries=1, feedback_limits=study["feedback"])
     r = TrajectoryRunner(state=st, tdir=tmp_path / "t", ctx=ctx, provider=MockProvider([{"text": "x", "transport_failures": 5}]),
-                         evaluator=MockEvaluator(), rules=rules, cfg=cfg, sleep=lambda s: None)
+                         evaluator=MockEvaluator(), job=job, cfg=cfg, sleep=lambda s: None)
     assert r.run() == "incomplete"
-    assert st.rounds[0].status == "infrastructure_incomplete" and st.rounds[0].attempts[0].cost is None
-    assert len(st.transport_log) == 2
+    # connection-level failures never reached the provider: cost is a known 0, not unknown
+    assert st.rounds[0].status == "infrastructure_incomplete" and st.rounds[0].attempts[0].cost == 0
+    assert st.rounds[0].attempts[0].cost_status == "known" and len(st.transport_log) == 2
+    # a failure that may have been billed (timeout after sending) leaves the cost unknown
+    st2 = new_trajectory_state(e, ctx, "m", "base", "h", "c", "t")
+    r2 = TrajectoryRunner(state=st2, tdir=tmp_path / "t2", ctx=ctx,
+                          provider=MockProvider([{"text": "x", "transport_failures": 5, "transport_charged": "unknown"}]),
+                          evaluator=MockEvaluator(), job=job, cfg=cfg, sleep=lambda s: None)
+    assert r2.run() == "incomplete" and st2.rounds[0].attempts[0].cost is None
+    assert st2.rounds[0].attempts[0].cost_status == "unknown"
 
 
 def test_no_cross_task_context_in_prompts(tmp_path, study, folds):
     """A trajectory for operator A never sees code or runtimes of operator B."""
-    ctx_a, task_a, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
-    ctx_b, task_b, _ = synthetic_context("relu", "fp16", "B200", "triton", "base", study, folds)
+    ctx_a, job_a, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
+    ctx_b, job_b, _ = synthetic_context("relu", "fp16", "B200", "triton", "base", study, folds)
     e_a = eligibility("vector_add", "fp16", "B200", "triton", study, folds)
     e_b = eligibility("relu", "fp16", "B200", "triton", study, folds)
     cfg = RunnerConfig(model_id="m", provider_name="mock", settings={}, feedback_limits=study["feedback"])
     marker = "RELU_SECRET_MARKER_42"
     pb = MockProvider([{"text": scripted_text("impl_triton.py", f"# MOCK: valid 1.0\n# {marker}\ndef run(*a): pass\ndef get_last_config(): return {{}}")}] * 2)
     sb = new_trajectory_state(e_b, ctx_b, "m", "base", "h", "c", "t")
-    TrajectoryRunner(state=sb, tdir=tmp_path / "b", ctx=ctx_b, provider=pb, evaluator=MockEvaluator(), rules=rules, cfg=cfg).step()
+    TrajectoryRunner(state=sb, tdir=tmp_path / "b", ctx=ctx_b, provider=pb, evaluator=MockEvaluator(), job=job_b, cfg=cfg).step()
     pa = MockProvider([{"text": scripted_text("impl_triton.py", "# MOCK: valid 1.0\ndef run(*a): pass\ndef get_last_config(): return {}")}] * 4)
     sa = new_trajectory_state(e_a, ctx_a, "m", "base", "h", "c", "t")
-    ra = TrajectoryRunner(state=sa, tdir=tmp_path / "a", ctx=ctx_a, provider=pa, evaluator=MockEvaluator(), rules=rules, cfg=cfg)
+    ra = TrajectoryRunner(state=sa, tdir=tmp_path / "a", ctx=ctx_a, provider=pa, evaluator=MockEvaluator(), job=job_a, cfg=cfg)
     for _ in range(4):
         ra.step()
     assert all(marker not in req.user for req in pa.requests)

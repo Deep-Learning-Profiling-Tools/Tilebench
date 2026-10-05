@@ -20,8 +20,8 @@ are independent.
 - eps: keyword float, default 1e-5 (the benchmark does not pass it).
 - Y: a freshly allocated tensor with X's shape and dtype, allocated inside
   the entry point. No aliasing.
-- The entry point takes (X, WEIGHT, BIAS) positionally plus the keywords
-  `eps` and `autotune`; the benchmark passes nothing else.
+- The entry point takes (X, WEIGHT, BIAS) positionally; `eps` keeps its
+  default and no keyword arguments are passed.
 
 ## Required logical stages
 1. Shape bookkeeping and allocation: 2-D (batch*M, K) views of X and Y;

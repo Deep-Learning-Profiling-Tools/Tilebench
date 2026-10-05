@@ -8,11 +8,11 @@
     {"id": "s3", "description": "Final normalisation O / l, rounded to the output dtype and stored; the whole operator is one launch with no global intermediate."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "scaled_dot_product_attention|torch\\.nn\\.functional\\.multi_head_attention_forward|torch\\.nn\\.MultiheadAttention|flash_attn", "message": "library attention replaces the whole computation", "level": "confirmed"},
-    {"pattern": "torch\\.(matmul|bmm|baddbmm|einsum|mm)\\(|\\.softmax\\(|torch\\.softmax|F\\.softmax|torch\\.log_softmax", "message": "host-side matmul/softmax performs an attention stage", "level": "suspicious"},
-    {"pattern": "torch\\.(zeros|zeros_like|full|empty)\\(", "message": "extra buffer; no global scratch or materialised score matrix is permitted (only the output via torch.empty_like)", "level": "suspicious"},
-    {"pattern": "torch\\.(exp|max|amax|sum|tril|triu|ones)\\(", "message": "host-side softmax statistics or mask materialisation", "level": "suspicious"},
-    {"pattern": "lse|logsumexp|log_sum_exp", "message": "log-sum-exp side output or split-key combine is not part of this operator", "level": "suspicious"}
+    {"pattern": "scaled_dot_product_attention|torch\\.nn\\.functional\\.multi_head_attention_forward|torch\\.nn\\.MultiheadAttention|flash_attn", "message": "library attention replaces the whole computation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(matmul|bmm|baddbmm|einsum|mm)\\(|\\.softmax\\(|torch\\.softmax|F\\.softmax|torch\\.log_softmax", "message": "host-side matmul/softmax performs an attention stage", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty)\\(", "message": "extra buffer; no global scratch or materialised score matrix is permitted (only the output via torch.empty_like)", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(exp|max|amax|sum|tril|triu|ones)\\(", "message": "host-side softmax statistics or mask materialisation", "level": "suspicious", "scope": "host"},
+    {"pattern": "lse|logsumexp|log_sum_exp", "message": "log-sum-exp side output or split-key combine is not part of this operator", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "matmul", "\\bdot\\("], "message": "tile matmul for QK^T and PV", "level": "suspicious"},

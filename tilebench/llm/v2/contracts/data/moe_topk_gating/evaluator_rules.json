@@ -10,13 +10,13 @@
     {"id": "store_outputs", "description": "Store weights cast to logits.dtype and int32 indices; fused with the previous stages in one launch."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.topk\\(|\\.topk\\(", "message": "torch.topk replaces the whole selection stage.", "level": "confirmed"},
-    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(|(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(", "message": "Host-side sort/argsort replaces the selection stage.", "level": "suspicious"},
-    {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|\\.softmax\\(|torch\\.exp\\(|torch\\.logsumexp", "message": "Host-side softmax/exp replaces the normalisation stage.", "level": "suspicious"},
-    {"pattern": "torch\\.max\\(|torch\\.argmax\\(|torch\\.amax\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take_along_dim", "message": "Host-side max/argmax/gather assembles the outputs with PyTorch.", "level": "suspicious"},
-    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32|\\.half\\(\\)|\\.to\\(\\s*torch\\.(float16|bfloat16)", "message": "Host-side dtype conversion of logits or of the outputs is an extra pass; conversions belong inside the kernel.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros|torch\\.full\\(|torch\\.ones", "message": "No initialised global scratch is part of this operator.", "level": "suspicious"},
-    {"pattern": "\\.clone\\(\\)|\\.copy_\\(|\\.contiguous\\(\\)", "message": "A host-side copy of logits inside run() is not permitted.", "level": "suspicious"}
+    {"pattern": "torch\\.topk\\(|\\.topk\\(", "message": "torch.topk replaces the whole selection stage.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(|(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(", "message": "Host-side sort/argsort replaces the selection stage.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|\\.softmax\\(|torch\\.exp\\(|torch\\.logsumexp", "message": "Host-side softmax/exp replaces the normalisation stage.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.max\\(|torch\\.argmax\\(|torch\\.amax\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take_along_dim", "message": "Host-side max/argmax/gather assembles the outputs with PyTorch.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32|\\.half\\(\\)|\\.to\\(\\s*torch\\.(float16|bfloat16)", "message": "Host-side dtype conversion of logits or of the outputs is an extra pass; conversions belong inside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.full\\(|torch\\.ones", "message": "No initialised global scratch is part of this operator.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.clone\\(\\)|\\.copy_\\(|\\.contiguous\\(\\)", "message": "A host-side copy of logits inside run() is not permitted.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.argmax", "ct\\.argmax", "T\\.reduce_argmax", "nl\\.argmax", "nisa\\.max8", "argmax"], "message": "No kernel-level argmax found; the selection must be done in the kernel.", "level": "suspicious"},

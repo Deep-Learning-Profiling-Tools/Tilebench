@@ -20,10 +20,8 @@ reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(X, S, M, N, TILE_SIZE, block_size=...,
-autotune=False, **kwargs)`: the five problem arguments positional;
-`block_size` carries an integer default the implementation may ignore, the
-keywords may be ignored and unknown keywords must be accepted.
+The entry point is called as `run(X, S, M, N, TILE_SIZE)`: the five problem
+arguments positional; no keyword arguments are passed.
 
 - `X`: `(M, N)`, contiguous row-major, dtype one of fp16, bf16, fp32.
   Read-only.

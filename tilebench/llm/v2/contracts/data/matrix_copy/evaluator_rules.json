@@ -7,15 +7,15 @@
     {"id": "stream_copy", "description": "One kernel pass that reads every element of A exactly once and writes it unchanged to the same position of the output, with correct tail handling for N*N elements."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.clone\\(|\\.clone\\(\\)|\\.copy_\\(|torch\\.Tensor\\.to\\(|copy\\s*=\\s*True", "message": "The copy must be performed by the kernel, not by a PyTorch clone/copy.", "level": "confirmed"},
-    {"pattern": "return\\s+A\\b|return\\s+A\\.view|return\\s+A\\.reshape|return\\s+A\\.contiguous", "message": "Returning the input or a view of it violates the fresh-output requirement.", "level": "confirmed"},
-    {"pattern": "\\bA\\s*\\+\\s*0\\b|\\bA\\s*\\*\\s*1\\b|torch\\.add\\(|torch\\.mul\\(", "message": "Host-side arithmetic identity on the input replaces the whole computation.", "level": "suspicious"},
-    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in matrix_copy.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "No initialised scratch buffer is part of this operator; only torch.empty / torch.empty_like are expected.", "level": "suspicious"}
+    {"pattern": "torch\\.clone\\(|\\.clone\\(\\)|\\.copy_\\(|torch\\.Tensor\\.to\\(|copy\\s*=\\s*True", "message": "The copy must be performed by the kernel, not by a PyTorch clone/copy.", "level": "confirmed", "scope": "host"},
+    {"pattern": "return\\s+A\\b|return\\s+A\\.view|return\\s+A\\.reshape|return\\s+A\\.contiguous", "message": "Returning the input or a view of it violates the fresh-output requirement.", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\bA\\s*\\+\\s*0\\b|\\bA\\s*\\*\\s*1\\b|torch\\.add\\(|torch\\.mul\\(", "message": "Host-side arithmetic identity on the input replaces the whole computation.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in matrix_copy.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "No initialised scratch buffer is part of this operator; only torch.empty / torch.empty_like are expected.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the copy must be done by a kernel.", "level": "suspicious"},
-    {"any_of": ["tl\\.load", "ct\\.load", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"}
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the copy must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.load", "ct\\.load", "load_offset", "get_raw_memory", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [
     "torch.empty",

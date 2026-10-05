@@ -37,7 +37,8 @@ class MockProvider:
             self._armed = self._cursor
         if self._pending_failures > 0:
             self._pending_failures -= 1
-            raise TransportError(f"mock transport failure for script item {self._cursor}")
+            raise TransportError(f"mock transport failure for script item {self._cursor}",
+                                 charged=item.get("transport_charged", "no"))
         self._cursor += 1
         if item.get("usage_missing"):
             usage = unknown(self.name, self.usage_schema, "mock: usage withheld")

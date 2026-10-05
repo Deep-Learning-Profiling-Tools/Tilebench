@@ -8,12 +8,12 @@
     {"id": "normalise_store", "description": "Divide each row total by the exact N in float32 (or multiply by a float32 reciprocal) and store one float32 per row; fused with the sum in the same launch."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.mean\\(|\\.mean\\(|torch\\.nanmean|\\.nanmean\\(", "message": "The mean must be computed by the kernel, not by PyTorch.", "level": "confirmed"},
-    {"pattern": "torch\\.sum\\(|(?<!tl)(?<!ct)(?<!nl)\\.sum\\(|torch\\.einsum|torch\\.matmul|torch\\.mv\\(|\\s@\\s", "message": "Host-side row sums (sum/einsum/matmul with a ones vector) replace the reduction stage.", "level": "suspicious"},
-    {"pattern": "torch\\.cumsum|torch\\.logsumexp|torch\\.add\\(", "message": "Host-side arithmetic on x inside run() is not part of this operator.", "level": "suspicious"},
-    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float32", "message": "Casting x to float32 on the host is an untimed-equivalent extra pass; the conversion must happen inside the kernel.", "level": "suspicious"},
-    {"pattern": "dtype\\s*=\\s*(tl|ct|T|nl)\\.(float16|bfloat16|fp16|bf16)", "message": "A float16/bfloat16 accumulator violates the float32 accumulation requirement.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "No initialised global scratch is part of this operator; partial sums must stay on chip.", "level": "suspicious"}
+    {"pattern": "torch\\.mean\\(|\\.mean\\(|torch\\.nanmean|\\.nanmean\\(", "message": "The mean must be computed by the kernel, not by PyTorch.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.sum\\(|(?<!tl)(?<!ct)(?<!nl)\\.sum\\(|torch\\.einsum|torch\\.matmul|torch\\.mv\\(|\\s@\\s", "message": "Host-side row sums (sum/einsum/matmul with a ones vector) replace the reduction stage.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.cumsum|torch\\.logsumexp|torch\\.add\\(", "message": "Host-side arithmetic on x inside run() is not part of this operator.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float32", "message": "Casting x to float32 on the host is an untimed-equivalent extra pass; the conversion must happen inside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "dtype\\s*=\\s*(tl|ct|T|nl)\\.(float16|bfloat16|fp16|bf16)", "message": "A float16/bfloat16 accumulator violates the float32 accumulation requirement.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "No initialised global scratch is part of this operator; partial sums must stay on chip.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce_sum", "reduce"], "message": "No kernel-level sum reduction found.", "level": "suspicious"},

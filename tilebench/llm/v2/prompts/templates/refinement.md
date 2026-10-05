@@ -29,16 +29,7 @@
 
 # Optimization round {{round}} of {{rounds}}
 
-## Previous candidate (round {{prev_round}})
-
-```python title="{{output_file}}"
-{{prev_source}}
-```
-
-Configuration reported by `get_last_config()`: `{{prev_config}}`
-
-Outcome: {{prev_outcome}}
-{{prev_diagnostics_block}}
+{{prev_block}}
 {{best_valid_block}}
 ## Runtime history of this task (valid candidates only; ms, mean of 3 timed runs after 1 warmup)
 

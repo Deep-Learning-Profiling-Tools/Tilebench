@@ -15,9 +15,8 @@ bit-exactly and the dtype is preserved (including the integer dtype).
 - N: Python int, the element count of A and B (third positional argument).
 - OUT: a freshly allocated contiguous tensor of shape (2N,) and dtype A.dtype,
   allocated inside the entry point on every call. It aliases nothing.
-- Neither input may be mutated. The entry point takes (A, B, N) positionally
-  plus the framework keywords `block_size`, `autotune` and `**kwargs`; extra
-  keywords must be accepted and may be ignored.
+- Neither input may be mutated. The entry point takes (A, B, N) positionally;
+  no keyword arguments are passed.
 
 ## Required logical stages
 1. Output allocation: an uninitialised buffer of length 2N (inside the entry

@@ -26,9 +26,8 @@ the kernel_rows / kernel_cols / input_rows / input_cols it is given.
   input's dtype, freshly allocated inside run() on every call (an empty
   tensor if the image has no elements); no aliasing with any input.
 - No input may be modified.
-- Call form: `run(input, kernel, input_rows, input_cols, kernel_rows, kernel_cols, block_size=..., autotune=False, **kwargs)`.
-  The keyword knobs are framework knobs; ignore them and never run a
-  configuration search.
+- Call form: `run(input, kernel, input_rows, input_cols, kernel_rows, kernel_cols)`,
+  positional; no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
 1. For each output element, accumulate the kernel_rows * kernel_cols tap

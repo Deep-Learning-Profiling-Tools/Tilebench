@@ -11,10 +11,8 @@ reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(input, N, k, block_size=None,
-autotune=False, **kwargs)`: `input`, `N`, `k` positional; unknown keywords
-must be accepted. The implementation may honour `block_size` as a
-suggestion or ignore it.
+The entry point is called as `run(input, N, k)`: `input`, `N`, `k` positional;
+no keyword arguments are passed.
 
 - `input`: `(N,)`, contiguous, fp32 only (the only dtype swept), on the
   CUDA device. Read-only. `N == input.shape[0]`.

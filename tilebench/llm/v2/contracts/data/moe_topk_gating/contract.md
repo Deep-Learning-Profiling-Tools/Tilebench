@@ -17,9 +17,8 @@ This is the reference `torch.topk(logits, k, dim=-1, largest=True,
 sorted=True)` followed by `softmax(vals.float()).to(logits.dtype)` and
 `idx.to(torch.int32)`.
 
-The entry point is called as `run(logits, M, E, k, **kwargs)` where
-`logits.shape == (M, E)`. Keyword arguments such as `block_size` and
-`autotune` may be accepted and ignored.
+The entry point is called as `run(logits, M, E, k)` where
+`logits.shape == (M, E)`. No keyword arguments are passed.
 
 ## Inputs and outputs
 

@@ -18,9 +18,8 @@ int32 integers and verification is exact (zero tolerance).
 - Output: exactly one tensor of shape (num_bins,) in int32, freshly
   allocated inside run() on every call; no aliasing with any input.
 - No input may be modified.
-- Call form: `run(input, N, num_bins, block_size=None, autotune=False, **kwargs)`.
-  `block_size` and `autotune` are framework knobs; ignore them and never
-  run a configuration search.
+- Call form: `run(input, N, num_bins)`, positional; no keyword arguments are
+  passed. Never run a configuration search.
 
 ## Required logical stages
 1. Scratch initialisation: inside run(), allocate a global int32 scratch of

@@ -17,9 +17,10 @@ y[n, c] = (x[n, c] - mean_c) * rsqrt(var_c + eps) * gamma_c + beta_c
 No running statistics are produced or consumed. `N >= 2` in every case
 (the reference's `N == 1` special case is out of scope).
 
-The entry point is called as `run(input, gamma, beta, N, C, eps,
-**kwargs)`; `N`, `C` are ints and `eps` a float, all positional. It must
-accept and ignore `block_size` and `autotune`.
+The entry point is called as `run(input, gamma, beta, N, C, eps)`; `N`, `C` are ints and `eps` a float, all positional.
+The entry point is called positionally with exactly the inputs listed below;
+no keyword arguments are passed (declared keyword parameters, if any, must
+have defaults and must not affect the computation).
 
 ## Inputs and outputs
 

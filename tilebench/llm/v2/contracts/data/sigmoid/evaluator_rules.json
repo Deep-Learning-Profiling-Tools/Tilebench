@@ -7,14 +7,14 @@
     {"id": "elementwise_sigmoid", "description": "One kernel pass over exactly N elements: load, upcast to fp32, evaluate 1/(1+exp(-x)) (any equivalent formulation), downcast once, masked store."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|\\.sigmoid_\\(", "message": "The whole operator is performed by a PyTorch sigmoid routine.", "level": "confirmed"},
-    {"pattern": "torch\\.(exp|tanh|reciprocal|neg|div|add|mul)\\(|torch\\.special\\.", "message": "Host-side PyTorch elementwise arithmetic computing the sigmoid outside the kernel.", "level": "suspicious"},
-    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp|exp\\([^\\n]*\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half)", "message": "The exponential appears to be evaluated in half precision; it must be fp32.", "level": "suspicious"},
-    {"pattern": "return\\s+X\\b|return\\s+X\\.|X\\.copy_\\(|X\\.sigmoid_\\(|X\\[.*\\]\\s*=", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious"},
-    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious"}
+    {"pattern": "torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|\\.sigmoid_\\(", "message": "The whole operator is performed by a PyTorch sigmoid routine.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(exp|tanh|reciprocal|neg|div|add|mul)\\(|torch\\.special\\.", "message": "Host-side PyTorch elementwise arithmetic computing the sigmoid outside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp|exp\\([^\\n]*\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half)", "message": "The exponential appears to be evaluated in half precision; it must be fp32.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+X\\b|return\\s+X\\.|X\\.copy_\\(|X\\.sigmoid_\\(|X\\[.*\\]\\s*=", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["tl\\.sigmoid", "tl\\.exp", "tl\\.exp2", "ct\\.exp", "ct\\.exp2", "T\\.exp", "T\\.exp2", "nl\\.exp", "nl\\.sigmoid", "nisa\\.activation", "sigmoid", "exp"], "message": "No exponential / sigmoid primitive found in the kernel.", "level": "suspicious"},
     {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 upcast evidence; the sigmoid must be evaluated in fp32.", "level": "suspicious"}
   ],

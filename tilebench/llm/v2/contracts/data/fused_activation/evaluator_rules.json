@@ -6,10 +6,10 @@
     {"id": "s1", "description": "Single element-wise pass: z = x*gate + bias and out = z*sigmoid(z) (any equivalent algebraic form) in fp32, stored into a freshly allocated fp32 output; no intermediate, one launch."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.nn\\.functional\\.silu|F\\.silu|torch\\.nn\\.SiLU|torch\\.nn\\.functional\\.swish|F\\.swish", "message": "library SiLU replaces the whole activation", "level": "confirmed"},
-    {"pattern": "torch\\.sigmoid|torch\\.special\\.expit|torch\\.nn\\.functional\\.sigmoid|F\\.sigmoid|torch\\.nn\\.Sigmoid", "message": "host-side sigmoid performs the activation", "level": "suspicious"},
-    {"pattern": "torch\\.(exp|mul|add|addcmul|multiply|div)\\(|x\\s*\\*\\s*gate\\s*\\+\\s*bias", "message": "host-side tensor arithmetic performs the fused multiply-add", "level": "suspicious"},
-    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like|cat|stack)\\(", "message": "extra buffer; only the fp32 output allocation is permitted", "level": "suspicious"}
+    {"pattern": "torch\\.nn\\.functional\\.silu|F\\.silu|torch\\.nn\\.SiLU|torch\\.nn\\.functional\\.swish|F\\.swish", "message": "library SiLU replaces the whole activation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.sigmoid|torch\\.special\\.expit|torch\\.nn\\.functional\\.sigmoid|F\\.sigmoid|torch\\.nn\\.Sigmoid", "message": "host-side sigmoid performs the activation", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(exp|mul|add|addcmul|multiply|div)\\(|x\\s*\\*\\s*gate\\s*\\+\\s*bias", "message": "host-side tensor arithmetic performs the fused multiply-add", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like|cat|stack)\\(", "message": "extra buffer; only the fp32 output allocation is permitted", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["sigmoid", "exp2", "\\bexp\\(", "nl\\.exp", "T\\.exp", "nl\\.sigmoid", "nisa\\.activation"], "message": "sigmoid / exponential of z", "level": "suspicious"},

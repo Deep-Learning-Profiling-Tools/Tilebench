@@ -26,9 +26,8 @@ case; the flag must be honoured, with `causal=False` meaning full attention.
 - Output: exactly one tensor with q's shape and dtype, freshly allocated
   inside run() on every call; no aliasing with any input.
 - No input may be modified.
-- Call form: `run(q, k, v, causal=True, autotune=False, **kwargs)`. The
-  keyword knobs are framework knobs; ignore `autotune`/`block_size` and never
-  run a configuration search.
+- Call form: `run(q, k, v)`, positional; `causal` keeps its default `True` and
+  no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
 1. Query block setup: one program owns one block of query rows of one

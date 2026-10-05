@@ -6,9 +6,8 @@ Given a 1-D tensor `x` of length `n`, produce a new tensor `y` of the same
 shape and dtype with `y[i] == max(x[i], 0)` for every element. This is the
 reference `torch.relu(x)`, defined for the floating dtypes and for int8.
 
-The entry point is called as `run(x, **kwargs)`; `n` is `x.numel()`.
-Keyword arguments such as `block_size` and `autotune` may be accepted and
-ignored.
+The entry point is called as `run(x)`; `n` is `x.numel()`. No keyword
+arguments are passed.
 
 ## Inputs and outputs
 

@@ -32,9 +32,8 @@ Values are copied bit-exactly; no arithmetic is performed.
   call) or must be freshly produced on every call is an open review item
   (see below); until it is resolved either policy is accepted, and the
   evaluator will flag the persistent policy for review.
-- Call form: `run(kv_nope, kv_rope, dest_loc, o_nope, o_rope, autotune=False)`.
-  `autotune` is a framework knob; ignore it and never run a configuration
-  search.
+- Call form: `run(kv_nope, kv_rope, dest_loc, o_nope, o_rope)`, all positional;
+  no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
 1. Output initialisation: the output buffers hold the contents of `o_nope` /

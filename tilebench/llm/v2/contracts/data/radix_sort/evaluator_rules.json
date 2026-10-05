@@ -10,13 +10,13 @@
     {"id": "lsd_pass_loop", "description": "Passes run least-significant digit first and together cover all 32 key bits, swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.msort\\(|torch\\.topk\\(|torch\\.unique\\(", "message": "A PyTorch sort replaces the whole computation.", "level": "confirmed"},
-    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(|\\.msort\\(|\\.topk\\(", "message": "A tensor-method sort on the host replaces the whole computation.", "level": "suspicious"},
-    {"pattern": "tl\\.sort\\(|ct\\.sort\\(|T\\.sort\\(|nl\\.sort\\(|bitonic|merge_sort|mergesort", "message": "A DSL comparison-sort primitive or network replaces the radix passes; it may not produce the final order.", "level": "suspicious"},
-    {"pattern": "torch\\.cumsum\\(|torch\\.bincount\\(|torch\\.histc\\(|torch\\.histogram\\(|\\.cumsum\\(\\s*(dim\\s*=\\s*)?-?\\d\\s*\\)|\\.cumsum_\\(|\\.bincount\\(", "message": "Host-side histogram or scan (torch.cumsum/bincount/histc or a tensor-method cumsum) replaces a per-pass stage; in-kernel scans are required and not flagged.", "level": "suspicious"},
-    {"pattern": "return\\s+input\\b|input\\.sort_\\(|input\\[.*\\]\\s*=|input\\.copy_\\(|input\\.fill_\\(|input\\.zero_\\(", "message": "The input must never be written or returned.", "level": "suspicious"},
-    {"pattern": "range\\(\\s*0\\s*,\\s*31\\b|range\\(\\s*31\\s*\\)|if\\s+.*all\\s*\\(.*digit|skip\\w*\\s+(the\\s+|this\\s+)?pass|pass(es)?\\s+(is|are|can be|may be)?\\s*skip", "message": "Possible data-dependent or incomplete pass coverage; all 32 bits must be processed.", "level": "suspicious"},
-    {"pattern": "_cache\\b|functools\\.lru_cache|global\\s+_", "message": "Possible state cached across calls; everything must be recomputed inside run().", "level": "suspicious"}
+    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.msort\\(|torch\\.topk\\(|torch\\.unique\\(", "message": "A PyTorch sort replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(|\\.msort\\(|\\.topk\\(", "message": "A tensor-method sort on the host replaces the whole computation.", "level": "suspicious", "scope": "host"},
+    {"pattern": "tl\\.sort\\(|ct\\.sort\\(|T\\.sort\\(|nl\\.sort\\(|bitonic|merge_sort|mergesort", "message": "A DSL comparison-sort primitive or network replaces the radix passes; it may not produce the final order.", "level": "suspicious", "scope": "any"},
+    {"pattern": "torch\\.cumsum\\(|torch\\.bincount\\(|torch\\.histc\\(|torch\\.histogram\\(|\\.cumsum\\(\\s*(dim\\s*=\\s*)?-?\\d\\s*\\)|\\.cumsum_\\(|\\.bincount\\(", "message": "Host-side histogram or scan (torch.cumsum/bincount/histc or a tensor-method cumsum) replaces a per-pass stage; in-kernel scans are required and not flagged.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|input\\.sort_\\(|input\\[.*\\]\\s*=|input\\.copy_\\(|input\\.fill_\\(|input\\.zero_\\(", "message": "The input must never be written or returned.", "level": "suspicious", "scope": "host"},
+    {"pattern": "range\\(\\s*0\\s*,\\s*31\\b|range\\(\\s*31\\s*\\)|if\\s+.*all\\s*\\(.*digit|skip\\w*\\s+(the\\s+|this\\s+)?pass|pass(es)?\\s+(is|are|can be|may be)?\\s*skip", "message": "Possible data-dependent or incomplete pass coverage; all 32 bits must be processed.", "level": "suspicious", "scope": "host"},
+    {"pattern": "_cache\\b|functools\\.lru_cache|global\\s+_", "message": "Possible state cached across calls; everything must be recomputed inside run().", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.cumsum", "ct\\.cumsum", "T\\.cumsum", "nl\\.cumsum", "nisa\\.tensor_scan", "cumsum", "prefix", "scan"], "message": "No kernel-level prefix scan found; the per-pass scan and in-block rank must be computed in kernels.", "level": "suspicious"},

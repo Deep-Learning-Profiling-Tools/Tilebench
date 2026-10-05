@@ -23,8 +23,8 @@ enabled.
 The entry point is called as `run(Q, K, V, layout_csr_row_indices,
 layout_csr_col_indices, layout_csr_row_stride_h, layout_csr_col_stride_h,
 num_layout, softmax_scale, num_heads, num_kv_heads, total_seq_len,
-BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS, block_size=None,
-autotune=False)`; all eighteen inputs are positional.
+BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS)`; all eighteen inputs
+are positional. The entry point is called positionally with exactly the inputs listed below; no keyword arguments are passed.
 
 ## Inputs and outputs
 

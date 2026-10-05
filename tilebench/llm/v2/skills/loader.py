@@ -2,9 +2,22 @@
 
 The asset manifest (`skills/manifest.json` at the repository root) names
 every file the framework may inject, with its raw hash, the hash of the text
-after the documented transformation, its permission label and its approval
-status. The loader never browses directories, never falls back to another
-version, DSL or device, and never truncates.
+after the documented transformation, its permission label, its approval
+status and its sharing grants. The loader never browses directories, never
+falls back to another version, DSL or device, and never truncates.
+
+Three independent decisions are recorded per asset and checked separately:
+
+  status        draft | approved | frozen | test-only   (content approval)
+  sendable_to   list of provider names (openai, anthropic, ...) the asset
+                may be sent to as prompt context; empty = not confirmed.
+                `internal` and even `public` labels do not imply a grant.
+  publishable   whether the body may leave the private repository (review
+                bundles, publication exports)
+
+`permission` (public | internal | private) describes the asset's origin;
+`private` bodies are never stored in the repository and are never sendable
+or publishable regardless of the other fields.
 
 Transformation rule (`transform()`), applied identically to every asset:
   1. decode UTF-8;  2. CRLF/CR -> LF;  3. drop a leading YAML front-matter block
@@ -26,8 +39,7 @@ MANIFEST_SCHEMA = "tilebench-skill-manifest/1"
 KINDS = ("reference", "device", "optimization", "contract")
 PERMISSIONS = ("public", "internal", "private")
 STATUSES = ("draft", "approved", "frozen", "test-only")
-# What may be sent to a third-party API provider.
-API_SENDABLE = {"public", "internal"}
+PROVIDERS = ("openai", "anthropic")
 
 
 class SkillError(RuntimeError):
@@ -67,6 +79,8 @@ class SkillComponent:
     text: str
     chars: int
     attachments: list[dict]
+    sendable_to: list[str]
+    publishable: bool
 
     def record(self) -> dict:
         d = asdict(self)
@@ -136,10 +150,25 @@ def _read_asset(rel_path: str | None, expect_raw: str | None, expect_injected: s
     return text, h_raw, h_inj
 
 
+def sendable_to(entry: dict) -> list[str]:
+    if entry.get("permission") == "private":
+        return []
+    return [p for p in (entry.get("sendable_to") or []) if isinstance(p, str)]
+
+
+def is_publishable(entry: dict) -> bool:
+    if entry.get("permission") == "private":
+        return False
+    return bool(entry.get("publishable", False))
+
+
 def load_component(manifest: dict, kind: str, key: str, version: str | None = None, *,
                    require_status: tuple[str, ...] = ("approved", "frozen"),
-                   provider_sendable: bool = True, max_chars: int | None = None,
-                   verify_hashes: bool = True) -> SkillComponent:
+                   provider_sendable: bool = True, provider: str | None = None,
+                   max_chars: int | None = None, verify_hashes: bool = True) -> SkillComponent:
+    """provider_sendable=True means the text is being loaded to be sent to a
+    model provider: private assets are refused, and when `provider` is
+    named the manifest must list it in the asset's `sendable_to` grant."""
     if kind not in KINDS:
         raise SkillError(f"unknown skill kind {kind}")
     version, entry = _entry(manifest, kind, key, version)
@@ -147,8 +176,13 @@ def load_component(manifest: dict, kind: str, key: str, version: str | None = No
     status = entry.get("status")
     if permission not in PERMISSIONS:
         raise SkillPermissionError(f"{kind}/{key}@{version}: permission {permission!r} is not one of {PERMISSIONS}")
-    if provider_sendable and permission not in API_SENDABLE:
-        raise SkillPermissionError(f"{kind}/{key}@{version}: permission {permission!r} may not be sent to an API provider")
+    grants = sendable_to(entry)
+    if provider_sendable:
+        if permission == "private":
+            raise SkillPermissionError(f"{kind}/{key}@{version}: permission 'private' may not be sent to an API provider")
+        if provider is not None and provider not in grants:
+            raise SkillPermissionError(f"{kind}/{key}@{version}: sending to provider {provider!r} is not granted "
+                                       f"(sendable_to={grants}; permission={permission!r})")
     if status not in STATUSES:
         raise SkillStatusError(f"{kind}/{key}@{version}: status {status!r} is not one of {STATUSES}")
     if require_status and status not in require_status:
@@ -163,32 +197,36 @@ def load_component(manifest: dict, kind: str, key: str, version: str | None = No
         raise SkillTooLongError(f"{kind}/{key}@{version}: {len(text)} chars exceed the limit {max_chars}")
     return SkillComponent(kind=kind, key=key, version=version, path=entry["path"], sha256_raw=h_raw,
                           sha256_injected=h_inj, permission=permission, status=status, text=text,
-                          chars=len(text), attachments=[{k: v for k, v in a.items() if k != "text"} for a in attachments])
+                          chars=len(text), attachments=[{k: v for k, v in a.items() if k != "text"} for a in attachments],
+                          sendable_to=grants, publishable=is_publishable(entry))
 
 
 def compose_context(manifest: dict, study: dict, *, dsl: str, device: str, fold: str,
                     condition: str, require_approved: bool = True,
                     reference_version: str | None = None, device_snapshot: str | None = None,
-                    optimization_version: str | None = None) -> list[SkillComponent]:
+                    optimization_version: str | None = None, provider: str | None = None,
+                    provider_sendable: bool = True) -> list[SkillComponent]:
     """The ordered skill components of one condition. Base never includes an
     Optimization Skill; Enhanced refuses to start without the frozen one for
-    (dsl, fold), and refuses a device outside the DSL's transfer list."""
+    (dsl, fold), and refuses a device outside the DSL's transfer list. With
+    `provider` named, every component must carry that provider's grant."""
     if condition not in study["conditions"]:
         raise SkillError(f"unknown condition {condition}")
     limits = study["context_limits"]
     statuses = ("approved", "frozen") if require_approved else ("draft", "approved", "frozen", "test-only")
+    common = {"provider": provider, "provider_sendable": provider_sendable}
     comps = [
         load_component(manifest, "reference", dsl, reference_version or study["dsls"][dsl]["reference_version"],
-                       require_status=statuses, max_chars=limits["reference_skill"]),
+                       require_status=statuses, max_chars=limits["reference_skill"], **common),
         load_component(manifest, "device", device, device_snapshot, require_status=statuses,
-                       max_chars=limits["device_context_skill"]),
+                       max_chars=limits["device_context_skill"], **common),
     ]
     if condition == "enhanced":
         if device not in study["skill_transfer"][dsl]:
             raise SkillError(f"{device} is not a transfer target of {dsl} Optimization Skills")
         opt = load_component(manifest, "optimization", f"{dsl}/{fold}", optimization_version,
                              require_status=("frozen",) if require_approved else ("frozen", "test-only"),
-                             max_chars=limits["optimization_skill"])
+                             max_chars=limits["optimization_skill"], **common)
         comps.append(opt)
     return comps
 
@@ -199,11 +237,19 @@ def hash_record(components: list[SkillComponent]) -> dict:
 
 def register_asset(manifest: dict, kind: str, key: str, version: str, rel_path: str, *,
                    permission: str, status: str, source: str, attachments: list[str] | None = None,
-                   extra: dict | None = None) -> dict:
-    """Compute hashes for an asset and add/replace its manifest entry (dev CLI)."""
+                   extra: dict | None = None, sendable_to: list[str] | None = None,
+                   publishable: bool | None = None) -> dict:
+    """Compute hashes for an asset and add/replace its manifest entry (dev CLI).
+    Grants default to NOTHING: `sendable_to` empty and `publishable` false
+    unless given explicitly (a private asset can never carry either)."""
     text, h_raw, h_inj = _read_asset(rel_path, None, None, verify_hashes=False)
+    grants = [] if permission == "private" else list(sendable_to or [])
+    for p in grants:
+        if p not in PROVIDERS:
+            raise SkillError(f"unknown provider {p!r} in sendable_to (known: {PROVIDERS})")
     entry = {"path": rel_path, "sha256_raw": h_raw, "sha256_injected": h_inj, "chars": len(text),
-             "permission": permission, "status": status, "source": source, "attachments": []}
+             "permission": permission, "status": status, "source": source, "attachments": [],
+             "sendable_to": grants, "publishable": bool(publishable) and permission != "private"}
     for att in attachments or []:
         _, a_raw, a_inj = _read_asset(att, None, None, verify_hashes=False)
         entry["attachments"].append({"path": att, "sha256_raw": a_raw, "sha256_injected": a_inj})

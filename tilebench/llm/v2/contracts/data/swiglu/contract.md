@@ -12,9 +12,8 @@ multiplier. There is no reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(x, y, block_size=..., autotune=False)`:
-`x`, `y` positional; `block_size` carries an integer default the
-implementation may ignore, and both keywords may be ignored.
+The entry point is called as `run(x, y)`: `x`, `y` positional; no keyword
+arguments are passed.
 
 - `x`: `(M, N)`, contiguous row-major, dtype one of fp16, bf16, fp32.
   Read-only.

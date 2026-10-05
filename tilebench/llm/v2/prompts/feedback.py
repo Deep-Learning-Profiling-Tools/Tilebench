@@ -13,6 +13,7 @@ import re
 STATUS_TEXT = {
     "valid": "compiled, passed numerical verification and was timed",
     "format_error": "response format error: the file could not be extracted",
+    "interface_error": "interface error: run()/get_last_config() missing, failing, or not returning one fixed dict",
     "compile_error": "compilation/import failed",
     "runtime_error": "execution raised an error",
     "numerical_error": "output did not match the reference within tolerance",

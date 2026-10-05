@@ -1,83 +1,91 @@
-# READINESS — TileBench++ LLM protocol v2, shared-framework phase (2026-10-05)
+# READINESS — TileBench++ LLM protocol v2 (state after the review-fix round, 2026-10-05)
 
-Branch `exp/llm` (worktree `../llm_wt`), cut from `S_main = ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe`
-(main after PR #318). This phase delivers the v2 plan's stages B–F as
-testable code and reviewed assets. It does **not** run a Base campaign,
-distill a real Optimization Skill, create device branches, or declare
-`S_llm` frozen.
+Branch `exp/llm` (worktree `../llm_wt`), cut from `S_main = ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe`.
+The shared framework (89140bb3) was reviewed (REVIEW_89140bb3.md, findings
+R1–R12); this round fixed every finding, wired the live execution chain into
+the shared CLI, and ran a real ten-round validation campaign on B200 with
+GPT and Claude. It does **not** run a formal Base campaign, distill a real
+Optimization Skill, approve contracts or skills, create device branches, or
+declare `S_llm` frozen.
 
-## 1. What is implemented and tested
+## 1. Three states
 
-| Stage | Deliverable | State |
-|---|---|---|
-| B. Task contracts | 45 × `contract.md` + `evaluator_rules.json` + `audit.json`; 90 independent extractions; `CANONICAL_AUDIT.md` | 37 `draft`, 8 `needs-review`, 0 `approved` (owner act) |
-| C. Framework | `tilebench.llm.v2` (manifests, tasks, skills, prompts, providers, validation, metrics, orchestration, evaluation, distillation, contracts, CLI) | implemented; 93 CPU/mock tests |
-| D. Reference + Device | Triton 3.6.0 / cuTile 1.5.0 / TileLang 0.1.11 references (section-revised, introspection-verified, REVISION_MAPs); 4 device snapshots with sources | all `draft`; NKI reference private/metadata only |
-| E. Experiment manifests | `study.yaml`, `models.yaml`, `folds.yaml` (proposed), `arithmetic_modes.yaml` (proposed), `skills/manifest.json`, task table (880 tasks) | validated; live-blocking items listed in DECISIONS_REQUIRED |
-| F. Pre-run integration | mock ten-round trajectory with persistence/resume; dry-run of 770 prompts on 8 device/DSL pairs; prompt snapshots from the real renderer; B200 worker smoke (positive + cheat) | done on this host only |
+### Implemented (code, tests, docs)
 
-### Test evidence (this host, dgx003, `tilebench_env`)
+| Finding | Fix | Where | Regression |
+|---|---|---|---|
+| R1 gate-only CLI | `base`/`enhanced` run manifests → task context → provider factory → `TrajectoryRunner` → `SubprocessEvaluator` → state/ledger/artifacts; `distill` runs the real map/reduce with trusted index and persistence | `orchestration/campaign.py::run_campaign`, `cli.py` | real campaign (§2) |
+| R2 missing atol/rtol | evaluator-only `EvaluationJob` (effective tolerance with arch override, rules, normalized timing, identity); the campaign asserts prompt tolerance == evaluator tolerance | `evaluation/job.py` | `test_review_fixes.py::test_evaluation_job_*`, `test_prompt_and_evaluator_tolerance_agree` |
+| R3 regex false positives / alias miss | import-alias resolution, kernel-vs-host scope, regex on comment/string-stripped code, confirmed only with AST corroboration, rule `scope` on all 250 rules | `validation/static_checks.py`, `contract_checks.py`, `contracts/data/*/evaluator_rules.json` | `test_kernel_arithmetic_is_not_host_delegation`, `test_import_alias_autotune_is_confirmed`, `test_regex_rules_ignore_comments_strings_and_kernel_scope` |
+| R4 interface not enforced | worker requires callable `run`/`get_last_config` (dict, JSON, identical across three reads), scans for autotuner objects, `interface_error` status; prompt text fixed (literals vs derived quantities) | `evaluation/worker.py`, `prompts/templates/system_interface.md` | `test_worker_requires_exports_and_fixed_config`, `test_worker_detects_autotuner_object_and_output_aliasing` |
+| R5 providers | streaming, `api_key_env` (`CLAUDE_API_KEY`), `ProviderConfigError` never retried, transport failures classified `charged: no/unknown`, terminal status/truncation, factory from models.yaml | `providers/*.py` | `test_provider_kwargs_carry_the_configured_settings`, `test_sdk_exceptions_are_classified`, `test_factory_refuses_without_key_env`, live probes (§2) |
+| R6 ledger gaps | per-transport-attempt charge accounting, attempt cost unknown when any charge is unknown, prompt_too_long = 0/not_sent, reconciliation of the response→ledger crash window, orphaned `sending` events | `orchestration/runner.py`, `state.py` | `test_unknown_transport_charge_propagates_to_the_attempt`, `test_prompt_too_long_*`, `test_crash_between_response_and_ledger_is_reconciled_on_resume`, `test_orphaned_sending_event_*` |
+| R7 unknown → 0 | `efficiency_at` None for unknown cost / no SOL / incomplete; aggregate `mean` None with a labelled `lower_bound_mean`; finite-sample checks; coverage-checked pairing | `metrics/efficiency.py`, `state_machine.py` | `test_unknown_cost_and_missing_sol_are_not_zero`, `test_non_finite_latency_*`, `test_valid_round_needs_consistent_finite_samples` |
+| R8 distillation binding | trusted index with file hashes, root containment, symlink refusal, state identity re-verification, validation runs refused, persisted/resumable observations, template-content hash | `distillation/access.py`, `orchestrator.py` | `test_distillation_refuses_identity_mismatch_escape_and_validation_runs`, `test_distillation_persists_and_reuses_observations` |
+| R9 internal ≠ sendable | `sendable_to` per provider and `publishable` per asset, independent of status; TileLang/NKI carry no grant | `skills/loader.py`, `skills/manifest.json` | `test_provider_grants_are_separate_from_status`, `test_real_manifest_grants_match_permissions` |
+| R10 timing names / text | `timing_settings()` normalization, versioned `capture_failure_policy`, `timing_mode_differs` flag, restore hook before capture-prep launches, prompt describes the real check/timing protocol and GPU-time measurement | `evaluation/job.py`, `timing.py`, `study.yaml` | `test_timing_settings_normalize_study_keys`, `test_evaluation.py` |
+| R11 oracle alias | reference and candidate outputs frozen before restore; mutation judged per declared index; output aliasing detected | `evaluation/anticache.py` | `test_reference_returning_mutated_input_is_frozen_before_restore` |
+| R12 isolation / publication | bubblewrap sandbox (home hidden, no network, read-only host, private tmp) with an honest fallback report; sandbox evidence archived before deletion; `export-publication` + ARTIFACT_POLICY | `evaluation/launcher.py`, `orchestration/publication.py`, `docs/llm_v2/ARTIFACT_POLICY.md` | `test_isolation_report_and_bwrap_argv`, `test_publication_withholds_non_publishable_context`, live sandbox probe |
+| item 11 (violation fallback) | a round closed by three violations is shown by outcome only; the last compliant implementation is the base | `runner._round_view`, `renderer._prev_block` | `test_execution_confirmed_violation_triggers_repair_and_violation_round_hides_code` |
 
-```
-python -m pytest tests/llm_v2 -q       -> 93 passed
-python -m pytest tests -q              -> 570 passed, 2 skipped (pre-existing skips), 0 failed
-python -m compileall -q tilebench scripts tests -> ok
-python -m tilebench.llm.v2 validate-manifests -> errors: [], contracts draft 37 / needs-review 8
-python -m tilebench.llm.v2 dry-run --device <D> --dsl <L> --allow-draft (8 pairs)
-   B200 triton/cutile/tilelang 110/110/110 rendered; GH200 110/110/110; MI300X 109 + 1 unsupported;
-   Trn2 110 needs_review (no prompt rendered); max prompt 57,529 chars (limit 260,000)
-```
+Test evidence (dgx003, `tilebench_env`, final code state): `python -m pytest tests/llm_v2 -q` → 128 passed;
+`python -m pytest tests -q` → 605 passed, 2 skipped (pre-existing skips); `python -m compileall -q tilebench scripts tests` → ok
+(logs under `outputs/llm_v2/test_logs/`, copied into the handoff).
 
-Coverage of the ten required test areas (`tests/llm_v2/`):
-1. single-DSL single-task requests + strict parser; no cross-task context (`test_state_machine_and_runner.py::test_no_cross_task_context_in_prompts`, `test_validation.py`)
-2. missing/hash/version/permission failures; Base/Enhanced differ only by the Optimization component (`test_skills_loader.py`)
-3. no scoring/manual leakage in config, feedback, diagnostics, contracts (`test_prompts.py`, `test_contracts_and_campaign.py`, `test_manifests_and_tasks.py`)
-4. case selection from expanded cases; family folds; target/held-out access boundaries (`test_manifests_and_tasks.py`, `test_distillation.py`)
-5. ten-round state machine, ≤3 generations, ordinary failures without same-round repair, review_required, infrastructure incomplete (`test_state_machine_and_runner.py`)
-6. cached/reasoning normalization, failed-attempt charging, unknown usage, resume without re-request (`test_providers_and_usage.py`, runner tests)
-7. 1 warmup / 3 timed call counts, three raw samples + mean, graph vs eager, actual capture status (`test_evaluation.py`)
-8. fresh-input / same-address anti-cache, mutation restore, worker isolation (`test_evaluation.py`; GPU evidence in `docs/llm_v2/evidence/b200_smoke_2026-10-05/`)
-9. E(B) zero, >1 flagged, best never erased, non-uniform token steps, operator-balanced aggregation, incomplete vs unsupported (`test_metrics.py`)
-10. same-fold skill hash identical across devices, NKI source = Trn2 only, release scope ≠ evaluation scope (`test_skills_loader.py`, `test_distillation.py`)
+### Executed (real models, real device)
 
-Not covered by tests: delegation/hidden-autotuning detection is covered
-statically and by the GPU cheat smoke, not by a GPU test; a worker crash
-is simulated through the `infrastructure_incomplete` path (the launcher's
-subprocess timeout/crash branch is exercised only by the smoke).
+See `docs/llm_v2/VALIDATION_2026-10-05.md` for the per-trajectory table
+(request ids, usage, three timing samples, reviews, artifact paths).
+Campaign `validation_b200_2026-10-05`, run type `validation` (unscored),
+condition Base, B200, DSLs Triton and cuTile, models `gpt-6.1-sol`
+(reasoning.effort xhigh, max_output_tokens 128000) and `claude-opus-5-5`
+(output_config.effort xhigh, adaptive thinking, max_tokens 128000), tasks
+vector_add/fp16 (single pass), softmax/fp16 (row reduction),
+histogramming/int32 (multi-kernel: scratch fill + private counting +
+reduce), representative cases from the operators' real configs. Twelve
+trajectories, ten rounds each, isolated evaluation (bwrap), 1 warmup + 3
+timed launches with graph replay. Resume was exercised twice on the same
+trajectory: a pause/resume at round boundaries and a `kill -9` after a
+response was archived but before its evaluation (the archived response was
+reused without a new request; the usage ledger kept one row per response).
+
+### Still blocked (owner decisions; nothing was decided by the framework)
+
+1. Contracts: 0/45 approved (37 draft, 8 needs-review); `DECISIONS_REQUIRED.md §A`.
+2. Models: `candidate` status only; formal runs need `approved` (§C1); distiller unset.
+3. Folds and arithmetic modes `proposed`; peak table gaps (§B).
+4. Skills `draft`; grants set for public assets, none for TileLang/NKI (§D).
+5. Remote devices: GH200 / MI300X / Trn2 have run nothing of v2; the same
+   `base` command runs there once the branch is checked out (RUNBOOK).
+6. NKI adapter not validated (NKI_HANDOFF).
+7. Protocol readings E6–E11 (interface_error, execution-confirmed
+   violations, capture-failure policy, run types, regex corroboration,
+   review authority).
 
 ## 2. Readiness per device / DSL
 
-| Device / DSL | Reference | Device ctx | Contracts | Eligibility | Timing adapter | Model cfg | Live state |
+| Device / DSL | Reference | Device ctx | Contracts | Timing adapter | Provider grant | Live chain | Formal gate |
 |---|---|---|---|---|---|---|---|
-| B200 triton/cutile/tilelang | draft (introspection-verified here) | draft, verified on device | 37 draft / 8 needs-review | 330 eligible | `proton_cuda_graph`, smoke-tested | unset | **blocked** (approvals, model ids) |
-| GH200 triton/cutile/tilelang | same text (same hash) | draft, from archived captures, not verified on device | same | 330 eligible | same adapter, not run there | unset | **blocked** + remote preflight pending |
-| MI300X triton | same | draft, from archived captures | same | 109 eligible, 1 unsupported (fp8) | `proton_rocm_eager`, not run there | unset | **blocked** + remote preflight pending |
-| Trn2 nki | private, metadata only | draft, vendor docs only, no capture | n/a until NKI reference exists | 110 needs_review | `neuron_runtime_trace` **not ready** | unset | **blocked** (NKI_HANDOFF) |
+| B200 triton / cutile | draft, public, granted | draft, verified on device | draft/needs-review | `proton_cuda_graph`, exercised in the validation campaign | openai + anthropic | **executed** (validation) | blocked (approvals) |
+| B200 tilelang | draft, internal, **no grant** | same | same | same | none | blocked by grant | blocked |
+| GH200 triton / cutile / tilelang | same texts | draft, not verified | same | same adapter, not run there | as above | not run | blocked |
+| MI300X triton | same | draft, not verified | same | `proton_rocm_eager`, not run there | as above | not run | blocked |
+| Trn2 nki | private, metadata only | draft, vendor docs | n/a | `neuron_runtime_trace` **not ready** | none | blocked | blocked |
 
-`python -m tilebench.llm.v2 preflight --live` reports these blockers per
-pair; `base`/`enhanced`/`distill` refuse to start on them.
+## 3. Protocol deviations introduced by this round
 
-## 3. Blockers (exact)
+None intended. Readings the owner must confirm are listed in
+`DECISIONS_REQUIRED.md §E` (E6–E11). Two evaluator-rule revisions were made
+during the validation campaign and are recorded there and in the campaign
+report: cuTile raw-memory `load_offset`/`store_offset` added to the
+kernel-level load/store evidence (13 rule files), and the softmax
+"-inf literal" required-evidence entry removed (the contract permits
+whole-row-on-chip evaluation without partial chunks). Both are
+evaluator-only draft rules; no contract text, no Skill text and no prompt
+template was changed in response to a candidate's performance.
 
-1. Contract approval: 0/45 approved; 8 need a decision (see `CANONICAL_AUDIT.md` and `DECISIONS_REQUIRED.md §A`).
-2. `models.yaml`: generator/distiller model ids, reasoning settings, max output tokens unset.
-3. `folds.yaml` status `proposed`; `arithmetic_modes.yaml` status `proposed`; peak table gaps (`DECISIONS_REQUIRED.md §B`).
-4. Skill approvals: references and device snapshots are `draft`; TileLang reference permission `internal` pending licence confirmation; repository has no LICENSE.
-5. Remote evidence: GH200 / MI300X / Trn2 have run nothing of v2 (`RUNBOOK.md` "Remote devices").
-6. NKI: adapter not validated, reference not derivable until permissions are confirmed (`NKI_HANDOFF.md`).
-7. Live runner wiring (provider + `SubprocessEvaluator` per device) is intentionally not attached to the `base`/`enhanced` commands on the shared branch.
+## 4. S_llm
 
-## 4. Protocol deviations introduced by this phase
-
-None intended. Items where the implementation had to pick a reading of the v2
-text are listed in `DECISIONS_REQUIRED.md §E` (positional `run()` call,
-graph-capture failure handling, undetermined-cost rule, review gating).
-The MI300X `fp8_e4m3fn` task is marked `unsupported` from the manual
-campaign's evidence rather than from a generation attempt.
-
-## 5. S_llm
-
-Not proposed. Conditions before an `S_llm` candidate can be named:
-contracts approved (or needs-review resolved), folds and arithmetic modes
-frozen, skills approved, model ids set, remote preflights returned with
-evidence.
+Not proposed. Conditions unchanged: contracts approved (or needs-review
+resolved), folds and arithmetic modes frozen, skills approved, model ids
+approved, remote preflights returned with evidence.

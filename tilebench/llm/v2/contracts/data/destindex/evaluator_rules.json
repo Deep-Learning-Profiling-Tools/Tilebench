@@ -8,15 +8,15 @@
     {"id": "s3", "description": "Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s2 and s3 independent, may be one or two launches; returns (out_nope, out_rope)."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "\\.index_copy_?\\(", "message": "index_copy replaces the whole scatter-copy", "level": "confirmed"},
-    {"pattern": "(o_nope|o_rope)\\.(index_copy_|copy_|scatter_|index_put_|fill_|zero_)\\(|(o_nope|o_rope)\\s*\\[[^\\]]*\\]\\s*=[^=]", "message": "writes into o_nope / o_rope mutate an input", "level": "confirmed"},
-    {"pattern": "\\.index_put_?\\(|torch\\.index_put|\\.scatter_\\(|torch\\.scatter\\(|torch\\.index_select|\\[\\s*dest_loc\\s*\\]\\s*=[^=]", "message": "host-side indexed copy replaces the scatter kernel", "level": "suspicious"},
-    {"pattern": "torch\\.(argsort|sort)\\(|dest_loc\\.(argsort|sort)\\(|torch\\.empty\\([^)]*dest_loc", "message": "preprocessing of dest_loc (sort / inverse permutation) is forbidden", "level": "suspicious"},
-    {"pattern": "WeakTensorKeyDictionary|_out_cache|_cache\\b|lru_cache|data_ptr\\(\\)", "message": "persistent output buffers keyed by input identity: open review item (policy b)", "level": "suspicious"}
+    {"pattern": "\\.index_copy_?\\(", "message": "index_copy replaces the whole scatter-copy", "level": "confirmed", "scope": "host"},
+    {"pattern": "(o_nope|o_rope)\\.(index_copy_|copy_|scatter_|index_put_|fill_|zero_)\\(|(o_nope|o_rope)\\s*\\[[^\\]]*\\]\\s*=[^=]", "message": "writes into o_nope / o_rope mutate an input", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\.index_put_?\\(|torch\\.index_put|\\.scatter_\\(|torch\\.scatter\\(|torch\\.index_select|\\[\\s*dest_loc\\s*\\]\\s*=[^=]", "message": "host-side indexed copy replaces the scatter kernel", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(argsort|sort)\\(|dest_loc\\.(argsort|sort)\\(|torch\\.empty\\([^)]*dest_loc", "message": "preprocessing of dest_loc (sort / inverse permutation) is forbidden", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|_out_cache|_cache\\b|lru_cache|data_ptr\\(\\)", "message": "persistent output buffers keyed by input identity: open review item (policy b)", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["dest_loc", "dest"], "message": "destination index lookup", "level": "suspicious"},
-    {"any_of": ["tl\\.store", "ct\\.scatter", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy", "store"], "message": "store/scatter at the computed destination", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.scatter", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy", "store"], "message": "store/scatter at the computed destination", "level": "suspicious"},
     {"any_of": ["clone\\(", "copy_\\(", "empty_like", "torch\\.empty"], "message": "output buffer initialised from o_*", "level": "suspicious"}
   ],
   "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.clone", "torch.cuda.current_stream"],

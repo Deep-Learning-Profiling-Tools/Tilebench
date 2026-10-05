@@ -8,12 +8,12 @@
     {"id": "int32_gemm", "description": "int8 x int8 products accumulated exactly in int32 per logical output tile; int32 tile stored."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.(matmul|mm|addmm|bmm|einsum|_int_mm)\\(", "message": "library GEMM computes the operator", "level": "confirmed"},
-    {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious"},
-    {"pattern": "b\\.to\\(\\s*torch\\.int32\\s*\\)|\\(\\s*b\\s*&|b\\s*>>|torch\\.bitwise_(and|right_shift)\\(", "message": "host-side decode of the packed B with PyTorch bit operations", "level": "suspicious"},
-    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of B: permitted only per call inside run(), never cached across calls", "level": "suspicious"},
-    {"pattern": "\\.to\\(\\s*torch\\.float(32|16)?\\s*\\)|\\.float\\(\\)|\\.half\\(\\)", "message": "floating-point evaluation of an integer product", "level": "suspicious"},
-    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision", "message": "process-wide precision flag changed", "level": "suspicious"}
+    {"pattern": "torch\\.(matmul|mm|addmm|bmm|einsum|_int_mm)\\(", "message": "library GEMM computes the operator", "level": "confirmed", "scope": "host"},
+    {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious", "scope": "host"},
+    {"pattern": "b\\.to\\(\\s*torch\\.int32\\s*\\)|\\(\\s*b\\s*&|b\\s*>>|torch\\.bitwise_(and|right_shift)\\(", "message": "host-side decode of the packed B with PyTorch bit operations", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of B: permitted only per call inside run(), never cached across calls", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.float(32|16)?\\s*\\)|\\.float\\(\\)|\\.half\\(\\)", "message": "floating-point evaluation of an integer product", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision", "message": "process-wide precision flag changed", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "mma"], "message": "a device-side tiled matrix multiply", "level": "suspicious"},

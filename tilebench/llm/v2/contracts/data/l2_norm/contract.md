@@ -17,8 +17,8 @@ X.dtype. Rows are independent.
 - Y: a freshly allocated tensor with X's shape and dtype, allocated inside
   the entry point. It may be allocated as a (batch*M, K) buffer and returned
   as a reshaped view of that buffer; it must not alias X.
-- The entry point takes (X, eps) positionally plus `autotune` and
-  `**kwargs`; extra keywords must be accepted.
+- The entry point takes (X, eps) positionally; no keyword arguments are
+  passed.
 
 ## Required logical stages
 1. Shape bookkeeping and allocation: view X as (batch*M, K) (a view; a copy

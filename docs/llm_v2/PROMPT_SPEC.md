@@ -36,13 +36,29 @@ the development CLI and are not reachable from `orchestration.runner`.
 in the requested DSL on the declared device; preserve the canonical
 algorithm contract while optimizing permitted implementation details; use
 the supplied version-pinned API reference and device context; commit to one
-deterministic implementation and configuration (per stage for multi-kernel
-implementations); do not invoke autotuners, search configurations at
-runtime, reuse cached outputs, delegate the computation to the reference or
-external compute libraries, or inspect/modify the evaluator; PyTorch only
-for the operations the contract permits; inputs are fresh each call and may
-reuse storage; return exactly one fenced block titled with the output file;
-performance feedback is runtime only.
+deterministic implementation and configuration: tunable values (tile/block
+sizes, warps, stages, vector widths) are fixed literals, per stage for
+multi-kernel implementations, while quantities derived deterministically
+from the fixed shape and those literals (grid sizes, loop bounds, chunk
+counts) may be computed, a later round may choose another configuration,
+and `get_last_config()` returns the same dict on every call; do not invoke
+autotuners, search or time several configurations at runtime, reuse cached
+outputs, delegate the computation to the reference or external compute
+libraries, or inspect/modify the evaluator; PyTorch only for the operations
+the contract permits; correctness is checked on freshly generated inputs
+(fresh allocation, then new values in the same storage, then a repeated
+call on identical inputs) and timing uses one fixed input set, no state
+across calls, no input mutation unless the contract declares it; return
+exactly one fenced block titled with the output file, `run` called
+positionally with the task inputs only (no `block_size`/`autotune`
+keywords); performance feedback is the GPU time of the kernels launched by
+`run()` (one warmup, mean of three timed launches; host-side work is not
+GPU time, every launched kernel/fill/copy/cast is counted).
+
+The 45 contracts state the same call form ("called positionally with
+exactly the inputs listed; no keyword arguments are passed"); the legacy
+`block_size=...`/`autotune=False` call descriptions were removed on
+2026-10-05.
 
 ## 3. Components of the user message (order fixed)
 
@@ -81,16 +97,35 @@ History rule (`study.yaml:trajectory.history_rule`): previous round's
 candidate + outcome; best valid candidate when different; runtime table of
 all valid rounds. Regression: the slower valid candidate is recorded, the
 best is kept. Context overflow: `prompt_too_long` before any API call; no
-truncation.
+truncation; the attempt is recorded with cost 0 / `not_sent`.
+
+Rounds without a compliant candidate (`renderer._prev_block`): when the
+previous round closed with three contract violations, or without a
+parsable file, the refinement prompt shows the outcome and diagnostics
+only, states that rejected candidates are not shown and must not serve as
+the basis of the next implementation, and offers the trajectory's last
+compliant implementation (or says none exists). A violating candidate is
+never shown as the previous candidate. Round statuses that can appear in
+the outcome text: valid, format_error, interface_error (missing/failing
+`run`/`get_last_config`, or a configuration that changed between calls),
+compile_error, runtime_error, numerical_error, timing_error,
+contract_violation, infrastructure_incomplete.
 
 ## 5. Compliance repair
 
-Rendered only after a CONFIRMED violation (static evidence level
-`confirmed` or contract rule level `confirmed`). States the round, the
-attempt number and the maximum (3), lists the violations with line numbers,
-shows the rejected candidate, and offers the trajectory's last compliant
-implementation as the fallback (never the violating one). Ordinary
-compile/numerical failures never reach this template.
+Rendered only after a CONFIRMED violation: static evidence level
+`confirmed` (autotune entry points resolved through the file's import
+aliases, host-scope reference-library calls, forbidden imports), a contract
+rule of level `confirmed` matched in its declared scope on a computational
+line of code-only text, or a violation confirmed by the evaluator at
+execution (autotuner object in the module, output aliasing an input).
+States the round, the attempt number and the maximum (3), lists the
+violations with line numbers, shows the rejected candidate, and offers the
+trajectory's last compliant implementation as the fallback (never the
+violating one). Ordinary compile/numerical/interface failures never reach
+this template. Suspicious evidence (`review_required`) blocks the
+trajectory for a recorded human decision (`review-resolve`); it never
+triggers a repair by itself.
 
 ## 6. Distillation prompts
 
@@ -106,4 +141,20 @@ trajectories is enforced in `distillation/access.py`, not by the prompt.
 
 `validation/parser.py`: exactly one fenced `python` block with
 `title="<output_file>"`; it must parse as Python. Anything else is a
-`format_error` (consumes the round, no repair).
+`format_error` (consumes the round, no repair). A response the provider
+reports as truncated (`incomplete:max_output_tokens`, `max_tokens`) is a
+`format_error` as well, even if its text happens to parse: it is not a
+complete candidate.
+
+## 8. Providers
+
+Requests are streamed (`client.responses.stream`,
+`client.messages.stream`) and consumed to the end; the archived result
+carries the echoed model id, response id, terminal status, truncation flag,
+event count, raw usage and the parameters actually sent (never the key).
+Configuration errors (400/401/403/404/422) are never retried; transport
+failures are retried up to `models.yaml:transport.max_transport_retries`
+with each attempt logged and classified as `charged: no` (never reached the
+provider or rejected with an error status) or `charged: unknown` (timeout
+after sending, interrupted stream; the last streamed usage is kept as a
+lower bound).

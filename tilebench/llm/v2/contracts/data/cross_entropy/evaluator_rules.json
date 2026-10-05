@@ -8,11 +8,11 @@
     {"id": "s3", "description": "loss[i] = -(target_logit - max - log(sum)) rounded once to logits.dtype and stored; all stages in one launch, no global intermediate."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.nn\\.functional\\.cross_entropy|F\\.cross_entropy|torch\\.nn\\.CrossEntropyLoss|torch\\.nn\\.NLLLoss|F\\.nll_loss", "message": "library cross-entropy replaces the whole computation", "level": "confirmed"},
-    {"pattern": "torch\\.(log_softmax|logsumexp|softmax)\\(|F\\.(log_softmax|softmax)\\(|torch\\.special\\.logsumexp", "message": "library log-sum-exp/softmax replaces the row reduction", "level": "confirmed"},
-    {"pattern": "torch\\.gather\\(|torch\\.take_along_dim|logits\\.gather\\(|logits\\[[^\\]]*targets", "message": "host-side gather of the target logit", "level": "suspicious"},
-    {"pattern": "torch\\.(max|amax|sum|exp|log)\\(", "message": "host-side reduction or transcendental on tensors", "level": "suspicious"},
-    {"pattern": "torch\\.(zeros|zeros_like|full)\\(", "message": "a zero-filled or extra buffer suggests a materialised intermediate; no global scratch is permitted", "level": "suspicious"}
+    {"pattern": "torch\\.nn\\.functional\\.cross_entropy|F\\.cross_entropy|torch\\.nn\\.CrossEntropyLoss|torch\\.nn\\.NLLLoss|F\\.nll_loss", "message": "library cross-entropy replaces the whole computation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(log_softmax|logsumexp|softmax)\\(|F\\.(log_softmax|softmax)\\(|torch\\.special\\.logsumexp", "message": "library log-sum-exp/softmax replaces the row reduction", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.gather\\(|torch\\.take_along_dim|logits\\.gather\\(|logits\\[[^\\]]*targets", "message": "host-side gather of the target logit", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(max|amax|sum|exp|log)\\(", "message": "host-side reduction or transcendental on tensors", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(zeros|zeros_like|full)\\(", "message": "a zero-filled or extra buffer suggests a materialised intermediate; no global scratch is permitted", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.max", "ct\\.max", "T\\.reduce_max", "nl\\.max", "nisa\\.tensor_reduce", "reduce_max", "\\bmax\\("], "message": "row max reduction", "level": "suspicious"},

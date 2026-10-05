@@ -6,9 +6,8 @@ Given a 1-D tensor `x` of length `n`, produce a new tensor `y` of the same
 shape and dtype with `y[i] == 2 * x[i]` for every element. This is the
 reference `x * 2` with a Python scalar, which keeps the tensor dtype.
 
-The entry point is called as `run(x, **kwargs)`; `n` is `x.numel()`.
-Keyword arguments such as `block_size` and `autotune` may be accepted and
-ignored.
+The entry point is called as `run(x)`; `n` is `x.numel()`. No keyword
+arguments are passed.
 
 ## Inputs and outputs
 

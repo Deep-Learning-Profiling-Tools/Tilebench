@@ -18,8 +18,8 @@ matters for exact zeros, but it must be present.)
 - Y: shape (rows, cols), fp32, same layout. Read-only.
 - LOSS: a freshly allocated fp32 tensor of shape (rows,), allocated inside
   the entry point. No aliasing.
-- The entry point takes (LOG_P, Y) positionally plus `autotune` and
-  `**kwargs`; extra keywords (such as `block_size`) must be accepted.
+- The entry point takes (LOG_P, Y) positionally; no keyword arguments are
+  passed.
 
 ## Required logical stages
 1. Output allocation of LOSS.

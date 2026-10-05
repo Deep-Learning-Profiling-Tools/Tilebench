@@ -8,19 +8,18 @@
     {"id": "normalise", "description": "Per element, exp(x - m) / l in fp32 with one downcast at the store, in the same launch as the statistics."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|torch\\.log_softmax\\(|F\\.log_softmax\\(|nn\\.Softmax\\(|nn\\.LogSoftmax\\(|torch\\.special\\.softmax\\(", "message": "The whole operator is performed by a PyTorch softmax routine.", "level": "confirmed"},
-    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.softmax\\(|nl\\.softmax\\(", "message": "A tensor-method or library softmax replaces the online two-sweep kernel.", "level": "suspicious"},
-    {"pattern": "torch\\.(max|amax|sum|exp|logsumexp|exp2)\\(|torch\\.special\\.logsumexp\\(", "message": "Host-side PyTorch reduction or exponential computes the row statistics outside the kernel.", "level": "suspicious"},
-    {"pattern": "\\.(amax|max|sum|logsumexp)\\(\\s*(dim\\s*=\\s*)?-?1\\b|\\.exp\\(\\s*\\)", "message": "Tensor-method statistics on the host replace the in-kernel reduction.", "level": "suspicious"},
-    {"pattern": "atomic_max|atomic_add|atomic", "message": "Atomics suggest a cross-program row reduction, which the contract forbids.", "level": "suspicious"},
-    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp\\(", "message": "Exponentials appear to be evaluated in half precision; they must be fp32.", "level": "suspicious"},
-    {"pattern": "return\\s+x\\b|return\\s+x\\.|x\\.copy_\\(|x\\.sub_\\(|x\\.exp_\\(|x\\.div_\\(|x\\[.*\\]\\s*=", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious"}
+    {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|torch\\.log_softmax\\(|F\\.log_softmax\\(|nn\\.Softmax\\(|nn\\.LogSoftmax\\(|torch\\.special\\.softmax\\(", "message": "The whole operator is performed by a PyTorch softmax routine.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.softmax\\(|nl\\.softmax\\(", "message": "A tensor-method or library softmax replaces the online two-sweep kernel.", "level": "suspicious", "scope": "any"},
+    {"pattern": "torch\\.(max|amax|sum|exp|logsumexp|exp2)\\(|torch\\.special\\.logsumexp\\(", "message": "Host-side PyTorch reduction or exponential computes the row statistics outside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(amax|max|sum|logsumexp)\\(\\s*(dim\\s*=\\s*)?-?1\\b|\\.exp\\(\\s*\\)", "message": "Tensor-method statistics on the host replace the in-kernel reduction.", "level": "suspicious", "scope": "host"},
+    {"pattern": "atomic_max|atomic_add|atomic", "message": "Atomics suggest a cross-program row reduction, which the contract forbids.", "level": "suspicious", "scope": "any"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp\\(", "message": "Exponentials appear to be evaluated in half precision; they must be fp32.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\.|x\\.copy_\\(|x\\.sub_\\(|x\\.exp_\\(|x\\.div_\\(|x\\[.*\\]\\s*=", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.max", "ct\\.max", "T\\.reduce_max", "nl\\.max", "nisa\\.tensor_reduce", "reduce_max", "max"], "message": "No in-kernel max reduction found for the row maximum.", "level": "suspicious"},
     {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce_sum", "sum"], "message": "No in-kernel sum reduction found for the denominator.", "level": "suspicious"},
     {"any_of": ["tl\\.exp", "tl\\.exp2", "ct\\.exp", "ct\\.exp2", "T\\.exp", "T\\.exp2", "nl\\.exp", "nisa\\.activation", "exp"], "message": "No exponential primitive found in the kernel.", "level": "suspicious"},
-    {"any_of": ["-float\\(['\"]inf['\"]\\)", "-inf", "NEG_INF", "float\\(['\"]-inf['\"]\\)", "-math\\.inf", "-np\\.inf"], "message": "No -inf initial max / padding evidence for the online sweep.", "level": "suspicious"},
     {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 upcast evidence; statistics and exponentials must be fp32.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [

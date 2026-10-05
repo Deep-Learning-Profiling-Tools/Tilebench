@@ -7,15 +7,15 @@
     {"id": "block_scaled_multiply", "description": "One kernel pass over all M*N elements: derive the block coordinates (i // T, j // T) of each element, fetch the scale from S (per-element gather or per-tile hoisted load), multiply X by it, masked store. No expanded scale map in global memory."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "S\\[[^\\]]*\\[:,\\s*None\\][^\\]]*\\]|S\\[[^\\]]*None,\\s*:\\][^\\]]*\\]|torch\\.repeat_interleave\\(|\\.repeat_interleave\\(|torch\\.kron\\(|\\.expand\\(|torch\\.tile\\(|\\.repeat\\(", "message": "The expanded (M, N) scale map is materialised with PyTorch, reproducing the reference on the host.", "level": "confirmed"},
-    {"pattern": "torch\\.arange\\([^)]*\\)\\s*//|torch\\.div\\(|torch\\.floor_divide\\(", "message": "Host-side index construction for the scale map (reference-style).", "level": "suspicious"},
-    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|return\\s+X\\s*\\*|output\\s*=\\s*X\\s*\\*|\\.copy_\\(\\s*X\\s*\\*", "message": "The multiply is performed by PyTorch on the host instead of the kernel.", "level": "suspicious"},
-    {"pattern": "return\\s+(X|S)\\b|return\\s+(X|S)\\.|\\b(X|S)\\.copy_\\(|\\b(X|S)\\.mul_\\(|\\b(X|S)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious"},
-    {"pattern": "torch\\.round\\(|\\.round\\(\\)|torch\\.ceil\\(|/\\s*TILE_SIZE\\b(?!\\s*\\))", "message": "Scale indexing must use floor division of the row and column by the block side.", "level": "suspicious"},
-    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious"}
+    {"pattern": "S\\[[^\\]]*\\[:,\\s*None\\][^\\]]*\\]|S\\[[^\\]]*None,\\s*:\\][^\\]]*\\]|torch\\.repeat_interleave\\(|\\.repeat_interleave\\(|torch\\.kron\\(|\\.expand\\(|torch\\.tile\\(|\\.repeat\\(", "message": "The expanded (M, N) scale map is materialised with PyTorch, reproducing the reference on the host.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.arange\\([^)]*\\)\\s*//|torch\\.div\\(|torch\\.floor_divide\\(", "message": "Host-side index construction for the scale map (reference-style).", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|return\\s+X\\s*\\*|output\\s*=\\s*X\\s*\\*|\\.copy_\\(\\s*X\\s*\\*", "message": "The multiply is performed by PyTorch on the host instead of the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+(X|S)\\b|return\\s+(X|S)\\.|\\b(X|S)\\.copy_\\(|\\b(X|S)\\.mul_\\(|\\b(X|S)\\[.*\\]\\s*=", "message": "Writing into or returning an input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.round\\(|\\.round\\(\\)|torch\\.ceil\\(|/\\s*TILE_SIZE\\b(?!\\s*\\))", "message": "Scale indexing must use floor division of the row and column by the block side.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the multiply must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the multiply must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["//\\s*TILE_SIZE", "//\\s*T\\b", "//\\s*tile_size", "//\\s*BLOCK_SCALE", "// "], "message": "No floor-division block-index evidence for the scale lookup.", "level": "suspicious"},
     {"any_of": ["ct\\.gather", "tl\\.load", "T\\.copy", "nl\\.load", "nisa\\.dma_copy", "gather"], "message": "No in-kernel scale load/gather found.", "level": "suspicious"}
   ],

@@ -7,14 +7,14 @@
     {"id": "mirrored_copy", "description": "One kernel pass that reads each element of input once and writes it once to position N - 1 - i of the output, with correct tail handling (no out-of-range or negative-index access is stored or read)."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.flip\\(|torch\\.fliplr\\(|torch\\.flipud\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take\\(|torch\\.take_along_dim\\(", "message": "A PyTorch flip/gather replaces the whole computation.", "level": "confirmed"},
-    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.flip\\(|\\.index_select\\(|(?<!tl)(?<!ct)(?<!nl)\\.gather\\(|\\.copy_\\(|torch\\.arange\\(", "message": "Tensor-method flip/gather, a host copy, or a host-built index inside run() performs the reversal on the host.", "level": "suspicious"},
-    {"pattern": "return\\s+input\\b|return\\s+input\\.|as_strided|stride\\s*=\\s*-", "message": "Returning the input, a view of it, or a negative-stride view violates the fresh contiguous-output requirement.", "level": "suspicious"},
-    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in reverse_array.", "level": "suspicious"},
-    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious"}
+    {"pattern": "torch\\.flip\\(|torch\\.fliplr\\(|torch\\.flipud\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take\\(|torch\\.take_along_dim\\(", "message": "A PyTorch flip/gather replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.flip\\(|\\.index_select\\(|(?<!tl)(?<!ct)(?<!nl)\\.gather\\(|\\.copy_\\(|torch\\.arange\\(", "message": "Tensor-method flip/gather, a host copy, or a host-built index inside run() performs the reversal on the host.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|return\\s+input\\.|as_strided|stride\\s*=\\s*-", "message": "Returning the input, a view of it, or a negative-stride view violates the fresh contiguous-output requirement.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in reverse_array.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
-    {"any_of": ["tl\\.store", "ct\\.store", "ct\\.scatter", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the reversal must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "ct\\.scatter", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the reversal must be done by a kernel.", "level": "suspicious"},
     {"any_of": ["N\\s*-\\s*1\\s*-", "n\\s*-\\s*1\\s*-", "tl\\.flip", "ct\\.flip", "T\\.flip", "nl\\.flip", "reverse", "\\[::-1\\]"], "message": "No mirrored index arithmetic or in-tile flip found inside the kernel.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [

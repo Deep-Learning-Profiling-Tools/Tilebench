@@ -19,8 +19,8 @@ division.
 - eps: Python float, fourth positional argument (default 1e-6).
 - O: a freshly allocated (M, D) fp32 tensor allocated inside the entry
   point. No aliasing.
-- The entry point takes (Q, K, V, eps) positionally plus `block_size`,
-  `autotune` and `**kwargs`; extra keywords must be accepted.
+- The entry point takes (Q, K, V, eps) positionally; no keyword arguments
+  are passed.
 
 ## Required logical stages
 1. Feature map on Q: PHI_Q = phi(Q).

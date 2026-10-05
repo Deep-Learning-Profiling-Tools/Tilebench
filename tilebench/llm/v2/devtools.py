@@ -11,6 +11,7 @@ from pathlib import Path
 
 from tilebench.paths import REPO_ROOT, list_operators
 
+from tilebench.llm.v2.evaluation.job import EvaluationJob, timing_settings
 from tilebench.llm.v2.manifests import schema as ms
 from tilebench.llm.v2.metrics import efficiency as eff
 from tilebench.llm.v2.metrics.sol import t_sol
@@ -20,7 +21,7 @@ from tilebench.llm.v2.orchestration.state import TrajectoryState
 from tilebench.llm.v2.prompts.renderer import TaskContext
 from tilebench.llm.v2.providers.base import TransportError
 from tilebench.llm.v2.providers.mock import MockProvider, scripted_text
-from tilebench.llm.v2.skills.loader import SkillComponent
+from tilebench.llm.v2.skills.loader import SkillComponent, is_publishable
 from tilebench.llm.v2.tasks.case_selection import load_operator_config
 from tilebench.llm.v2.tasks.fields import task_fields
 from tilebench.llm.v2.tasks.support import eligibility
@@ -32,11 +33,20 @@ def synthetic_component(kind: str, key: str, version: str, body: str, status: st
     text = TEST_ONLY_BANNER + body
     h = hashlib.sha256(text.encode()).hexdigest()
     return SkillComponent(kind=kind, key=key, version=version, path=f"<synthetic:{kind}/{key}>", sha256_raw=h,
-                          sha256_injected=h, permission="public", status=status, text=text, chars=len(text), attachments=[])
+                          sha256_injected=h, permission="public", status=status, text=text, chars=len(text),
+                          attachments=[], sendable_to=[], publishable=False)
+
+
+SYNTHETIC_RULES = {"schema": "tilebench-evaluator-rules/1", "forbidden_substitutions": [], "required_evidence": [],
+                   "allowed_torch_calls": ["torch.empty_like", "torch.empty"],
+                   "mutation": {"inputs_mutated": [], "restore_required": False},
+                   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none"},
+                   "required_stages": [], "timing_boundary": {"includes_preprocessing": True, "notes": ""},
+                   "tolerance_source": "config.verify"}
 
 
 def synthetic_context(operator: str, dtype: str, device: str, dsl: str, condition: str, study: dict, folds: dict,
-                      *, contract_text: str | None = None) -> tuple[TaskContext, dict, dict]:
+                      *, contract_text: str | None = None) -> tuple[TaskContext, EvaluationJob, dict]:
     e = eligibility(operator, dtype, device, dsl, study, folds)
     cfg = load_operator_config(operator)
     tf = task_fields(operator, dtype, e.params, cfg, None)
@@ -55,12 +65,14 @@ def synthetic_context(operator: str, dtype: str, device: str, dsl: str, conditio
                       rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"], run_signature=tf.run_signature,
                       returns=tf.returns, functional_reference=tf.functional_reference.source, fp8_format=e.fp8_format,
                       components=comps, contract_text=contract, rounds=study["trajectory"]["rounds"])
-    rules = {"forbidden_substitutions": [], "required_evidence": [], "allowed_torch_calls": ["torch.empty_like", "torch.empty"],
-             "mutation": {"inputs_mutated": [], "restore_required": False}}
-    task = {"operator": operator, "dtype": dtype, "case_id": e.key.case_id, "params": e.params, "device": device,
-            "dsl": dsl, "fold": e.fold, "fp8_format": e.fp8_format, "atol": tf.tolerance["atol"], "rtol": tf.tolerance["rtol"],
-            "rules": rules}
-    return ctx, task, rules
+    rules = json.loads(json.dumps(SYNTHETIC_RULES))
+    adapter = study["support_matrix"][device]["timing_adapter"]
+    job = EvaluationJob(operator=operator, dtype=dtype, params=e.params, dsl=dsl, device=device, arch=None,
+                        atol=tf.tolerance["atol"], rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"],
+                        rules=rules, timing=timing_settings(study),
+                        expected_timing_mode="graph" if adapter == "proton_cuda_graph" else "eager",
+                        timing_adapter=adapter, identity={"synthetic": True, "fold": e.fold})
+    return ctx, job, rules
 
 
 def mock_script(output_file: str, rounds: int = 10) -> list[dict]:
@@ -86,7 +98,7 @@ class _FailingProvider:
     usage_schema = "openai_responses_v1"
 
     def generate(self, request):
-        raise TransportError("resume must not re-request an archived attempt")
+        raise TransportError("resume must not re-request an archived attempt", charged="no")
 
 
 def run_mock_trajectory(out: Path, *, operator: str, dtype: str, device: str, dsl: str, condition: str,
@@ -94,9 +106,10 @@ def run_mock_trajectory(out: Path, *, operator: str, dtype: str, device: str, ds
     from tilebench.llm.v2.evaluation.launcher import MockEvaluator
     from tilebench.llm.v2.orchestration.campaign import new_trajectory_state
     study, folds = ms.load_study(), ms.load_folds()
-    ctx, task, rules = synthetic_context(operator, dtype, device, dsl, condition, study, folds)
+    ctx, job, rules = synthetic_context(operator, dtype, device, dsl, condition, study, folds)
     e = eligibility(operator, dtype, device, dsl, study, folds)
     chash = ms.study_config_hash(study, ms.load_models(), folds, ms.load_arithmetic_modes())
+    task = {"operator": operator, "dtype": dtype, "case_id": e.key.case_id, "device": device, "dsl": dsl}
     tdir = trajectory_dir("mock", task, "mock-model", condition, root=out)
     tpath = tdir / "trajectory.json"
     if resume and tpath.exists():
@@ -105,11 +118,12 @@ def run_mock_trajectory(out: Path, *, operator: str, dtype: str, device: str, ds
             raise RuntimeError("config hash changed; refusing to resume")
         provider = _FailingProvider()
     else:
-        state = new_trajectory_state(e, ctx, "mock-model", condition, chash, "synthetic-contract", "synthetic-templates")
+        state = new_trajectory_state(e, ctx, "mock-model", condition, chash, "synthetic-contract", "synthetic-templates",
+                                     run_type="validation", campaign="mock")
         provider = MockProvider(mock_script(ctx.output_file))
     cfg = RunnerConfig(model_id="mock-model", provider_name="mock", settings={}, retry_backoff_s=0.0,
                        feedback_limits=study["feedback"], total_prompt_max_chars=study["context_limits"]["total_prompt"])
-    runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=provider, evaluator=MockEvaluator(), rules=rules,
+    runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=provider, evaluator=MockEvaluator(), job=job,
                               cfg=cfg, sleep=lambda s: None)
     status = runner.run()
     return {"trajectory_dir": str(tdir), "status": status, "rounds": [(r.round, r.status, r.latency_ms_mean) for r in state.rounds],
@@ -119,10 +133,14 @@ def run_mock_trajectory(out: Path, *, operator: str, dtype: str, device: str, ds
 
 def _walk_states(campaign_dir: Path):
     for p in sorted(campaign_dir.rglob("trajectory.json")):
+        if "_sandbox" in p.parts:
+            continue
         yield p, TrajectoryState.load(p)
 
 
 def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> dict:
+    """E(B) curves of a campaign directory. Validation-run trajectories are
+    reported under their own key and labelled unscored."""
     modes = ms.load_arithmetic_modes()
     groups: dict[tuple, dict] = {}
     budgets = budgets or [50_000, 100_000, 200_000, 400_000, 800_000]
@@ -133,7 +151,7 @@ def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> d
                     cfg.get("metrics", {}), modes)
         status = "incomplete" if st.status in ("in_progress", "incomplete", "review_required") else "eligible"
         curve = eff.curve(sol.t_sol_ms, st.metric_rounds(), status="complete" if status == "eligible" else "incomplete")
-        key = (t["device"], t["dsl"], st.model, st.condition)
+        key = (t["device"], t["dsl"], st.model, st.condition, st.run_type)
         g = groups.setdefault(key, {"curves": {}, "eligible": {}, "sol_status": {}})
         g["curves"][(t["operator"], t["dtype"])] = curve
         g["eligible"][(t["operator"], t["dtype"])] = status
@@ -143,6 +161,9 @@ def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> d
         agg = eff.aggregate(g["curves"], budgets, g["eligible"])
         agg["sol_status"] = g["sol_status"]
         agg["audit_flags"] = {f"{k[0]}/{k[1]}": c.audit_flags for k, c in g["curves"].items() if c.audit_flags}
+        agg["run_type"] = key[4]
+        if key[4] != "formal":
+            agg["scoring_note"] = "validation run: unscored engineering acceptance; never a formal E(B) result"
         out["/".join(key)] = agg
     return out
 
@@ -150,7 +171,7 @@ def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> d
 def coverage(campaign_dir: Path) -> dict:
     counts: dict = {}
     for path, st in _walk_states(campaign_dir):
-        key = f"{st.task['device']}/{st.task['dsl']}/{st.model}/{st.condition}"
+        key = f"{st.task['device']}/{st.task['dsl']}/{st.model}/{st.condition}/{st.run_type}"
         c = counts.setdefault(key, {"trajectories": 0, "status": {}, "rounds_done": 0})
         c["trajectories"] += 1
         c["status"][st.status] = c["status"].get(st.status, 0) + 1
@@ -163,15 +184,19 @@ def review_queue(campaign_dir: Path) -> list[dict]:
     for path, st in _walk_states(campaign_dir):
         if st.status == "review_required":
             rec = st.rounds[-1]
-            out.append({"trajectory": str(path.parent), "round": rec.round, "attempt": rec.attempts[-1].attempt,
-                        "evidence": (rec.attempts[-1].compliance or {}).get("static", {}).get("evidence", [])})
+            att = rec.attempts[-1]
+            comp = att.compliance or {}
+            out.append({"trajectory": str(path.parent), "trajectory_id": st.trajectory_id, "round": rec.round,
+                        "attempt": att.attempt, "source_path": att.source_path,
+                        "review_items": comp.get("review_items", []),
+                        "evidence": comp.get("static", {}).get("evidence", []) + comp.get("contract_evidence", [])})
     return out
 
 
 def export_review_bundle(out: Path) -> dict:
-    """Copy shareable material only: docs, contracts, public/internal skill
+    """Copy shareable material only: docs, contracts, publishable skill
     texts, prompt snapshots, tests summary. Never outputs/, credentials, or
-    private skill bodies."""
+    private / non-publishable skill bodies."""
     out.mkdir(parents=True, exist_ok=True)
     manifest = {"files": [], "excluded": []}
     include = [REPO_ROOT / "docs" / "llm_v2", REPO_ROOT / "tilebench" / "llm" / "v2" / "contracts" / "data",
@@ -181,15 +206,24 @@ def export_review_bundle(out: Path) -> dict:
     mp = REPO_ROOT / "skills" / "manifest.json"
     if mp.exists():
         skill_manifest = json.loads(mp.read_text())
-    private_paths = {e["path"] for kind in ("reference", "device", "optimization") for v in skill_manifest.get(kind, {}).values()
-                     for e in v.values() if e.get("permission") == "private" and e.get("path")}
+    blocked_paths = set()
+    for kind in ("reference", "device", "optimization"):
+        for v in skill_manifest.get(kind, {}).values():
+            for e in v.values():
+                if not is_publishable(e):
+                    if e.get("path"):
+                        blocked_paths.add(e["path"])
+                    for att in e.get("attachments", []):
+                        blocked_paths.add(att["path"])
+                    if e.get("path"):
+                        blocked_paths.add(str(Path(e["path"]).parent / "REVISION_MAP.md"))
     for src in include:
         if not src.exists():
             continue
         files = [src] if src.is_file() else [p for p in src.rglob("*") if p.is_file()]
         for f in files:
             rel = f.relative_to(REPO_ROOT)
-            if str(rel) in private_paths or "__pycache__" in rel.parts:
+            if str(rel) in blocked_paths or "__pycache__" in rel.parts:
                 manifest["excluded"].append(str(rel))
                 continue
             dst = out / rel
@@ -236,12 +270,12 @@ def make_snapshots(out: Path, *, operator: str = "vector_add", dtype: str = "fp1
     from tilebench.llm.v2.skills.loader import SkillError, compose_context, load_manifest
     study, folds = ms.load_study(), ms.load_folds()
     out.mkdir(parents=True, exist_ok=True)
-    ctx, task, rules = synthetic_context(operator, dtype, device, dsl, "base", study, folds)
+    ctx, job, rules = synthetic_context(operator, dtype, device, dsl, "base", study, folds)
     provenance = {"components": "synthetic"}
     if use_manifest:
         try:
-            comps = compose_context(load_manifest(), study, dsl=dsl, device=device, fold=task["fold"], condition="base",
-                                    require_approved=False)
+            comps = compose_context(load_manifest(), study, dsl=dsl, device=device, fold=job.identity.get("fold", "A"),
+                                    condition="base", require_approved=False, provider_sendable=False)
             ctx.components = comps
             provenance["components"] = {f"{c.kind}:{c.key}@{c.version}": c.sha256_injected for c in comps}
         except SkillError as e:
@@ -272,6 +306,11 @@ def make_snapshots(out: Path, *, operator: str = "vector_add", dtype: str = "fp1
                                                                  "line 19: reference-library computation torch.matmul"],
                                                      rejected_source="# rejected candidate source\n",
                                                      fallback={"round": 3, "source": "# best valid candidate source\n"})
+    prev_viol = {"round": 6, "status": "contract_violation", "source": None, "config": None, "latency_ms_mean": None,
+                 "latency_ms_samples": None, "diagnostic": "line 4: autotune decorator triton.autotune"}
+    files["07_refinement_after_violation_round.md"] = render_refinement(ctx, round_index=7, prev=prev_viol, best_valid=best,
+                                                                        history=hist, limits=limits,
+                                                                        fallback={"round": 3, "source": "# best valid candidate source\n"})
     ctx_e, _, _ = synthetic_context(operator, dtype, device, dsl, "enhanced", study, folds)
     if use_manifest and "components_error" not in provenance:
         ctx_e.components = list(ctx.components) + [c for c in ctx_e.components if c.kind == "optimization"]
@@ -333,4 +372,71 @@ def canonical_audit_report() -> str:
             details.append(f"### {op} ({status})\n" + "\n".join(f"- {it}" for it in items) +
                            ("\n" + "\n".join(f"- aspect `{a}`: {audit['aspects'][a].get('note', '')}" for a in nr) if nr else ""))
     lines += ["", f"Totals: {counts}", "", "## Review items by operator", ""] + details
+    return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------
+# Campaign report (per-trajectory evidence table for handoffs)
+# --------------------------------------------------------------------------
+
+def campaign_report(campaign_dir: Path) -> dict:
+    """Per-trajectory evidence: task/case, rounds closed, valid/failed/repair
+    counts, response ids, usage totals, best timing with its three samples,
+    review decisions, artifact locations. Costs are summed only when every
+    attempt's cost is known."""
+    from tilebench.llm.v2.providers.ledger import read_jsonl
+    rows = []
+    for path, st in _walk_states(campaign_dir):
+        tdir = path.parent
+        attempts = [a for r in st.rounds for a in r.attempts]
+        costs = [a.cost for a in attempts]
+        usage_in = [a.usage.get("logical_input") for a in attempts if a.usage]
+        usage_out = [a.usage.get("logical_output") for a in attempts if a.usage]
+        reasoning = [a.usage.get("reasoning_output") for a in attempts if a.usage]
+        statuses = {}
+        for r in st.rounds:
+            statuses[r.status] = statuses.get(r.status, 0) + 1
+        reviews = read_jsonl(tdir / "reviews.jsonl")
+        best = st.best_valid or {}
+        best_round = next((r for r in st.rounds if best and r.round == best.get("round")), None)
+        rows.append({
+            "trajectory_id": st.trajectory_id, "dir": str(tdir), "task": st.task, "model": st.model,
+            "model_id": next((a.model_id for a in attempts if a.model_id), None),
+            "condition": st.condition, "run_type": st.run_type, "status": st.status, "stop_reason": st.stop_reason,
+            "rounds_closed": sum(1 for r in st.rounds if r.status != "pending"), "round_statuses": statuses,
+            "attempts": len(attempts), "repairs": sum(1 for a in attempts if a.kind == "repair"),
+            "verdicts": {v: sum(1 for a in attempts if a.verdict == v) for v in {a.verdict for a in attempts}},
+            "response_ids": [a.response_id for a in attempts],
+            "transport_events": st.request_count(),
+            "tokens_logical_total": None if any(c is None for c in costs) else sum(costs),
+            "tokens_input": sum(x for x in usage_in if x is not None), "tokens_output": sum(x for x in usage_out if x is not None),
+            "tokens_reasoning": None if any(x is None for x in reasoning) else sum(reasoning),
+            "cost_exact": not any(c is None for c in costs),
+            "best_valid": {"round": best.get("round"), "latency_ms_mean": best.get("latency_ms_mean"),
+                           "latency_ms_samples": best_round.latency_ms_samples if best_round else None,
+                           "timing_execution_mode": best.get("timing_execution_mode")} if best else None,
+            "valid_latencies_ms": [(r.round, r.latency_ms_mean) for r in st.rounds if r.valid],
+            "reviews": [{"round": x["round"], "decision": x["decision"], "reviewer": x["reviewer"]} for x in reviews],
+            "isolation": next((r.evaluation.get("isolation", {}).get("backend") for r in st.rounds if r.evaluation), None),
+            "content_hashes": st.content_hashes, "config_hash": st.config_hash, "generator": st.generator,
+        })
+    return {"campaign_dir": str(campaign_dir), "trajectories": rows}
+
+
+def campaign_report_markdown(report: dict) -> str:
+    lines = ["| task | model | status | rounds | valid | attempts | repairs | best ms (round) | samples | tokens (in/out/reasoning) | exact | reviews |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for r in report["trajectories"]:
+        t = r["task"]
+        b = r["best_valid"] or {}
+        if b and b.get("latency_ms_mean") is not None:
+            best = "%.4f (%s)" % (b["latency_ms_mean"], b.get("round"))
+            samples = ", ".join("%.4f" % x for x in (b.get("latency_ms_samples") or []))
+        else:
+            best, samples = "-", "-"
+        reviews = ", ".join("r%s:%s" % (x["round"], x["decision"]) for x in r["reviews"]) or "-"
+        tokens = "%s/%s/%s" % (r["tokens_input"], r["tokens_output"], r["tokens_reasoning"])
+        lines.append("| %s/%s/%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            t["dsl"], t["operator"], t["dtype"], r["model"], r["status"], r["rounds_closed"],
+            r["round_statuses"].get("valid", 0), r["attempts"], r["repairs"], best, samples, tokens, r["cost_exact"], reviews))
     return "\n".join(lines) + "\n"

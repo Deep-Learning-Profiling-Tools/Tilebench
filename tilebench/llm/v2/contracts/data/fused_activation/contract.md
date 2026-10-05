@@ -16,9 +16,8 @@ per-element tensor (same shape as x), not a broadcast scalar or vector.
 - Output: exactly one tensor of x's shape in fp32, freshly allocated inside
   run() on every call; no aliasing with any input.
 - No input may be modified.
-- Call form: `run(x, gate, bias, autotune=False, **kwargs)`. `autotune` and
-  any `block_size` keyword are framework knobs; ignore them and never run a
-  configuration search.
+- Call form: `run(x, gate, bias)`, positional; no keyword arguments are
+  passed. Never run a configuration search.
 
 ## Required logical stages
 1. Element-wise fused multiply-add and SiLU: for each element read x, gate

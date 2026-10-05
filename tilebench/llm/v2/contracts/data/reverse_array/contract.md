@@ -7,9 +7,8 @@ Given a 1-D tensor `input` of length `N`, produce a new contiguous tensor
 every `i`. This is the reference `input.flip(0).contiguous()`: a
 materialised reversal, not a negative-stride view.
 
-The entry point is called as `run(input, N, **kwargs)` with
-`N == input.numel()`. Keyword arguments such as `block_size` and `autotune`
-may be accepted and ignored.
+The entry point is called as `run(input, N)` with `N == input.numel()`. No
+keyword arguments are passed.
 
 ## Inputs and outputs
 

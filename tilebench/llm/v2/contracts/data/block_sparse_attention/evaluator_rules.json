@@ -7,12 +7,12 @@
     {"id": "csr_online_softmax_attention", "description": "One kernel launch: per (query row block, batch, head) read the CSR row range, visit the listed key blocks in stored order, S = scale * Q.K^T in fp32 with causal and sequence-bound -inf masking, online-softmax update (running max with guard, running sum, alpha rescale), P cast to fp16 for P.V, final divide by the guarded row sum and store."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "flex_attention|create_block_mask|scaled_dot_product_attention|torch\\.nn\\.functional\\.softmax\\(|torch\\.softmax\\(|\\bF\\.softmax\\(|torch\\.(matmul|bmm|einsum|baddbmm)\\(", "message": "A library attention, softmax or GEMM replaces the core computation.", "level": "confirmed"},
-    {"pattern": "torch\\.(tril|triu|ones|zeros|full)\\(|torch\\.zeros_like\\(|\\.masked_fill", "message": "A dense materialised mask or zero-filled scratch is forbidden; masking must happen inside the kernel.", "level": "suspicious"},
-    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.item\\(\\)|\\.numpy\\(\\)|torch\\.repeat_interleave|torch\\.nonzero|torch\\.where\\(", "message": "Host-side decoding of the CSR layout is forbidden; the kernel must consume the CSR arrays directly.", "level": "suspicious"},
-    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b", "message": "Caching layout-derived or other state across calls is forbidden.", "level": "suspicious"},
-    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation suggests a split-key scheme, which is a different structure.", "level": "suspicious"},
-    {"pattern": "\\.transpose\\(\\s*[0-9]|\\.permute\\(|\\.contiguous\\(\\)\\s*\\.(view|reshape)", "message": "Host-side transpose/copy of Q/K/V is forbidden; in-kernel tile transposes are fine.", "level": "suspicious"}
+    {"pattern": "flex_attention|create_block_mask|scaled_dot_product_attention|torch\\.nn\\.functional\\.softmax\\(|torch\\.softmax\\(|\\bF\\.softmax\\(|torch\\.(matmul|bmm|einsum|baddbmm)\\(", "message": "A library attention, softmax or GEMM replaces the core computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(tril|triu|ones|zeros|full)\\(|torch\\.zeros_like\\(|\\.masked_fill", "message": "A dense materialised mask or zero-filled scratch is forbidden; masking must happen inside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.item\\(\\)|\\.numpy\\(\\)|torch\\.repeat_interleave|torch\\.nonzero|torch\\.where\\(", "message": "Host-side decoding of the CSR layout is forbidden; the kernel must consume the CSR arrays directly.", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b", "message": "Caching layout-derived or other state across calls is forbidden.", "level": "suspicious", "scope": "host"},
+    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation suggests a split-key scheme, which is a different structure.", "level": "suspicious", "scope": "any"},
+    {"pattern": "\\.transpose\\(\\s*[0-9]|\\.permute\\(|\\.contiguous\\(\\)\\s*\\.(view|reshape)", "message": "Host-side transpose/copy of Q/K/V is forbidden; in-kernel tile transposes are fine.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "nki\\.isa\\.nc_matmul"], "message": "No matrix-multiply primitive found for Q.K^T / P.V.", "level": "suspicious"},

@@ -7,9 +7,9 @@
     {"id": "elementwise_map", "description": "Single device pass: Y = X if X > 0 else 0.01 * X, X read once, Y written once."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.(nn\\.functional\\.)?leaky_relu\\(|F\\.leaky_relu\\(|torch\\.nn\\.LeakyReLU\\(", "message": "library leaky ReLU computes the operator", "level": "confirmed"},
-    {"pattern": "torch\\.(nn\\.functional\\.)?relu\\(|F\\.relu\\(|torch\\.where\\(|torch\\.maximum\\(|torch\\.clamp\\(|torch\\.clamp_min\\(", "message": "PyTorch elementwise computation of the result", "level": "suspicious"},
-    {"pattern": "\\.mul_\\(|\\.masked_fill_?\\(|\\.clamp_\\(", "message": "in-place PyTorch arithmetic on the input", "level": "suspicious"}
+    {"pattern": "torch\\.(nn\\.functional\\.)?leaky_relu\\(|F\\.leaky_relu\\(|torch\\.nn\\.LeakyReLU\\(", "message": "library leaky ReLU computes the operator", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(nn\\.functional\\.)?relu\\(|F\\.relu\\(|torch\\.where\\(|torch\\.maximum\\(|torch\\.clamp\\(|torch\\.clamp_min\\(", "message": "PyTorch elementwise computation of the result", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.mul_\\(|\\.masked_fill_?\\(|\\.clamp_\\(", "message": "in-place PyTorch arithmetic on the input", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.where", "ct\\.where", "T\\.if_then_else", "nl\\.where", "where\\(", "maximum", "max\\("], "message": "a device-side select between x and 0.01*x", "level": "suspicious"},

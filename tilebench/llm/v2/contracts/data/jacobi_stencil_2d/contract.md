@@ -22,8 +22,8 @@ tolerance-based, so bit-exact association is not required.
 - OUT: a freshly allocated tensor of shape (rows, cols) and dtype IN.dtype,
   allocated inside the entry point. Every element, boundary included, is
   written by the implementation's own device pass. No aliasing.
-- The entry point takes (IN, rows, cols) positionally plus `block_size`,
-  `autotune` and `**kwargs`; extra keywords must be accepted.
+- The entry point takes (IN, rows, cols) positionally; no keyword arguments
+  are passed.
 
 ## Required logical stages
 1. Output allocation (uninitialised).

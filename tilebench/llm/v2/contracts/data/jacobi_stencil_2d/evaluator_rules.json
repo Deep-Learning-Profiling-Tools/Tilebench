@@ -7,11 +7,11 @@
     {"id": "stencil_sweep", "description": "One device pass: interior = 0.25*(up+down+left+right), boundary = centre copied; OUT fully written by the kernel."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.(nn\\.functional\\.)?conv2d\\(|F\\.conv2d\\(", "message": "convolution primitive computes the stencil", "level": "confirmed"},
-    {"pattern": "torch\\.roll\\(|torch\\.nn\\.functional\\.unfold\\(|F\\.unfold\\(", "message": "roll/unfold would form the neighbour sum in PyTorch", "level": "confirmed"},
-    {"pattern": "\\[\\s*0\\s*:\\s*rows\\s*-\\s*2\\s*,|\\[\\s*2\\s*:\\s*rows\\s*,|\\[\\s*1\\s*:\\s*rows\\s*-\\s*1\\s*,", "message": "slicing arithmetic on the input grid (reference-style interior update)", "level": "suspicious"},
-    {"pattern": "\\.clone\\(\\)|torch\\.clone\\(|\\.copy_\\(", "message": "host-side copy of the input to obtain the boundary", "level": "suspicious"},
-    {"pattern": "torch\\.nn\\.functional\\.pad\\(|F\\.pad\\(", "message": "host-side halo padding of the input", "level": "suspicious"}
+    {"pattern": "torch\\.(nn\\.functional\\.)?conv2d\\(|F\\.conv2d\\(", "message": "convolution primitive computes the stencil", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.roll\\(|torch\\.nn\\.functional\\.unfold\\(|F\\.unfold\\(", "message": "roll/unfold would form the neighbour sum in PyTorch", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\[\\s*0\\s*:\\s*rows\\s*-\\s*2\\s*,|\\[\\s*2\\s*:\\s*rows\\s*,|\\[\\s*1\\s*:\\s*rows\\s*-\\s*1\\s*,", "message": "slicing arithmetic on the input grid (reference-style interior update)", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.clone\\(\\)|torch\\.clone\\(|\\.copy_\\(", "message": "host-side copy of the input to obtain the boundary", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.nn\\.functional\\.pad\\(|F\\.pad\\(", "message": "host-side halo padding of the input", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.where", "ct\\.where", "T\\.if_then_else", "nl\\.where", "where\\(", "select"], "message": "a boundary select between the average and the centre value", "level": "suspicious"},

@@ -21,9 +21,8 @@ fully deterministic. `p` is only used to form the rescale factor.
 - Output: exactly one tensor with the shape and dtype of `x`, freshly
   allocated inside run() on every call; no aliasing with any input.
 - No input may be modified.
-- Call form: `run(x, x_keep, p, block_size=..., autotune=False)`. The
-  keyword knobs are framework knobs; ignore them and never run a
-  configuration search.
+- Call form: `run(x, x_keep, p)`, positional; no keyword arguments are
+  passed. Never run a configuration search.
 
 ## Required logical stages
 1. Element-wise masked rescale: for each element, read x and x_keep, apply

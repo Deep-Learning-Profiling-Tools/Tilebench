@@ -18,6 +18,15 @@ CONDITIONS = ("base", "enhanced")
 FOLDS = ("A", "B", "C")
 DSLS = ("triton", "cutile", "tilelang", "nki")
 DEVICES = ("B200", "GH200", "MI300X", "Trn2")
+# What the timing adapter does when a requested CUDA-graph capture fails
+# (study.yaml:timing.capture_failure_policy). Only one policy is defined:
+# the candidate is timed eagerly, the record says so, and every consumer
+# (metrics, publication) flags the round as measured in a different mode.
+CAPTURE_FAILURE_POLICIES = ("time_eagerly_and_flag",)
+# formal: scored Base/Enhanced campaigns (approved assets, approved models,
+# frozen folds for Enhanced). validation: engineering acceptance of the
+# execution chain; identical mechanics, unscored, never a distillation source.
+RUN_TYPES = ("formal", "validation")
 
 
 class ManifestError(ValueError):
@@ -81,6 +90,14 @@ def validate_study(study: dict) -> None:
     timing = study.get("timing", {})
     if (timing.get("warmup"), timing.get("repeat")) != (1, 3):
         raise ManifestError("study.yaml: timing must be warmup=1, repeat=3")
+    if timing.get("cache_flush") != "operator_boundary_outside_timed_scope":
+        raise ManifestError("study.yaml: timing.cache_flush must be operator_boundary_outside_timed_scope")
+    if not isinstance(timing.get("cuda_graph_requested"), bool):
+        raise ManifestError("study.yaml: timing.cuda_graph_requested must be a boolean")
+    if timing.get("capture_failure_policy") not in CAPTURE_FAILURE_POLICIES:
+        raise ManifestError(f"study.yaml: timing.capture_failure_policy must be one of {CAPTURE_FAILURE_POLICIES}")
+    if study.get("run_types") is None or set(study["run_types"]) != set(RUN_TYPES):
+        raise ManifestError(f"study.yaml: run_types must define exactly {RUN_TYPES}")
     conds = study.get("conditions", {})
     if set(conds) != set(CONDITIONS):
         raise ManifestError(f"study.yaml: conditions must be exactly {CONDITIONS}")
@@ -152,8 +169,12 @@ def training_folds(held_out: str) -> tuple[str, ...]:
     return tuple(f for f in FOLDS if f != held_out)
 
 
-def blockers_models(models: dict, roles: tuple[str, ...] = ("generator",)) -> list[str]:
-    """Reasons a live campaign cannot start: unset model ids / settings."""
+def blockers_models(models: dict, roles: tuple[str, ...] = ("generator",), *,
+                    accept_status: tuple[str, ...] = ("approved",), names: tuple[str, ...] | None = None) -> list[str]:
+    """Reasons a live campaign cannot start: unset model ids / settings, or a
+    status outside `accept_status` (formal runs accept only `approved`;
+    validation runs also accept `candidate`). `names` restricts the generator
+    entries checked to the models actually selected for the run."""
     out: list[str] = []
     for role in roles:
         spec = models.get("roles", {}).get(role)
@@ -162,14 +183,16 @@ def blockers_models(models: dict, roles: tuple[str, ...] = ("generator",)) -> li
             continue
         entries = spec.items() if role == "generator" else [(role, spec)]
         for name, cfg in entries:
+            if role == "generator" and names is not None and name not in names:
+                continue
             if role == "reviewer" and not cfg.get("enabled"):
                 continue
             if not cfg.get("model_id"):
                 out.append(f"models.yaml: {role}.{name}.model_id is not set")
             if not cfg.get("provider"):
                 out.append(f"models.yaml: {role}.{name}.provider is not set")
-            if cfg.get("status") != "approved":
-                out.append(f"models.yaml: {role}.{name}.status is {cfg.get('status')!r}, not approved")
+            if cfg.get("status") not in accept_status:
+                out.append(f"models.yaml: {role}.{name}.status is {cfg.get('status')!r}, accepted {accept_status}")
     return out
 
 

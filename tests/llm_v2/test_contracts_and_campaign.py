@@ -38,8 +38,12 @@ def test_preflight_blocks_live_without_models_and_nki(monkeypatch, study):
     from tilebench.llm.v2.skills import loader
     monkeypatch.setattr(loader, "MANIFEST_PATH", loader.REPO_ROOT / "does-not-exist.json")
     pf = campaign.preflight("B200", "triton", "enhanced", live=True, study=study)
-    assert not pf.ok and any("model_id" in b for b in pf.blockers) and any("manifest missing" in b for b in pf.blockers)
+    # formal gate: candidate model ids are not approved; validation gate accepts them
+    assert not pf.ok and any("status is 'candidate'" in b for b in pf.blockers) and any("manifest missing" in b for b in pf.blockers)
     assert any("not frozen" in b for b in pf.blockers)
+    pfv = campaign.preflight("B200", "triton", "base", live=True, study=study, run_type="validation",
+                             models_selected=("gpt",), provider="openai")
+    assert not any("models.yaml" in b for b in pfv.blockers)
     pf2 = campaign.preflight("Trn2", "nki", "base", live=False, study=study)
     assert any("NKI timing adapter" in b for b in pf2.blockers)
     pf3 = campaign.preflight("MI300X", "cutile", "base", live=False, study=study)

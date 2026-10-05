@@ -30,9 +30,8 @@ b_seqlen[b] = seq_len >= 1; rows with no valid split are unspecified.
 - Output: exactly one tensor of shape (batch, heads, head_dim) in
   `mid_o.dtype`, freshly allocated inside run() on every call; no aliasing.
 - No input may be modified.
-- Call form: `run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size=None, autotune=False)`.
-  The keyword knobs are framework knobs; ignore them and never run a
-  configuration search.
+- Call form: `run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor)`, positional;
+  no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
 1. Per (batch, head) program: read b_seqlen[b], compute nb.

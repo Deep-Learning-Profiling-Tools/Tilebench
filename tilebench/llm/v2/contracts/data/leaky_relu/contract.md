@@ -14,8 +14,7 @@ comparison is not observable.
 - N: Python int, the element count (second positional argument).
 - Y: a freshly allocated tensor with X's shape and dtype, allocated inside
   the entry point. No aliasing.
-- The entry point takes (X, N) positionally plus `block_size`, `autotune`
-  and `**kwargs`; extra keywords must be accepted and may be ignored.
+- The entry point takes (X, N) positionally; no keyword arguments are passed.
 
 ## Required logical stages
 1. Output allocation.

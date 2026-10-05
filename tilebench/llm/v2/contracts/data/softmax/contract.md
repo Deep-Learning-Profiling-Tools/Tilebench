@@ -14,8 +14,8 @@ There is no reference-side preprocessing.
 
 ## Inputs and outputs
 
-The entry point is called as `run(x, block_size=None, autotune=False)`:
-`x` positional, keywords may be ignored.
+The entry point is called as `run(x)`: `x` positional; no keyword arguments
+are passed.
 
 - `x`: exactly 2-D, `(n_rows, n_cols)`, contiguous row-major, dtype fp16 or
   fp32. Read-only.

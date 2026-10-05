@@ -7,11 +7,11 @@
     {"id": "s2", "description": "Single rounding from fp32 to fp16 at the store into a freshly allocated (rows, cols) fp16 output; one launch, no intermediate."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.dequantize|torch\\._make_per_channel_quantized_tensor|torch\\._make_per_tensor_quantized_tensor|torch\\.ops\\.quantized|torch\\.ao\\.", "message": "library dequantisation replaces the whole computation", "level": "confirmed"},
-    {"pattern": "torch\\.(mul|multiply|div|divide|true_divide)\\(", "message": "host-side tensor arithmetic performs the dequantisation", "level": "suspicious"},
-    {"pattern": "state_x\\.unsqueeze|state_x\\[:,\\s*None\\]|\\.unsqueeze\\(1\\)\\s*\\*", "message": "host-side broadcast multiply of the row scale", "level": "suspicious"},
-    {"pattern": "x\\.(float|half|to)\\(|x\\.to\\(torch", "message": "host-side cast of the int8 input (pre-cast copy is forbidden)", "level": "suspicious"},
-    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like)\\(", "message": "extra buffer; no intermediate is permitted (only the fp16 output via torch.empty)", "level": "suspicious"}
+    {"pattern": "torch\\.dequantize|torch\\._make_per_channel_quantized_tensor|torch\\._make_per_tensor_quantized_tensor|torch\\.ops\\.quantized|torch\\.ao\\.", "message": "library dequantisation replaces the whole computation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(mul|multiply|div|divide|true_divide)\\(", "message": "host-side tensor arithmetic performs the dequantisation", "level": "suspicious", "scope": "host"},
+    {"pattern": "state_x\\.unsqueeze|state_x\\[:,\\s*None\\]|\\.unsqueeze\\(1\\)\\s*\\*", "message": "host-side broadcast multiply of the row scale", "level": "suspicious", "scope": "any"},
+    {"pattern": "x\\.(float|half|to)\\(|x\\.to\\(torch", "message": "host-side cast of the int8 input (pre-cast copy is forbidden)", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like)\\(", "message": "extra buffer; no intermediate is permitted (only the fp16 output via torch.empty)", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["127"], "message": "the 1/127 dequantisation constant", "level": "suspicious"},

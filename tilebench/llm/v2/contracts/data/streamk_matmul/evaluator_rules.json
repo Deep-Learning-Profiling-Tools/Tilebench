@@ -9,15 +9,15 @@
     {"id": "final_cast", "description": "For fp16/bf16 inputs only, one rounding of the fp32 accumulation target into the output tensor after both regions have completed."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.matmul\\(|torch\\.mm\\(|torch\\.bmm\\(|torch\\.addmm\\(|torch\\.einsum\\(|torch\\.nn\\.functional\\.linear\\(|F\\.linear\\(|torch\\.linalg\\.matmul\\(|\\.matmul\\(|\\.mm\\(", "message": "The whole GEMM is performed by a PyTorch / library matmul.", "level": "confirmed"},
-    {"pattern": "[A-Za-z0-9_\\)\\]]\\s*@\\s*[A-Za-z_\\(]", "message": "The @ operator on tensors performs the GEMM in PyTorch.", "level": "suspicious"},
-    {"pattern": "cublas|cutlass|hipblas|rocblas|torch\\.backends\\.cuda\\.matmul", "message": "A BLAS library or a global matmul-mode switch replaces or alters the kernel.", "level": "suspicious"},
-    {"pattern": "WeakTensorKeyDictionary|_cache\\[\\s*b\\s*\\]|_cache\\.get\\(\\s*b\\b|functools\\.lru_cache|data_ptr\\(\\)\\s*\\]|id\\(\\s*b\\s*\\)", "message": "Cross-call caching keyed on an input tensor: a prepacked / transposed operand reused outside the timed region is not permitted (open review item).", "level": "suspicious"},
-    {"pattern": "b\\.t\\(\\)|b\\.T\\b|b\\.transpose\\(|torch\\.transpose\\(\\s*b|b\\.permute\\(|b\\.mT\\b", "message": "Transposing B: permitted only if performed inside run() on every call and never cached.", "level": "suspicious"},
-    {"pattern": "semaphore|flag|lock|spin|cuda\\.synchronize|partials?\\b|workspace", "message": "Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme.", "level": "suspicious"},
-    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*atomic|atomic_add\\([^\\n]*(float16|bfloat16|half)", "message": "Half-precision atomic combination: partials must be combined in fp32 and rounded once at the end.", "level": "suspicious"},
-    {"pattern": "allow_tf32\\s*=\\s*False|input_precision\\s*=\\s*['\"](ieee|hf32)['\"]", "message": "Disabling TF32 for fp32 operands is a different numeric mode from the canonical behaviour.", "level": "suspicious"},
-    {"pattern": "return\\s+(a|b)\\b|return\\s+(a|b)\\.|\\b(a|b)\\.copy_\\(|\\b(a|b)\\.zero_\\(", "message": "Mutating or returning an input violates the no-mutation / fresh-output rules.", "level": "suspicious"}
+    {"pattern": "torch\\.matmul\\(|torch\\.mm\\(|torch\\.bmm\\(|torch\\.addmm\\(|torch\\.einsum\\(|torch\\.nn\\.functional\\.linear\\(|F\\.linear\\(|torch\\.linalg\\.matmul\\(|\\.matmul\\(|\\.mm\\(", "message": "The whole GEMM is performed by a PyTorch / library matmul.", "level": "confirmed", "scope": "host"},
+    {"pattern": "[A-Za-z0-9_\\)\\]]\\s*@\\s*[A-Za-z_\\(]", "message": "The @ operator on tensors performs the GEMM in PyTorch.", "level": "suspicious", "scope": "host"},
+    {"pattern": "cublas|cutlass|hipblas|rocblas|torch\\.backends\\.cuda\\.matmul", "message": "A BLAS library or a global matmul-mode switch replaces or alters the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|_cache\\[\\s*b\\s*\\]|_cache\\.get\\(\\s*b\\b|functools\\.lru_cache|data_ptr\\(\\)\\s*\\]|id\\(\\s*b\\s*\\)", "message": "Cross-call caching keyed on an input tensor: a prepacked / transposed operand reused outside the timed region is not permitted (open review item).", "level": "suspicious", "scope": "host"},
+    {"pattern": "b\\.t\\(\\)|b\\.T\\b|b\\.transpose\\(|torch\\.transpose\\(\\s*b|b\\.permute\\(|b\\.mT\\b", "message": "Transposing B: permitted only if performed inside run() on every call and never cached.", "level": "suspicious", "scope": "host"},
+    {"pattern": "semaphore|flag|lock|spin|cuda\\.synchronize|partials?\\b|workspace", "message": "Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*atomic|atomic_add\\([^\\n]*(float16|bfloat16|half)", "message": "Half-precision atomic combination: partials must be combined in fp32 and rounded once at the end.", "level": "suspicious", "scope": "any"},
+    {"pattern": "allow_tf32\\s*=\\s*False|input_precision\\s*=\\s*['\"](ieee|hf32)['\"]", "message": "Disabling TF32 for fp32 operands is a different numeric mode from the canonical behaviour.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+(a|b)\\b|return\\s+(a|b)\\.|\\b(a|b)\\.copy_\\(|\\b(a|b)\\.zero_\\(", "message": "Mutating or returning an input violates the no-mutation / fresh-output rules.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nl\\.matmul", "nisa\\.nc_matmul", "\\bmma\\b", "\\bdot\\b"], "message": "No tensor-core / matrix-multiply primitive found.", "level": "suspicious"},

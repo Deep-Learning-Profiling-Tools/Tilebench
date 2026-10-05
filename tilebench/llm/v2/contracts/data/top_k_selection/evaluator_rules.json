@@ -9,13 +9,13 @@
     {"id": "final_slice", "description": "Return the first k entries of the final single-block row as a 1-D (k,) fp32 tensor that does not alias the input."}
   ],
   "forbidden_substitutions": [
-    {"pattern": "torch\\.topk\\(|(?<!tl)\\.topk\\(|torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(", "message": "The whole selection is performed by a PyTorch top-k / sort routine.", "level": "confirmed"},
-    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.(sort|argsort)\\(", "message": "A tensor-method sort on the host replaces the in-kernel hierarchy.", "level": "suspicious"},
-    {"pattern": "torch\\.(max|amax|argmax|maximum|where|nonzero|histc|bincount|bucketize|searchsorted|cumsum|unique)\\(", "message": "Host-side PyTorch reduction / histogram / threshold operations indicate a different selection family or host-side selection.", "level": "suspicious"},
-    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.numpy\\(\\)|heapq|\\bsorted\\(|\\.item\\(\\)", "message": "Data moved to the host or selected in Python.", "level": "suspicious"},
-    {"pattern": "radix|histogram|threshold|bucket|digit", "message": "Radix-select / histogram-threshold selection is a different algorithm family from the hierarchical block tournament.", "level": "suspicious"},
-    {"pattern": "return\\s+input\\b|return\\s+input\\[|return\\s+input\\.|input\\.copy_\\(|input\\[.*\\]\\s*=|input\\.sort_\\(", "message": "Returning a view of the input or mutating it violates the aliasing / no-mutation rules.", "level": "suspicious"},
-    {"pattern": "largest\\s*=\\s*False|ascending|reverse\\s*=\\s*True", "message": "Ascending / smallest selection; the output must be the k largest in descending order.", "level": "suspicious"}
+    {"pattern": "torch\\.topk\\(|(?<!tl)\\.topk\\(|torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(", "message": "The whole selection is performed by a PyTorch top-k / sort routine.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.(sort|argsort)\\(", "message": "A tensor-method sort on the host replaces the in-kernel hierarchy.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(max|amax|argmax|maximum|where|nonzero|histc|bincount|bucketize|searchsorted|cumsum|unique)\\(", "message": "Host-side PyTorch reduction / histogram / threshold operations indicate a different selection family or host-side selection.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.numpy\\(\\)|heapq|\\bsorted\\(|\\.item\\(\\)", "message": "Data moved to the host or selected in Python.", "level": "suspicious", "scope": "host"},
+    {"pattern": "radix|histogram|threshold|bucket|digit", "message": "Radix-select / histogram-threshold selection is a different algorithm family from the hierarchical block tournament.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|return\\s+input\\[|return\\s+input\\.|input\\.copy_\\(|input\\[.*\\]\\s*=|input\\.sort_\\(", "message": "Returning a view of the input or mutating it violates the aliasing / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "largest\\s*=\\s*False|ascending|reverse\\s*=\\s*True", "message": "Ascending / smallest selection; the output must be the k largest in descending order.", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["tl\\.topk", "tl\\.sort", "bitonic", "ct\\.minimum", "ct\\.maximum", "tl\\.maximum", "tl\\.minimum", "T\\.max", "nl\\.maximum", "nisa\\.max8", "nisa\\.nc_find_index8", "compare", "exchange", "sort"], "message": "No in-block selection / sort primitive found.", "level": "suspicious"},
