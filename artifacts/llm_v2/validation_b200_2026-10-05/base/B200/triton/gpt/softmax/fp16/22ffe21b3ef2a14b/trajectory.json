@@ -1,0 +1,2666 @@
+{
+ "best_valid": {
+  "config": {
+   "block_cols": 2048,
+   "exponential": "exp2_fma",
+   "fragment_reduction": "serial",
+   "held_fragments": 5,
+   "load_cache_modifier": "",
+   "log2e": 1.4426950408889634,
+   "maxnreg": 64,
+   "n_cols": 10240,
+   "n_rows": 2048,
+   "num_ctas": 1,
+   "num_stages": 1,
+   "num_warps": 8,
+   "rows_per_program": 1,
+   "store_cache_modifier": ""
+  },
+  "latency_ms_mean": 0.016480333333333333,
+  "round": 10,
+  "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_10/attempt_1/impl_triton.py",
+  "timing_execution_mode": "graph"
+ },
+ "campaign": "validation_b200_2026-10-05",
+ "condition": "base",
+ "config_hash": "43bae837b5bcbcecb6bd4e5c946145ea4f74086399d7cc2c5bc2180d9d0085c2",
+ "content_hashes": {
+  "contract": "ed0dcd4dd1be4417316de3018904c9ee0b4f31619972648c9dc2a4cae8047a7f",
+  "device:B200@2026-10-05": "69687df32035f175ccff437d9b26871d08836e91d86e96b21ac8ed99d2cac588",
+  "reference:triton@3.6.0": "023f7409d0e20d5009a95798a23fe11be6eac6e962c69932fe3858cec20653cd",
+  "templates": "3871a96471c43b7bcea825eb3743cca36008c4f777b9db341411d17bcaf2377d"
+ },
+ "evaluation_job": {
+  "arch": "blackwell",
+  "atol": 0.001,
+  "device": "B200",
+  "dsl": "triton",
+  "dtype": "fp16",
+  "expected_timing_mode": "graph",
+  "identity": {
+   "campaign": "validation_b200_2026-10-05",
+   "condition": "base",
+   "model": "gpt",
+   "run_type": "validation",
+   "trajectory_id": "5b7f40fabe2aa727f27d"
+  },
+  "operator": "softmax",
+  "params": {
+   "n_cols": 10240,
+   "n_rows": 2048
+  },
+  "rtol": 0.001,
+  "rules_sha256": "8a73d24059784252f08b776709189fc9b9df56cd73142310444ab0160fc01bd5",
+  "schema": "tilebench-llm-v2-evaljob/1",
+  "timing": {
+   "capture_failure_policy": "time_eagerly_and_flag",
+   "flush": true,
+   "record_prep_runs": true,
+   "repeat": 3,
+   "use_cuda_graph": true,
+   "warmup": 1
+  },
+  "timing_adapter": "proton_cuda_graph",
+  "tolerance_source": "config.verify+dtype_default"
+ },
+ "generator": {
+  "api_key_env": "OPENAI_API_KEY",
+  "model_id": "gpt-6.1-sol",
+  "name": "gpt",
+  "provider": "openai",
+  "set_by": "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000",
+  "settings": {
+   "max_output_tokens": 128000,
+   "reasoning_effort": "xhigh"
+  },
+  "status": "candidate"
+ },
+ "model": "gpt",
+ "notes": [
+  "round 1 attempt 1: review by operator:claude-fable-5.1-session -> compliant: Reviewed by the campaign operator (Claude Fable 5.1 session, human-visible record). Evidence: whole row held on chip with exact tiling (N_COLS constexpr 10240 = 5 x BLOCK_COLS 2048), no partial chunk hence no out-of-range lanes to pad with -inf; contract permits 'a single sweep when the whole row fits' and free evaluation order 'when a whole row is held on chip'; fp32 upcast on load, exact row max subtracted, fp32 exp/sum, single downcast at store, each element read once; no host reductions, no global scratch, fresh output. The missing '-inf' literal is a rule miss, not a contract breach.",
+  "round 2 attempt 1: review by recheck:contract_checks/2026-10-05.2 -> compliant: softmax draft rule revised: '-inf literal' required-evidence entry removed (contract permits whole-row-on-chip evaluation without partial chunks; masking is verified by execution) [recheck under contract_checks/2026-10-05.2: clear; previous items: ['missing evidence: No -inf initial max / padding evidence for the online sweep.']]"
+ ],
+ "output_file": "impl_triton.py",
+ "rounds": [
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [
+       {
+        "category": "rule",
+        "level": "suspicious",
+        "line": null,
+        "matched": null,
+        "message": "missing evidence: No -inf initial max / padding evidence for the online sweep.",
+        "scope": null
+       }
+      ],
+      "diagnostics": [],
+      "review_items": [
+       "missing evidence: No -inf initial max / padding evidence for the online sweep."
+      ],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 44,
+       "verdict": "clear"
+      },
+      "verdict": "review_required"
+     },
+     "config": {
+      "block_cols": 2048,
+      "held_fragments": 5,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "rows_per_program": 1
+     },
+     "cost": 20014,
+     "cost_status": "known",
+     "diagnostic": "missing evidence: No -inf initial max / padding evidence for the online sweep.",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52300,
+     "request_hash": "ce931ae810c24227adb9566d92af4d488a236107a5eab3a65414b287b3349541",
+     "response_id": "resp_0af479a3f85a040e006ac37eeed00887d29d7a7480bbed2c3d",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_01/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_01/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 132.5677137374878,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0af479a3f85a040e006ac37eeed00887d29d7a7480bbed2c3d",
+       "round": 1,
+       "t": 1791197042.150805,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14747,
+        "logical_output": 5267,
+        "logical_total": 20014,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 4606,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14747,
+      "logical_output": 5267,
+      "logical_total": 20014,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 4606,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "held_fragments": 5,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 8,
+    "rows_per_program": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_01/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_3d7b8452.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "held_fragments": 5,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 8,
+     "rows_per_program": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.001408815383911,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 1,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.017301333333333335,
+    "latency_ms_samples": [
+     0.017696,
+     0.017248,
+     0.01696
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_1_1_q953qr62",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1526377960,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791197269.5063372
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.017301333333333335,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_1_1_q953qr62/tilebench_proton_tree_3d7b8452.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.017696,
+      0.017248,
+      0.01696
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 13.117807388305664
+   },
+   "latency_ms_mean": 0.017301333333333335,
+   "latency_ms_samples": [
+    0.017696,
+    0.017248,
+    0.01696
+   ],
+   "round": 1,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_01/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "checker_version": "contract_checks/2026-10-05.2",
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 42,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "held_fragments": 5,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 16,
+      "rows_per_program": 1
+     },
+     "cost": 18347,
+     "cost_status": "known",
+     "diagnostic": "missing evidence: No -inf initial max / padding evidence for the online sweep.",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 54373,
+     "request_hash": "4748a82107ee173d13ef3187fdacd2894380d17e7c2e5cd48bcd3ac87ca96fcd",
+     "response_id": "resp_085e92bd8303e397006ac38059cb6487d29ccbb5ea57462bdf",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_02/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_02/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 67.9253602027893,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_085e92bd8303e397006ac38059cb6487d29ccbb5ea57462bdf",
+       "round": 2,
+       "t": 1791197340.8156676,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15516,
+        "logical_output": 2831,
+        "logical_total": 18347,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 2208,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15516,
+      "logical_output": 2831,
+      "logical_total": 18347,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 2208,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "held_fragments": 5,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 16,
+    "rows_per_program": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_02/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_310e986e.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "held_fragments": 5,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 16,
+     "rows_per_program": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.807040691375732,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 2,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.019722666666666666,
+    "latency_ms_samples": [
+     0.020096,
+     0.019712,
+     0.01936
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_2_1_h771lvxy",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 2016135940,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791201081.296723
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.019722666666666666,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_2_1_h771lvxy/tilebench_proton_tree_310e986e.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.020096,
+      0.019712,
+      0.01936
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 3620.1493666172028
+   },
+   "latency_ms_mean": 0.019722666666666666,
+   "latency_ms_samples": [
+    0.020096,
+    0.019712,
+    0.01936
+   ],
+   "round": 2,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_02/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 43,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "held_fragments": 5,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 4,
+      "rows_per_program": 1
+     },
+     "cost": 18462,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 56368,
+     "request_hash": "4533fb788db0da205d876d1aa79899f3f6ba4486e3e165f178c5ea4e03f45724",
+     "response_id": "resp_0b813e9c0d4fc6cc006ac38f3e81b487d28943e23a5771fb7c",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_03/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_03/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 58.07775664329529,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0b813e9c0d4fc6cc006ac38f3e81b487d28943e23a5771fb7c",
+       "round": 3,
+       "t": 1791201142.4868975,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16233,
+        "logical_output": 2229,
+        "logical_total": 18462,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 1592,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16233,
+      "logical_output": 2229,
+      "logical_total": 18462,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 1592,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "held_fragments": 5,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 4,
+    "rows_per_program": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_03/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_6404983d.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "held_fragments": 5,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 4,
+     "rows_per_program": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.496277332305908,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 3,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.018304,
+    "latency_ms_samples": [
+     0.01824,
+     0.01856,
+     0.018112
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_3_1_ey88rk8p",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1847207002,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202349.6284788
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.018304,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_3_1_ey88rk8p/tilebench_proton_tree_6404983d.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.01824,
+      0.01856,
+      0.018112
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 1210.2175643444061
+   },
+   "latency_ms_mean": 0.018304,
+   "latency_ms_samples": [
+    0.01824,
+    0.01856,
+    0.018112
+   ],
+   "round": 3,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_03/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 48,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 16,
+      "pair_cols": 4096,
+      "paired_fragments": 2,
+      "rows_per_program": 1,
+      "tail_cols": 2048
+     },
+     "cost": 19643,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 56469,
+     "request_hash": "62c58e49b97d70a71aaa397bc677a5710b93a824d3c6a3003c0107e0c88b4640",
+     "response_id": "resp_0012c19f21ba5025006ac394311efc87d29be803ffc32c59a7",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_04/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_04/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 92.06170535087585,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0012c19f21ba5025006ac394311efc87d29be803ffc32c59a7",
+       "round": 4,
+       "t": 1791202445.0660887,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16275,
+        "logical_output": 3368,
+        "logical_total": 19643,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 2716,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16275,
+      "logical_output": 3368,
+      "logical_total": 19643,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 2716,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 16,
+    "pair_cols": 4096,
+    "paired_fragments": 2,
+    "rows_per_program": 1,
+    "tail_cols": 2048
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_04/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_0a099dca.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 16,
+     "pair_cols": 4096,
+     "paired_fragments": 2,
+     "rows_per_program": 1,
+     "tail_cols": 2048
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.923288106918335,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 4,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.019711999999999997,
+    "latency_ms_samples": [
+     0.019776,
+     0.019712,
+     0.019648
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_4_1_6feph8h5",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 903469765,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202447.806009
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.019711999999999997,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_4_1_6feph8h5/tilebench_proton_tree_0a099dca.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.019776,
+      0.019712,
+      0.019648
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.661908864974976
+   },
+   "latency_ms_mean": 0.019711999999999997,
+   "latency_ms_samples": [
+    0.019776,
+    0.019712,
+    0.019648
+   ],
+   "round": 4,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_04/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 46,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "log2e": 1.4426950408889634,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "rows_per_program": 1
+     },
+     "cost": 21206,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 56652,
+     "request_hash": "844a5218d1e68688673b296ac75bc1a174ac019c516cd7840e4668689347e31c",
+     "response_id": "resp_0d7b6259c7a18efd006ac394931f0887d2b721d9b0b6bc8ef4",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_05/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_05/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 125.87333917617798,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0d7b6259c7a18efd006ac394931f0887d2b721d9b0b6bc8ef4",
+       "round": 5,
+       "t": 1791202576.9023807,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16326,
+        "logical_output": 4880,
+        "logical_total": 21206,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 4082,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16326,
+      "logical_output": 4880,
+      "logical_total": 21206,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 4082,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "log2e": 1.4426950408889634,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 8,
+    "rows_per_program": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_05/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_b79c70ee.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "log2e": 1.4426950408889634,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 8,
+     "rows_per_program": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.035577774047852,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 5,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.016757666666666667,
+    "latency_ms_samples": [
+     0.016992,
+     0.016481,
+     0.0168
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_5_1_pp6th5lj",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1745252307,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202586.6670532
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.016757666666666667,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_5_1_pp6th5lj/tilebench_proton_tree_b79c70ee.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.016992,
+      0.016481,
+      0.0168
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 13.099370002746582
+   },
+   "latency_ms_mean": 0.016757666666666667,
+   "latency_ms_samples": [
+    0.016992,
+    0.016481,
+    0.0168
+   ],
+   "round": 5,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_05/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 43,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "log2e": 1.4426950408889634,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 16,
+      "rows_per_program": 1
+     },
+     "cost": 18736,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 55033,
+     "request_hash": "e6658a8f94c8bbb263bf7397ed92e73cd3148c50d1641cc9b1ca4ba1c40f82ec",
+     "response_id": "resp_0eb1c2ef93c60c01006ac3951ee07887d293eeb150c2e20e27",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_06/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_06/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 67.65031147003174,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0eb1c2ef93c60c01006ac3951ee07887d293eeb150c2e20e27",
+       "round": 6,
+       "t": 1791202657.948713,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15798,
+        "logical_output": 2938,
+        "logical_total": 18736,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 2182,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15798,
+      "logical_output": 2938,
+      "logical_total": 18736,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 2182,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "log2e": 1.4426950408889634,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 16,
+    "rows_per_program": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_06/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_5b28dd74.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "log2e": 1.4426950408889634,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 16,
+     "rows_per_program": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.577606916427612,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 6,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.018997,
+    "latency_ms_samples": [
+     0.018815,
+     0.019136,
+     0.01904
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_6_1_sxbehyzv",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1184108372,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202661.6135654
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.018997,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_6_1_sxbehyzv/tilebench_proton_tree_5b28dd74.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.018815,
+      0.019136,
+      0.01904
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 6.894753932952881
+   },
+   "latency_ms_mean": 0.018997,
+   "latency_ms_samples": [
+    0.018815,
+    0.019136,
+    0.01904
+   ],
+   "round": 6,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_06/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 52,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "log2e": 1.4426950408889634,
+      "loop_stages": 2,
+      "n_cols": 10240,
+      "n_rows": 2048,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "persistent_programs": 592,
+      "row_schedule": "grid_stride",
+      "rows_per_iteration": 1
+     },
+     "cost": 22904,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 57499,
+     "request_hash": "051f5037c5ff8d677120aa25f33a776fb05801fc5f4e6ef967d90f1f5287296a",
+     "response_id": "resp_0d4f6deca002e0e3006ac395694bfc87d295e9de7e493cc7d7",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_07/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_07/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 172.73912692070007,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0d4f6deca002e0e3006ac395694bfc87d295e9de7e493cc7d7",
+       "round": 7,
+       "t": 1791202837.8448577,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16681,
+        "logical_output": 6223,
+        "logical_total": 22904,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 5349,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16681,
+      "logical_output": 6223,
+      "logical_total": 22904,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 5349,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "log2e": 1.4426950408889634,
+    "loop_stages": 2,
+    "n_cols": 10240,
+    "n_rows": 2048,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 8,
+    "persistent_programs": 592,
+    "row_schedule": "grid_stride",
+    "rows_per_iteration": 1
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_07/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_8290750e.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "log2e": 1.4426950408889634,
+     "loop_stages": 2,
+     "n_cols": 10240,
+     "n_rows": 2048,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 8,
+     "persistent_programs": 592,
+     "row_schedule": "grid_stride",
+     "rows_per_iteration": 1
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.1791746616363525,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 7,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.017749666666666667,
+    "latency_ms_samples": [
+     0.018176,
+     0.017185,
+     0.017888
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_7_1_9pssho1f",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 697776560,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202840.8235357
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.017749666666666667,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_7_1_9pssho1f/tilebench_proton_tree_8290750e.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.018176,
+      0.017185,
+      0.017888
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.927283525466919
+   },
+   "latency_ms_mean": 0.017749666666666667,
+   "latency_ms_samples": [
+    0.018176,
+    0.017185,
+    0.017888
+   ],
+   "round": 7,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_07/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 60,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "load_cache_modifier": ".cg",
+      "log2e": 1.4426950408889634,
+      "maxnreg": 64,
+      "n_cols": 10240,
+      "n_rows": 2048,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "rows_per_program": 1,
+      "store_cache_modifier": ".cs"
+     },
+     "cost": 22836,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 58196,
+     "request_hash": "204ebed2def45bbe4a9e78ab490744a31662c6e13b5a58373261144ef2004ea0",
+     "response_id": "resp_00bd65748a01a882006ac3961c43b487d28b3218e27ad6bf37",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_08/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_08/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 161.19195365905762,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_00bd65748a01a882006ac3961c43b487d28b3218e27ad6bf37",
+       "round": 8,
+       "t": 1791203005.2677348,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16867,
+        "logical_output": 5969,
+        "logical_total": 22836,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 5066,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16867,
+      "logical_output": 5969,
+      "logical_total": 22836,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 5066,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "load_cache_modifier": ".cg",
+    "log2e": 1.4426950408889634,
+    "maxnreg": 64,
+    "n_cols": 10240,
+    "n_rows": 2048,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 8,
+    "rows_per_program": 1,
+    "store_cache_modifier": ".cs"
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_08/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_01eecb71.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "load_cache_modifier": ".cg",
+     "log2e": 1.4426950408889634,
+     "maxnreg": 64,
+     "n_cols": 10240,
+     "n_rows": 2048,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 8,
+     "rows_per_program": 1,
+     "store_cache_modifier": ".cs"
+    },
+    "diagnostic": null,
+    "elapsed_s": 3.5651321411132812,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 8,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.016874333333333335,
+    "latency_ms_samples": [
+     0.017344,
+     0.01664,
+     0.016639
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_8_1_xdr1j93n",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 615267283,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791203007.1310275
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.016874333333333335,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_8_1_xdr1j93n/tilebench_proton_tree_01eecb71.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.017344,
+      0.01664,
+      0.016639
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 4.24561071395874
+   },
+   "latency_ms_mean": 0.016874333333333335,
+   "latency_ms_samples": [
+    0.017344,
+    0.01664,
+    0.016639
+   ],
+   "round": 8,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_08/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 47,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "load_cache_modifier": "",
+      "log2e": 1.4426950408889634,
+      "maxnreg": 64,
+      "n_cols": 10240,
+      "n_rows": 2048,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 16,
+      "rows_per_program": 2,
+      "store_cache_modifier": ""
+     },
+     "cost": 21298,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 58257,
+     "request_hash": "79dbdc1d72be07869b4d1a5ca8fc980d07f9bc37f62a9fa0eac746ef4199fc3f",
+     "response_id": "resp_0edc3c108a94d8d5006ac396c1d9c487d29d76317367a907cd",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_09/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_09/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 83.41078162193298,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0edc3c108a94d8d5006ac396c1d9c487d29d76317367a907cd",
+       "round": 9,
+       "t": 1791203093.1936417,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16924,
+        "logical_output": 4374,
+        "logical_total": 21298,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 3519,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16924,
+      "logical_output": 4374,
+      "logical_total": 21298,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 3519,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "load_cache_modifier": "",
+    "log2e": 1.4426950408889634,
+    "maxnreg": 64,
+    "n_cols": 10240,
+    "n_rows": 2048,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 16,
+    "rows_per_program": 2,
+    "store_cache_modifier": ""
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_09/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_b14250cc.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "load_cache_modifier": "",
+     "log2e": 1.4426950408889634,
+     "maxnreg": 64,
+     "n_cols": 10240,
+     "n_rows": 2048,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 16,
+     "rows_per_program": 2,
+     "store_cache_modifier": ""
+    },
+    "diagnostic": null,
+    "elapsed_s": 3.4872210025787354,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 9,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.020501333333333333,
+    "latency_ms_samples": [
+     0.02112,
+     0.019872,
+     0.020512
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_9_1_521l6jnz",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 490680001,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791203094.985425
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.020501333333333333,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_9_1_521l6jnz/tilebench_proton_tree_b14250cc.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.02112,
+      0.019872,
+      0.020512
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 4.080352067947388
+   },
+   "latency_ms_mean": 0.020501333333333333,
+   "latency_ms_samples": [
+    0.02112,
+    0.019872,
+    0.020512
+   ],
+   "round": 9,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_09/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 44,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "block_cols": 2048,
+      "exponential": "exp2_fma",
+      "fragment_reduction": "serial",
+      "held_fragments": 5,
+      "load_cache_modifier": "",
+      "log2e": 1.4426950408889634,
+      "maxnreg": 64,
+      "n_cols": 10240,
+      "n_rows": 2048,
+      "num_ctas": 1,
+      "num_stages": 1,
+      "num_warps": 8,
+      "rows_per_program": 1,
+      "store_cache_modifier": ""
+     },
+     "cost": 23416,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 58110,
+     "request_hash": "d66bf9b66100ae4057556321cec1aad66877a36e501de9d1668b46a653e12b0d",
+     "response_id": "resp_0669427b277a65ae006ac39719a1c487d290504739ed26975a",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_10/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_10/attempt_1/impl_triton.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 147.98511672019958,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0669427b277a65ae006ac39719a1c487d290504739ed26975a",
+       "round": 10,
+       "t": 1791203245.5098214,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 16900,
+        "logical_output": 6516,
+        "logical_total": 23416,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 5696,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 16900,
+      "logical_output": 6516,
+      "logical_total": 23416,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 5696,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "block_cols": 2048,
+    "exponential": "exp2_fma",
+    "fragment_reduction": "serial",
+    "held_fragments": 5,
+    "load_cache_modifier": "",
+    "log2e": 1.4426950408889634,
+    "maxnreg": 64,
+    "n_cols": 10240,
+    "n_rows": 2048,
+    "num_ctas": 1,
+    "num_stages": 1,
+    "num_warps": 8,
+    "rows_per_program": 1,
+    "store_cache_modifier": ""
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_10/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_3be0a41e.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "block_cols": 2048,
+     "exponential": "exp2_fma",
+     "fragment_reduction": "serial",
+     "held_fragments": 5,
+     "load_cache_modifier": "",
+     "log2e": 1.4426950408889634,
+     "maxnreg": 64,
+     "n_cols": 10240,
+     "n_rows": 2048,
+     "num_ctas": 1,
+     "num_stages": 1,
+     "num_warps": 8,
+     "rows_per_program": 1,
+     "store_cache_modifier": ""
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.430152177810669,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 10,
+     "run_type": "validation",
+     "trajectory_id": "5b7f40fabe2aa727f27d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.016480333333333333,
+    "latency_ms_samples": [
+     0.016512,
+     0.01648,
+     0.016449
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_10_1_0xcxy81e",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 338168018,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791203247.8664641
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.016480333333333333,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_10_1_0xcxy81e/tilebench_proton_tree_3be0a41e.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.016512,
+      0.01648,
+      0.016449
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.132528781890869
+   },
+   "latency_ms_mean": 0.016480333333333333,
+   "latency_ms_samples": [
+    0.016512,
+    0.01648,
+    0.016449
+   ],
+   "round": 10,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_10/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  }
+ ],
+ "run_type": "validation",
+ "schema": "tilebench-llm-v2-trajectory/2",
+ "status": "complete",
+ "stop_reason": null,
+ "task": {
+  "case_id": "22ffe21b3ef2a14b",
+  "case_index": 38,
+  "device": "B200",
+  "dsl": "triton",
+  "dtype": "fp16",
+  "fold": "C",
+  "fp8_format": null,
+  "operator": "softmax",
+  "params": {
+   "n_cols": 10240,
+   "n_rows": 2048
+  },
+  "problem_size": 20971520
+ },
+ "trajectory_id": "5b7f40fabe2aa727f27d",
+ "transport_log": []
+}

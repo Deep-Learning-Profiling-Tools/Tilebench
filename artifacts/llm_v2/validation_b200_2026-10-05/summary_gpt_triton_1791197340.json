@@ -1,0 +1,118 @@
+{
+ "campaign": "validation_b200_2026-10-05",
+ "run_type": "validation",
+ "generator": {
+  "name": "gpt",
+  "provider": "openai",
+  "model_id": "gpt-6.1-sol",
+  "api_key_env": "OPENAI_API_KEY",
+  "settings": {
+   "reasoning_effort": "xhigh",
+   "max_output_tokens": 128000
+  },
+  "status": "candidate",
+  "set_by": "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000"
+ },
+ "config_hash": "43bae837b5bcbcecb6bd4e5c946145ea4f74086399d7cc2c5bc2180d9d0085c2",
+ "isolation": {
+  "backend": "bwrap",
+  "home_hidden": true,
+  "network": "unshared",
+  "pid_namespace": true,
+  "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+  "tmp_private": true,
+  "probe_error": null,
+  "env_secrets_scrubbed": true
+ },
+ "trajectories": [
+  {
+   "trajectory_id": "5b7f40fabe2aa727f27d",
+   "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b",
+   "task": {
+    "case_id": "22ffe21b3ef2a14b",
+    "case_index": 38,
+    "device": "B200",
+    "dsl": "triton",
+    "dtype": "fp16",
+    "fold": "C",
+    "fp8_format": null,
+    "operator": "softmax",
+    "params": {
+     "n_cols": 10240,
+     "n_rows": 2048
+    },
+    "problem_size": 20971520
+   },
+   "model": "gpt",
+   "condition": "base",
+   "run_type": "validation",
+   "status": "review_required",
+   "state_status": "review_required",
+   "stop_reason": null,
+   "rounds_closed": 2,
+   "valid_rounds": 1,
+   "attempts": 2,
+   "transport_events": 2,
+   "cumulative_tokens": 38361,
+   "cost_exact": true,
+   "best_valid": {
+    "round": 1,
+    "latency_ms_mean": 0.017301333333333335,
+    "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/gpt/softmax/fp16/22ffe21b3ef2a14b/round_01/attempt_1/impl_triton.py",
+    "config": {
+     "block_cols": 2048,
+     "held_fragments": 5,
+     "rows_per_program": 1,
+     "num_warps": 8,
+     "num_stages": 1,
+     "num_ctas": 1
+    },
+    "timing_execution_mode": "graph"
+   },
+   "rounds": [
+    {
+     "round": 1,
+     "status": "valid",
+     "attempts": 1,
+     "verdicts": [
+      "clear"
+     ],
+     "latency_ms_mean": 0.017301333333333335,
+     "latency_ms_samples": [
+      0.017696,
+      0.017248,
+      0.01696
+     ],
+     "cost": [
+      20014
+     ],
+     "response_ids": [
+      "resp_0af479a3f85a040e006ac37eeed00887d29d7a7480bbed2c3d"
+     ],
+     "timing_execution_mode": "graph"
+    },
+    {
+     "round": 2,
+     "status": "review_required",
+     "attempts": 1,
+     "verdicts": [
+      "review_required"
+     ],
+     "latency_ms_mean": null,
+     "latency_ms_samples": null,
+     "cost": [
+      18347
+     ],
+     "response_ids": [
+      "resp_085e92bd8303e397006ac38059cb6487d29ccbb5ea57462bdf"
+     ],
+     "timing_execution_mode": null
+    }
+   ],
+   "notes": [
+    "round 1 attempt 1: review by operator:claude-fable-5.1-session -> compliant: Reviewed by the campaign operator (Claude Fable 5.1 session, human-visible record). Evidence: whole row held on chip with exact tiling (N_COLS constexpr 10240 = 5 x BLOCK_COLS 2048), no partial chunk hence no out-of-range lanes to pad with -inf; contract permits 'a single sweep when the whole row fits' and free evaluation order 'when a whole row is held on chip'; fp32 upcast on load, exact row max subtracted, fp32 exp/sum, single downcast at store, each element read once; no host reductions, no global scratch, fresh output. The missing '-inf' literal is a rule miss, not a contract breach."
+   ]
+  }
+ ],
+ "skipped": []
+}

@@ -1,0 +1,173 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/1",
+ "operator": "softmax",
+ "dtype": "fp16",
+ "params": {
+  "n_rows": 2048,
+  "n_cols": 10240
+ },
+ "dsl": "triton",
+ "device": "B200",
+ "arch": "blackwell",
+ "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_3_1_ey88rk8p/impl_triton.py",
+ "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/softmax_3_1_ey88rk8p",
+ "atol": 0.001,
+ "rtol": 0.001,
+ "tolerance_source": "config.verify+dtype_default",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "softmax",
+  "contract_revision": 1,
+  "required_stages": [
+   {
+    "id": "allocate_output",
+    "description": "Allocate a fresh (n_rows, n_cols) output of x's dtype inside run()."
+   },
+   {
+    "id": "online_row_statistics",
+    "description": "Per row, one streaming sweep producing the exact fp32 row max m and the fp32 denominator l via the online rescaling recurrence (l = l*exp(m_old - m_new) + sum exp(chunk - m_new)), with -inf for out-of-range lanes, held privately by the program that owns the row."
+   },
+   {
+    "id": "normalise",
+    "description": "Per element, exp(x - m) / l in fp32 with one downcast at the store, in the same launch as the statistics."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|torch\\.log_softmax\\(|F\\.log_softmax\\(|nn\\.Softmax\\(|nn\\.LogSoftmax\\(|torch\\.special\\.softmax\\(",
+    "message": "The whole operator is performed by a PyTorch softmax routine.",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "(?<!tl)(?<!ct)(?<!nl)\\.softmax\\(|nl\\.softmax\\(",
+    "message": "A tensor-method or library softmax replaces the online two-sweep kernel.",
+    "level": "suspicious",
+    "scope": "any"
+   },
+   {
+    "pattern": "torch\\.(max|amax|sum|exp|logsumexp|exp2)\\(|torch\\.special\\.logsumexp\\(",
+    "message": "Host-side PyTorch reduction or exponential computes the row statistics outside the kernel.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "\\.(amax|max|sum|logsumexp)\\(\\s*(dim\\s*=\\s*)?-?1\\b|\\.exp\\(\\s*\\)",
+    "message": "Tensor-method statistics on the host replace the in-kernel reduction.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "atomic_max|atomic_add|atomic",
+    "message": "Atomics suggest a cross-program row reduction, which the contract forbids.",
+    "level": "suspicious",
+    "scope": "any"
+   },
+   {
+    "pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp\\(",
+    "message": "Exponentials appear to be evaluated in half precision; they must be fp32.",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "return\\s+x\\b|return\\s+x\\.|x\\.copy_\\(|x\\.sub_\\(|x\\.exp_\\(|x\\.div_\\(|x\\[.*\\]\\s*=",
+    "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "tl\\.max",
+     "ct\\.max",
+     "T\\.reduce_max",
+     "nl\\.max",
+     "nisa\\.tensor_reduce",
+     "reduce_max",
+     "max"
+    ],
+    "message": "No in-kernel max reduction found for the row maximum.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.sum",
+     "ct\\.sum",
+     "T\\.reduce_sum",
+     "nl\\.sum",
+     "nisa\\.tensor_reduce",
+     "reduce_sum",
+     "sum"
+    ],
+    "message": "No in-kernel sum reduction found for the denominator.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.exp",
+     "tl\\.exp2",
+     "ct\\.exp",
+     "ct\\.exp2",
+     "T\\.exp",
+     "T\\.exp2",
+     "nl\\.exp",
+     "nisa\\.activation",
+     "exp"
+    ],
+    "message": "No exponential primitive found in the kernel.",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "float32",
+     "fp32",
+     "f32"
+    ],
+    "message": "No fp32 upcast evidence; statistics and exponentials must be fp32.",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty_like",
+   "torch.empty",
+   "torch.cuda.current_stream",
+   "Tensor.contiguous",
+   "Tensor.stride",
+   "Tensor.numel"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none; the returned (n_rows, n_cols) tensor must be freshly allocated inside run() and must not share storage with x"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "Everything inside run() is timed: the output allocation and the single two-sweep kernel. No cached state across calls, no copy/cast/transpose of x, no global scratch for m or l, at most two reads of each row from memory."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "time_eagerly_and_flag",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "graph",
+ "seed": 1847207002,
+ "identity": {
+  "campaign": "validation_b200_2026-10-05",
+  "run_type": "validation",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "5b7f40fabe2aa727f27d",
+  "round": 3,
+  "attempt": 1
+ }
+}

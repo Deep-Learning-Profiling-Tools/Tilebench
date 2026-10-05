@@ -1,0 +1,124 @@
+{
+ "request_hash": "955ae4119385355fd4420b58a371ee2cb6c6f7e71455bd930c12dc2475cf1454",
+ "result": {
+  "elapsed_s": 8.820787191390991,
+  "error": null,
+  "model_id": "claude-opus-5-5",
+  "provider": "anthropic",
+  "raw_response": {
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSgQoKEAgSGAI4AUIIdGhpbmtpbmcSDF6v9k3N34+WKE71yhoMk979eFLqLmr35PKyIjDc51ebylpj76MvthNytKykDoFROc8zWjiLRdgvP7xWXLkmX12wz+sXf22r28wTM9oqngkhhlQYcMKqFApP32in3dS1AnQ8ovPe8YZAljkVcNHBITy1TuDs9Fkj+LKx3/ux8vXV1Hpf5GnkMnQFox6sgE3pIfDVhnL94yKWB0rAqQCmiUJCCiDV84G4BxWn1Fof9ASPtpG50+NgNLUDkGXe2inzktnEdqw5gbutLByQhed22621fo/RCg/NXqoObqboIqrTYN+fux9PtKHp/UbgyAk8KFvxkkBT/dSZVRjjoCAFoaCk18E+F5rsIlK+vo3UfFnoo9rqZR0UeSzRi/opbwSI4n2bc+6deVudkt5XR+74vqxNXtFfzfJ2rSDIEET6mDHfuEuQ1h47pzvB9shlHyMPguooUbXKir2tfNF2UKXsRhiU6N2zpi0SlqXWt+m33vQN4wa0EJagN19roPRSGBU0S8HiClJqqs8QvjfRr5XLu/BxtQuVoLqW4IMfA8igl3lgmGI5dmNEn34c8wAyOXKMBgw6yH6weDRc4eIKNE0kc5SHBsG+YoduZPd4b4xen760Yr+tM7OUsjE/jgJLjsY0VXJcAgGkeyllwEBXhs/uktfWAkqu9BHfvm46Vt3oKETqixRXIB/9J+UfpEEp1QuglMsbYdIfAiIrDnKLyN/ha2qahaNf4ckiWdhOUBZn+PsXBi7+kvgDc1QB/aKsRdCw8926wx4OB1B3oeIplNRUdM1UR+VkqlHXdOdLYxQXNHsEvj4pAbe7JH5UvVRcq2NRm06q6b/mhVi3vI44fjGf0FCUMhFa3CwExuVxEC6YhNf4a3d6zDrLrGLSprhhV4qvhuhv+CgPbKJky3wL7+GRPQXw5XQ4cW1oodRgSPGEaDJ2hxSHVawSw99gwynLkDlR/ZET52lMU4MqHiFnwVbAxHNF9mJojzO01amPOeYWlWRRH2KTUIaS0saXV0aFNTm4NNotXm9q5TdnvVK0+98lyn5KmuLnn4uuIfmh+ElGYCeSa+O/42cBV1BJQ3TZ6iospXBY57G7OchLa65fxobUYbd76Q/vuEw9CP1YMVZDAwfBqHW7klx8UlTmgNuGkw32eBAhmVM/2mnEPGp1a7f9k1WC6STl9lMNYWVLbR1UDLJ1TEGOyPGuP99fEtLYppsDEONpSBpVch5WJ+81cy68NqpNmk6qVL2XjOpb4KL/w4u7qnzXA932IU670GetNUSoQ7P1Wbe1vnmXx1NX+NcdUhnb6NCx5wOtgYK6PygOJQNfqQfw6SSVBBagm19GdTLN6P+iMwzw8JevIzdsnwoe7Lbx2jqdPZITxjtTF+FQONQHpLHWOgimk0A3NXZ7Ctggfz+8eip78CQDpR7cOf7VJ7hHMrQpx58HJ2LIpsy3Xhg0aU/PPrhYC2Yp+UagE4aIuB3eSwA9fAKov9mEwavJ+OOYG7KcUKE1TET3JXGzLu/F1t9fbWXbEclfeUIPidLTVenie5PcvctGorcCMo9aTRfe6zJ4u5zWW6fhIiKef89gFshta98LnJE2FQ0lHA76tHmYp3iLlrqH7kJ8LpxudvROloIipCLnvayd8roSgz9BdT06b8jK3urgwfbl0XtBSl/+bVkf4K8xwx/gwkUYAQ==",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "citations": null,
+     "parsed_output": null,
+     "text": "This round resubmits the round-1 configuration unchanged and is not expected to beat 0.0218 ms. The kernel already reads and writes about 126 MB per call. At the measured 6,539 GB/s, that traffic alone takes about 19.2 \u00b5s. That leaves roughly 2\u20133 \u00b5s of possible gain. The variants tried in rounds 2\u20139 measured between 0.0218 and 0.0229 ms, none better than round 1.\n\nThe kernel makes one launch with 4096 fp16 elements per block. The loads are bounds-padded and the stores bounds-clipped, so a partial last block is handled for any `n`.\n\n```python title=\"impl_cutile.py\"\nimport torch\nimport cuda.tile as ct\n\nConstInt = ct.Constant[int]\n\n# Fixed configuration literal\n_TILE = 4096\n\n\n@ct.kernel\ndef _vector_add_kernel(x, y, out, TILE: ConstInt):\n    bid = ct.bid(0)\n    # Bounds-padded loads for a possible partial last tile.\n    a = ct.load(x, (bid,), (TILE,), padding_mode=ct.PaddingMode.ZERO)\n    b = ct.load(y, (bid,), (TILE,), padding_mode=ct.PaddingMode.ZERO)\n    # Add in the input dtype (fp16), exactly like the reference.\n    c = a + b\n    # Bounds-clipped store: elements beyond n are dropped.\n    ct.store(out, (bid,), c)\n\n\ndef run(x, y):\n    out = torch.empty_like(x)\n    n = x.numel()\n    if n == 0:\n        return out\n    grid = (ct.cdiv(n, _TILE),)\n    ct.launch(torch.cuda.current_stream(), grid, _vector_add_kernel,\n              (x, y, out, _TILE))\n    return out\n\n\ndef get_last_config() -> dict:\n    return {\"TILE\": 4096}\n```",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "id": "msg_011CfixemaMqo7UTcAs5uowy",
+   "model": "claude-opus-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 23462,
+    "output_tokens": 961,
+    "server_tool_use": null,
+    "service_tier": "standard"
+   }
+  },
+  "request_settings_sent": {
+   "max_tokens": 128000,
+   "model": "claude-opus-5-5",
+   "output_config": {
+    "effort": "xhigh"
+   },
+   "thinking": {
+    "type": "adaptive"
+   }
+  },
+  "requested_model_id": "claude-opus-5-5",
+  "response_id": "msg_011CfixemaMqo7UTcAs5uowy",
+  "stream_events": 207,
+  "streamed": true,
+  "terminal_status": "end_turn",
+  "text": "This round resubmits the round-1 configuration unchanged and is not expected to beat 0.0218 ms. The kernel already reads and writes about 126 MB per call. At the measured 6,539 GB/s, that traffic alone takes about 19.2 \u00b5s. That leaves roughly 2\u20133 \u00b5s of possible gain. The variants tried in rounds 2\u20139 measured between 0.0218 and 0.0229 ms, none better than round 1.\n\nThe kernel makes one launch with 4096 fp16 elements per block. The loads are bounds-padded and the stores bounds-clipped, so a partial last block is handled for any `n`.\n\n```python title=\"impl_cutile.py\"\nimport torch\nimport cuda.tile as ct\n\nConstInt = ct.Constant[int]\n\n# Fixed configuration literal\n_TILE = 4096\n\n\n@ct.kernel\ndef _vector_add_kernel(x, y, out, TILE: ConstInt):\n    bid = ct.bid(0)\n    # Bounds-padded loads for a possible partial last tile.\n    a = ct.load(x, (bid,), (TILE,), padding_mode=ct.PaddingMode.ZERO)\n    b = ct.load(y, (bid,), (TILE,), padding_mode=ct.PaddingMode.ZERO)\n    # Add in the input dtype (fp16), exactly like the reference.\n    c = a + b\n    # Bounds-clipped store: elements beyond n are dropped.\n    ct.store(out, (bid,), c)\n\n\ndef run(x, y):\n    out = torch.empty_like(x)\n    n = x.numel()\n    if n == 0:\n        return out\n    grid = (ct.cdiv(n, _TILE),)\n    ct.launch(torch.cuda.current_stream(), grid, _vector_add_kernel,\n              (x, y, out, _TILE))\n    return out\n\n\ndef get_last_config() -> dict:\n    return {\"TILE\": 4096}\n```",
+  "transport_attempts": 1,
+  "truncated": false,
+  "usage": {
+   "cache_creation_input": 0,
+   "cached_input": 0,
+   "checked_at": "2026-10-05",
+   "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+   "logical_input": 23462,
+   "logical_output": 961,
+   "logical_total": 24423,
+   "notes": [
+    "reasoning tokens are not reported separately by this API"
+   ],
+   "provider": "anthropic",
+   "reasoning_output": null,
+   "schema": "anthropic_messages_v1",
+   "status": "ok"
+  },
+  "usage_raw": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 0,
+   "inference_geo": "global",
+   "input_tokens": 23462,
+   "output_tokens": 961,
+   "server_tool_use": null,
+   "service_tier": "standard"
+  }
+ },
+ "transport": [
+  {
+   "attempt": 1,
+   "charged": "known",
+   "elapsed_s": 8.820878267288208,
+   "event": "succeeded",
+   "model_id": "claude-opus-5-5",
+   "outcome": "succeeded",
+   "response_id": "msg_011CfixemaMqo7UTcAs5uowy",
+   "round": 10,
+   "t": 1791197383.2386851,
+   "terminal_status": "end_turn",
+   "transport_attempt": 1,
+   "usage": {
+    "cache_creation_input": 0,
+    "cached_input": 0,
+    "checked_at": "2026-10-05",
+    "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+    "logical_input": 23462,
+    "logical_output": 961,
+    "logical_total": 24423,
+    "notes": [
+     "reasoning tokens are not reported separately by this API"
+    ],
+    "provider": "anthropic",
+    "reasoning_output": null,
+    "schema": "anthropic_messages_v1",
+    "status": "ok"
+   }
+  }
+ ]
+}

@@ -1,0 +1,156 @@
+{
+ "schema": "tilebench-llm-v2-evaljob/1",
+ "operator": "histogramming",
+ "dtype": "int32",
+ "params": {
+  "N": 67108864,
+  "num_bins": 4096
+ },
+ "dsl": "triton",
+ "device": "B200",
+ "arch": "blackwell",
+ "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_6_1_vvql66z3/impl_triton.py",
+ "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_6_1_vvql66z3",
+ "atol": 0.0,
+ "rtol": 0.0,
+ "tolerance_source": "config.verify",
+ "rules": {
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "histogramming",
+  "contract_revision": 1,
+  "required_stages": [
+   {
+    "id": "s1",
+    "description": "Global int32 scratch of P private partial histograms, shape (P, num_bins), allocated and zero-initialised inside run() on every call (device fill or in-kernel by the owning program); P bounded independently of N."
+   },
+   {
+    "id": "s2",
+    "description": "Private counting: each program owns one scratch row and counts its share of the input (single pass over the input) into that row with exact int32 updates; out-of-range values skipped; no two programs write the same row."
+   },
+   {
+    "id": "s3",
+    "description": "Cross-partial reduction: per bin, exact int32 sum of the P rows into the freshly allocated (num_bins,) int32 output; starts only after all of s2 completes (separate launch unless a grid barrier is guaranteed)."
+   }
+  ],
+  "forbidden_substitutions": [
+   {
+    "pattern": "torch\\.bincount|torch\\.histc|torch\\.histogram|torch\\.histogramdd|torch\\.unique|torch\\.unique_consecutive|\\.bincount\\(|\\.histc\\(",
+    "message": "library histogram replaces the whole computation",
+    "level": "confirmed",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.(sort|argsort|scatter_add|index_add|cumsum|searchsorted|bucketize)\\(|\\.scatter_add_?\\(|\\.index_add_?\\(|\\.sort\\(",
+    "message": "host-side sort/scatter-based counting replaces the private-histogram kernels",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "input\\.(to|float|long|int|double|clone)\\(|torch\\.(float32|float16|int64)",
+    "message": "conversion of the int32 input is forbidden (exact int32 path)",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "WeakTensorKeyDictionary|_cache\\b|lru_cache|global _scratch|_partial_buf",
+    "message": "scratch or partial result cached across calls is forbidden",
+    "level": "suspicious",
+    "scope": "host"
+   },
+   {
+    "pattern": "torch\\.(ones|full|arange|empty_like)\\(",
+    "message": "extra buffer beyond the output and the (P, num_bins) scratch",
+    "level": "suspicious",
+    "scope": "host"
+   }
+  ],
+  "required_evidence": [
+   {
+    "any_of": [
+     "atomic_add",
+     "atomic",
+     "tl\\.histogram",
+     "nisa\\.",
+     "T\\.atomic_add",
+     "nl\\.atomic"
+    ],
+    "message": "private-row count updates",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "tl\\.sum",
+     "ct\\.sum",
+     "T\\.reduce_sum",
+     "nl\\.sum",
+     "nisa\\.tensor_reduce",
+     "reduce_sum",
+     "\\bsum\\("
+    ],
+    "message": "cross-partial column sum",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "torch\\.zeros",
+     "zero",
+     "fill"
+    ],
+    "message": "scratch zero-initialisation inside run()",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "num_bins"
+    ],
+    "message": "range check / output width uses num_bins",
+    "level": "suspicious"
+   },
+   {
+    "any_of": [
+     "int32"
+    ],
+    "message": "int32 counting",
+    "level": "suspicious"
+   }
+  ],
+  "allowed_torch_calls": [
+   "torch.empty",
+   "torch.zeros",
+   "torch.cuda.current_stream"
+  ],
+  "mutation": {
+   "inputs_mutated": [],
+   "restore_required": false
+  },
+  "outputs": {
+   "structure": "tensor",
+   "count": 1,
+   "aliasing": "none; a freshly allocated (num_bins,) int32 tensor on every call"
+  },
+  "timing_boundary": {
+   "includes_preprocessing": true,
+   "notes": "The timed run() includes the scratch allocation and its zero fill (P * num_bins * 4 B), the counting launch with its atomic/additive updates, and the reduce launch; bytes_expr counts only the input read and output write (metric review item). No host-side sort/cast/copy of the input; no state across calls."
+  },
+  "tolerance_source": "config.verify"
+ },
+ "timing": {
+  "warmup": 1,
+  "repeat": 3,
+  "use_cuda_graph": true,
+  "flush": true,
+  "capture_failure_policy": "time_eagerly_and_flag",
+  "record_prep_runs": true
+ },
+ "expected_timing_mode": "graph",
+ "seed": 1058384816,
+ "identity": {
+  "campaign": "validation_b200_2026-10-05",
+  "run_type": "validation",
+  "model": "gpt",
+  "condition": "base",
+  "trajectory_id": "02d14ad49c348082c842",
+  "round": 6,
+  "attempt": 1
+ }
+}

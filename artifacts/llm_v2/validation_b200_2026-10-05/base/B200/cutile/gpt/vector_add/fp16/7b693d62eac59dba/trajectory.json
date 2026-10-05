@@ -1,0 +1,2593 @@
+{
+ "best_valid": {
+  "config": {
+   "allow_tma": false,
+   "load_latency": 10,
+   "num_ctas": 1,
+   "occupancy": 4,
+   "opt_level": 3,
+   "static_shape_dims": [
+    0
+   ],
+   "store_latency": 10,
+   "tile_size": 8192
+  },
+  "latency_ms_mean": 0.021728,
+  "round": 8,
+  "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_08/attempt_1/impl_cutile.py",
+  "timing_execution_mode": "graph"
+ },
+ "campaign": "validation_b200_2026-10-05",
+ "condition": "base",
+ "config_hash": "43bae837b5bcbcecb6bd4e5c946145ea4f74086399d7cc2c5bc2180d9d0085c2",
+ "content_hashes": {
+  "contract": "1ab35ca0f936d4da7829b6c13008ebb78f1614ce66fa37cac333f7b8a6036d34",
+  "device:B200@2026-10-05": "69687df32035f175ccff437d9b26871d08836e91d86e96b21ac8ed99d2cac588",
+  "reference:cutile@1.5.0": "f3e5b1c38827cc1afcb29134cde8605af5c30132cd3aeaf6a22b0da07db7461a",
+  "templates": "3871a96471c43b7bcea825eb3743cca36008c4f777b9db341411d17bcaf2377d"
+ },
+ "evaluation_job": {
+  "arch": "blackwell",
+  "atol": 0.001,
+  "device": "B200",
+  "dsl": "cutile",
+  "dtype": "fp16",
+  "expected_timing_mode": "graph",
+  "identity": {
+   "campaign": "validation_b200_2026-10-05",
+   "condition": "base",
+   "model": "gpt",
+   "run_type": "validation",
+   "trajectory_id": "2008a876fb2926a55f1d"
+  },
+  "operator": "vector_add",
+  "params": {
+   "n": 20971520
+  },
+  "rtol": 0.001,
+  "rules_sha256": "82448e88eab383bf7db4f0c07b306c787ad90f8ca7f8f634b62b8d1f5a8d2571",
+  "schema": "tilebench-llm-v2-evaljob/1",
+  "timing": {
+   "capture_failure_policy": "time_eagerly_and_flag",
+   "flush": true,
+   "record_prep_runs": true,
+   "repeat": 3,
+   "use_cuda_graph": true,
+   "warmup": 1
+  },
+  "timing_adapter": "proton_cuda_graph",
+  "tolerance_source": "config.verify+dtype_default"
+ },
+ "generator": {
+  "api_key_env": "OPENAI_API_KEY",
+  "model_id": "gpt-6.1-sol",
+  "name": "gpt",
+  "provider": "openai",
+  "set_by": "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000",
+  "settings": {
+   "max_output_tokens": 128000,
+   "reasoning_effort": "xhigh"
+  },
+  "status": "candidate"
+ },
+ "model": "gpt",
+ "notes": [
+  "round 5 attempt 1: review by operator:claude-fable-5.1-session -> compliant: Reviewed by the campaign operator. Evidence: loads and stores are issued inside the @ct.kernel through cuTile's raw-memory addressing (get_raw_memory().load_offset / store_offset), i.e. kernel-level load/store that the required-evidence rule (ct.load/ct.store) did not list; single pass over n elements with masked tail (or unmasked when n % 8192 == 0, a compile-time constant), add in the native dtype, fresh torch.empty_like output, no host arithmetic, no cache. Rule coverage gap, not a contract breach; the evidence patterns were extended afterwards."
+ ],
+ "output_file": "impl_cutile.py",
+ "rounds": [
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 14,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "tile_size": 8192
+     },
+     "cost": 15322,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 50014,
+     "request_hash": "fa17bcf954add86abbe16d1c0469f5abe7943ba3acc9f9f2361f27893453a4f1",
+     "response_id": "resp_0dbacd60ed5186e5006ac37ef5cb4887d2bc0857d4b456c58d",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_01/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_01/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 32.64051628112793,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0dbacd60ed5186e5006ac37ef5cb4887d2bc0857d4b456c58d",
+       "round": 1,
+       "t": 1791196949.6335533,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14186,
+        "logical_output": 1136,
+        "logical_total": 15322,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 866,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14186,
+      "logical_output": 1136,
+      "logical_total": 15322,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 866,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "tile_size": 8192
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_01/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_8422e95c.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "tile_size": 8192
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.817307233810425,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 1,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.021803,
+    "latency_ms_samples": [
+     0.021728,
+     0.021952,
+     0.021729
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_1_1_omeixbij",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 875767740,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791196961.1205144
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.021803,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_1_1_omeixbij/tilebench_proton_tree_8422e95c.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.021728,
+      0.021952,
+      0.021729
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 14.422208786010742
+   },
+   "latency_ms_mean": 0.021803,
+   "latency_ms_samples": [
+    0.021728,
+    0.021952,
+    0.021729
+   ],
+   "round": 1,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_01/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 14,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "num_ctas": 1,
+      "occupancy": 2,
+      "opt_level": 3,
+      "tile_size": 16384
+     },
+     "cost": 16078,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 51018,
+     "request_hash": "33e488dadf924699e7fe68e23756f98ffe77367a5ac9202b6bff699c986c7cbe",
+     "response_id": "resp_08705c46daa03f10006ac37f24682887d2b692a99ddaff4049",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_02/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_02/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 43.75890135765076,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_08705c46daa03f10006ac37f24682887d2b692a99ddaff4049",
+       "round": 2,
+       "t": 1791197008.068655,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14552,
+        "logical_output": 1526,
+        "logical_total": 16078,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 1256,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14552,
+      "logical_output": 1526,
+      "logical_total": 16078,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 1256,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "num_ctas": 1,
+    "occupancy": 2,
+    "opt_level": 3,
+    "tile_size": 16384
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_02/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_262bbd39.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "num_ctas": 1,
+     "occupancy": 2,
+     "opt_level": 3,
+     "tile_size": 16384
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.473083972930908,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 2,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.022880333333333332,
+    "latency_ms_samples": [
+     0.023328,
+     0.02256,
+     0.022753
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_2_1_orzq7_km",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1325285300,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791197011.2138894
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.022880333333333332,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_2_1_orzq7_km/tilebench_proton_tree_262bbd39.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.023328,
+      0.02256,
+      0.022753
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 6.456211566925049
+   },
+   "latency_ms_mean": 0.022880333333333332,
+   "latency_ms_samples": [
+    0.023328,
+    0.02256,
+    0.022753
+   ],
+   "round": 2,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_02/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "Annotated": "typing.Annotated",
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 14,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "static_shape_dims": [
+       0
+      ],
+      "tile_size": 8192
+     },
+     "cost": 16574,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52113,
+     "request_hash": "49ed493a3c9adbd3225126f1bef168f27fc22467d07b62743c9fb214968d0870",
+     "response_id": "resp_0d529acafc1fb6f8006ac37f56e0e087d292d125fa12612a21",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_03/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_03/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 48.843846559524536,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0d529acafc1fb6f8006ac37f56e0e087d292d125fa12612a21",
+       "round": 3,
+       "t": 1791197063.6118634,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14904,
+        "logical_output": 1670,
+        "logical_total": 16574,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 1354,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14904,
+      "logical_output": 1670,
+      "logical_total": 16574,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 1354,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "static_shape_dims": [
+     0
+    ],
+    "tile_size": 8192
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_03/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_9018e174.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "static_shape_dims": [
+      0
+     ],
+     "tile_size": 8192
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.931791543960571,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 3,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.021941,
+    "latency_ms_samples": [
+     0.021695,
+     0.021792,
+     0.022336
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_3_1_bxv37yth",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1046939265,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791197073.130468
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.021941,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_3_1_bxv37yth/tilebench_proton_tree_9018e174.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.021695,
+      0.021792,
+      0.022336
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 12.527000427246094
+   },
+   "latency_ms_mean": 0.021941,
+   "latency_ms_samples": [
+    0.021695,
+    0.021792,
+    0.022336
+   ],
+   "round": 3,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_03/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 14,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "num_ctas": 1,
+      "occupancy": 2,
+      "opt_level": 3,
+      "tile_size": 16384
+     },
+     "cost": 17218,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52361,
+     "request_hash": "d9fef6676ef29448bc6f1496c500535a453422a24b163ad03c9342460298ea30",
+     "response_id": "resp_0744d15e5552b450006ac37f94aed487d2a325a046915de0e7",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_04/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_04/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 74.85853862762451,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0744d15e5552b450006ac37f94aed487d2a325a046915de0e7",
+       "round": 4,
+       "t": 1791197151.2202964,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14987,
+        "logical_output": 2231,
+        "logical_total": 17218,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 1961,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14987,
+      "logical_output": 2231,
+      "logical_total": 17218,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 1961,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "num_ctas": 1,
+    "occupancy": 2,
+    "opt_level": 3,
+    "tile_size": 16384
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_04/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_a256f32c.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "num_ctas": 1,
+     "occupancy": 2,
+     "opt_level": 3,
+     "tile_size": 16384
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.627075672149658,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 4,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.022944000000000003,
+    "latency_ms_samples": [
+     0.022944,
+     0.02304,
+     0.022848
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_4_1_7ecami40",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 596721369,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791197158.8031406
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.022944000000000003,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_4_1_7ecami40/tilebench_proton_tree_a256f32c.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.022944,
+      0.02304,
+      0.022848
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 10.408663272857666
+   },
+   "latency_ms_mean": 0.022944000000000003,
+   "latency_ms_samples": [
+    0.022944,
+    0.02304,
+    0.022848
+   ],
+   "round": 4,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_04/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [
+       {
+        "category": "rule",
+        "level": "suspicious",
+        "line": null,
+        "matched": null,
+        "message": "missing evidence: No kernel-level store found; the add must be done by a kernel.",
+        "scope": null
+       },
+       {
+        "category": "rule",
+        "level": "suspicious",
+        "line": null,
+        "matched": null,
+        "message": "missing evidence: No kernel-level load found.",
+        "scope": null
+       }
+      ],
+      "diagnostics": [],
+      "review_items": [
+       "missing evidence: No kernel-level store found; the add must be done by a kernel.",
+       "missing evidence: No kernel-level load found."
+      ],
+      "static": {
+       "aliases": {
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 16,
+       "verdict": "clear"
+      },
+      "verdict": "review_required"
+     },
+     "config": {
+      "addressing": "raw",
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "tile_size": 8192,
+      "unmasked_when_divisible": true
+     },
+     "cost": 17224,
+     "cost_status": "known",
+     "diagnostic": "missing evidence: No kernel-level store found; the add must be done by a kernel.; missing evidence: No kernel-level load found.",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52193,
+     "request_hash": "ab74395b5e7b762d7fc7ca08528ed0bdd6d8914fdf6f2590307f7a8315bc5aac",
+     "response_id": "resp_07e45b581d0208c3006ac37fe9f43087d2b26bc44d7e6dd1fb",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_05/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_05/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 65.76335334777832,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_07e45b581d0208c3006ac37fe9f43087d2b26bc44d7e6dd1fb",
+       "round": 5,
+       "t": 1791197227.6225595,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14960,
+        "logical_output": 2264,
+        "logical_total": 17224,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 1917,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14960,
+      "logical_output": 2264,
+      "logical_total": 17224,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 1917,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "addressing": "raw",
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "tile_size": 8192,
+    "unmasked_when_divisible": true
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_05/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_316df04c.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "addressing": "raw",
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "tile_size": 8192,
+     "unmasked_when_divisible": true
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.75417685508728,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 5,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.02208,
+    "latency_ms_samples": [
+     0.021696,
+     0.02208,
+     0.022464
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_5_1_0ki_6wvl",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 146417052,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791197377.1309962
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.02208,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_5_1_0ki_6wvl/tilebench_proton_tree_316df04c.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.021696,
+      0.02208,
+      0.022464
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.921126127243042
+   },
+   "latency_ms_mean": 0.02208,
+   "latency_ms_samples": [
+    0.021696,
+    0.02208,
+    0.022464
+   ],
+   "round": 5,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_05/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "Annotated": "typing.Annotated",
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 28,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "elements_per_block": 16384,
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "static_shape_dims": [
+       0
+      ],
+      "tile_size": 8192,
+      "tiles_per_block": 2
+     },
+     "cost": 19906,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52524,
+     "request_hash": "d4ecedbc1f3390b8440ab404753cf2a8aac0650c085d3a4b8428fed6bdd9b31d",
+     "response_id": "resp_0692a11e2a8e8c39006ac380c5a9f487d2a839a6a181277636",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_06/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_06/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 168.66942286491394,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0692a11e2a8e8c39006ac380c5a9f487d2a839a6a181277636",
+       "round": 6,
+       "t": 1791197548.9294286,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15074,
+        "logical_output": 4832,
+        "logical_total": 19906,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 4385,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15074,
+      "logical_output": 4832,
+      "logical_total": 19906,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 4385,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "elements_per_block": 16384,
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "static_shape_dims": [
+     0
+    ],
+    "tile_size": 8192,
+    "tiles_per_block": 2
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_06/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_ba9cda75.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "elements_per_block": 16384,
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "static_shape_dims": [
+      0
+     ],
+     "tile_size": 8192,
+     "tiles_per_block": 2
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.035085439682007,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 6,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.021909,
+    "latency_ms_samples": [
+     0.021887,
+     0.021824,
+     0.022016
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_6_1_38yysd2e",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1023425603,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202375.985233
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.021909,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_6_1_38yysd2e/tilebench_proton_tree_ba9cda75.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.021887,
+      0.021824,
+      0.022016
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 4829.39509510994
+   },
+   "latency_ms_mean": 0.021909,
+   "latency_ms_samples": [
+    0.021887,
+    0.021824,
+    0.022016
+   ],
+   "round": 6,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_06/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 16,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "addressing": "raw_offset",
+      "masked_partial_tile": true,
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "tile_size": 8192,
+      "unmasked_full_tiles": true
+     },
+     "cost": 19198,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52914,
+     "request_hash": "eeeb2512da0095c8d5b13c271e1c3bfd2f83aa5ec8bc7951205d7375635e7686",
+     "response_id": "resp_0d226b6ce3e37434006ac3944aaf2887d280565fdf15dd705c",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_07/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_07/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 134.6384081840515,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_0d226b6ce3e37434006ac3944aaf2887d280565fdf15dd705c",
+       "round": 7,
+       "t": 1791202513.212744,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15219,
+        "logical_output": 3979,
+        "logical_total": 19198,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 3624,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15219,
+      "logical_output": 3979,
+      "logical_total": 19198,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 3624,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "addressing": "raw_offset",
+    "masked_partial_tile": true,
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "tile_size": 8192,
+    "unmasked_full_tiles": true
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_07/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_6b1b3b59.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "addressing": "raw_offset",
+     "masked_partial_tile": true,
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "tile_size": 8192,
+     "unmasked_full_tiles": true
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.763698577880859,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 7,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.021866666666666663,
+    "latency_ms_samples": [
+     0.02208,
+     0.021792,
+     0.021728
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_7_1_4rwmocpn",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 337823544,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202516.1733558
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.021866666666666663,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_7_1_4rwmocpn/tilebench_proton_tree_6b1b3b59.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.02208,
+      0.021792,
+      0.021728
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.771278142929077
+   },
+   "latency_ms_mean": 0.021866666666666663,
+   "latency_ms_samples": [
+    0.02208,
+    0.021792,
+    0.021728
+   ],
+   "round": 7,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_07/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "Annotated": "typing.Annotated",
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 26,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "load_latency": 10,
+      "num_ctas": 1,
+      "occupancy": 4,
+      "opt_level": 3,
+      "static_shape_dims": [
+       0
+      ],
+      "store_latency": 10,
+      "tile_size": 8192
+     },
+     "cost": 17783,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 52680,
+     "request_hash": "a492ab4d1071f3b64e9a5d52c7e348efe95d7ac5ec057908935171b537007025",
+     "response_id": "resp_087dae6fafd0df5a006ac394d776ac87d29712fe7924af39b7",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_08/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_08/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 89.61308193206787,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_087dae6fafd0df5a006ac394d776ac87d29712fe7924af39b7",
+       "round": 8,
+       "t": 1791202608.9707797,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15145,
+        "logical_output": 2638,
+        "logical_total": 17783,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 2280,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15145,
+      "logical_output": 2638,
+      "logical_total": 17783,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 2280,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "load_latency": 10,
+    "num_ctas": 1,
+    "occupancy": 4,
+    "opt_level": 3,
+    "static_shape_dims": [
+     0
+    ],
+    "store_latency": 10,
+    "tile_size": 8192
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_08/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_55431303.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "load_latency": 10,
+     "num_ctas": 1,
+     "occupancy": 4,
+     "opt_level": 3,
+     "static_shape_dims": [
+      0
+     ],
+     "store_latency": 10,
+     "tile_size": 8192
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.782848119735718,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 8,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.021728,
+    "latency_ms_samples": [
+     0.021632,
+     0.021664,
+     0.021888
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_8_1_dnaxkbel",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1600608917,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202611.6349766
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.021728,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_8_1_dnaxkbel/tilebench_proton_tree_55431303.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.021632,
+      0.021664,
+      0.021888
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.821862459182739
+   },
+   "latency_ms_mean": 0.021728,
+   "latency_ms_samples": [
+    0.021632,
+    0.021664,
+    0.021888
+   ],
+   "round": 8,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_08/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "Annotated": "typing.Annotated",
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 26,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "load_latency": 10,
+      "num_ctas": 1,
+      "occupancy": 2,
+      "opt_level": 3,
+      "static_shape_dims": [
+       0
+      ],
+      "store_latency": 10,
+      "tile_size": 16384
+     },
+     "cost": 17701,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 51740,
+     "request_hash": "3e27eccc59d9241e06c6389178765485854df5644c4e79c5537a4aea4ff7094f",
+     "response_id": "resp_098e860a9ba197ec006ac39537255c87d28d04508fe4d8d376",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_09/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_09/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 66.31990647315979,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_098e860a9ba197ec006ac39537255c87d28d04508fe4d8d376",
+       "round": 9,
+       "t": 1791202681.3591616,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 14859,
+        "logical_output": 2842,
+        "logical_total": 17701,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 2484,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 14859,
+      "logical_output": 2842,
+      "logical_total": 17701,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 2484,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "load_latency": 10,
+    "num_ctas": 1,
+    "occupancy": 2,
+    "opt_level": 3,
+    "static_shape_dims": [
+     0
+    ],
+    "store_latency": 10,
+    "tile_size": 16384
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_09/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_f81374b9.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "load_latency": 10,
+     "num_ctas": 1,
+     "occupancy": 2,
+     "opt_level": 3,
+     "static_shape_dims": [
+      0
+     ],
+     "store_latency": 10,
+     "tile_size": 16384
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.357508659362793,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 9,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.02246366666666667,
+    "latency_ms_samples": [
+     0.022527,
+     0.022464,
+     0.0224
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_9_1_o10i3lxe",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 969157589,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202683.9410472
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.02246366666666667,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_9_1_o10i3lxe/tilebench_proton_tree_f81374b9.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.022527,
+      0.022464,
+      0.0224
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 5.121562719345093
+   },
+   "latency_ms_mean": 0.02246366666666667,
+   "latency_ms_samples": [
+    0.022527,
+    0.022464,
+    0.0224
+   ],
+   "round": 9,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_09/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "Annotated": "typing.Annotated",
+        "ct": "cuda.tile",
+        "torch": "torch"
+       },
+       "evidence": [],
+       "kernel_line_count": 26,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": {
+      "allow_tma": false,
+      "load_latency": 10,
+      "num_ctas": 1,
+      "occupancy": 8,
+      "opt_level": 3,
+      "static_shape_dims": [
+       0
+      ],
+      "store_latency": 10,
+      "tile_size": 8192
+     },
+     "cost": 21738,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "gpt-6.1-sol",
+     "prompt_chars": 53278,
+     "request_hash": "389b390f707d9f96510e4342c1b288298d6e9d0b06e895622823a09093287e5d",
+     "response_id": "resp_08229f6e362c552e006ac3957ecfd087d2852f7060ece900cc",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_10/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_10/attempt_1/impl_cutile.py",
+     "terminal_status": "completed",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 182.21647572517395,
+       "event": "succeeded",
+       "model_id": "gpt-6.1-sol",
+       "outcome": "succeeded",
+       "response_id": "resp_08229f6e362c552e006ac3957ecfd087d2852f7060ece900cc",
+       "round": 10,
+       "t": 1791202868.9289546,
+       "terminal_status": "completed",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": null,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+        "logical_input": 15322,
+        "logical_output": 6416,
+        "logical_total": 21738,
+        "notes": [],
+        "provider": "openai",
+        "reasoning_output": 6058,
+        "schema": "openai_responses_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": null,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://platform.openai.com/docs/api-reference/responses/object#usage",
+      "logical_input": 15322,
+      "logical_output": 6416,
+      "logical_total": 21738,
+      "notes": [],
+      "provider": "openai",
+      "reasoning_output": 6058,
+      "schema": "openai_responses_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "allow_tma": false,
+    "load_latency": 10,
+    "num_ctas": 1,
+    "occupancy": 8,
+    "opt_level": 3,
+    "static_shape_dims": [
+     0
+    ],
+    "store_latency": 10,
+    "tile_size": 8192
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_10/attempt_1/evaluation",
+     "files": [
+      "impl_cutile.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_febabe7c.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "allow_tma": false,
+     "load_latency": 10,
+     "num_ctas": 1,
+     "occupancy": 8,
+     "opt_level": 3,
+     "static_shape_dims": [
+      0
+     ],
+     "store_latency": 10,
+     "tile_size": 8192
+    },
+    "diagnostic": null,
+    "elapsed_s": 3.972094774246216,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "gpt",
+     "round": 10,
+     "run_type": "validation",
+     "trajectory_id": "2008a876fb2926a55f1d"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.025397333333333338,
+    "latency_ms_samples": [
+     0.025312,
+     0.025408,
+     0.025472
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_10_1_994c3e3v",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1709909499,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202871.3281121
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.025397333333333338,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/vector_add_10_1_994c3e3v/tilebench_proton_tree_febabe7c.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.025312,
+      0.025408,
+      0.025472
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 4.67006778717041
+   },
+   "latency_ms_mean": 0.025397333333333338,
+   "latency_ms_samples": [
+    0.025312,
+    0.025408,
+    0.025472
+   ],
+   "round": 10,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/cutile/gpt/vector_add/fp16/7b693d62eac59dba/round_10/attempt_1/impl_cutile.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  }
+ ],
+ "run_type": "validation",
+ "schema": "tilebench-llm-v2-trajectory/2",
+ "status": "complete",
+ "stop_reason": null,
+ "task": {
+  "case_id": "7b693d62eac59dba",
+  "case_index": 76,
+  "device": "B200",
+  "dsl": "cutile",
+  "dtype": "fp16",
+  "fold": "C",
+  "fp8_format": null,
+  "operator": "vector_add",
+  "params": {
+   "n": 20971520
+  },
+  "problem_size": 20971520
+ },
+ "trajectory_id": "2008a876fb2926a55f1d",
+ "transport_log": []
+}

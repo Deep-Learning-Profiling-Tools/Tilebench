@@ -1,0 +1,2115 @@
+{
+ "best_valid": {
+  "config": {
+   "BLOCK": 4096,
+   "COUNT_MAXNREG": 64,
+   "COUNT_STAGES": 5,
+   "COUNT_WARPS": 16,
+   "GRAIN": 1024,
+   "P_CAP": 296,
+   "RED_BB": 16,
+   "RED_R": 512,
+   "RED_WARPS": 8,
+   "ZBLOCK": 4096
+  },
+  "latency_ms_mean": 0.07505066666666667,
+  "round": 5,
+  "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_05/attempt_1/impl_triton.py",
+  "timing_execution_mode": "graph"
+ },
+ "campaign": "validation_b200_2026-10-05",
+ "condition": "base",
+ "config_hash": "43bae837b5bcbcecb6bd4e5c946145ea4f74086399d7cc2c5bc2180d9d0085c2",
+ "content_hashes": {
+  "contract": "083238f4f85b9861432dcc1437d6fd0c18a4c239c0ddd3c64236f2c5f7e962a8",
+  "device:B200@2026-10-05": "69687df32035f175ccff437d9b26871d08836e91d86e96b21ac8ed99d2cac588",
+  "reference:triton@3.6.0": "023f7409d0e20d5009a95798a23fe11be6eac6e962c69932fe3858cec20653cd",
+  "templates": "3871a96471c43b7bcea825eb3743cca36008c4f777b9db341411d17bcaf2377d"
+ },
+ "evaluation_job": {
+  "arch": "blackwell",
+  "atol": 0.0,
+  "device": "B200",
+  "dsl": "triton",
+  "dtype": "int32",
+  "expected_timing_mode": "graph",
+  "identity": {
+   "campaign": "validation_b200_2026-10-05",
+   "condition": "base",
+   "model": "claude",
+   "run_type": "validation",
+   "trajectory_id": "503bd80c550e0af16db5"
+  },
+  "operator": "histogramming",
+  "params": {
+   "N": 67108864,
+   "num_bins": 4096
+  },
+  "rtol": 0.0,
+  "rules_sha256": "9466a94838cda46acf2f5615462664e5073ab88afd14947ed8d7306c030086b1",
+  "schema": "tilebench-llm-v2-evaljob/1",
+  "timing": {
+   "capture_failure_policy": "time_eagerly_and_flag",
+   "flush": true,
+   "record_prep_runs": true,
+   "repeat": 3,
+   "use_cuda_graph": true,
+   "warmup": 1
+  },
+  "timing_adapter": "proton_cuda_graph",
+  "tolerance_source": "config.verify"
+ },
+ "generator": {
+  "api_key_env": "CLAUDE_API_KEY",
+  "model_id": "claude-opus-5-5",
+  "name": "claude",
+  "provider": "anthropic",
+  "set_by": "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): claude-opus-5-5, output_config.effort=xhigh, adaptive thinking, max_tokens=128000",
+  "settings": {
+   "max_output_tokens": 128000,
+   "output_effort": "xhigh",
+   "thinking": {
+    "type": "adaptive"
+   }
+  },
+  "status": "candidate"
+ },
+ "model": "claude",
+ "notes": [
+  "round 2 attempt 1: review by operator:claude-fable-5.1-session -> compliant: Reviewed by the campaign operator. Evidence: line 76 is 'assert x.data_ptr() == input.data_ptr()', a guard that the permitted no-op .contiguous() did not copy the input; no dictionary, cache or state keyed by the address; scratch (P x num_bins int32) and output are allocated fresh inside run() on every call; stages: in-kernel zero fill fused into private counting (one row per program), separate reduce launch summing the P rows per bin in int32. Static 'tensor address used as a key' heuristic hit, not a contract breach.",
+  "round 3 attempt 1: review by recheck:contract_checks/2026-10-05.2 -> compliant: static data_ptr heuristic refined: a bare equality guard (assert x.data_ptr() == input.data_ptr(), no-op contiguity check) is not a cache key; only subscript/get/in/stored uses are flagged [recheck under contract_checks/2026-10-05.2: clear; previous items: ['line 91 [host]: tensor address used as a key', 'line 91 [host]: tensor address used as a key']]"
+ ],
+ "output_file": "impl_triton.py",
+ "rounds": [
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": null,
+     "config": null,
+     "cost": 71657,
+     "cost_status": "known",
+     "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 52979,
+     "request_hash": "2e441e0b3448a1820d20b1e5172e383463f3b0a3d719165701864b20dd181860",
+     "response_id": "msg_011Cfix4vmJ7no3MwVRNKvLe",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_01/attempt_1/response.json",
+     "source_path": null,
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 466.0944743156433,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfix4vmJ7no3MwVRNKvLe",
+       "round": 1,
+       "t": 1791197381.3918772,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 22962,
+        "logical_output": 48695,
+        "logical_total": 71657,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 22962,
+      "logical_output": 48695,
+      "logical_total": 71657,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "format_error"
+    }
+   ],
+   "config": null,
+   "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+   "evaluation": null,
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "round": 1,
+   "source_path": null,
+   "status": "format_error",
+   "timing_execution_mode": null,
+   "timing_mode_differs": null
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [
+       "line 76 [host]: tensor address used as a key",
+       "line 76 [host]: tensor address used as a key"
+      ],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [
+        {
+         "category": "cache",
+         "level": "suspicious",
+         "line": 76,
+         "matched": ".data_ptr()",
+         "message": "tensor address used as a key",
+         "scope": "host"
+        },
+        {
+         "category": "cache",
+         "level": "suspicious",
+         "line": 76,
+         "matched": ".data_ptr()",
+         "message": "tensor address used as a key",
+         "scope": "host"
+        }
+       ],
+       "kernel_line_count": 38,
+       "verdict": "review_required"
+      },
+      "verdict": "review_required"
+     },
+     "config": null,
+     "cost": 49508,
+     "cost_status": "known",
+     "diagnostic": "line 76 [host]: tensor address used as a key; line 76 [host]: tensor address used as a key",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 53042,
+     "request_hash": "3a93d16ce0ca94a000aeb8d5922e37518c3fcce9f65e5e1c983e1aa64da6de2e",
+     "response_id": "msg_011CfixfHbNyzcMNhrR3pQpE",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_02/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_02/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 252.9523708820343,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011CfixfHbNyzcMNhrR3pQpE",
+       "round": 2,
+       "t": 1791197634.3857517,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 23004,
+        "logical_output": 26504,
+        "logical_total": 49508,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 23004,
+      "logical_output": 26504,
+      "logical_total": 49508,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK": 2048,
+    "COUNT_WARPS": 8,
+    "P_CAP": 592,
+    "RED_BB": 16,
+    "RED_R": 256,
+    "RED_WARPS": 8,
+    "ZBLOCK": 1024
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_02/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "result.json",
+      "tilebench_proton_tree_c3c02284.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK": 2048,
+     "COUNT_WARPS": 8,
+     "P_CAP": 592,
+     "RED_BB": 16,
+     "RED_R": 256,
+     "RED_WARPS": 8,
+     "ZBLOCK": 1024
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.093620300292969,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 2,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.10058733333333332,
+    "latency_ms_samples": [
+     0.101696,
+     0.10045,
+     0.099616
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_2_1_okxotomd",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 781485200,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791199262.6639833
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.10058733333333332,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_2_1_okxotomd/tilebench_proton_tree_c3c02284.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.101696,
+      0.10045,
+      0.099616
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 1569.2180643081665
+   },
+   "latency_ms_mean": 0.10058733333333332,
+   "latency_ms_samples": [
+    0.101696,
+    0.10045,
+    0.099616
+   ],
+   "round": 2,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_02/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "checker_version": "contract_checks/2026-10-05.2",
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 49,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 67482,
+     "cost_status": "known",
+     "diagnostic": "line 91 [host]: tensor address used as a key; line 91 [host]: tensor address used as a key",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 56842,
+     "request_hash": "dcfba8fb90fef7b42b7495c041a6da8315281eb21d76ce291073de2016665c90",
+     "response_id": "msg_011Cfj14EQmb8yG3MBnZxS11",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_03/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_03/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 409.6972258090973,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj14EQmb8yG3MBnZxS11",
+       "round": 3,
+       "t": 1791199676.0334284,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 24884,
+        "logical_output": 42598,
+        "logical_total": 67482,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 24884,
+      "logical_output": 42598,
+      "logical_total": 67482,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK": 2048,
+    "COUNT_MAXNREG": 64,
+    "COUNT_WARPS": 8,
+    "PREFETCH_DEPTH": 2,
+    "P_CAP": 592,
+    "RED_BB": 8,
+    "RED_R": 1024,
+    "RED_WARPS": 8,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_03/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_a5a0edff.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK": 2048,
+     "COUNT_MAXNREG": 64,
+     "COUNT_WARPS": 8,
+     "PREFETCH_DEPTH": 2,
+     "P_CAP": 592,
+     "RED_BB": 8,
+     "RED_R": 1024,
+     "RED_WARPS": 8,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.976220369338989,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 3,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.08838366666666665,
+    "latency_ms_samples": [
+     0.089664,
+     0.088191,
+     0.087296
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_3_1_5frx39zm",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 94263657,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791201105.16396
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.08838366666666665,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_3_1_5frx39zm/tilebench_proton_tree_a5a0edff.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.089664,
+      0.088191,
+      0.087296
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 1340.7206239700317
+   },
+   "latency_ms_mean": 0.08838366666666665,
+   "latency_ms_samples": [
+    0.089664,
+    0.088191,
+    0.087296
+   ],
+   "round": 3,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_03/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 51,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 75115,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 57745,
+     "request_hash": "fb020760fbbbe4a9f1cb0881a56e1604f9c7cc7a2f40dcca57b5a21a75647be7",
+     "response_id": "msg_011Cfj3Q6kCCkx2Kbtc1AAFG",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_04/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_04/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 479.03884172439575,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj3Q6kCCkx2Kbtc1AAFG",
+       "round": 4,
+       "t": 1791201588.559286,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 25371,
+        "logical_output": 49744,
+        "logical_total": 75115,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 25371,
+      "logical_output": 49744,
+      "logical_total": 75115,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK": 4096,
+    "COUNT_MAXNREG": 64,
+    "COUNT_STAGES": 5,
+    "COUNT_WARPS": 16,
+    "P_CAP": 296,
+    "RED_BB": 16,
+    "RED_R": 512,
+    "RED_WARPS": 8,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_04/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_d4a9eaef.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK": 4096,
+     "COUNT_MAXNREG": 64,
+     "COUNT_STAGES": 5,
+     "COUNT_WARPS": 16,
+     "P_CAP": 296,
+     "RED_BB": 16,
+     "RED_R": 512,
+     "RED_WARPS": 8,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 4.429745674133301,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 4,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.075445,
+    "latency_ms_samples": [
+     0.074527,
+     0.07536,
+     0.076448
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_4_1_fcgdghnt",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1258676291,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202354.983022
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.075445,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_4_1_fcgdghnt/tilebench_proton_tree_d4a9eaef.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.074527,
+      0.07536,
+      0.076448
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 769.3586978912354
+   },
+   "latency_ms_mean": 0.075445,
+   "latency_ms_samples": [
+    0.074527,
+    0.07536,
+    0.076448
+   ],
+   "round": 4,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_04/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 57,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 88289,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 57866,
+     "request_hash": "e4edde97d1b0f7b55090c46fa944bf3a8c62dc97a0215eaaa10ad95a1d818478",
+     "response_id": "msg_011Cfj4z9yxe7PbiLQMmqrVh",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_05/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_05/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 617.1892418861389,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj4z9yxe7PbiLQMmqrVh",
+       "round": 5,
+       "t": 1791202975.519764,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 25400,
+        "logical_output": 62889,
+        "logical_total": 88289,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 25400,
+      "logical_output": 62889,
+      "logical_total": 88289,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK": 4096,
+    "COUNT_MAXNREG": 64,
+    "COUNT_STAGES": 5,
+    "COUNT_WARPS": 16,
+    "GRAIN": 1024,
+    "P_CAP": 296,
+    "RED_BB": 16,
+    "RED_R": 512,
+    "RED_WARPS": 8,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_05/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_39667ded.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK": 4096,
+     "COUNT_MAXNREG": 64,
+     "COUNT_STAGES": 5,
+     "COUNT_WARPS": 16,
+     "GRAIN": 1024,
+     "P_CAP": 296,
+     "RED_BB": 16,
+     "RED_R": 512,
+     "RED_WARPS": 8,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 6.072174310684204,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 5,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.07505066666666667,
+    "latency_ms_samples": [
+     0.07616,
+     0.074592,
+     0.0744
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_5_1_dx5o7dhk",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 939855373,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791202978.8655696
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.07505066666666667,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_5_1_dx5o7dhk/tilebench_proton_tree_39667ded.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.07616,
+      0.074592,
+      0.0744
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 6.8590989112854
+   },
+   "latency_ms_mean": 0.07505066666666667,
+   "latency_ms_samples": [
+    0.07616,
+    0.074592,
+    0.0744
+   ],
+   "round": 5,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_05/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": null,
+     "config": null,
+     "cost": 94156,
+     "cost_status": "known",
+     "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 58276,
+     "request_hash": "9e815b42c0d9884ad31c02d90f7477769c527aac012ff61453b929195665cf7b",
+     "response_id": "msg_011Cfj5nC32v1Q7NhCEUCy5P",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_06/attempt_1/response.json",
+     "source_path": null,
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 682.0832703113556,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj5nC32v1Q7NhCEUCy5P",
+       "round": 6,
+       "t": 1791203664.7736056,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 25620,
+        "logical_output": 68536,
+        "logical_total": 94156,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 25620,
+      "logical_output": 68536,
+      "logical_total": 94156,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "format_error"
+    }
+   ],
+   "config": null,
+   "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+   "evaluation": null,
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "round": 6,
+   "source_path": null,
+   "status": "format_error",
+   "timing_execution_mode": null,
+   "timing_mode_differs": null
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "TensorDescriptor": "triton.tools.tensor_descriptor.TensorDescriptor",
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 60,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 87533,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 63480,
+     "request_hash": "f542807f7b044a4fcccd8bb08c0f2c1789d925c4bea935f0f32c1d6dca37c3b5",
+     "response_id": "msg_011Cfj6eUc5QEyVxiHZYgPNe",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_07/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_07/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 609.7769079208374,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj6eUc5QEyVxiHZYgPNe",
+       "round": 7,
+       "t": 1791204274.608535,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 28039,
+        "logical_output": 59494,
+        "logical_total": 87533,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 28039,
+      "logical_output": 59494,
+      "logical_total": 87533,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK_ROWS": 128,
+    "COUNT_MAXNREG": 64,
+    "COUNT_STAGES": 5,
+    "COUNT_WARPS": 16,
+    "GRAIN_ROWS": 32,
+    "P_CAP": 296,
+    "RED_BB": 16,
+    "RED_R": 512,
+    "RED_WARPS": 8,
+    "ROW_W": 32,
+    "TAIL_BLOCK": 1024,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_07/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_f8fd3fa2.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK_ROWS": 128,
+     "COUNT_MAXNREG": 64,
+     "COUNT_STAGES": 5,
+     "COUNT_WARPS": 16,
+     "GRAIN_ROWS": 32,
+     "P_CAP": 296,
+     "RED_BB": 16,
+     "RED_R": 512,
+     "RED_WARPS": 8,
+     "ROW_W": 32,
+     "TAIL_BLOCK": 1024,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 5.56807804107666,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 7,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.40147099999999997,
+    "latency_ms_samples": [
+     0.401279,
+     0.402623,
+     0.400511
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_7_1_af0wnrz8",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 800134820,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791204280.4871075
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.40147099999999997,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_7_1_af0wnrz8/tilebench_proton_tree_f8fd3fa2.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.401279,
+      0.402623,
+      0.400511
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 9.69791030883789
+   },
+   "latency_ms_mean": 0.40147099999999997,
+   "latency_ms_samples": [
+    0.401279,
+    0.402623,
+    0.400511
+   ],
+   "round": 7,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_07/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": null,
+     "config": null,
+     "cost": 99800,
+     "cost_status": "known",
+     "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 64597,
+     "request_hash": "778bd3778e60e34b2adda0e878218a937191575363f531407c7ae6cff4a52558",
+     "response_id": "msg_011Cfj7S9hZUgLELXTu5eZdc",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_08/attempt_1/response.json",
+     "source_path": null,
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 687.2735435962677,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj7S9hZUgLELXTu5eZdc",
+       "round": 8,
+       "t": 1791204971.9016051,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 28821,
+        "logical_output": 70979,
+        "logical_total": 99800,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 28821,
+      "logical_output": 70979,
+      "logical_total": 99800,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "format_error"
+    }
+   ],
+   "config": null,
+   "diagnostic": "format error: the code block must carry title=\"impl_triton.py\"",
+   "evaluation": null,
+   "latency_ms_mean": null,
+   "latency_ms_samples": null,
+   "round": 8,
+   "source_path": null,
+   "status": "format_error",
+   "timing_execution_mode": null,
+   "timing_mode_differs": null
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 57,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 80036,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 64538,
+     "request_hash": "767a4854f3cf459d917281b8e39dc29fca6dcdd80b3b9b27f5a540500f7d660a",
+     "response_id": "msg_011Cfj8JqHDHf29e75WRH7Qf",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_09/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_09/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 511.2235314846039,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj8JqHDHf29e75WRH7Qf",
+       "round": 9,
+       "t": 1791205483.1953616,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 28690,
+        "logical_output": 51346,
+        "logical_total": 80036,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 28690,
+      "logical_output": 51346,
+      "logical_total": 80036,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BLOCK": 4096,
+    "COUNT_MAXNREG": 32,
+    "COUNT_STAGES": 5,
+    "COUNT_WARPS": 32,
+    "GRAIN": 1024,
+    "P_CAP": 296,
+    "RED_BB": 16,
+    "RED_R": 512,
+    "RED_WARPS": 8,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_09/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_a9b84774.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BLOCK": 4096,
+     "COUNT_MAXNREG": 32,
+     "COUNT_STAGES": 5,
+     "COUNT_WARPS": 32,
+     "GRAIN": 1024,
+     "P_CAP": 296,
+     "RED_BB": 16,
+     "RED_R": 512,
+     "RED_WARPS": 8,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 6.670619964599609,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 9,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.07549866666666667,
+    "latency_ms_samples": [
+     0.076577,
+     0.074687,
+     0.075232
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_9_1_oyz280sd",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 360030661,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791205486.8389149
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.07549866666666667,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_9_1_oyz280sd/tilebench_proton_tree_a9b84774.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.076577,
+      0.074687,
+      0.075232
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 7.683347702026367
+   },
+   "latency_ms_mean": 0.07549866666666667,
+   "latency_ms_samples": [
+    0.076577,
+    0.074687,
+    0.075232
+   ],
+   "round": 9,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_09/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  },
+  {
+   "attempts": [
+    {
+     "attempt": 1,
+     "compliance": {
+      "contract_evidence": [],
+      "diagnostics": [],
+      "review_items": [],
+      "static": {
+       "aliases": {
+        "TensorDescriptor": "triton.tools.tensor_descriptor.TensorDescriptor",
+        "tl": "triton.language",
+        "torch": "torch",
+        "triton": "triton"
+       },
+       "evidence": [],
+       "kernel_line_count": 59,
+       "verdict": "clear"
+      },
+      "verdict": "clear"
+     },
+     "config": null,
+     "cost": 85637,
+     "cost_status": "known",
+     "diagnostic": null,
+     "error": null,
+     "execution": null,
+     "kind": "initial",
+     "model_id": "claude-opus-5-5",
+     "prompt_chars": 63605,
+     "request_hash": "15ece2bbd03de2178f6fe586d27de44cdc5fd56ee687e1ec2faca002634dd200",
+     "response_id": "msg_011Cfj8y7LQxKop3SsFfbNvZ",
+     "response_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_10/attempt_1/response.json",
+     "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_10/attempt_1/impl_triton.py",
+     "terminal_status": "end_turn",
+     "transport": [
+      {
+       "attempt": 1,
+       "charged": "known",
+       "elapsed_s": 564.5102360248566,
+       "event": "succeeded",
+       "model_id": "claude-opus-5-5",
+       "outcome": "succeeded",
+       "response_id": "msg_011Cfj8y7LQxKop3SsFfbNvZ",
+       "round": 10,
+       "t": 1791206055.766345,
+       "terminal_status": "end_turn",
+       "transport_attempt": 1,
+       "usage": {
+        "cache_creation_input": 0,
+        "cached_input": 0,
+        "checked_at": "2026-10-05",
+        "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+        "logical_input": 28213,
+        "logical_output": 57424,
+        "logical_total": 85637,
+        "notes": [
+         "reasoning tokens are not reported separately by this API"
+        ],
+        "provider": "anthropic",
+        "reasoning_output": null,
+        "schema": "anthropic_messages_v1",
+        "status": "ok"
+       }
+      }
+     ],
+     "transport_attempts": 1,
+     "truncated": false,
+     "usage": {
+      "cache_creation_input": 0,
+      "cached_input": 0,
+      "checked_at": "2026-10-05",
+      "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+      "logical_input": 28213,
+      "logical_output": 57424,
+      "logical_total": 85637,
+      "notes": [
+       "reasoning tokens are not reported separately by this API"
+      ],
+      "provider": "anthropic",
+      "reasoning_output": null,
+      "schema": "anthropic_messages_v1",
+      "status": "ok"
+     },
+     "verdict": "clear"
+    }
+   ],
+   "config": {
+    "BM": 128,
+    "BW": 32,
+    "COUNT_MAXNREG": 64,
+    "COUNT_STAGES": 4,
+    "COUNT_WARPS": 16,
+    "GRAIN_ROWS": 32,
+    "P_CAP": 296,
+    "RED_BB": 16,
+    "RED_R": 512,
+    "RED_WARPS": 8,
+    "TBLOCK": 4096,
+    "ZBLOCK": 4096
+   },
+   "diagnostic": null,
+   "evaluation": {
+    "archive": {
+     "dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_10/attempt_1/evaluation",
+     "files": [
+      "impl_triton.py",
+      "job.json",
+      "progress.json",
+      "result.json",
+      "tilebench_proton_tree_16b3931e.hatchet",
+      "worker_stderr.txt",
+      "worker_stdout.txt"
+     ]
+    },
+    "config": {
+     "BM": 128,
+     "BW": 32,
+     "COUNT_MAXNREG": 64,
+     "COUNT_STAGES": 4,
+     "COUNT_WARPS": 16,
+     "GRAIN_ROWS": 32,
+     "P_CAP": 296,
+     "RED_BB": 16,
+     "RED_R": 512,
+     "RED_WARPS": 8,
+     "TBLOCK": 4096,
+     "ZBLOCK": 4096
+    },
+    "diagnostic": null,
+    "elapsed_s": 6.684701681137085,
+    "expected_timing_mode": "graph",
+    "identity": {
+     "attempt": 1,
+     "campaign": "validation_b200_2026-10-05",
+     "condition": "base",
+     "model": "claude",
+     "round": 10,
+     "run_type": "validation",
+     "trajectory_id": "503bd80c550e0af16db5"
+    },
+    "isolation": {
+     "backend": "bwrap",
+     "env_secrets_scrubbed": true,
+     "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
+     "home_hidden": true,
+     "network": "unshared",
+     "pid_namespace": true,
+     "probe_error": null,
+     "tmp_private": true
+    },
+    "latency_ms_mean": 0.4045,
+    "latency_ms_samples": [
+     0.404447,
+     0.398687,
+     0.410366
+    ],
+    "sandbox_dir": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_10_1_083__z6c",
+    "schema": "tilebench-llm-v2-eval/2",
+    "seed": 1716780118,
+    "stages": {
+     "autotuner_scan": {
+      "hits": []
+     },
+     "config_stability": {
+      "reads": 3,
+      "stable": true
+     },
+     "import_compile": {
+      "executions": 1,
+      "ok": true,
+      "started": 1791206059.6069515
+     },
+     "interface": {
+      "get_last_config": true,
+      "run": true
+     },
+     "numerical_checks": {
+      "checks": [
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "fresh_storage",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "same_address_new_values",
+        "ok": true,
+        "output_aliases_inputs": []
+       },
+       {
+        "inputs_mutated": [],
+        "message": "",
+        "name": "repeat_same_inputs",
+        "ok": true,
+        "output_aliases_inputs": []
+       }
+      ],
+      "executions_candidate": 3,
+      "executions_reference": 3,
+      "mutable_indices": []
+     },
+     "timing": {
+      "graph_prep": 4,
+      "timed": 3,
+      "warmup": 1
+     }
+    },
+    "status": "valid",
+    "timing": {
+     "capture_error": null,
+     "capture_succeeded": true,
+     "effective_use_cuda_graph": true,
+     "flush_before_each_launch": true,
+     "flush_buffer_mb": 253,
+     "graph_prep_runs": 4,
+     "mean_ms": 0.4045,
+     "measured_quantity": "gpu_kernel_time_per_launch_ns_from_proton",
+     "note": null,
+     "profile_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/_sandbox/histogramming_10_1_083__z6c/tilebench_proton_tree_16b3931e.hatchet",
+     "requested_use_cuda_graph": true,
+     "samples_ms": [
+      0.404447,
+      0.398687,
+      0.410366
+     ],
+     "scope_names": [
+      "launch_1",
+      "launch_2",
+      "launch_3"
+     ],
+     "timed_runs": 3,
+     "timing_execution_mode": "graph",
+     "warmup_runs": 1
+    },
+    "timing_mode_differs": false,
+    "worker_rc": 0,
+    "worker_wall_s": 7.489614009857178
+   },
+   "latency_ms_mean": 0.4045,
+   "latency_ms_samples": [
+    0.404447,
+    0.398687,
+    0.410366
+   ],
+   "round": 10,
+   "source_path": "/projects/kzhou6/bcui2/research/tilebench/llm_wt/outputs/llm_v2/validation_b200_2026-10-05/base/B200/triton/claude/histogramming/int32/620b08f2e3d7c688/round_10/attempt_1/impl_triton.py",
+   "status": "valid",
+   "timing_execution_mode": "graph",
+   "timing_mode_differs": false
+  }
+ ],
+ "run_type": "validation",
+ "schema": "tilebench-llm-v2-trajectory/2",
+ "status": "complete",
+ "stop_reason": null,
+ "task": {
+  "case_id": "620b08f2e3d7c688",
+  "case_index": 19,
+  "device": "B200",
+  "dsl": "triton",
+  "dtype": "int32",
+  "fold": "B",
+  "fp8_format": null,
+  "operator": "histogramming",
+  "params": {
+   "N": 67108864,
+   "num_bins": 4096
+  },
+  "problem_size": 67108864
+ },
+ "trajectory_id": "503bd80c550e0af16db5",
+ "transport_log": []
+}
