@@ -2,7 +2,8 @@ import torch
 import tilelang 
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_NOPE_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_ROPE_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
 _last_autotune_config: dict = {}
 _out_cache = torch.utils.weak.WeakTensorKeyDictionary()
 def _cached_out(o: torch.Tensor) -> torch.Tensor:
@@ -22,7 +23,7 @@ def destindex_config():
     ]
 
 
-@tilelang.autotune(configs=destindex_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=destindex_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def copy_by_dest_kernel(
         kv,
@@ -81,7 +82,7 @@ def _launch_copy(
         kernel(kv_flat, dest_loc, out_flat)
 
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = {"nope": _DEFAULT_NOPE_CONFIG, "rope": _DEFAULT_ROPE_CONFIG}[label]
         copy_by_dest_kernel(
             kv_flat, dest_loc, out_flat, dtype=dtype, dest_dtype=dest_dtype,
             head_num=head_num, head_dim=head_dim,

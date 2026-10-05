@@ -35,6 +35,8 @@ _dequantize_rowwise_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["ROWS", "COLS"],
+    warmup=1,
+    rep=3,
 )(dequantize_rowwise_kernel)
 
 

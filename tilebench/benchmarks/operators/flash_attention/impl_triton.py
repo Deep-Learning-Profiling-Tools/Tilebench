@@ -86,6 +86,8 @@ _fwd_kernel_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["SEQLEN", "DIM"],
+    warmup=1,
+    rep=3,
 )(fwd_kernel)
 
 

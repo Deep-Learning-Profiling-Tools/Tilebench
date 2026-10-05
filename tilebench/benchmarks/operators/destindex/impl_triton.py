@@ -49,6 +49,8 @@ _copy_by_dest_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["total"],
+    warmup=1,
+    rep=3,
 )(copy_by_dest_kernel)
 
 

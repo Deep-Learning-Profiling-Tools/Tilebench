@@ -56,6 +56,17 @@ from typing import Any, Callable, Hashable, Sequence
 import cuda.tile as ct
 
 
+#: Crash-isolation guard passed to every ``ct.tune.exhaustive_search``. With a
+#: timeout set, cuTile runs each candidate's first warmup launch in a separate
+#: benchmark worker process, so a candidate that faults on the device (e.g. a
+#: CUDA "illegal instruction", which would otherwise poison this process's
+#: context and every later case) is recorded in ``TuningResult.failures`` and
+#: skipped. The remaining warmups and all timing still run in this process, so
+#: the measurement of successful candidates is unchanged. A candidate whose
+#: first launch takes longer than this many seconds also counts as a failure.
+CRASH_ISOLATION_TIMEOUT_SEC = 60
+
+
 class CutileAutotuner:
     """Caches `replace_hints` results and autotune outcomes for one kernel.
 
@@ -110,6 +121,7 @@ class CutileAutotuner:
                 search_space, stream,
                 grid_fn=grid_fn, kernel=self.kernel,
                 args_fn=args_fn, hints_fn=hints_fn,
+                single_run_timeout_sec=CRASH_ISOLATION_TIMEOUT_SEC,
             )
             cached = result.best.config
             self._tuned_cache[shape_key] = cached

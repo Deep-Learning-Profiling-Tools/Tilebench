@@ -30,6 +30,8 @@ _swiglu_kernel_autotuned = triton.autotune(
         for nw in [2, 4, 8]
     ],
     key=["n_elements"],
+    warmup=1,
+    rep=3,
 )(swiglu_kernel)
 
 

@@ -16,7 +16,7 @@ def softmax_config():
         for nt in threads
     ]
 
-@tilelang.autotune(configs=softmax_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=softmax_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def softmax_online_kernel(x, y, dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     M = T.dynamic("M")

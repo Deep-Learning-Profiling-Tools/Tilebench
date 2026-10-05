@@ -33,6 +33,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tilebench.profiling import ncu_kernel_select as ks  # noqa: E402
+from tilebench.backends import parse_backends  # noqa: E402
 from tilebench.paths import REPO_ROOT, hardware_label, ncu_output_dir, ncu_report_path  # noqa: E402
 
 ROOT = REPO_ROOT
@@ -41,6 +42,9 @@ NCU = "/usr/local/cuda/bin/ncu"
 HARNESS = Path(__file__).resolve().with_name("ncu_generic_harness.py")
 
 KERNEL_REGEX_BY_BACKEND_DEFAULT = ".*"
+
+#: Backends the driver can profile; --tile-language selects among them.
+PROFILED_BACKENDS = ("triton", "cutile", "tilelang")
 
 
 def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
@@ -115,6 +119,16 @@ def run_one(op: str, dtype: str, backend: str, params: dict, cfg: dict | None,
             captured = ks.captured_kernels((r.stdout or "") + (r.stderr or ""))
         validated, problems = ks.validate_capture(
             captured, kernel_names if rgx else None, expected_count=count)
+        if backend == "tilelang" and rgx and validated:
+            # TileLang names many distinct kernels `main_kernel` (radix_sort,
+            # bitonic_sort, top_k, attention): stems and count cannot tell them
+            # apart, so the captured sequence must equal the probed one in order.
+            expected_seq = [n for n in kernel_names if not ks.is_aux_kernel(n)]
+            if list(captured) != expected_seq:
+                validated = False
+                problems = problems + [f"sequence differs from the probed launch order: "
+                                       f"captured {[n[:40] for n in captured][:12]} vs "
+                                       f"expected {[n[:40] for n in expected_seq][:12]}"]
         if ok and not validated:
             ok = False
         unexpected = problems
@@ -137,7 +151,16 @@ def main() -> None:
     ap.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
                     help="Hardware label (e.g. B200): reads outputs/profiling/<gpu>/, "
                          "writes outputs/ncu/<gpu>/")
+    ap.add_argument("--tile-language", type=str, default="triton,cutile",
+                    help="Backends to profile, among triton, cutile, tilelang "
+                         "(default: triton,cutile)")
     args = ap.parse_args()
+    try:
+        backends = [b for b in parse_backends(args.tile_language) if b in PROFILED_BACKENDS]
+    except ValueError as e:
+        ap.error(f"--tile-language: {e}")
+    if not backends:
+        ap.error(f"--tile-language must include one of {', '.join(PROFILED_BACKENDS)}")
     try:
         catalogue = ks.load_catalogue(args.gpu)
         kernel_counts, kernel_names_map = ks.load_kernel_counts(args.gpu)
@@ -157,7 +180,7 @@ def main() -> None:
         for dt in c["dtypes"]:
             params = c["default_params_per_dtype"][dt]
             winner = c["autotune_winner_per_dtype"].get(dt)
-            for backend in ("triton", "cutile"):
+            for backend in backends:
                 cfg = None
                 if winner is not None:
                     cfg = winner.get(backend)

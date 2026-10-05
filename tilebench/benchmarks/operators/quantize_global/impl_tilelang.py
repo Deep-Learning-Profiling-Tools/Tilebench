@@ -14,7 +14,7 @@ def quantize_global_configs():
     ]
 
 
-@tilelang.autotune(configs = quantize_global_configs(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs = quantize_global_configs(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 
 

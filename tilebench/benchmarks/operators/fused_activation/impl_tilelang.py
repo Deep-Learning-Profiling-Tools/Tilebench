@@ -17,7 +17,7 @@ def fused_activation_configs():
     ]
 
 
-@tilelang.autotune(configs=fused_activation_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=fused_activation_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def fused_activation_kernel(x, gate, bias, output, in_dtype, out_dtype, BLOCK_SIZE: int = 1024, threads: int = 128):
     n_elements = T.const("n_elements")

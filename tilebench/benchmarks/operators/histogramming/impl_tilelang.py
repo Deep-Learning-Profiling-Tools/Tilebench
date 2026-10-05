@@ -33,7 +33,7 @@ def histogram_reduce_configs():
     ]
 
 
-@tilelang.autotune(configs=histogram_partial_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=histogram_partial_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def histogram_partial_kernel(x, partial, BLOCK_SIZE: int = 1024, threads: int = 128):
     N, num_partials, num_bins = T.const("N, num_partials, num_bins")
@@ -55,7 +55,7 @@ def histogram_partial_kernel(x, partial, BLOCK_SIZE: int = 1024, threads: int = 
         T.copy(smem, partial[pid, :])
 
 
-@tilelang.autotune(configs=histogram_reduce_configs(), warmup=3, rep=10, timeout=60)
+@tilelang.autotune(configs=histogram_reduce_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def histogram_reduce_kernel(partial, histogram, BLOCK_ROWS: int = 64, BLOCK_BINS: int = 256, threads: int = 128):
     num_partials, num_bins = T.const("num_partials, num_bins")

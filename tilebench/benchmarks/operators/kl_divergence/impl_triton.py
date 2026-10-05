@@ -44,8 +44,8 @@ _kl_divergence_kernel_autotuned = triton.autotune(
         if bs >= nw * 32
     ],
     key=["n_cols"],
-    warmup=3,
-    rep=10,
+    warmup=1,
+    rep=3,
 )(kl_divergence_kernel)
 
 

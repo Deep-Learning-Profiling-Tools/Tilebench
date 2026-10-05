@@ -6,6 +6,8 @@ operator, results/<gpu>/logs/autotune_logs/<op>_autotune_<backends>.json.
 
 Usage:  python scripts/profiling/ncu_catalogue.py --gpu B200 [op ...]
         ... --tile-language triton,cutile,tilelang   # winners from that run instead
+        python scripts/profiling/ncu_catalogue.py --gpu MI300X --tile-language triton
+                                                     # a Triton-only GPU: cutile winners are null
 """
 import argparse
 
@@ -30,17 +32,19 @@ def main(argv=None):
                              "(outputs/profiling/<gpu>/ncu_catalogue.json)")
     parser.add_argument("--tile-language", type=str, default="triton,cutile",
                         help="Backend selection of the autotune run whose winners to read, as "
-                             "passed to run_bench.py --autotune. It must include triton and "
-                             "cutile, the two backends NCU profiles (default: triton,cutile)")
+                             "passed to run_bench.py --autotune. It must include triton or "
+                             "cutile, the backends the profilers replay (default: triton,cutile; "
+                             "a GPU without cuTile, e.g. MI300X, uses triton)")
     parser.add_argument("ops", nargs="*", help="Operators to refresh (default: all)")
     args = parser.parse_args(argv)
     try:
         backends = parse_backends(args.tile_language)
     except ValueError as e:
         parser.error(f"--tile-language: {e}")
-    if not {"triton", "cutile"} <= set(backends):
-        parser.error("--tile-language must include triton and cutile: the catalogue records "
-                     "the autotune winners of exactly these two backends")
+    if not {"triton", "cutile"} & set(backends):
+        parser.error("--tile-language must include triton or cutile: the catalogue records "
+                     "the autotune winners of these two backends (a backend outside the "
+                     "selection has no winner)")
 
     try:
         out, built = write_catalogue(args.gpu, backends, args.ops)
