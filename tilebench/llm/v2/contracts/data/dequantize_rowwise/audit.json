@@ -1,0 +1,100 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "dequantize_rowwise",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/dequantize_rowwise/impl_triton.py",
+      "functions": [
+        {"name": "dequantize_rowwise_kernel", "lines": [11, 28]},
+        {"name": "_dequantize_rowwise_kernel_autotuned", "lines": [31, 40]},
+        {"name": "run", "lines": [43, 61]},
+        {"name": "get_last_config", "lines": [64, 68]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/dequantize_rowwise/impl_cutile.py",
+      "functions": [
+        {"name": "dequantize_rowwise_kernel", "lines": [22, 35]},
+        {"name": "_tuner", "lines": [38, 38]},
+        {"name": "run", "lines": [41, 65]},
+        {"name": "get_last_config", "lines": [68, 69]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/dequantize_rowwise/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 7]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[r, c] = fp16(fp32(x[r, c]) * fp32(state_x[r]) * (1/127)) (impl_triton.py L24-28); output allocated fp16 (L46).",
+      "cutile": "Same expression (impl_cutile.py L31-35); output allocated fp16 (L45).",
+      "note": "Both match impl_torch.py L7: (state_x.unsqueeze(1) * x * (1.0/127.0)).to(float16); int8 x, fp32 per-row scale, fp16 output."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, grid (rows, ceil(cols/CHUNK)): load int8 slice masked other=0 (L24), load row scale (L25), multiply (L27), store fp16 masked (L28).",
+      "cutile": "One kernel, grid (rows, ceil(cols/chunk), 1): zero-padded (1, CHUNK) load (L27-30), (1,) scale load (L32), multiply (L34), store fp16 (L35).",
+      "note": "Single element-wise pass on both sides; no intermediates."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-program dependency; each program reads its x slice and scale and writes its output slice (L17-28).",
+      "cutile": "Same (L24-35).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (L11-28).",
+      "cutile": "None (L22-35).",
+      "note": "Purely element-wise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "x and scale cast to fp32 (L24-25); product x * scale * _INV_127 with _INV_127 = tl.constexpr(1.0/127.0) (L8, L27); single rounding to fp16 at the store (L28).",
+      "cutile": "ct.astype float32 on x and scale (L31, L33); x_f32 * scale * _INV_127 with _INV_127 = 1.0/127.0 (L19, L34); ct.astype float16 at the store (L35).",
+      "note": "Same fp32 path, same operand order (x * scale) * (1/127), same single final rounding; multiply-by-reciprocal on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Output allocation only (L46); no contiguous()/cast; the kernel assumes row-major contiguous x (offset row * COLS + col, L22).",
+      "cutile": "Output allocation only (L45); 2-D tile indexing assumes the (rows, cols) layout (L28).",
+      "note": "Neither side copies, casts or caches anything; both assume contiguous inputs as generated (tensors.py L182-183)."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Result written directly."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L46).",
+      "cutile": "No input written; fresh output per call (L45).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "rows * cols * 1 + rows * 4 + rows * cols * 2",
+    "flops_expr": "2 * rows * cols",
+    "consistent": "true",
+    "note": "Literal byte widths (1 B int8 read, 4 B fp32 scale per row, 2 B fp16 write) match the compulsory traffic of the single kernel on both sides; the per-(row, chunk) re-read of the row scale is not counted and is negligible. No preprocessing or prepacked input exists. The formula is only valid for the int8 case fixed in config.yaml."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

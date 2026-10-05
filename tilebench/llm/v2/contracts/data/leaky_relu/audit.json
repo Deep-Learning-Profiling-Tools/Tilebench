@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "leaky_relu",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/leaky_relu/impl_triton.py",
+      "functions": [
+        {"name": "leaky_relu_kernel", "lines": [8, 15]},
+        {"name": "_leaky_relu_kernel_autotuned", "lines": [18, 28]},
+        {"name": "run", "lines": [31, 48]},
+        {"name": "get_last_config", "lines": [51, 59]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/leaky_relu/impl_cutile.py",
+      "functions": [
+        {"name": "leaky_relu_kernel", "lines": [19, 24]},
+        {"name": "run", "lines": [30, 56]},
+        {"name": "get_last_config", "lines": [59, 60]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/leaky_relu/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [5, 6]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = where(x > 0, x, 0.01 * x) (impl_triton.py:14).",
+      "cutile": "y = where(x > 0, x, 0.01 * x) (impl_cutile.py:23).",
+      "note": "Both match impl_torch.py:6 (F.leaky_relu, negative_slope=0.01). Generator tensors.py:103-105 returns (x, n)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "empty_like (impl_triton.py:33) + one launch grid ceil(N/block) (36-46).",
+      "cutile": "empty_like (impl_cutile.py:32) + one launch grid ceil(N/tile) (52-54).",
+      "note": "Identical allocation + single-pass structure."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends only on the output buffer.",
+      "cutile": "kernel depends only on the output buffer.",
+      "note": "No intermediates."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "none.",
+      "cutile": "none.",
+      "note": "Elementwise map."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "arithmetic on the loaded dtype, no explicit upcast (impl_triton.py:13-15).",
+      "cutile": "arithmetic on the tile dtype, no explicit upcast (impl_cutile.py:22-24).",
+      "note": "Both native-dtype; the contract permits (does not require) fp32 promotion."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "only empty_like inside run; block_size ignored (impl_triton.py:33).",
+      "cutile": "only empty_like inside run; block_size ignored (impl_cutile.py:32).",
+      "note": "Nothing cached or prepacked."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none.",
+      "cutile": "none.",
+      "note": "No global scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "input never written; fresh output.",
+      "cutile": "input never written; fresh output.",
+      "note": "Idempotent."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches; masked load/store (impl_triton.py:12-15).",
+      "cutile": "no dispatch branches; zero-padded load + clipped store (impl_cutile.py:22-24).",
+      "note": "Tail mechanism is a mapping choice."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "One read of X and one write of Y at dtype_size bytes, exactly the single kernel's traffic on both sides; the allocation is inside run() and timed; nothing cached or prepacked."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "moe_topk_gating",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_outputs", "description": "Allocate weights (M, k) in logits.dtype and indices (M, k) int32 inside run()."},
+    {"id": "row_load_fp32", "description": "Read each row of logits once, upcast to float32, pad positions beyond E with -inf."},
+    {"id": "iterative_argmax_selection", "description": "k sequential rounds of full-row max + argmax; record value and int32 index into slot i; exclude the chosen column with -inf; output order is descending."},
+    {"id": "softmax_over_k", "description": "Numerically stable float32 softmax (max-subtract, exp, sum, divide) over only the k selected values; padded slots contribute 0."},
+    {"id": "store_outputs", "description": "Store weights cast to logits.dtype and int32 indices; fused with the previous stages in one launch."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.topk\\(|\\.topk\\(", "message": "torch.topk replaces the whole selection stage.", "level": "confirmed"},
+    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(|(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(", "message": "Host-side sort/argsort replaces the selection stage.", "level": "suspicious"},
+    {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|\\.softmax\\(|torch\\.exp\\(|torch\\.logsumexp", "message": "Host-side softmax/exp replaces the normalisation stage.", "level": "suspicious"},
+    {"pattern": "torch\\.max\\(|torch\\.argmax\\(|torch\\.amax\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take_along_dim", "message": "Host-side max/argmax/gather assembles the outputs with PyTorch.", "level": "suspicious"},
+    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32|\\.half\\(\\)|\\.to\\(\\s*torch\\.(float16|bfloat16)", "message": "Host-side dtype conversion of logits or of the outputs is an extra pass; conversions belong inside the kernel.", "level": "suspicious"},
+    {"pattern": "torch\\.zeros|torch\\.full\\(|torch\\.ones", "message": "No initialised global scratch is part of this operator.", "level": "suspicious"},
+    {"pattern": "\\.clone\\(\\)|\\.copy_\\(|\\.contiguous\\(\\)", "message": "A host-side copy of logits inside run() is not permitted.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.argmax", "ct\\.argmax", "T\\.reduce_argmax", "nl\\.argmax", "nisa\\.max8", "argmax"], "message": "No kernel-level argmax found; the selection must be done in the kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.exp", "ct\\.exp", "T\\.exp", "nl\\.exp", "exp\\("], "message": "No kernel-level exp found for the softmax stage.", "level": "suspicious"},
+    {"any_of": ["-inf", "float\\(\"-inf\"\\)", "float\\('-inf'\\)", "NEG_INF", "-float\\(\"inf\"\\)", "-float\\('inf'\\)", "neg_inf", "-1e30"], "message": "No -inf masking value found; exclusion of selected columns and padding must use -inf.", "level": "suspicious"},
+    {"any_of": ["int32"], "message": "No int32 index dtype found.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.int32",
+    "torch.cuda.current_stream"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tuple", "count": 2, "aliasing": "none; (weights (M, k) in logits.dtype, indices (M, k) int32) both freshly allocated inside run() and not sharing storage with logits"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the two output allocations, host-side derivation of padded widths from E and k, and the single fused kernel. No cached state, no host-side cast, copy or partial selection of logits."},
+  "tolerance_source": "config.verify"
+}

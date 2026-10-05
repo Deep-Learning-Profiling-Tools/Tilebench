@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "softmax",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/softmax/impl_triton.py",
+      "functions": [
+        {"name": "softmax_online_kernel", "lines": [8, 37]},
+        {"name": "_softmax_kernel_autotuned", "lines": [40, 49]},
+        {"name": "run", "lines": [52, 73]},
+        {"name": "get_last_config", "lines": [76, 83]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/softmax/impl_cutile.py",
+      "functions": [
+        {"name": "softmax_online_kernel", "lines": [24, 61]},
+        {"name": "run", "lines": [67, 108]},
+        {"name": "get_last_config", "lines": [111, 112]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/softmax/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [3, 4]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = exp(x - m)/l per row with m the exact row max and l the rescaled sum, output in x's dtype (impl_triton.py 20-37).",
+      "cutile": "y = exp(tile - m)/l per row with the same m/l recurrence, output in x's dtype (impl_cutile.py 35-61).",
+      "note": "Both realise torch.softmax(x, dim=-1) (impl_torch.py 4) for a 2-D input; both unpack exactly two dims (53 / 69)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one program per row (grid n_rows, 55): sweep A online max/sum (22-29), sweep B normalise (32-37).",
+      "cutile": "One kernel, one CTA per row (grid (n_rows,1,1), 71): pass 1 online max/sum (38-49), pass 2 normalise (52-61).",
+      "note": "Identical single-launch two-sweep online structure; both re-read the row for the second sweep."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "m, l are program-private scalars consumed by sweep B; rows independent (20-21, 36).",
+      "cutile": "m, l are CTA-private 0-d fp32 tiles consumed by pass 2; rows independent (35-36, 59).",
+      "note": "Per-row statistics before normalisation, no global intermediate, on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Per chunk tl.max then tl.sum of exp(x - m_new); sequential rescale l = l*exp(m - m_new) + ... across chunks; -inf padding in sweep A (25-29).",
+      "cutile": "Per tile ct.max then ct.sum of exp(tile - m_new); same sequential rescale; NEG_INF padding in pass 1 (41-48).",
+      "note": "Same online-softmax recurrence with identical initial state (m=-inf, l=0); intra-tile reduction order left to the compiler on both sides."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Loads upcast .to(tl.float32) (25, 35); m, l, exp and division fp32; explicit cast to the output element type at the store (37).",
+      "cutile": "Loads upcast ct.astype(ct.float32) (43, 57); m, l fp32 0-d tiles; ct.exp and true division; one ct.astype to the output dtype (60).",
+      "note": "fp32 statistics and exponentials with a single downcast on both sides; plain exp and true division on both."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "torch.empty_like(x); strides passed; n_cols runtime (53-55, 60-61).",
+      "cutile": "torch.empty_like(x); n_tiles = ceil(n_cols/block) computed on the host and passed as ConstInt (70, 97-100).",
+      "note": "Only the output allocation plus host integer arithmetic inside run() on both sides; no copy, cast or cached state."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None in global memory (whole file).",
+      "cutile": "None in global memory (whole file).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x read-only; fresh output each call (54).",
+      "cutile": "x read-only; fresh output each call (70); tuning launches overwrite output (89), rewritten by the final launch.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches; _HANG_CFGS (15-21) only prunes the tuning space.",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n_rows * n_cols * dtype_size * 2",
+    "flops_expr": "n_rows * n_cols",
+    "consistent": "true",
+    "note": "Both timed run() bodies allocate the output and launch one kernel; no clone, zero-fill, scratch or cached prepack. bytes_expr (config.yaml 18) is the minimal one-read-one-write bound; both kernels re-read each row for the second sweep, so issued traffic is up to 3x the model when the re-read misses cache. flops_expr is the nominal one-operation-per-element convention."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

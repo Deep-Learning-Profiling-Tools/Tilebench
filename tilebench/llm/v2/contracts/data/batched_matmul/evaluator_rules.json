@@ -1,0 +1,33 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "batched_matmul",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh flat (BATCH*M*N,) (or (BATCH, M, N)) output of A's dtype inside run()."},
+    {"id": "batched_gemm", "description": "One kernel launch: each (batch, M-tile, N-tile) output tile accumulates the full K range sequentially into a local fp32 accumulator via a tensor-core product, with zero-filled edge loads and clipped/masked stores; cast to A's dtype at the store."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(matmul|bmm|mm|einsum|baddbmm|addmm|addbmm)\\(|torch\\.linalg\\.matmul", "message": "A library GEMM replaces the whole computation.", "level": "confirmed"},
+    {"pattern": "\\w[ \\t]*@[ \\t]*\\w", "message": "The @ operator on tensors is a library GEMM.", "level": "suspicious"},
+    {"pattern": "\\.transpose\\(|\\.permute\\(|\\.t\\(\\)|\\.contiguous\\(\\)", "message": "Host-side transpose/repack or copy of an operand: forbidden under the provisional no-repack rule (open review item); in-kernel tile transposes are fine.", "level": "suspicious"},
+    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b|cache\\[", "message": "Cross-call caching keyed on input tensors is forbidden.", "level": "suspicious"},
+    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation suggests split-K, which is a different reduction structure.", "level": "suspicious"},
+    {"pattern": "\\.half\\(\\)|\\.bfloat16\\(\\)|\\.to\\(torch\\.(float16|bfloat16)\\)|astype\\([^)]*(float16|bfloat16)", "message": "Possible downcast of fp32 operands below TF32 precision.", "level": "suspicious"},
+    {"pattern": "torch\\.zeros\\(|torch\\.zeros_like\\(|torch\\.full\\(", "message": "No zero-filled scratch is part of this operator; only an uninitialised output is expected.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "nki\\.isa\\.nc_matmul"], "message": "No matrix-multiply primitive found; the GEMM must use a tensor-core product.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 accumulator evidence found.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.view",
+    "Tensor.reshape",
+    "Tensor.stride"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned flat (BATCH*M*N,) tensor (or flat view of a fresh (BATCH, M, N) buffer) must be allocated inside run() and must not share storage with A or B"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: zero-copy views, host descriptor/metadata construction, the output allocation and the single GEMM kernel. Provisional rule (open review item): no transposed/packed copy of A or B and no cross-call cache of input-derived data; if a repack is ever permitted it must be inside the timed call."},
+  "tolerance_source": "config.verify"
+}

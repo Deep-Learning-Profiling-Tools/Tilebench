@@ -1,0 +1,111 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "destindex",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "needs-review",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_triton.py",
+      "functions": [
+        {"name": "_out_cache (module-level WeakTensorKeyDictionary)", "lines": [7, 7]},
+        {"name": "_cached_out", "lines": [10, 15]},
+        {"name": "copy_by_dest_kernel", "lines": [18, 42]},
+        {"name": "_copy_by_dest_kernel_autotuned", "lines": [45, 54]},
+        {"name": "_launch_copy", "lines": [57, 76]},
+        {"name": "run", "lines": [79, 91]},
+        {"name": "get_last_config", "lines": [94, 101]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_cutile.py",
+      "functions": [
+        {"name": "_out_cache (module-level WeakTensorKeyDictionary)", "lines": [24, 24]},
+        {"name": "_cached_out", "lines": [27, 32]},
+        {"name": "copy_by_dest_kernel", "lines": [35, 61]},
+        {"name": "_tuner", "lines": [64, 64]},
+        {"name": "run", "lines": [67, 135]},
+        {"name": "get_last_config", "lines": [138, 139]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_torch.py",
+      "functions": [
+        {"name": "_out_cache (module-level WeakTensorKeyDictionary)", "lines": [4, 4]},
+        {"name": "_cached_out", "lines": [7, 12]},
+        {"name": "run", "lines": [15, 27]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[dest_loc[t], h, d] = kv[t, h, d] for both tensor pairs via flat offset decomposition + index load + store (impl_triton.py L32-42); returns (out_nope, out_rope) (L91).",
+      "cutile": "Same semantics via gather of dest_loc[token] + ct.scatter (impl_cutile.py L49-61); returns (out_nope, out_rope) (L135).",
+      "note": "Both match impl_torch.py L25-26 (index_copy_ along dim 0 into a clone of o_*). dest_loc is a permutation (tensors.py L151), so every row is overwritten and writes never collide."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Two launches of one kernel: nope (L89) then rope (L90), each a 1-D grid over the flattened element count (L61-76).",
+      "cutile": "Two launches of one kernel: nope (L124-127) then rope (L130-133), each a 1-D grid over the flattened element count.",
+      "note": "Identical structure; the two scatter-copies are independent and may be fused into one launch (contract permits)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "nope and rope launches touch disjoint buffers; both require the output buffers obtained from _cached_out (L87-88).",
+      "cutile": "Same (L75-76, L124-133).",
+      "note": "No dependency between the two copies; both depend on the output buffers being initialised from o_* (see preprocessing)."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None; plain store at computed destination, no atomics, no collision handling (L42).",
+      "cutile": "None; ct.scatter with unique destinations, no atomics (L61).",
+      "note": "Unique destinations by construction of the generator; neither side resolves duplicates."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Exact element copy for fp16/bf16/fp32/int8 (L41-42); dest index narrowed int64 -> int32 (L38).",
+      "cutile": "Exact element copy (L59-61); dest index narrowed to int32 (L55).",
+      "note": "No arithmetic on values; both narrow the index identically."
+    },
+    "preprocessing": {
+      "status": "needs-review",
+      "triton": "out_nope/out_rope = clone of o_nope/o_rope created on the FIRST call per input tensor identity and cached in a module-level WeakTensorKeyDictionary (L7, L10-15, L87-88); later calls reuse the buffer, so the clone (allocation + device copy of both o_* tensors) is outside the steady-state timed window.",
+      "cutile": "Identical pattern (L24, L27-32, L75-76) plus metadata-only .contiguous().view(-1) flattening (L80-83).",
+      "note": "Both sides (and impl_torch.py L4-12) agree with each other, but the policy itself is a timed-boundary question: a generated run() that initialises fresh outputs from o_* on every call times an extra read+write of both outputs (doubling the traffic counted by bytes_expr), one that keeps per-identity persistent buffers reproduces the manual boundary but relies on module-level state keyed by tensor identity (flagged as suspicious by the static checker), and one that writes into o_* directly would mutate inputs (forbidden). The human must choose the required policy."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "No scratch; the persistent output buffers are the only module-level state (L7).",
+      "cutile": "No scratch; same persistent output buffers (L24).",
+      "note": "Both agree; the persistence question is recorded under preprocessing/mutation."
+    },
+    "mutation": {
+      "status": "needs-review",
+      "triton": "No positional input is written (kv_*, dest_loc, o_* read-only); the cached output buffers are overwritten in place on every call (L42, L87-90).",
+      "cutile": "Same: inputs read-only, cached outputs overwritten in place (L61, L75-76, L124-133).",
+      "note": "Agreed: inputs are never modified. Open: whether the returned tensors may be the same objects across calls (rewritten in place) or must be distinct per call; rows not named by dest_loc keep the o_* values copied on the first call."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "unclear",
+    "note": "n = total_tokens * (kv_nope_head_num*kv_nope_head_dim + kv_rope_head_num*kv_rope_head_dim) (tensors.py infer_problem_size L652-656). The formula counts one read of kv and one write of out per element, which is the STEADY-STATE traffic of the two kernels only because the output initialisation from o_* (read o_* + write out, the same n*dtype_size*2 again) runs once per input identity and is cached across calls on both sides; the dest_loc index reads (8 B per token, re-gathered per element) are not counted. Whether the formula is consistent depends on the output-buffer policy chosen in the review item."
+  },
+  "human_reference_comparable": false,
+  "review_items": [
+    "Output-buffer policy: decide whether a generated run() must (a) allocate the outputs and initialise them from o_nope/o_rope on every call (reference semantics, doubles the timed traffic relative to bytes_expr), or (b) may keep persistent output buffers keyed to the o_* input identity, initialised once and rewritten in place on each call (the manual boundary; relies on module-level tensor-identity state); writing into o_* directly is forbidden on both sides.",
+    "bytes_expr consistency: if policy (a) is chosen, decide whether bytes_expr should include the per-call read of o_* and the corresponding write (n * dtype_size * 4) so that SOL figures reflect the timed work; if (b) is chosen, human_reference_comparable can be set true.",
+    "Define the required result for rows not addressed by dest_loc (they must equal the o_* values) and whether the evaluator should test a non-permutation dest_loc, which the current generator never produces."
+  ],
+  "contract_sha256": null
+}

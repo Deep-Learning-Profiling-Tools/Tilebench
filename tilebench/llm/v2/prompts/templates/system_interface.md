@@ -15,5 +15,5 @@ Rules that apply to every response:
    ...
    ```
 
-   that defines `{{run_signature}}` with the declared return structure, and `def get_last_config() -> dict` returning the fixed configuration literals you used. No other code blocks, no prose outside the block is required.
+   that defines `{{run_signature}}` with the declared return structure, and `def get_last_config() -> dict` returning the fixed configuration literals you used. The evaluator calls `run` with the positional inputs listed in the task only; it never passes keyword arguments such as `block_size` or `autotune`. If you declare such parameters they must have defaults and must not change the computation. No other code blocks, no prose outside the block is required.
 7. Performance feedback you will receive is the measured runtime of your implementation only.

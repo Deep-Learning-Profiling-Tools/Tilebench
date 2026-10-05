@@ -1,0 +1,30 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "linear_self_attention",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "phi_q", "description": "PHI_Q = where(Q > 0, Q + 1, exp(Q)) in fp32 (materialised or fused into the output stage)."},
+    {"id": "phi_k", "description": "PHI_K = where(K > 0, K + 1, exp(K)) in fp32 (materialised or fused into the state/normaliser loads)."},
+    {"id": "state_s", "description": "S = PHI_K^T @ V, (D, D), reduced over all M rows, TF32-or-better operands, fp32 accumulation."},
+    {"id": "colsum_z", "description": "Z = column sums of PHI_K over M, (D,), fp32 (separate pass or fused into state_s)."},
+    {"id": "output_o", "description": "O = (PHI_Q @ S) / (PHI_Q . Z + eps); numerator TF32-or-better/fp32-acc, denominator full fp32, eps added once after the reduction."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(matmul|mm|bmm|einsum|addmm)\\(|torch\\.nn\\.functional\\.linear\\(|F\\.linear\\(", "message": "library GEMM computes a stage of the operator", "level": "confirmed"},
+    {"pattern": "torch\\.nn\\.functional\\.scaled_dot_product_attention\\(|F\\.scaled_dot_product_attention\\(", "message": "library attention computes the operator", "level": "confirmed"},
+    {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious"},
+    {"pattern": "torch\\.exp\\(|torch\\.where\\(", "message": "PyTorch evaluation of the feature map", "level": "suspicious"},
+    {"pattern": "torch\\.sum\\(|\\.sum\\(\\s*(dim\\s*=\\s*0|0)\\s*\\)", "message": "PyTorch column sum for the normaliser", "level": "suspicious"},
+    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32", "message": "process-wide precision flag changed", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "mma", "matmul"], "message": "a device-side matrix multiply for S and the numerator", "level": "suspicious"},
+    {"any_of": ["tl\\.exp", "ct\\.exp", "T\\.exp", "nl\\.exp", "exp\\("], "message": "a device-side exp for the feature map", "level": "suspicious"},
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "a device-side reduction for Z / the denominator", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, D) fp32 tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All allocations (O and scratch), any in-run transposed copies and every launch are inside run() and timed; no cross-call cache of PHI_K, S, Z or transposed operands; no prepacked inputs."},
+  "tolerance_source": "config.verify"
+}

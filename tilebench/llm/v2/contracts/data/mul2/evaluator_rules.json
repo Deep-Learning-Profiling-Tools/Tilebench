@@ -1,0 +1,28 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "mul2",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (n,) output of x's dtype inside run()."},
+    {"id": "elementwise_double", "description": "One kernel pass that reads each element of x once, doubles it, and stores it once at the same position of the output, with correct tail handling for n elements."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|torch\\.add\\(|torch\\.lerp\\(|\\.mul\\(|\\.mul_\\(|\\.add_\\(|\\.copy_\\(", "message": "The doubling must be performed by the kernel, not by a PyTorch arithmetic op or copy.", "level": "confirmed"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\s*\\+|return\\s+2\\s*\\*\\s*x\\b", "message": "Returning the input or a host-side expression on it replaces the whole computation.", "level": "confirmed"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in mul2.", "level": "suspicious"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["\\*\\s*2\\b", "2\\s*\\*", "\\+\\s*x", "<<\\s*1", "\\*\\s*2\\.0"], "message": "No doubling arithmetic found inside the kernel.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty_like",
+    "torch.cuda.current_stream",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n,) tensor must be freshly allocated inside run() and must not share storage with x"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation and the single elementwise kernel. No cached state, no host-side copy or conversion of x."},
+  "tolerance_source": "config.verify"
+}

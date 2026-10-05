@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "jacobi_stencil_2d",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/jacobi_stencil_2d/impl_triton.py",
+      "functions": [
+        {"name": "jacobi_stencil_kernel", "lines": [12, 54]},
+        {"name": "_jacobi_stencil_kernel_autotuned", "lines": [57, 70]},
+        {"name": "run", "lines": [73, 102]},
+        {"name": "get_last_config", "lines": [105, 113]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/jacobi_stencil_2d/impl_cutile.py",
+      "functions": [
+        {"name": "jacobi_stencil_kernel", "lines": [21, 49]},
+        {"name": "run", "lines": [55, 94]},
+        {"name": "get_last_config", "lines": [97, 98]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/jacobi_stencil_2d/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 14]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "interior avg = 0.25*(top+bottom+left+right), boundary passes the centre through via tl.where(mask_edge, avg, center) (impl_triton.py:38-50).",
+      "cutile": "same four-point average and where-select on the interior mask (impl_cutile.py:32-46).",
+      "note": "Both reproduce impl_torch.py:7-13 (clone + interior overwrite, centre not in the sum). Generator tensors.py:120-125 gives square grids (cols defaults to rows)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "empty_like (impl_triton.py:75) + one 2-D grid launch (78-100).",
+      "cutile": "empty_like (impl_cutile.py:58) + one 2-D grid launch (85-92).",
+      "note": "Single sweep, single kernel on both sides; boundary handled inside the kernel, not by a host clone."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends only on the output buffer.",
+      "cutile": "kernel depends only on the output buffer.",
+      "note": "No intermediates."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "four-term sum ((top+bottom)+left)+right then *0.25 (impl_triton.py:49).",
+      "cutile": "same association (impl_cutile.py:45).",
+      "note": "No reduction; same summation order as the reference (impl_torch.py:8-12)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "arithmetic on the loaded dtype, no explicit upcast (impl_triton.py:49-50).",
+      "cutile": "arithmetic on the gathered dtype, no explicit astype (impl_cutile.py:45-46).",
+      "note": "Both compute in the native dtype like the reference; contract permits (does not require) an fp32 promotion."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "only empty_like inside run; strides passed to the kernel (impl_triton.py:75,84-85).",
+      "cutile": "only empty_like inside run (impl_cutile.py:58).",
+      "note": "No halo padding, cloning or caching on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none; five masked loads per tile are register resident (impl_triton.py:40-47).",
+      "cutile": "none; five gathers per tile (impl_cutile.py:39-43).",
+      "note": "No global scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "input never written; fresh output (impl_triton.py:75).",
+      "cutile": "input never written; fresh output (impl_cutile.py:58).",
+      "note": "True Jacobi (out-of-place) on both sides."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches.",
+      "cutile": "no dispatch branches.",
+      "note": "Neighbour access (masked pointer loads vs gathers with padding_value 0.0) and tail handling (masked store vs clipped store) are mapping choices. cuTile's mask_center (impl_cutile.py:36) is dead code."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "2 * rows * rows * dtype_size",
+    "flops_expr": "4 * rows * rows",
+    "consistent": "true",
+    "note": "Counts one compulsory read of IN and one write of OUT (plus 3 adds + 1 multiply per element), hard-coding cols == rows, which holds for every case (config sweeps rows only; generator defaults cols to rows). Both implementations issue five loads/gathers per element (the re-reads are cache hits in the minimal-traffic model). Nothing is untimed or prepacked; the output allocation is inside run()."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

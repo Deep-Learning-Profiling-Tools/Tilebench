@@ -1,0 +1,26 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "l2_norm",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "view_and_alloc", "description": "View X as (batch*M, K) and allocate Y inside run()."},
+    {"id": "row_stats", "description": "Per row: fp32 sum of squares over the full row, rstd = rsqrt(sumsq + eps)."},
+    {"id": "row_apply", "description": "Per row: Y = X * rstd in fp32, cast once to X.dtype, stored."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?normalize\\(|F\\.normalize\\(", "message": "library L2 normalisation computes the operator", "level": "confirmed"},
+    {"pattern": "torch\\.linalg\\.(vector_)?norm\\(|\\.norm\\(", "message": "library norm computes the row statistics", "level": "confirmed"},
+    {"pattern": "torch\\.rsqrt\\(|torch\\.sqrt\\(|torch\\.sum\\(|\\.square\\(\\)|\\.pow\\(\\s*2\\s*\\)|\\.sum\\(\\s*(dim|-1|1)", "message": "PyTorch computation of the statistics or scaling on the data path", "level": "suspicious"},
+    {"pattern": "\\.contiguous\\(\\)", "message": "contiguous() is only permitted when X is not already contiguous (check it is guarded)", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "a device-side row reduction", "level": "suspicious"},
+    {"any_of": ["rsqrt", "sqrt"], "message": "a device-side reciprocal square root", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "an fp32 accumulator / upcast", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh tensor with X's shape/dtype allocated inside run() (may be returned as a reshape view of a 2-D buffer)"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The reshape (a view for contiguous X), the allocation and the launch(es) are all inside run() and timed; no cross-call cache of statistics."},
+  "tolerance_source": "config.verify"
+}

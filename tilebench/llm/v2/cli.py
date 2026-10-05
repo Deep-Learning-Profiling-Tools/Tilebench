@@ -246,6 +246,23 @@ def cmd_export_review_bundle(a) -> int:
     return 0
 
 
+def cmd_canonical_audit(a) -> int:
+    from tilebench.llm.v2.devtools import canonical_audit_report
+    text = canonical_audit_report()
+    out = Path(a.out) if a.out else Path("docs/llm_v2/CANONICAL_AUDIT.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(f"wrote {out} ({len(text)} chars)")
+    return 0
+
+
+def cmd_snapshots(a) -> int:
+    from tilebench.llm.v2.devtools import make_snapshots
+    _print(make_snapshots(Path(a.out), operator=a.operator, dtype=a.dtype, device=a.device, dsl=a.dsl,
+                          use_manifest=not a.synthetic))
+    return 0
+
+
 def cmd_capture_device(a) -> int:
     from tilebench.llm.v2.devtools import capture_device_facts
     _print(capture_device_facts())
@@ -312,6 +329,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("export-review-bundle", help="safe review bundle (no credentials, no private bodies)")
     s.add_argument("--out", required=True); s.set_defaults(fn=cmd_export_review_bundle)
     sub.add_parser("capture-device", help="print the runtime device facts a Device Context needs").set_defaults(fn=cmd_capture_device)
+    s = sub.add_parser("canonical-audit", help="compile docs/llm_v2/CANONICAL_AUDIT.md from the 45 audit.json files")
+    s.add_argument("--out"); s.set_defaults(fn=cmd_canonical_audit)
+    s = sub.add_parser("snapshots", help="write representative rendered prompts with the real renderer")
+    s.add_argument("--out", required=True)
+    for name, default in (("--operator", "vector_add"), ("--dtype", "fp16"), ("--device", "B200"), ("--dsl", "triton")):
+        s.add_argument(name, default=default)
+    s.add_argument("--synthetic", action="store_true", help="use synthetic test-only components instead of the manifest")
+    s.set_defaults(fn=cmd_snapshots)
     return p
 
 

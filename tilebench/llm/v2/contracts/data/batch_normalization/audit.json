@@ -1,0 +1,108 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "batch_normalization",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/batch_normalization/impl_triton.py",
+      "functions": [
+        {"name": "_STEP/_K1_BLOCK_N", "lines": [8, 9]},
+        {"name": "compute_block_sums_kernel", "lines": [12, 40]},
+        {"name": "compute_mean_invstd_kernel", "lines": [43, 71]},
+        {"name": "apply_batch_norm_kernel", "lines": [74, 106]},
+        {"name": "_apply_batch_norm_kernel_autotuned", "lines": [109, 118]},
+        {"name": "run", "lines": [121, 162]},
+        {"name": "get_last_config", "lines": [165, 172]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/batch_normalization/impl_cutile.py",
+      "functions": [
+        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [11, 17]},
+        {"name": "_STEP/_K1_BLOCK_N", "lines": [20, 21]},
+        {"name": "_next_pow2", "lines": [24, 25]},
+        {"name": "compute_block_sums_kernel", "lines": [28, 55]},
+        {"name": "compute_mean_invstd_kernel", "lines": [58, 89]},
+        {"name": "apply_batch_norm_kernel", "lines": [92, 126]},
+        {"name": "_tuner", "lines": [129, 129]},
+        {"name": "run", "lines": [132, 189]},
+        {"name": "get_last_config", "lines": [192, 193]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/batch_normalization/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [5, 14]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = (x - mean) * rsqrt(var + eps) * gamma + beta per channel over the batch axis, biased variance, output (N, C) in the input dtype (impl_triton.py 66-71, 96-106, 124).",
+      "cutile": "Identical formula and output (impl_cutile.py 83-86, 116-126, 136).",
+      "note": "Both realise F.batch_norm(..., training=True, momentum=0.0, eps) with gamma/beta upcast (impl_torch.py 9-14). Neither mirrors the reference's N == 1 branch (impl_torch.py 7-8), which the sweep (N >= 1000) never reaches; the contract scopes N >= 2."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Allocate output + 4 fp32 scratch (124-130); K1 block partial sums/squares, grid (NUM_BLOCKS,) (133-137); K2 per-channel mean/inv_std, grid (C,) (140-144); K3 apply, grid (ceil(N/ROWS),) (147-160).",
+      "cutile": "Allocate output + 4 fp32 scratch (136-142); K1 grid (NUM_BLOCKS,1,1) (153-154); K2 grid (C,1,1) (158-160); K3 grid (ceil(N/rows),1,1) (183-187).",
+      "note": "Identical three-kernel structure with identical fixed row-block and sub-tile constants for K1 (_K1_BLOCK_N = 64, _STEP = 8 on both, impl_triton.py 8-9 / impl_cutile.py 20-21); only K3 is tuned on both sides."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "K2 depends on all K1 partials; K3 depends on K2; separate launches on one stream (impl_triton.py 133-160).",
+      "cutile": "Same (impl_cutile.py 153-187).",
+      "note": "Same dependency chain; the contract permits folding K2 into K3's prologue (dependency-legal) but requires K1 and K3 to stay separate."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Level 1: static sub-chunks in increasing row order, tl.sum(axis=0) of x and x*x accumulated per channel (31-37); level 2: tl.sum over a power-of-two tile of NUM_BLOCKS partials (57-64); var = SQ/N - mean^2 clamped at 0, inv_std = rsqrt(var + eps) (66-71).",
+      "cutile": "Level 1: static sub-tiles in increasing row order, ct.sum(axis=0) of x and x*x (45-52); level 2: ct.sum over a power-of-two gather of NUM_BLOCKS partials (72-81); var = SQ/N - mean*mean clamped at 0, rsqrt(var + eps) (83-86).",
+      "note": "Identical two-level reduction and identical one-pass variance formula with clamp; both differ from the reference's ATen statistics only at fp32 rounding (config.yaml verify atol/rtol 1e-2)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 partials, mean, var, inv_std, scale, shift and y; x/gamma/beta upcast in-kernel (35, 94-95, 104); y stored into the input-dtype buffer with an implicit cast (106).",
+      "cutile": "Same fp32 path (50, 112-115, 124); explicit ct.astype to the output dtype at store (126).",
+      "note": "Same precision class; the implicit-vs-explicit cast at the store is a DSL detail."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "empty_like output, NUM_BLOCKS arithmetic, four torch.empty fp32 scratch allocations, next-power-of-two padding sizes (124-140); no host casts or copies.",
+      "cutile": "Same allocations (136-142), zero-copy views and a no-op input.contiguous() (144-147), power-of-two padding sizes (152-157); no host casts or copies.",
+      "note": "Same timed host work; gamma/beta are upcast inside the kernels on both sides, unlike the reference's host .float()."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "block_sum, block_sq_sum (NUM_BLOCKS, C) fp32; mean, inv_std (C,) fp32; torch.empty per call (impl_triton.py 127-130).",
+      "cutile": "Same four buffers, same shapes and dtype, torch.empty per call (impl_cutile.py 139-142).",
+      "note": "Identical declared scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output and scratch fresh per call (impl_triton.py 124-130).",
+      "cutile": "Same (impl_cutile.py 136-142).",
+      "note": "Idempotent; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branch.",
+      "cutile": "No architecture branch.",
+      "note": "None on either side."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "3 * N * C * dtype_size + 2 * C * dtype_size",
+    "flops_expr": "4 * N * C",
+    "consistent": "true",
+    "note": "config.yaml 22-23. Counts two reads of input (statistics and apply), one write of output and one read each of gamma and beta, which is exactly the traffic of the three kernels on both sides. The fp32 scratch traffic (about 2*NUM_BLOCKS*C*4 bytes written and read, plus the (C,) mean/inv_std re-read by every apply program) and the four allocations are uncounted but identical on both sides and small relative to N*C."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

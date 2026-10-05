@@ -44,3 +44,28 @@ def test_preflight_blocks_live_without_models_and_nki(monkeypatch, study):
     assert any("NKI timing adapter" in b for b in pf2.blockers)
     pf3 = campaign.preflight("MI300X", "cutile", "base", live=False, study=study)
     assert any("not supported on MI300X" in b for b in pf3.blockers)
+
+
+def test_private_metadata_only_entry_is_never_readable(skill_env):
+    m, _ = skill_env
+    from tilebench.llm.v2.skills import loader
+    m["reference"]["nki"] = {"beta5": {"path": None, "sha256_raw": "x", "sha256_injected": None, "permission": "private",
+                                       "status": "draft", "attachments": []}}
+    with pytest.raises(loader.SkillPermissionError):
+        loader.load_component(m, "reference", "nki", "beta5", require_status=())
+    with pytest.raises(loader.SkillMissingError, match="private asset"):
+        loader.load_component(m, "reference", "nki", "beta5", require_status=(), provider_sendable=False)
+
+
+def test_snapshots_come_from_the_renderer(tmp_path):
+    from tilebench.llm.v2.devtools import make_snapshots
+    out = make_snapshots(tmp_path / "snap", use_manifest=False)
+    names = out["files"]
+    assert names[:5] == ["00_system.md", "01_initial_base.md", "02_refinement_after_compile_failure.md",
+                         "03_refinement_after_regression.md", "04_compliance_repair.md"]
+    text = (tmp_path / "snap" / "02_refinement_after_compile_failure.md").read_text()
+    assert "[line withheld]" in text and "roofline" not in text
+    enh = (tmp_path / "snap" / "05_initial_enhanced_TESTONLY_skill.md").read_text()
+    assert "TEST-ONLY" in enh and "Optimization guidance" in enh
+    cli_out = (tmp_path / "snap" / "INDEX.json").read_text()
+    assert "sha256" in cli_out

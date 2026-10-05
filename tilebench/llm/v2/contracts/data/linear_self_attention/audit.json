@@ -1,0 +1,111 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "linear_self_attention",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/linear_self_attention/impl_triton.py",
+      "functions": [
+        {"name": "_phi", "lines": [33, 36]},
+        {"name": "phi_kernel", "lines": [39, 43]},
+        {"name": "kv_gemm_kernel", "lines": [55, 77]},
+        {"name": "z_kernel", "lines": [80, 104]},
+        {"name": "out_gemm_kernel", "lines": [116, 143]},
+        {"name": "_kv_kernel_autotuned", "lines": [146, 161]},
+        {"name": "_out_kernel_autotuned", "lines": [164, 179]},
+        {"name": "_launch_z", "lines": [182, 190]},
+        {"name": "run", "lines": [193, 286]},
+        {"name": "get_last_config", "lines": [301, 309]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/linear_self_attention/impl_cutile.py",
+      "functions": [
+        {"name": "_phi_tile", "lines": [39, 40]},
+        {"name": "phi_kernel", "lines": [43, 53]},
+        {"name": "kv_gemm_kernel", "lines": [56, 92]},
+        {"name": "z_kernel", "lines": [95, 117]},
+        {"name": "out_gemm_kernel", "lines": [120, 169]},
+        {"name": "_launch_z", "lines": [176, 182]},
+        {"name": "run", "lines": [185, 297]},
+        {"name": "get_last_config", "lines": [300, 301]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/linear_self_attention/impl_torch.py",
+      "functions": [
+        {"name": "_phi", "lines": [4, 7]},
+        {"name": "run", "lines": [10, 30]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "phi = where(x>0, x+1, exp x) (impl_triton.py:36); S = PhiK^T V (55-77); Z = colsum PhiK (80-104); O = PhiQ S / (PhiQ.Z + eps) (116-143).",
+      "cutile": "same phi (impl_cutile.py:40); S (56-92); Z (95-117); O (120-169).",
+      "note": "Both match impl_torch.py:7,16-28 (non-causal, single head, no scaling, eps after the dot product). Generator tensors.py:500-518 enforces fp32 and returns (q, k, v, eps)."
+    },
+    "stages": {
+      "status": "mapping-only",
+      "triton": "8 launches: phi x2 (impl_triton.py:219-220), torch transposes PhiK_t and V_t (223-224), kv GEMM (235/257), z (237/266), torch transpose S_t (239/269), out GEMM (247/277).",
+      "cutile": "5 launches: phi x2 (impl_cutile.py:211-212), kv GEMM (234), z (248), out GEMM (283); operands transposed via ct.transpose in registers (86) or consumed in native layout.",
+      "note": "Same five logical stages (phi Q, phi K, S, Z, O). The three extra launches are per-call, timed layout copies that feed descriptor-based K-major loads; a layout/launch choice the contract must not pin."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "S and Z depend on PhiK; O depends on PhiQ, S (via S_t) and Z (impl_triton.py:223-247).",
+      "cutile": "S and Z depend on PhiK; O depends on PhiQ, S and Z (impl_cutile.py:211-295).",
+      "note": "Identical dependency graph; neither side fuses phi into the GEMMs or Z into the kv GEMM."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "S: sequential over M chunks, fp32 acc (impl_triton.py:69-75); Z: sequential over M, tl.sum over rows (91-102); numerator/denominator: sequential over D chunks (130-140); eps added after the full reduction (142).",
+      "cutile": "S: sequential while-loop over M tiles, fp32 acc (impl_cutile.py:67-90); Z: sequential over M, ct.sum axis 0 (103-115); numerator/denominator: sequential over D (132-167); eps after the reduction (169).",
+      "note": "Same reduction structure; no split-K, no atomics on either side. The denominator is recomputed per N-tile on both sides (mapping)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "input_precision='tf32' on both dots (impl_triton.py:75,136); Z fp32 (101); denominator q*z summed in plain fp32 (140); fp32 output.",
+      "cutile": "astype(tfloat32) on both MMAs (impl_cutile.py:86-87,158-159); Z fp32 (114); denominator q*z in fp32 with q not rounded (162-166); fp32 output.",
+      "note": "Both use TF32 operands / fp32 accumulation for S and the numerator and full fp32 for Z and the denominator; the reference evaluates phi_q @ Z under allow_tf32 (impl_torch.py:21,28), so both manual sides are at least as precise. The contract pins the denominator as full fp32 (both agree) and permits TF32 for the two GEMMs."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "contiguous() no-ops (impl_triton.py:206-208); PhiK_t = PhiK.t().contiguous() and V_t = V.t().contiguous() every call (223-224); S_t = S.t().contiguous() (239/269); descriptors rebuilt per call.",
+      "cutile": "contiguous() no-ops (impl_cutile.py:198-200); no transposes, no descriptors.",
+      "note": "The transposes are inside run(), executed on every call (nothing cached, no data_ptr keys), so the timed boundary is the same on both sides; they are a layout mapping, not a boundary divergence."
+    },
+    "intermediate_storage": {
+      "status": "mapping-only",
+      "triton": "per call: PhiQ, PhiK, PhiK_t, V_t, S, S_t, Z (impl_triton.py:211-215,223-224,239/269).",
+      "cutile": "per call: PhiQ, PhiK, S, Z (impl_cutile.py:203-207).",
+      "note": "All scratch is allocated inside run() and released after return on both sides; the three extra transposed copies are mapping-only."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "Q, K, V never written; fresh O (impl_triton.py:215).",
+      "cutile": "Q, K, V never written; fresh O (impl_cutile.py:207).",
+      "note": "Idempotent; the reference toggles a process-wide TF32 flag but restores it (impl_torch.py:20-30)."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches (TMA descriptor path only).",
+      "cutile": "no dispatch branches.",
+      "note": "Descriptor-based vs tile loads, runtime while-loops vs tl.range, fixed phi/z launch parameters on both sides are mapping details."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(4 * M * D + D * D + D) * dtype_size",
+    "flops_expr": "4 * M * D * D + 3 * M * D",
+    "consistent": "true",
+    "note": "Fused-ideal lower bound: Q, K, V read once, O written once, S and Z written once (dtype_size = 4). Both implementations additionally materialise PhiQ/PhiK (and one side three transposed copies) and re-read them, but every such pass is inside run() and timed and nothing is cached or prepacked across calls, so the timed boundary is the same for both sides and for any generated implementation. flops counts the two GEMMs plus three M*D passes and omits the per-row denominator matvec (2 M D) and the division."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

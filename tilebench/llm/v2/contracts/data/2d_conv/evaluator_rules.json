@@ -1,0 +1,34 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "2d_conv",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (batch, out_channels, out_H, out_W) output of input's dtype inside run(); no zero-fill needed."},
+    {"id": "implicit_gemm_conv", "description": "One kernel launch: per group, output viewed as (batch*out_H*out_W) x Cout_g, reduction over the flattened (ic_local, kh, kw) axis gathered on the fly with zero fill, tensor-core product into a local fp32 accumulator, cast and masked/clipped store."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?conv[123]d\\(|\\bF\\.conv[123]d\\(|torch\\.nn\\.Conv[123]d", "message": "A library convolution replaces the whole computation.", "level": "confirmed"},
+    {"pattern": "torch\\.(matmul|bmm|mm|einsum|baddbmm|addmm)\\(", "message": "A library GEMM (on an im2col matrix or otherwise) replaces the core computation.", "level": "confirmed"},
+    {"pattern": "\\.unfold\\(|torch\\.(nn\\.functional\\.)?unfold\\(|\\bF\\.unfold\\(|im2col", "message": "Materialised im2col/unfold is forbidden; the convolution must be an implicit GEMM.", "level": "suspicious"},
+    {"pattern": "torch\\.(nn\\.functional\\.)?pad\\(|\\bF\\.pad\\(|torch\\.zeros\\(|torch\\.zeros_like\\(|torch\\.full\\(", "message": "A padded or zero-filled copy of the input is forbidden; zero padding must be realised by masking inside the kernel.", "level": "suspicious"},
+    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation suggests split-K, which is a different reduction structure.", "level": "suspicious"},
+    {"pattern": "\\.half\\(\\)|\\.bfloat16\\(\\)|\\.to\\(torch\\.(float16|bfloat16)\\)|astype\\([^)]*(float16|bfloat16)", "message": "Possible downcast of fp32 operands below TF32 precision.", "level": "suspicious"},
+    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b", "message": "Cross-call caching of input-derived data is forbidden.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "nki\\.isa\\.nc_matmul"], "message": "No matrix-multiply primitive found; the implicit GEMM must use a tensor-core product.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 accumulator evidence found.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.view",
+    "Tensor.reshape",
+    "Tensor.stride",
+    "Tensor.is_contiguous"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (batch, out_channels, out_H, out_W) tensor must be freshly allocated inside run() and must not share storage with input or weight"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: scalar metadata, the output allocation, optional zero-copy views and the single implicit-GEMM kernel. No cast, transpose, pack, padded copy or im2col of the inputs; no cached state across calls."},
+  "tolerance_source": "config.verify"
+}

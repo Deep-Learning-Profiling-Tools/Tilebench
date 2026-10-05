@@ -1,0 +1,33 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "argmax",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (M,) int64 output inside run()."},
+    {"id": "row_scan_argmax", "description": "One kernel launch: each row is read once, in column chunks in increasing order, keeping a running (best value, best index) pair; chunk max/argmax with lowest-index ties, merged across chunks with a strict greater-than test; -inf padding for columns beyond N; the final index is stored once."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.argmax\\(|torch\\.max\\(|torch\\.topk\\(|torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(", "message": "A library argmax/max/topk/sort replaces the whole computation.", "level": "confirmed"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)(?<!isa)\\.argmax\\(|(?<!tl)(?<!ct)(?<!nl)(?<!isa)\\.max\\(\\s*(dim|axis|1)", "message": "A tensor-method argmax/max on the host replaces the kernel reduction.", "level": "suspicious"},
+    {"pattern": ">=\\s*best|best_val\\s*<=|tie_break_left\\s*=\\s*False", "message": "A non-strict merge or right-tie-break would pick a later occurrence; first occurrence is required.", "level": "suspicious"},
+    {"pattern": "atomic_add|atomic_max|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic merging of partial results across programs is not the single-program-per-row structure.", "level": "suspicious"},
+    {"pattern": "torch\\.zeros\\(|torch\\.full\\(|torch\\.empty\\([^)]*\\)\\s*\\n.*torch\\.empty\\(", "message": "Only the (M,) int64 output is expected; a second buffer suggests scratch for partial results.", "level": "suspicious"},
+    {"pattern": "\\.transpose\\(|\\.t\\(\\)|\\.permute\\(", "message": "A transpose copy inside run() is only acceptable on a dim != 1 path that the benchmark never takes.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.argmax", "ct\\.argmax", "T\\.argmax", "nl\\.argmax", "nisa\\.max8", "nisa\\.nc_find_index8", "argmax"], "message": "No argmax/index reduction primitive found.", "level": "suspicious"},
+    {"any_of": ["tl\\.max\\(", "ct\\.max\\(", "T\\.reduce_max", "reduce_max", "nl\\.max\\(", "nisa\\.tensor_reduce"], "message": "No max reduction primitive found.", "level": "suspicious"},
+    {"any_of": ["-inf", "float\\(\\\"-inf\\\"\\)", "float\\('-inf'\\)", "-float\\(", "NEG_INF", "neg_inf"], "message": "No -inf fill/identity found; out-of-range columns must never win.", "level": "suspicious"},
+    {"any_of": ["int64", "tl\\.int64", "ct\\.int64", "torch\\.int64", "nl\\.int64"], "message": "No int64 index handling found; the output must be int64.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.is_cuda"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (M,) int64 tensor must be freshly allocated inside run() and must not share storage with x"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: a no-op contiguity guard, the output allocation, chunk-count arithmetic and the single row-scan kernel. For the benchmark (dim == 1, contiguous x) no copy or transpose may occur; nothing is cached across calls."},
+  "tolerance_source": "config.verify"
+}

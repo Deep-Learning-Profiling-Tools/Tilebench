@@ -1,0 +1,106 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "block_sparse_attention",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/block_sparse_attention/impl_triton.py",
+      "functions": [
+        {"name": "block_sparse_attention_kernel", "lines": [9, 119]},
+        {"name": "_block_sparse_attention_kernel_autotuned", "lines": [122, 131]},
+        {"name": "_make_descriptors", "lines": [134, 139]},
+        {"name": "run", "lines": [142, 188]},
+        {"name": "get_last_config", "lines": [190, 194]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/block_sparse_attention/impl_cutile.py",
+      "functions": [
+        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [14, 15]},
+        {"name": "block_sparse_attention_kernel", "lines": [18, 148]},
+        {"name": "_tuner", "lines": [151, 151]},
+        {"name": "run", "lines": [154, 205]},
+        {"name": "get_last_config", "lines": [208, 209]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/block_sparse_attention/impl_torch.py",
+      "functions": [
+        {"name": "module-level torch.compile(flex_attention) and _mask_cache", "lines": [9, 13]},
+        {"name": "_build_block_mask", "lines": [16, 42]},
+        {"name": "run", "lines": [45, 61]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Per (query block, b, h): kv head h // (H/H_kv), layout head h % num_layout, visit CSR-listed key blocks, causal + sequence-bound -inf mask, online softmax, out = acc / l_safe in Q's dtype (impl_triton.py 38-43, 61-70, 85-90, 114-119).",
+      "cutile": "Identical mapping, CSR traversal, mask, online softmax and epilogue (impl_cutile.py 31-34, 57-60, 68-72, 97-103, 138-148).",
+      "note": "Both match the reference mask_mod sel[h % num_layout, q // BLOCK_M, kv // BLOCK_N] & (q >= kv) with scale=softmax_scale and enable_gqa=True (impl_torch.py 35-42, 60-61)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Output allocation (157), host TMA descriptors (159), one kernel launch over (ceil(M/BLOCK_M), B*H) (impl_triton.py 161-187).",
+      "cutile": "Shape asserts (166-173), output allocation (175), one kernel launch over (ceil(M/BLOCK_M), B*H, 1) (impl_cutile.py 176-204).",
+      "note": "Identical single fused kernel; the only difference is host descriptor construction versus direct tile indexing (mapping)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Query blocks independent; the data-dependent key-block loop is sequential inside a program (impl_triton.py 69-112).",
+      "cutile": "Same, as a runtime while loop (impl_cutile.py 68-136).",
+      "note": "Same dependency structure; runtime for-range versus while is a mapping detail."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Blocks in CSR stored order; S accumulated over d-chunks from zero; S *= scale; mask -> -inf; m_new = max(m, rowmax); m_safe = max(m_new, -1e30); alpha = exp(m - m_safe); p = exp(S - m_safe); l = l*alpha + rowsum(p); acc = acc*alpha + p.V; l_safe = 1 where l == 0 (impl_triton.py 69-119).",
+      "cutile": "Identical sequence with the same guards (impl_cutile.py 68-148).",
+      "note": "Same online-softmax update, same natural-exp formulation, same -1e30 and l == 0 guards; row max/sum tree order is the DSL's on both sides."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 S, m_i, l_i, acc (50-54, 75); P cast to q.dtype before P.V (102); output cast to out dtype (116, 119).",
+      "cutile": "fp32 S, m_i, l_i, acc (51-55, 80-84); P cast to Q.dtype (116); output cast to Out.dtype (139, 145).",
+      "note": "Same precision class; config.yaml verify atol 5e-2 / rtol 5e-3."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Q/K/V .contiguous() (no-op for generator tensors), output allocation, host-side TensorDescriptor construction every call (impl_triton.py 148-159); no CSR decoding, nothing cached.",
+      "cutile": "Shape asserts, output allocation, float(softmax_scale) (impl_cutile.py 162-185); no CSR decoding, nothing cached.",
+      "note": "No device-side preprocessing on either side; the reference's BlockMask build and torch.compile are reference-side and cached there (impl_torch.py 13, 52-58)."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None; statistics and accumulators in registers (impl_triton.py 50-54).",
+      "cutile": "None (impl_cutile.py 51-55).",
+      "note": "No scratch; S and P never touch global memory."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output freshly allocated (impl_triton.py 157).",
+      "cutile": "No input written; output freshly allocated (impl_cutile.py 175).",
+      "note": "Idempotent; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No code branch; the host TensorDescriptor/TMA path is used unconditionally (impl_triton.py 134-139).",
+      "cutile": "No architecture branch.",
+      "note": "Neither side dispatches on hardware; the descriptor path is a load-mechanism mapping the contract leaves free."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "2 * B * (H + H_kv) * M * D * dtype_size",
+    "flops_expr": "12 * B * H * BLOCK_N * D * (M - BLOCK_M)",
+    "consistent": "true",
+    "note": "config.yaml 27-28. bytes = one read of Q, K, V and one write of out (compulsory; per-query-block and per-GQA-group re-reads of K/V are cache-absorbed on both sides). flops is hard-wired to the generator's causal local window (window_blocks = 2, tensors.py 295-311): 3 visited blocks per row block after a two-row ramp-up at 4*BLOCK_M*BLOCK_N*D flops each, which sums to exactly the expression and counts every visited block in full, including the masked half of diagonal blocks that both kernels do compute. It therefore matches executed work for the benchmark layout but is not derived from the CSR arrays and assumes M is a multiple of BLOCK_M (true for the sweep)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Confirm that flops_expr should stay tied to the generator's fixed window density (executed block work, including the masked half of diagonal blocks) rather than being derived from the CSR arrays; it is correct for the benchmark layout and both manual kernels but silently wrong for any other layout."
+  ],
+  "contract_sha256": null
+}

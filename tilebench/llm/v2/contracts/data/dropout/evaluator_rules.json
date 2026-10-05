@@ -1,0 +1,24 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "dropout",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "s1", "description": "Single element-wise pass: read x and the INPUT mask x_keep, apply the mask (multiply or select) and the factor 1/(1-p) in fp32, round once to x's dtype, store into a freshly allocated output. No RNG, no intermediate."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.nn\\.functional\\.dropout|F\\.dropout|torch\\.dropout|torch\\.nn\\.Dropout|torch\\.native_dropout", "message": "library dropout replaces the whole computation and ignores the supplied mask", "level": "confirmed"},
+    {"pattern": "tl\\.rand|tl\\.randn|tl\\.randint|tl\\.philox|philox|torch\\.rand|torch\\.bernoulli|torch\\.manual_seed|torch\\.Generator|ct\\.rand|nl\\.random|T\\.rand", "message": "random number generation: the mask is an input, run() must be deterministic", "level": "confirmed"},
+    {"pattern": "torch\\.(mul|multiply|where|div|true_divide)\\(|x\\s*\\*\\s*x_keep|x_keep\\s*\\*\\s*x\\b", "message": "host-side tensor arithmetic performs the masked rescale", "level": "suspicious"},
+    {"pattern": "x_keep\\.(to|bool|int|view|reshape)\\(|torch\\.(zeros|zeros_like|full|empty)\\(", "message": "mask repacking / extra buffer; only the output allocation is permitted", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["x_keep", "keep", "mask"], "message": "the supplied keep mask is consumed", "level": "suspicious"},
+    {"any_of": ["1\\s*-\\s*p", "1\\.0\\s*-\\s*p", "scale", "1\\s*/\\s*\\(", "keep_prob"], "message": "rescale factor 1/(1-p)", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "\\.to\\(tl\\.float32\\)", "astype"], "message": "fp32 arithmetic before the single rounding", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated tensor with x's shape and dtype on every call"},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains only the output allocation, the host scalar 1/(1-p) and one launch. The mask is a pre-generated input: no RNG, no mask transformation, no copies, no state across calls."},
+  "tolerance_source": "config.verify"
+}

@@ -1,0 +1,112 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "top_k_selection",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/top_k_selection/impl_triton.py",
+      "functions": [
+        {"name": "block_topk_kernel", "lines": [23, 36]},
+        {"name": "_run_hierarchy", "lines": [39, 49]},
+        {"name": "_tune_pipeline", "lines": [52, 65]},
+        {"name": "run", "lines": [68, 90]},
+        {"name": "get_last_config", "lines": [93, 96]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/top_k_selection/impl_cutile.py",
+      "functions": [
+        {"name": "_next_pow2", "lines": [19, 20]},
+        {"name": "_make_bitonic_stages", "lines": [23, 31]},
+        {"name": "_sort_desc_1024", "lines": [39, 57]},
+        {"name": "_sort_desc_2048", "lines": [60, 78]},
+        {"name": "_sort_desc_4096", "lines": [81, 99]},
+        {"name": "block_topk_kernel_b1024", "lines": [102, 116]},
+        {"name": "block_topk_kernel_b2048", "lines": [119, 133]},
+        {"name": "block_topk_kernel_b4096", "lines": [136, 150]},
+        {"name": "_resolve_block", "lines": [162, 173]},
+        {"name": "_run_hierarchy", "lines": [176, 193]},
+        {"name": "_tune", "lines": [196, 238]},
+        {"name": "run", "lines": [241, 276]},
+        {"name": "get_last_config", "lines": [279, 280]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/top_k_selection/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "k largest fp32 values, descending, values only: hierarchy of block top-K2 (K2 = next_power_of_2(k)) ending in one block, returns out[0, :k] (impl_triton.py 39-49, 77).",
+      "cutile": "Same: hierarchy of block top-K2 (K2 = _next_pow2(k)) ending in one block, returns out[0, :k] (impl_cutile.py 176-193, 256).",
+      "note": "Both realise torch.topk(input.contiguous(), k, largest=True, sorted=True).values (impl_torch.py 5); both assert 1-D fp32 CUDA input with shape[0] == N and 1 <= k <= N (70-74 / 249-253)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One launch per level, grid ceil(n/B), fresh (nb, K2) torch.empty per level, flatten and repeat until nb == 1 (42-49).",
+      "cutile": "One launch per level, grid (ceil(n/B),1,1), fresh (nb, K2) torch.empty per level, flatten and repeat until nb == 1 (183-193).",
+      "note": "Identical host-side level loop; B is clamped to >= 2*K2 on both sides (Triton 59, 88; cuTile 164, 207) so every level at least halves the candidate count."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Each level consumes the whole previous buffer (cur = out.view(-1), 49); blocks within a level independent.",
+      "cutile": "Each level consumes the whole previous buffer (cur = out.reshape(-1), 192); blocks within a level independent.",
+      "note": "Same level-by-level dependency chain; levels cannot be fused."
+    },
+    "reduction_scan_sort": {
+      "status": "mapping-only",
+      "triton": "In-block selection via the tl.topk builtin (tl.max when K2 == 1) on a -inf-padded block (31-36); descending order and duplicate semantics live inside the builtin.",
+      "cutile": "In-block selection via an explicit static bitonic sorting network (descending) followed by ct.extract of the K2-prefix on a NEG_INF-padded block (39-99, 113-116); ct.minimum/ct.maximum keep duplicates with multiplicity.",
+      "note": "Same tournament tree (per-level block top-K2, candidates concatenated in block order, fan-in B/K2 >= 2, exact because K2 >= k); the in-block selection primitive is a mapping choice. tl.topk's descending-order / multiset guarantee is not visible in the source (relied on by the out[0, :k] slice); the contract states both as requirements."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Comparison-only on fp32; -inf padding (31); fp32 level buffers (44).",
+      "cutile": "Comparison-only on fp32; NEG_INF padding (110, 127, 144); fp32 level buffers (185).",
+      "note": "Exact selection on both sides; verify atol/rtol 1e-5 (config.yaml 13-15)."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "input.contiguous() (no-op), K2 = next_power_of_2(k), block clamp to >= 2*K2, block_size honoured on the default path (76-77, 84-88).",
+      "cutile": "input.contiguous() (no-op), K2 = _next_pow2(k), block resolved to the smallest supported width >= max(requested, 2*K2) (255-256, 162-173, 262-265).",
+      "note": "Host integer arithmetic only, inside run(); no copy, cast or cached state on the default path."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "One fp32 (nb, K2) torch.empty per level inside the timed loop (44); the final (1, K2) buffer backs the returned slice (48).",
+      "cutile": "One fp32 (nb, K2) torch.empty per level inside the timed loop (185); the final (1, K2) buffer backs the returned slice (190).",
+      "note": "Identical per-level scratch pattern; the returned (k,) tensor is a view of a run-allocated buffer on both sides, never of the input."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "input read-only; fresh level buffers each call (44).",
+      "cutile": "input read-only; fresh level buffers each call (185); tuning uses its own scratch (211).",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches; the three width-specialised kernels (153-157) exist only because tile shapes must be static.",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(N + k) * dtype_size",
+    "flops_expr": "N",
+    "consistent": "unclear",
+    "note": "bytes_expr (config.yaml 19) counts one read of the N inputs and one write of the k results. Neither timed run() body performs preprocessing traffic or uses cached state, but both write and re-read ceil(N/B)*K2 candidates at level 0 and geometrically fewer at later levels, and allocate one (nb, K2) buffer per level inside run(). This in-run scratch traffic is inherent to the canonical hierarchy (identical on both sides) rather than untimed preprocessing; it is a small fraction for large N / small k and comparable to N for small N / large k (e.g. N = 4096, k = 1024 in the case grid). flops_expr = N is nominal."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "bytes_expr = (N + k) * dtype_size ignores the candidate buffers that the canonical hierarchy writes and re-reads inside run() (about N*K2/B at level 0, up to N/2 bytes-equivalent when B = 2*K2); both references pay it equally. Decide whether the bandwidth model stays the minimal bound (current) or counts level traffic, which would make the metric depend on the chosen block width. Non-blocking for the contract text."
+  ],
+  "contract_sha256": null
+}

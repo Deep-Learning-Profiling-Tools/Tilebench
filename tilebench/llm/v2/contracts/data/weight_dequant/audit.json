@@ -1,0 +1,101 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "weight_dequant",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/weight_dequant/impl_triton.py",
+      "functions": [
+        {"name": "dequant_kernel", "lines": [8, 28]},
+        {"name": "_dequant_kernel_autotuned", "lines": [31, 40]},
+        {"name": "run", "lines": [43, 61]},
+        {"name": "get_last_config", "lines": [64, 68]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/weight_dequant/impl_cutile.py",
+      "functions": [
+        {"name": "dequant_kernel", "lines": [21, 41]},
+        {"name": "run", "lines": [47, 77]},
+        {"name": "get_last_config", "lines": [80, 81]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/weight_dequant/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 8]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Y[off] = X[off] * S[(off // N) // TILE_SIZE, (off % N) // TILE_SIZE] over the flat M*N index space, S row stride cdiv(N, TILE_SIZE), fresh (M, N) output (impl_triton.py 14-28, 45-46).",
+      "cutile": "out[off] = X_flat[off] * gather(S, ((off // N) // TILE_SIZE, (off % N) // TILE_SIZE)) over the flat M*N index space, fresh (M, N) output (impl_cutile.py 24-41, 49-52).",
+      "note": "Both realise X * S[row_idx[:, None], col_idx[None, :]] with floor-division block indexing (impl_torch.py 5-8) without materialising the expanded scale map."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch, grid = ceil(M*N/block) (50, 54).",
+      "cutile": "One kernel, one launch, grid = (ceil(M*N/tile), 1, 1) (72).",
+      "note": "Identical single-stage flat elementwise map with a per-element scale gather."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Blocks independent (12-28).",
+      "cutile": "Tiles independent (23-41).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (8-28).",
+      "cutile": "None (21-41).",
+      "note": "Purely elementwise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "No upcast; a single native-dtype multiply (26).",
+      "cutile": "No upcast; a single native-dtype multiply (39).",
+      "note": "Native-dtype multiply on both sides, identical to the reference."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "torch.empty(M, N); S_COLS = cdiv(N, TILE_SIZE); total = M*N; M/N/S_COLS/TILE_SIZE passed as constexpr (45-47, 51, 55-57).",
+      "cutile": "torch.empty(M, N); X.contiguous().view(-1), output.view(-1); total = M*N; N/TILE_SIZE passed as ConstInt (49-52, 75).",
+      "note": "Output allocation, views and host integer arithmetic only, inside run() on both sides; no copy, cast, expanded scale map or cached state."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None (whole file); the reference's (M, N) scale map is not materialised.",
+      "cutile": "None (whole file); the reference's (M, N) scale map is not materialised.",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "X, S read-only; fresh output each call (45).",
+      "cutile": "X, S read-only; fresh output each call (49); tuning launches overwrite out_flat (61), rewritten by the final launch.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides. Tail handling (Triton mask 15-28 vs cuTile ZERO padding and padding_value=0 gather 28, 37) is a legality detail."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size",
+    "flops_expr": "M * M",
+    "consistent": "true",
+    "note": "Both timed run() bodies allocate the output and launch one kernel that reads X once, writes Y once and gathers one scale per element (the formula counts S once, i.e. assumes the repeated per-element scale requests are cache-served); no clone, zero-fill, scratch or cached prepack on either side. The expressions hard-code the square case N == M (config.yaml 17-18), which the generator guarantees (tensors.py 493-494: N defaults to M, only M is swept) although run() accepts a distinct N."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "bytes_expr and flops_expr hard-code N == M (M*M terms) while run() and the generator accept a distinct N; decide whether to generalise the expressions to M*N (no measured case is affected). Non-blocking for the contract text."
+  ],
+  "contract_sha256": null
+}

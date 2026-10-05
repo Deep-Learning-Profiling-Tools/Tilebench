@@ -1,0 +1,25 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "layernorm",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "view_and_alloc", "description": "2-D (batch*M, K) views of X and Y; allocate Y inside run()."},
+    {"id": "row_stats", "description": "Per row: fp32 mean and biased variance over the full row, rstd = rsqrt(var + eps)."},
+    {"id": "row_apply", "description": "Per row: (X - mean) * rstd * WEIGHT + BIAS in fp32, cast once to X.dtype, stored."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?layer_norm\\(|F\\.layer_norm\\(|torch\\.nn\\.LayerNorm\\(", "message": "library layer normalisation computes the operator", "level": "confirmed"},
+    {"pattern": "torch\\.(mean|var|var_mean|std)\\(|\\.(mean|var|std)\\(\\s*(dim|-1|1|\\))|torch\\.rsqrt\\(|torch\\.sum\\(", "message": "PyTorch computation of the row statistics on the data path", "level": "suspicious"},
+    {"pattern": "weight\\.(float|to)\\(|bias\\.(float|to)\\(", "message": "host-side cast of the affine parameters", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "a device-side row reduction", "level": "suspicious"},
+    {"any_of": ["rsqrt", "sqrt"], "message": "a device-side reciprocal square root", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "an fp32 accumulator / upcast", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh tensor with X's shape/dtype allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Views, allocation and launch(es) are all inside run() and timed; WEIGHT/BIAS are read per call; no cross-call cache of statistics or parameters."},
+  "tolerance_source": "config.verify"
+}

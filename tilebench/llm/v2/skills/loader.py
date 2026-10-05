@@ -93,7 +93,8 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def load_manifest(path: Path = MANIFEST_PATH) -> dict:
+def load_manifest(path: Path | None = None) -> dict:
+    path = path if path is not None else MANIFEST_PATH   # resolved at call time (tests monkeypatch it)
     if not path.exists():
         raise SkillMissingError(f"skill manifest missing: {path}")
     data = json.loads(path.read_text())
@@ -211,5 +212,6 @@ def register_asset(manifest: dict, kind: str, key: str, version: str, rel_path: 
     return entry
 
 
-def save_manifest(manifest: dict, path: Path = MANIFEST_PATH) -> None:
+def save_manifest(manifest: dict, path: Path | None = None) -> None:
+    path = path if path is not None else MANIFEST_PATH
     path.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")

@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "relu",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/relu/impl_triton.py",
+      "functions": [
+        {"name": "relu_kernel", "lines": [8, 16]},
+        {"name": "_relu_kernel_autotuned", "lines": [19, 28]},
+        {"name": "run", "lines": [31, 46]},
+        {"name": "get_last_config", "lines": [49, 53]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/relu/impl_cutile.py",
+      "functions": [
+        {"name": "relu_kernel", "lines": [21, 27]},
+        {"name": "run", "lines": [33, 59]},
+        {"name": "get_last_config", "lines": [62, 63]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/relu/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = where(x >= 0, x, 0) elementwise with a zero of x's dtype, into a fresh empty_like buffer (impl_triton.py 14-16, 33).",
+      "cutile": "y = where(x >= 0, x, 0) elementwise with a zero tile of x's dtype, into a fresh empty_like buffer (impl_cutile.py 24-27, 34).",
+      "note": "Both realise the reference torch.relu(x) (impl_torch.py 5) as a compare-and-select; they equal max(x, 0) for every finite input. Both return 0 for NaN where torch.relu propagates NaN, and may differ from the reference in the sign of a zero; neither case is exercised by the randn/randint generator (tensors.py 78-83)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch of ceil(n / tile) programs: load, select, store (impl_triton.py 8-16, 35-45).",
+      "cutile": "One kernel, one launch of ceil(n / tile) CTAs: load, select, store (impl_cutile.py 21-27, 56-57).",
+      "note": "Identical single-stage elementwise map."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-element dependencies (impl_triton.py 14-16).",
+      "cutile": "No inter-element dependencies (impl_cutile.py 24-27).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (impl_triton.py 8-16).",
+      "cutile": "None (impl_cutile.py 21-27).",
+      "note": "Elementwise only."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Compare and select in the input dtype; no rounding introduced; output dtype equals input dtype for fp16/bf16/fp32/int8 (impl_triton.py 15-16).",
+      "cutile": "Compare and select in the input dtype; no rounding introduced; same dtype out (impl_cutile.py 25-27).",
+      "note": "Identical and exact."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "n_elements = x.numel(); output = empty_like(x); x passed as-is (impl_triton.py 32-33).",
+      "cutile": "output = empty_like(x); n_elements = x.numel(); x passed as-is (impl_cutile.py 34-35).",
+      "note": "Only the output allocation on both sides."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output (impl_triton.py 33).",
+      "cutile": "None beyond the output (impl_cutile.py 34).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x is read-only; fresh output every call (impl_triton.py 14, 33).",
+      "cutile": "x is read-only; fresh output every call (impl_cutile.py 24, 34).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "Both timed run() bodies read n elements once and write n elements once with no preprocessing traffic and nothing prepacked, exactly what bytes_expr counts; flops_expr counts one compare/select per element (config.yaml 14-15)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

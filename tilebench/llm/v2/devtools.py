@@ -284,8 +284,53 @@ def make_snapshots(out: Path, *, operator: str = "vector_add", dtype: str = "fp1
         "observations_block": "### t-synthetic-1 (layernorm)\n[synthetic observation JSON]\n\n### t-synthetic-2 (softmax)\n[synthetic observation JSON]\n"})
     index = {}
     for name, text in files.items():
+        text = text.rstrip("\n") + "\n"          # exactly one trailing newline (repo hook convention)
         (out / name).write_text(text)
         index[name] = {"chars": len(text), "sha256": hashlib.sha256(text.encode()).hexdigest()}
     (out / "INDEX.json").write_text(json.dumps({"task": {"operator": operator, "dtype": dtype, "device": device, "dsl": dsl},
                                                 "provenance": provenance, "files": index}, indent=1) + "\n")
     return {"out": str(out), "files": list(files), "provenance": provenance}
+
+
+# --------------------------------------------------------------------------
+# Canonical audit report (compiled from the 45 audit.json files)
+# --------------------------------------------------------------------------
+
+def canonical_audit_report() -> str:
+    """Markdown table of every operator's contract audit status, the
+    per-aspect statuses, F/Q consistency, human-reference comparability and
+    review items. Written by the CLI to docs/llm_v2/CANONICAL_AUDIT.md."""
+    from tilebench.llm.v2.contracts.loader import ContractError, contract_dir, list_contracts
+    from tilebench.llm.v2.contracts.schema import ASPECTS
+    ops = list_operators()
+    have = set(list_contracts())
+    lines = ["# CANONICAL_AUDIT — 45 operator contracts (status as recorded in audit.json)", "",
+             "Status values: `draft` = both extractions reconcile (aligned / mapping-only) and the contract text is "
+             "ready for owner review; `needs-review` = at least one aspect or boundary question needs a human decision; "
+             "`approved` = set only by the study owner. No operator is approved by this tool.", "",
+             "| operator | status | needs-review aspects | F/Q consistent | human ref comparable | review items |",
+             "|---|---|---|---|---|---|"]
+    counts = {"draft": 0, "needs-review": 0, "approved": 0, "missing": 0, "invalid": 0}
+    details = []
+    for op in ops:
+        if op not in have:
+            counts["missing"] += 1
+            lines.append(f"| {op} | MISSING | | | | |")
+            continue
+        try:
+            audit = json.loads((contract_dir(op) / "audit.json").read_text())
+        except Exception as e:  # noqa: BLE001
+            counts["invalid"] += 1
+            lines.append(f"| {op} | INVALID | {e} | | | |")
+            continue
+        status = audit.get("status", "?")
+        counts[status] = counts.get(status, 0) + 1
+        nr = [a for a in ASPECTS if audit.get("aspects", {}).get(a, {}).get("status") == "needs-review"]
+        fq = audit.get("fq_boundary", {}).get("consistent", "?")
+        items = audit.get("review_items", [])
+        lines.append(f"| {op} | {status} | {', '.join(nr) or '-'} | {fq} | {audit.get('human_reference_comparable')} | {len(items)} |")
+        if items or nr:
+            details.append(f"### {op} ({status})\n" + "\n".join(f"- {it}" for it in items) +
+                           ("\n" + "\n".join(f"- aspect `{a}`: {audit['aspects'][a].get('note', '')}" for a in nr) if nr else ""))
+    lines += ["", f"Totals: {counts}", "", "## Review items by operator", ""] + details
+    return "\n".join(lines) + "\n"

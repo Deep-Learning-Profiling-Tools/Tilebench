@@ -1,0 +1,103 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "gaussian_blur",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "needs-review",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/gaussian_blur/impl_triton.py",
+      "functions": [
+        {"name": "gaussian_blur_kernel", "lines": [8, 41]},
+        {"name": "_gaussian_blur_kernel_autotuned", "lines": [44, 54]},
+        {"name": "run", "lines": [57, 93]},
+        {"name": "get_last_config", "lines": [96, 104]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/gaussian_blur/impl_cutile.py",
+      "functions": [
+        {"name": "gaussian_blur_kernel", "lines": [20, 49]},
+        {"name": "_tuner", "lines": [52, 52]},
+        {"name": "run", "lines": [55, 102]},
+        {"name": "get_last_config", "lines": [105, 106]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/gaussian_blur/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [5, 11]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[r,c] = sum over taps (kr,kc) of x[r + kr - kernel_rows//2, c + kc - kernel_cols//2] * w[kr,kc] with out-of-image taps 0 (impl_triton.py L28-37); flat row-major input/output (L34, L40, L64).",
+      "cutile": "Same cross-correlation with zero padding via ct.gather(padding_value=0.0) (impl_cutile.py L38-47); flat input/output viewed as 2-D (L63-64).",
+      "note": "Both match impl_torch.py L7-11 (F.conv2d with padding=(kr//2, kc//2), cropped to R x C, flattened): cross-correlation (no kernel flip), zero padding, same-size output. Config fixes a 7x7 kernel and square images (tensors.py L381-382)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel over a 2-D grid of output tiles: statically unrolled double tap loop (L28-29), per tap one masked shifted load of the input tile (L34-35) and one scalar weight load (L36), accumulate (L37), masked store (L39-41).",
+      "cutile": "One kernel over a 2-D grid of output tiles: static double tap loop over ConstInt bounds (L38-39), per tap one gather of the shifted tile (L42) and one scalar weight load (L44-45), accumulate (L46-47), store (L49).",
+      "note": "Same direct-stencil structure: one pass, per-tap re-reads of the shifted neighbourhood from global memory, no halo staging expressed, no intermediate."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Taps accumulated sequentially into acc (L37); no cross-program dependency.",
+      "cutile": "Taps accumulated sequentially into acc (L46-47); no cross-program dependency.",
+      "note": "Identical."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Per output element, sequential sum over kernel_rows*kernel_cols taps in (row-major) tap order into an fp32 accumulator (L26-37).",
+      "cutile": "Same tap order and fp32 accumulator (L36-47).",
+      "note": "No cross-lane reduction; tap order free in the contract (fp32 sum of at most 49 terms)."
+    },
+    "precision": {
+      "status": "needs-review",
+      "triton": "fp32 accumulator (L26) but the per-tap product x * w is formed in the INPUT dtype: the shifted tile (L34-35) and the scalar weight (L36) are loaded without a cast, so for fp16 inputs each product is rounded to fp16 before being added to the fp32 accumulator (L37); the fp32 result is cast at the store (L40).",
+      "cutile": "fp32 accumulator (L36) and BOTH the gathered pixel and the weight are cast to fp32 before the multiply-add (L46-47), so the per-tap product is exact in fp32; cast to the output dtype at the store (L49).",
+      "note": "Genuine precision-path divergence for fp16 inputs: fp16 products (one extra rounding per tap, relative error about 2^-11 each) versus fp32 products. Both pass the loose verify tolerance (atol 0.1, rtol 1e-2) and both are identical for fp32 inputs. The contract must not pick a side: the human has to decide whether per-tap products must be formed in fp32."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Empty-image guard (L60-62); flat output allocation in the input dtype (L64); kernel size passed as constexpr (L74-75).",
+      "cutile": "Empty-image guard (L58-60); flat output allocation (L62); metadata-only 2-D views of input and output (L63-64); kernel size as ConstInt.",
+      "note": "No host padding, no im2col, no copies or casts, no cached state on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Neighbour reuse relies on the cache hierarchy on both sides."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L64).",
+      "cutile": "No input written; fresh output per call (L62).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "input_rows * input_rows * dtype_size + kernel_rows * kernel_cols * dtype_size + input_rows * input_rows * dtype_size",
+    "flops_expr": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
+    "consistent": "true",
+    "note": "Both expressions are YAML folded scalars in config.yaml (L22-28); the strings here are their space-joined values. One image read, one weight read and one output write are the compulsory traffic of the single kernel on both sides; the kr*kc-fold re-reads of shifted neighbourhoods are cache traffic and are not counted (usual stencil convention). FLOPs = 2 per tap per output. The formulas use input_rows squared, i.e. assume square images, which the generator guarantees (input_cols defaults to input_rows); run() performs no preprocessing and nothing is prepacked."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Per-tap product precision for fp16 inputs: one implementation multiplies pixel and weight in the input dtype (fp16 rounding per tap) before fp32 accumulation, the other converts both to fp32 first. Decide whether the contract requires fp32 products (stricter, matches the fp32 reference path more closely) or permits input-dtype products (both currently pass the atol 0.1 / rtol 1e-2 tolerance); the contract text leaves it open.",
+    "(non-blocking, metric) bytes_expr/flops_expr assume square images (input_rows squared); correct for the config sweep but wrong if input_cols != input_rows is ever swept."
+  ],
+  "contract_sha256": null
+}

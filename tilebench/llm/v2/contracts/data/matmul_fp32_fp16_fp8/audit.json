@@ -1,0 +1,107 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "matmul_fp32_fp16_fp8",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "needs-review",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py",
+      "functions": [
+        {"name": "_tma_set_block_size_hook", "lines": [23, 29]},
+        {"name": "_bt_cache / _b_transposed", "lines": [32, 39]},
+        {"name": "matmul_kernel", "lines": [42, 79]},
+        {"name": "matmul_kernel_autotuned", "lines": [82, 118]},
+        {"name": "run", "lines": [124, 165]},
+        {"name": "get_last_config", "lines": [168, 179]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_cutile.py",
+      "functions": [
+        {"name": "matmul_kernel", "lines": [35, 68]},
+        {"name": "run", "lines": [74, 122]},
+        {"name": "get_last_config", "lines": [125, 126]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_torch.py",
+      "functions": [
+        {"name": "allow_tf32 = True (module level)", "lines": [4, 4]},
+        {"name": "_fp8_cache / _fp8_args", "lines": [7, 18]},
+        {"name": "run", "lines": [21, 27]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "C = A @ B, fp32 accumulator, cast to c dtype at the store (impl_triton.py:67-79).",
+      "cutile": "C = A @ B, fp32 accumulator, cast to C.dtype at the store (impl_cutile.py:55-68).",
+      "note": "Both match impl_torch.py:21-27 (torch.matmul under allow_tf32=True; fp8 via _scaled_mm with unit scales then cast to e4m3fn). Generator tensors.py:416-436 scales both operands by K**-0.5 and returns row-major (a, b)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "allocation + descriptor construction + one GEMM launch (impl_triton.py:131-164).",
+      "cutile": "allocation + one GEMM launch (impl_cutile.py:82-121).",
+      "note": "Single-kernel blocked GEMM with grouped tile ordering on both sides (impl_triton.py:54-62, impl_cutile.py:43-53)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends on c and on bt (impl_triton.py:132,137-139).",
+      "cutile": "kernel depends only on c (impl_cutile.py:82,118-121).",
+      "note": "No intermediates besides the Triton-side bt (see preprocessing)."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "sequential K loop in BLOCK_K chunks via tl.range, MMA accumulation (impl_triton.py:69-76).",
+      "cutile": "sequential K loop with compile-time trip count, MMA accumulation (impl_cutile.py:56-66).",
+      "note": "Same ascending-k sequential reduction; no split-K on either side."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "input_precision='tf32' passed for every dtype (impl_triton.py:76): TF32 operands for fp32, native fp16/fp8 operands otherwise; fp32 accumulation; single cast at the store (79).",
+      "cutile": "mma_dtype = tfloat32 only when A is fp32, else native dtype (impl_cutile.py:59,63,65); fp32 accumulation; single cast at the store (68).",
+      "note": "Effectively the same precision path on both sides (the tf32 flag is a no-op for non-fp32 operands). fp8 is consumed unscaled on both sides, consistent with the reference's unit scales. Both round the fp32 accumulator once to e4m3fn whereas the reference rounds via bf16 (impl_torch.py:24-26); config.verify atol 5.0 / rtol 0.1 covers it."
+    },
+    "preprocessing": {
+      "status": "needs-review",
+      "triton": "bt = b.t().contiguous() (N, K) cached in the module-level plain dict _bt_cache keyed by (b.data_ptr(), shape, dtype), never evicted (impl_triton.py:32-39), looked up on every run (132): the transpose copy executes once per distinct B (warmup) and is untimed thereafter.",
+      "cutile": "B consumed row-major as (TK, TN) tiles directly (impl_cutile.py:64-65); no cache, no transpose, no descriptors.",
+      "note": "Genuine F/Q boundary divergence: one side's steady-state timed region is 'GEMM with a prepacked K-major B', the other's is 'GEMM over the delivered layout'. The reference applies a similar cached repack only for fp8 (impl_torch.py:10-18). Not resolvable by intersection; the contract requires any repack to be per call and uncached and lists the question as open."
+    },
+    "intermediate_storage": {
+      "status": "needs-review",
+      "triton": "bt (N, K) retained for the process lifetime per (data_ptr, shape, dtype) key (impl_triton.py:32-39); unbounded growth across the 60-case sweep.",
+      "cutile": "none (impl_cutile.py:55-68).",
+      "note": "Cross-call persistent operand copy vs none; same root cause as the preprocessing divergence. The address-keyed plain dict is also a stale-address hazard (a freed B's address reused by a same-shape, same-dtype B would receive stale data)."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "a, b never written; fresh c per call (impl_triton.py:131).",
+      "cutile": "a, b never written; fresh c per call (impl_cutile.py:82).",
+      "note": "Idempotent for a fixed B object; see the stale-address hazard above."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches (host TMA descriptor path only, impl_triton.py:137-139,150-152).",
+      "cutile": "no dispatch branches; per-dtype default configs (impl_cutile.py:13-17).",
+      "note": "Descriptor-based vs tile loads and compile-time K (impl_cutile.py:39) are mapping details."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(M * K + K * N + M * N) * dtype_size",
+    "flops_expr": "2 * M * N * K",
+    "consistent": "false",
+    "note": "The formula counts A once, B once and C once in the input dtype. The cuTile path matches it with B consumed in its delivered (K, N) layout and no cache. The Triton path matches it in steady state only because the K-major copy of B (read + write of K*N elements plus one copy launch) is executed once per distinct B address and cached in _bt_cache (impl_triton.py:32-39,132), i.e. never timed after warmup: the formula implicitly credits a free prepacked B on that side. A generated implementation that transposes B per call carries 2*K*N*dtype_size of uncounted timed traffic; one reading B natively matches the formula. The reference's fp8 path (impl_torch.py:10-18) caches an analogous repack by data_ptr; its fp32/fp16 paths do not."
+  },
+  "human_reference_comparable": false,
+  "review_items": [
+    "Decide whether the K-major repack of B is inside the timed algorithm: the contract requires any repack to be per call and uncached, but the manual Triton timing excludes it (bt cached in _bt_cache, impl_triton.py:32-39,132); either re-measure the Triton reference with a per-call transpose or direct (K, N) consumption, or mark its numbers as not comparable to contract-conforming implementations.",
+    "Fix or flag the manual Triton _bt_cache (impl_triton.py:32-39): a plain dict keyed by (data_ptr, shape, dtype) that is never evicted is a stale-address correctness hazard when a freed B's address is reused and retains every (N, K) copy across the 60-case sweep; matmul_int8 already uses a WeakTensorKeyDictionary for the same purpose.",
+    "Confirm the fp32 reference precision at verification time: impl_torch.py:4 sets torch.backends.cuda.matmul.allow_tf32 = True at import and never restores it, while matmul_int8's reference sets it to False inside run() without restoring; the contract permits TF32 operand rounding on the assumption that the reference is also TF32-class under the atol 5.0 / rtol 0.1 tolerance."
+  ],
+  "contract_sha256": null
+}

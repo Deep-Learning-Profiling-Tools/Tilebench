@@ -1,0 +1,31 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "quantize_global",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (n,) float16 output inside run()."},
+    {"id": "elementwise_convert", "description": "One kernel pass that reads each float32 element once, converts it to float16 (round-to-nearest-even) and stores it once at the same position; no reduction, scale or clamp."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "\\.to\\(\\s*torch\\.float16\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float16\\s*\\)|\\.half\\(\\)|\\.type\\(\\s*torch\\.(float16|HalfTensor|cuda\\.HalfTensor)", "message": "The conversion must be performed by the kernel, not by a PyTorch cast.", "level": "confirmed"},
+    {"pattern": "\\.copy_\\(|torch\\.clone\\(|\\.clone\\(\\)", "message": "A host-side copy inside run() performs the conversion or an extra pass on the host.", "level": "suspicious"},
+    {"pattern": "absmax|amax|torch\\.abs\\(|\\.abs\\(\\)|torch\\.max\\(|\\.max\\(\\)|torch\\.norm|scale|clamp|torch\\.round|torch\\.int8|int8|torch\\.quantize", "message": "An absmax/scale/clamp/integer-quantisation step is not part of this operator; the reference is a bare fp32 -> fp16 cast.", "level": "suspicious"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\.", "message": "Returning the input or a view/cast of it replaces the whole computation.", "level": "suspicious"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "No initialised scratch is part of this operator.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.float16", "ct\\.float16", "T\\.float16", "nl\\.float16", "float16", "fp16", "half"], "message": "No float16 conversion target found inside the kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the conversion must be done by a kernel.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.float16",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n,) float16 tensor must be freshly allocated inside run() and must not share storage with x"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation, an optional no-op contiguous() guard and the single conversion kernel. No absmax or scale pass exists; no cached state; no host-side cast or copy of x."},
+  "tolerance_source": "config.verify"
+}

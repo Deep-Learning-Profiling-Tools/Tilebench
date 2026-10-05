@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "reverse_array",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/reverse_array/impl_triton.py",
+      "functions": [
+        {"name": "reverse_kernel", "lines": [8, 15]},
+        {"name": "_reverse_kernel_autotuned", "lines": [18, 29]},
+        {"name": "run", "lines": [32, 49]},
+        {"name": "get_last_config", "lines": [52, 56]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/reverse_array/impl_cutile.py",
+      "functions": [
+        {"name": "reverse_kernel", "lines": [21, 27]},
+        {"name": "run", "lines": [33, 59]},
+        {"name": "get_last_config", "lines": [62, 63]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/reverse_array/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[i] = input[N - 1 - i] into a fresh empty_like buffer, same dtype (impl_triton.py 11-15, 34).",
+      "cutile": "out[i] = input[N - 1 - i] into a fresh empty_like buffer, same dtype (impl_cutile.py 24-27, 35).",
+      "note": "Both realise the reference input.flip(0).contiguous() (impl_torch.py 5) as a materialised out-of-place reversal."
+    },
+    "stages": {
+      "status": "mapping-only",
+      "triton": "One kernel; each program owns a contiguous output range, loads the mirrored input addresses with a masked load (fill 0.0) and stores contiguously (impl_triton.py 11-15).",
+      "cutile": "One kernel; each CTA owns a contiguous output tile, reads the mirrored input indices with a per-element gather (padding value 0) and stores the tile contiguously (impl_cutile.py 24-27).",
+      "note": "Same single-stage reversal; the difference is only the read primitive (masked pointer load vs element gather), both reading each element once. The contract pins neither."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-element dependencies (impl_triton.py 13-15).",
+      "cutile": "No inter-element dependencies (impl_cutile.py 25-27).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (impl_triton.py 8-15).",
+      "cutile": "None (impl_cutile.py 21-27).",
+      "note": "Pure index permutation i -> N - 1 - i."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "No arithmetic on the data; bit-exact movement in the input dtype for fp16/bf16/fp32/int8 (impl_triton.py 14-15).",
+      "cutile": "No arithmetic on the data; bit-exact movement in the input dtype (impl_cutile.py 26-27).",
+      "note": "Same dtype in and out on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "output = empty_like(input); input passed as-is (impl_triton.py 34).",
+      "cutile": "output = empty_like(input); input passed as-is (impl_cutile.py 35).",
+      "note": "Only the output allocation on both sides."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output (impl_triton.py 34).",
+      "cutile": "None beyond the output (impl_cutile.py 35).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "input is read-only; fresh output every call (impl_triton.py 14, 34).",
+      "cutile": "input is read-only; fresh output every call (impl_cutile.py 26, 35).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "Both timed run() bodies read N elements once and write N elements once with no preprocessing traffic and nothing prepacked, exactly what bytes_expr counts (config's n is the positional N); flops_expr is a nominal one-op-per-element figure for pure data movement (config.yaml 14-15). The sweep sizes are not multiples of the tile lengths, so tail handling is exercised on both sides."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

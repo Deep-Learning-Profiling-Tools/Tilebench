@@ -1,0 +1,108 @@
+# 2d_max_pooling: canonical algorithm contract
+
+## Functional semantics
+
+2-D max pooling over a flat NCHW tensor. Interpreting `input` as
+`(N, C, H, W)`:
+
+```
+out[n, c, oh, ow] = max over kh < kernel_size, kw < kernel_size of
+    x[n, c, oh*stride + kh - padding, ow*stride + kw - padding]
+```
+
+taken over in-bounds positions only; positions outside `[0, H) x [0, W)`
+behave as `-inf` and never win. `H_out = (H + 2*padding - kernel_size) //
+stride + 1` and likewise `W_out` (floor, no ceil mode, dilation 1). This is
+exactly `torch.nn.functional.max_pool2d(input.view(N, C, H, W),
+kernel_size, stride=stride, padding=padding).reshape(-1)`.
+
+The entry point is called as `run(input, N, C, H, W, kernel_size, stride,
+padding, **kwargs)`; the seven ints are positional problem parameters, not
+tunables. It must accept and ignore `block_size` and `autotune`.
+
+## Inputs and outputs
+
+- `input`: flat `(N*C*H*W,)`, contiguous, dtype fp16, bf16 or fp32; NCHW
+  order (plane `n*C + c` occupies `H*W` consecutive elements). Read-only.
+  The benchmark uses `W == H`; the implementation must not assume it.
+- `kernel_size`, `stride`, `padding`: ints; the same value applies to both
+  spatial axes; padding is symmetric.
+- Output: flat `(N*C*H_out*W_out,)` in NCHW order, dtype of `input`,
+  freshly allocated inside `run()` on every call, returned as a single
+  tensor. It must not alias `input`. `input` must not be written.
+- If `N*C*H_out*W_out <= 0` an empty tensor of the input dtype may be
+  returned (never exercised by the benchmark).
+
+## Required logical stages
+
+1. **Allocate** the flat output (uninitialised allocation suffices).
+2. **Direct windowed max**: one device pass in which every output element
+   takes the maximum over its `kernel_size*kernel_size` window, reading the
+   input in place with `-inf` for out-of-range taps, and is written exactly
+   once.
+
+Stage 2 is the only device work and is a single launch. No pass may
+materialise a padded copy of the input or an unfolded window matrix, and the
+output must not be produced by a second pass over partial results.
+
+## Algorithm family and structure
+
+Direct stencil (sliding-window) reduction. Each program owns a tile of one
+or more output planes, initialises a running tile to `-inf`, folds the
+`kernel_size*kernel_size` taps in with an elementwise maximum, and stores
+the tile with bounds masking. The tap visiting order is free (the maximum is
+order-independent for non-NaN values). Taps whose input coordinate is
+negative or `>= H`/`>= W` must contribute `-inf` (masked loads with `-inf`
+fill, or an equivalent bounds-padded gather); this covers both the padding
+ring and windows overhanging the last row/column. NaN behaviour is
+unspecified; the benchmark inputs contain no NaN.
+
+## Precision and accumulation
+
+No arithmetic is performed. The running maximum may be kept in the input
+dtype (the maximum is exact in any dtype) or in a wider type; the output is
+stored in the input dtype. `-inf` is the only fill/identity value and is
+representable in all three dtypes.
+
+## Preprocessing and timing boundary
+
+Everything `run()` does is timed. It must not pad, unfold, cast or copy the
+input and must not cache anything across calls. It may compute `H_out`,
+`W_out` and the output size, allocate the output, take zero-copy views of
+the flat tensors (for example as `(N*C, H, W)` and `(N*C, H_out, W_out)`),
+and launch. The metric formulas count one read of the input and one write
+of the output, plus one comparison per tap per output; the cache re-reads of
+overlapping windows are expected and not counted.
+
+## Permitted implementation mappings
+
+- Output tile shape (1-D runs of a row or 2-D row-by-column tiles), planes
+  per program, grid shape, raster order, vector width, pipelining.
+- Element-wise gathers with bounds padding, or masked block loads, for the
+  taps; static unrolling of the tap loops; making `kernel_size`, `stride`
+  and `padding` compile-time constants of the kernel.
+- Tail handling of partial edge tiles by explicit masks or by the DSL's
+  bounds-clipped stores.
+
+## Forbidden substitutions
+
+- `torch.nn.functional.max_pool2d` / `max_pool1d` / `max_pool3d`,
+  `torch.nn.MaxPool2d`, `torch.amax` / `torch.max` over an unfolded window
+  tensor, or any other library pooling.
+- `unfold` / im2col-style window materialisation, `torch.nn.functional.pad`
+  or any padded copy of the input.
+- A multi-pass scheme (for example a row-wise max followed by a
+  column-wise max written through scratch).
+- Any dtype conversion of the stored result; mutating `input`; returning a
+  view of `input`.
+
+## Permitted PyTorch operations
+
+- `torch.empty(N*C*H_out*W_out, dtype=input.dtype, device=input.device)`
+  for the output (and `torch.empty(0, ...)` for the degenerate empty case).
+- `.view(...)` / `.reshape(...)` on the contiguous flat input and output as
+  metadata-only reshapes.
+- Reading dtype, shape and device metadata, and obtaining the current
+  stream.
+
+Everything else in `torch` is forbidden inside `run()`.

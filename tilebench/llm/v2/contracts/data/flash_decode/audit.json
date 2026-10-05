@@ -1,0 +1,104 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "flash_decode",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/flash_decode/impl_triton.py",
+      "functions": [
+        {"name": "fwd_kernel_flash_decode_stage2", "lines": [8, 55]},
+        {"name": "_fwd_kernel_flash_decode_stage2_autotuned", "lines": [58, 67]},
+        {"name": "run", "lines": [70, 137]},
+        {"name": "__main__ profiling script (inert on import)", "lines": [140, 196]},
+        {"name": "get_last_config", "lines": [198, 202]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/flash_decode/impl_cutile.py",
+      "functions": [
+        {"name": "fwd_kernel_flash_decode_stage2", "lines": [16, 68]},
+        {"name": "_tuner", "lines": [71, 71]},
+        {"name": "run", "lines": [74, 111]},
+        {"name": "__main__ profiling script (inert on import)", "lines": [113, 169]},
+        {"name": "get_last_config", "lines": [171, 172]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/flash_decode/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [3, 47]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Stage-2 split-KV combine only: per (b,h), nb = ceil(b_seqlen[b]/BLOCK_SEQ) (impl_triton.py L32-34); out = sum_{s<nb} exp(lse_s - m) * mid_o_s / sum_{s<nb} exp(lse_s - m) with no epsilon (L42-54).",
+      "cutile": "Same: real_num_blocks = ceil(seq_len/BLOCK_SEQ) (impl_cutile.py L31-33); invalid splits neutralised (L49-50); acc/sum_exp with no epsilon (L66).",
+      "note": "Both match impl_torch.py L13-45 except that the reference adds 1e-10 to the denominator (L45); since the denominator is >= 1 whenever at least one split is valid (the running max contributes exp(0) = 1) the difference is far below fp32 tolerance, and every benchmark row has b_seqlen = seq_len >= 1 (tensors.py L255). Stage 1 (attention over K/V) is NOT part of the operator."
+    },
+    "stages": {
+      "status": "mapping-only",
+      "triton": "One kernel, one program per (b,h) (L87): read b_seqlen (L32), loop over s < block_n_size with a RUNTIME, data-dependent trip count (L42), per step one head_dim vector load + one lse scalar (L43-44), online update (L45-52), store acc/sum_exp (L54).",
+      "cutile": "One kernel, one program per (b,h) (L86): read b_seqlen (L31), loop k in range(TOTAL_BLOCKS) with a COMPILE-TIME trip count equal to num_blocks (L41), invalid splits replaced by (-inf, 0) via ct.where (L43-50), same online update (L52-63), store acc/sum_exp into a 4-D view of the output (L66-68, L85).",
+      "note": "Same single-launch structure and the same per-split recurrence; skipping invalid splits by the loop bound versus visiting all splits with neutralised weights is a mapping choice (identical results; all splits are valid in the benchmark)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Sequential dependency through (max_logic, sum_exp, acc) along the split loop (L45-52); no cross-program dependency.",
+      "cutile": "Sequential dependency through (max_logic, sum_exp, acc) along the split loop (L52-63); no cross-program dependency.",
+      "note": "Identical."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Online running-max recurrence over splits in increasing index order: old_scale = exp(max_old - max_new), acc = acc*old_scale + exp(lse - max_new)*v, sum_exp likewise (L45-52); final division once (L54).",
+      "cutile": "Same recurrence in increasing split order (L52-63); final division once (L66).",
+      "note": "Both are single-pass online combines (the reference is two-pass: global max then weighted sum); fp32 rounding differs only by summation order. The head_dim axis is element-wise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 accumulator tile (L38), fp32 scalars, natural tl.exp (L47, L49); output in mid_o.dtype via implicit cast at the store (L54, L81); no epsilon.",
+      "cutile": "fp32 acc/max/sum tiles (L36-39), natural ct.exp (L54-55); stored into an output of mid_o.dtype (L68, L82); no epsilon.",
+      "note": "Same fp32 path, same natural-base exponent, both omit the reference's 1e-10."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "block_seq_tensor.item() on a CPU scalar tensor (L72-75); output allocation (L81); BLOCK_DMODEL = next_power_of_2(head_dim) (L84).",
+      "cutile": "block_seq_tensor.item() (L76-79); output allocation (L82); metadata-only 4-D view of the output (L85).",
+      "note": "No data preprocessing, casts or cached state on either side; the .item() is on a CPU tensor (no device sync), as in impl_torch.py L6-7."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Running statistics are register/tile resident."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written (mid_o_lse read directly, no clone); fresh output per call (L81).",
+      "cutile": "No input written; fresh output per call (L82).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "batch * heads * (seq_len // block_seq) * head_dim * dtype_size",
+    "flops_expr": "4 * batch * heads * (seq_len // block_seq) * head_dim",
+    "consistent": "true",
+    "note": "The timed run() is a host .item() on a CPU scalar, one allocation and one launch on both sides; there is no preprocessing, scratch or prepacked input. bytes_expr counts one read of mid_o only; the reads of mid_o_lse (1/head_dim of mid_o), b_seqlen and the output write (1/num_blocks of mid_o) are omitted, which is a small undercount rather than a boundary mismatch. seq_len // block_seq equals num_blocks for every config case."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "(non-blocking) Both implementations omit the reference's 1e-10 denominator epsilon; results agree within fp32 tolerance for every benchmark input (b_seqlen >= 1 so the denominator is >= 1), but a batch row with b_seqlen <= 0 would give 0/0 = NaN instead of the reference's 0: confirm that rows with zero valid splits are out of scope (the contract currently leaves them unspecified)."
+  ],
+  "contract_sha256": null
+}

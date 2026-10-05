@@ -1,0 +1,112 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "batched_matmul",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "needs-review",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/batched_matmul/impl_triton.py",
+      "functions": [
+        {"name": "_CDNA3_DEFAULT_CONFIG/_BUILTIN_DEFAULT_CONFIG", "lines": [17, 24]},
+        {"name": "_default_config", "lines": [27, 35]},
+        {"name": "_bt_cache", "lines": [41, 41]},
+        {"name": "_b_transposed", "lines": [44, 51]},
+        {"name": "_tma_set_block_size_hook", "lines": [54, 60]},
+        {"name": "bmm_kernel", "lines": [63, 97]},
+        {"name": "_bmm_kernel_autotuned", "lines": [100, 120]},
+        {"name": "_descriptors", "lines": [123, 127]},
+        {"name": "run", "lines": [130, 164]},
+        {"name": "get_last_config", "lines": [167, 178]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/batched_matmul/impl_cutile.py",
+      "functions": [
+        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [10, 22]},
+        {"name": "bmm_kernel", "lines": [25, 72]},
+        {"name": "_tuner", "lines": [75, 75]},
+        {"name": "run", "lines": [78, 130]},
+        {"name": "get_last_config", "lines": [133, 134]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/batched_matmul/impl_torch.py",
+      "functions": [
+        {"name": "allow_tf32 (module level)", "lines": [4, 4]},
+        {"name": "run", "lines": [7, 12]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "C[b] = A[b] @ B[b] via a (BATCH, M, K) view of A and a (BATCH, N, K) transposed copy of B; output flat (BATCH*M*N,) in A's dtype (impl_triton.py 133-136, 86-97).",
+      "cutile": "C[b] = A[b] @ B[b] via (BATCH, M, K) and (BATCH, K, N) views; output c_3d.reshape(-1) in A's dtype (impl_cutile.py 82-84, 52-72, 130).",
+      "note": "Both compute the reference torch.matmul(A_3d, B_3d).view(-1) (impl_torch.py 9-12); the result is the same, but the operand layout one side consumes differs (see preprocessing)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Output allocation (134), B^T lookup/materialisation (136, first call only), host descriptors (141/153), one GEMM kernel launch over (ceil(M/tm), ceil(N/tn), BATCH) (impl_triton.py 139-162).",
+      "cutile": "Output allocation (84), host grid/K-tile arithmetic (118-121), one GEMM kernel launch over (ceil(M/tm)*ceil(N/tn), BATCH) (impl_cutile.py 118-128), flat view return (130).",
+      "note": "The GEMM stage itself is identical (single launch, full-K per tile). The extra first-call transpose stage on one side is a boundary issue tracked under preprocessing/intermediate_storage."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Output tiles independent; sequential K loop inside a program (impl_triton.py 86-94).",
+      "cutile": "Same (impl_cutile.py 52-68).",
+      "note": "No inter-program dependency."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "K reduced sequentially in chunks into one fp32 accumulator by tl.dot with accumulator operand; no split-K/atomics (impl_triton.py 84-94).",
+      "cutile": "K reduced sequentially in chunks (compile-time trip count) into one fp32 accumulator by ct.mma; no split-K/atomics (impl_cutile.py 47-68).",
+      "note": "Same reduction structure; grouped/swizzled tile raster on both sides is launch-order only."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 accumulator (84); tl.dot(..., input_precision=\"tf32\") (94); cast to output dtype (96).",
+      "cutile": "fp32 accumulator (47); operands cast to ct.tfloat32 for fp32 inputs, else native (50, 64-65); cast at store (72).",
+      "note": "Same precision class, matching the reference's allow_tf32 = True (impl_torch.py 4); config.yaml verify atol 1.0 / rtol 1e-2."
+    },
+    "preprocessing": {
+      "status": "needs-review",
+      "triton": "_b_transposed (44-51) materialises B^T = B.view(BATCH, K, N).transpose(1, 2).contiguous() on the first call for a given B tensor object and memoises it in a WeakTensorKeyDictionary (41); run() calls it every time (136), so warmup and timed repeats consume a prepacked (BATCH, N, K) operand without paying the transpose.",
+      "cutile": "A.contiguous().view / B.contiguous().view (82-83) are zero-copy for the contiguous generator tensors; B is consumed in its given (BATCH, K, N) layout by the kernel (58-62).",
+      "note": "Genuine F-Q boundary divergence: one side benefits from an untimed, cached pre-transpose that the reference (torch.matmul on row-major views, impl_torch.py 9-11) does not need, while the other side and the reference consume B as given. The contract cannot pick either; the question is stated in review_items and the contract carries a provisional no-repack rule."
+    },
+    "intermediate_storage": {
+      "status": "needs-review",
+      "triton": "A (BATCH, N, K) B^T buffer in the input dtype, allocated by _b_transposed and kept alive by the identity-keyed cache for as long as the caller's B exists (impl_triton.py 41-51); plus the output.",
+      "cutile": "None beyond the output (impl_cutile.py 84).",
+      "note": "A persistent input-derived buffer that outlives the call exists on one side only; it is the storage side of the preprocessing divergence."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output freshly allocated per call (impl_triton.py 134). The identity-keyed B^T cache would serve stale data if B were mutated in place between calls (47-50).",
+      "cutile": "No input written; output freshly allocated per call (impl_cutile.py 84).",
+      "note": "Neither mutates inputs; the contract forbids mutation. The stale-cache hazard is a consequence of the preprocessing divergence, not a mutation."
+    },
+    "hardware_dispatch": {
+      "status": "mapping-only",
+      "triton": "_default_config() (27-35) substitutes _CDNA3_DEFAULT_CONFIG, which only lowers the pipeline depth of the non-autotuned path, when detect_arch() == 'cdna3' and the builtin default is in place (17-24); the host TensorDescriptor path is unconditional (123-127).",
+      "cutile": "No architecture branch.",
+      "note": "Legality-only resource-fit fallback (shared-memory footprint on gfx942); the algorithm is unchanged and the contract pins nothing."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "3 * BATCH * M * M * dtype_size",
+    "flops_expr": "2 * BATCH * M * M * M",
+    "consistent": "false",
+    "note": "config.yaml 21-22; assumes square N = K = M as the generator guarantees (tensors.py 88-91). It counts one read of A, one read of B and one write of C. The cuTile boundary matches. The Triton boundary does not: the B -> B^T transpose (an extra read and write of B, impl_triton.py 49) is performed inside run() only on the first call per B object and then served from a cache, so the steady-state timed region consumes a prepacked operand whose preparation is neither timed nor counted and which the reference never performs."
+  },
+  "human_reference_comparable": false,
+  "review_items": [
+    "Decide whether run() may consume B through a pre-transposed/packed layout and, if so, whether that repack must be performed inside every timed call or may be prepared once and cached: the Triton path memoises B^T per tensor identity (impl_triton.py 41-51, 136) so its steady-state latency excludes a transpose the reference never performs, while the cuTile path reads row-major B directly (impl_cutile.py 58-62, 83); the contract currently carries a provisional no-repack, no-cache rule.",
+    "Confirm that bytes_expr = 3 * BATCH * M * M * dtype_size (one read of A and B, one write of C) is the intended boundary; the untimed cached B^T materialisation is uncounted, so the Triton column is not comparable to a contract-conforming generated implementation (human_reference_comparable = false) until the first item is resolved or the Triton implementation is changed.",
+    "Decide whether the identity-keyed B^T cache (impl_triton.py 41-51), which would silently return stale results if B were mutated in place between calls, should be fixed before that implementation serves as a timing reference."
+  ],
+  "contract_sha256": null
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "matrix_transpose",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh contiguous (n, m) output of x's dtype inside run()."},
+    {"id": "tiled_transpose", "description": "One kernel pass that reads each element of x once and writes it once to the transposed position of the output, with edge tiles handled so that no out-of-range element is read or written."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "\\.transpose\\(\\s*[01]\\s*,\\s*[01]\\s*\\)\\s*\\.(contiguous|clone)\\(|\\.t\\(\\)\\s*\\.(contiguous|clone)\\(|\\.T\\s*\\.(contiguous|clone)\\(|\\.mT\\s*\\.(contiguous|clone)\\(|\\.permute\\([^)]*\\)\\s*\\.(contiguous|clone)\\(|torch\\.transpose\\([^)]*\\)\\s*\\.(contiguous|clone)\\(", "message": "A PyTorch view-transpose followed by contiguous()/clone() performs the whole operator on the host.", "level": "confirmed"},
+    {"pattern": "torch\\.transpose\\(|\\.transpose\\(\\s*[01]\\s*,\\s*[01]\\s*\\)|\\.permute\\(|\\.t\\(\\)|\\.mT\\b|torch\\.as_strided|torch\\.swapaxes|torch\\.swapdims", "message": "Host-side transpose/permute of x; if its result is returned or copied, the whole operator is done by PyTorch.", "level": "suspicious"},
+    {"pattern": "\\.copy_\\(|torch\\.clone\\(|\\.clone\\(\\)", "message": "A host-side copy inside run() is either a second data pass or the transpose itself.", "level": "suspicious"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\.", "message": "Returning the input or a view of it violates the fresh-output requirement.", "level": "suspicious"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)", "message": "No dtype conversion is allowed anywhere in matrix_transpose.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the transpose must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.trans", "ct\\.transpose", "T\\.copy", "nisa\\.nc_transpose", "nl\\.transpose", "stride", "\\[None, :\\]", "\\[:, None\\]"], "message": "No evidence of transposed addressing or an in-tile transpose primitive.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.stride",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n, m) tensor must be freshly allocated inside run(), contiguous row-major, and must not share storage with x"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation and the single transpose kernel. No cached state, no untimed re-layout or prepacking of x, no host-side copies."},
+  "tolerance_source": "config.verify"
+}

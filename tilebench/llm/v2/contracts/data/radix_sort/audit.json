@@ -1,0 +1,110 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "radix_sort",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "needs-review",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/radix_sort/impl_triton.py",
+      "functions": [
+        {"name": "radix_histogram_kernel", "lines": [13, 31]},
+        {"name": "radix_sum_chunks_kernel", "lines": [34, 41]},
+        {"name": "radix_scan_chunk_sums_kernel", "lines": [44, 51]},
+        {"name": "radix_scan_chunks_kernel", "lines": [54, 62]},
+        {"name": "radix_scatter_kernel", "lines": [65, 84]},
+        {"name": "_radix_scatter_kernel_autotuned", "lines": [87, 95]},
+        {"name": "run", "lines": [98, 138]},
+        {"name": "get_last_config", "lines": [141, 145]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/radix_sort/impl_cutile.py",
+      "functions": [
+        {"name": "radix_histogram_kernel", "lines": [21, 41]},
+        {"name": "radix_sum_chunks_kernel", "lines": [44, 49]},
+        {"name": "radix_scan_chunk_sums_kernel", "lines": [52, 58]},
+        {"name": "radix_scan_chunks_kernel", "lines": [61, 68]},
+        {"name": "radix_scatter_kernel", "lines": [71, 92]},
+        {"name": "run", "lines": [105, 163]},
+        {"name": "get_last_config", "lines": [166, 167]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/radix_sort/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Ascending sort of a 1-D int32 key array, values only, into a run-allocated buffer; keys compared as unsigned 32-bit patterns via a pointer reinterpretation (impl_triton.py 17, 69-70, 103, 138).",
+      "cutile": "Ascending sort of a 1-D int32 key array, values only, into a run-allocated buffer; digit extraction with an arithmetic shift and mask on int32, i.e. unsigned order for the non-negative benchmark keys (impl_cutile.py 31, 81, 110, 163).",
+      "note": "Both realise the reference torch.sort(input).values (impl_torch.py 5). The generator draws keys from [0, 2^31) (tensors.py 116-119) so signed and unsigned orders coincide; config.yaml requires an exact match (atol = rtol = 0, lines 1-3)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "work = input.clone(); output = empty_like; hist and chunk_sums scratch; per pass: block histogram -> chunk sums -> one-program exclusive scan of chunk sums -> per-chunk exclusive scan with carry -> stable block scatter; swap buffers; return work (impl_triton.py 103-138).",
+      "cutile": "Identical: clone, empty_like, hist and chunk_sums; per pass the same five launches in the same order; swap; return work (impl_cutile.py 110-163).",
+      "note": "Both sides use the same stage structure with the same pass loop over the full key width; the three-launch scan is one realisation of a single logical exclusive scan on both sides."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Within a pass: histogram -> scan (three dependent launches) -> scatter; each pass depends on the previous pass's scatter via the swapped buffers (impl_triton.py 116-136).",
+      "cutile": "Same chain (impl_cutile.py 146-161).",
+      "note": "Identical dependency structure; the scan must complete globally before any scatter, which is why count and scatter of one pass are separate launches on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "LSD counting radix sort: per block one int64 sum of packed one-hot counters (one 16-bit field per digit value) gives all digit counts; histogram laid out digit-major hist[d * K + block]; forward exclusive scan over the flat histogram yields the global write base per (digit, block); in-block rank by exclusive cumsum of the packed counters and field extraction, so equal-digit keys keep block order (stable); all 32 bits covered least-significant first (impl_triton.py 23-31, 41, 51, 62, 76-84, 116).",
+      "cutile": "Same scheme: packed int64 counters summed per tile, digit-major histogram written by scatter, three-launch exclusive scan, in-tile exclusive cumsum rank, stable scatter with out-of-range destination for padded lanes, all 32 bits least-significant first (impl_cutile.py 31-41, 49, 57, 67, 81-92, 146).",
+      "note": "Both use 2-bit digits (radix 4) and hence the same pass count. Correctness depends only on (a) every pass being a stable partition by its digit and (b) the digit positions covering all 32 bits in least-significant-first order; it does not depend on the digit width. The 2-bit width is tied to the packed-counter mapping (4 fields x 16 bits in one int64 with fewer than 2^16 keys per block) and is therefore recorded as a mapping choice, not pinned by the contract. See fq_boundary for the metric consequence."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Exact integer arithmetic: int32 digits/counts/offsets, int64 packed counters and cumsums; int32 output (impl_triton.py 23-31, 79-84).",
+      "cutile": "Exact integer arithmetic: int32 digits/counts/offsets, int64 packed counters and cumsums; int32 output (impl_cutile.py 31-41, 84-92).",
+      "note": "Identical; verification is exact."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "N <= 1 early return of input.clone(); work = input.clone() (device copy inside run, timed); allocate output, hist (RADIX * K,) int32 and chunk_sums (G2,) int32 with torch.empty, fully overwritten each pass (impl_triton.py 100-112).",
+      "cutile": "Identical: early return, work = input.clone(), empty output/hist/chunk_sums (impl_cutile.py 107-119).",
+      "note": "The clone is what keeps the caller's input unmodified and is inside the timed boundary on both sides; nothing is cached across calls and nothing is prepacked."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "work (N,) int32 clone, output (N,) int32 ping-pong partner, hist (RADIX * K,) int32, chunk_sums (G2,) int32; all per call (impl_triton.py 103-112).",
+      "cutile": "Same four buffers per call (impl_cutile.py 110-119).",
+      "note": "Identical scratch set; the returned tensor is one of the two key buffers (the clone buffer after the even pass count)."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "input is never written and never passed to a kernel; only read by the clone (impl_triton.py 103).",
+      "cutile": "input is never written; cloned before any launch (impl_cutile.py 110).",
+      "note": "Neither side mutates the input; the contract forbids mutation and requires a run-allocated working copy."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches; fixed occupancy hints on helper kernels are lowering hints (impl_cutile.py 95-99).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "16 * 3 * n * dtype_size",
+    "flops_expr": "n",
+    "consistent": "false",
+    "note": "bytes_expr models 16 passes x (one key read for counting + one key read and one key write for scattering) and nothing else (config.yaml 19). Two mismatches with the timed boundary on both sides: (1) the in-run input clone (one read and one write of n keys, about 4 percent of the modelled traffic) and the histogram/scan scratch traffic are not counted; (2) the pass count 16 is a property of the 2-bit digit mapping chosen by both implementations, not of the operator. Because the contract leaves the digit width free (correctness does not depend on it), an implementation with wider digits would be credited 16-pass traffic while moving less, so the bandwidth figure would not be comparable across implementations. flops_expr = n is nominal."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "BLOCKING (metric vs contract): bytes_expr hard-codes 16 passes (the 2-bit-digit mapping) while the contract leaves digit width and pass count free; decide either to pin the pass count in the contract (making the formula a faithful traffic model but constraining the mapping) or to keep the freedom and re-express or annotate the metric (for example report bytes per actual pass, or treat the formula as a fixed nominal '16-pass-equivalent' figure that is only comparable between implementations with the same pass count).",
+    "Non-blocking: the working-copy clone inside run() (2 * n * dtype_size bytes) and the histogram/scan scratch traffic are not counted by bytes_expr; decide whether to add the clone term, which every faithful implementation performs."
+  ],
+  "contract_sha256": null
+}

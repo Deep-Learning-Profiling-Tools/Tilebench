@@ -1,0 +1,101 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "2d_max_pooling",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/2d_max_pooling/impl_triton.py",
+      "functions": [
+        {"name": "max_pool2d_kernel", "lines": [8, 46]},
+        {"name": "_max_pool2d_kernel_autotuned", "lines": [49, 59]},
+        {"name": "run", "lines": [62, 104]},
+        {"name": "get_last_config", "lines": [107, 115]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/2d_max_pooling/impl_cutile.py",
+      "functions": [
+        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [10, 16]},
+        {"name": "max_pool2d_kernel", "lines": [20, 47]},
+        {"name": "_tuner", "lines": [50, 50]},
+        {"name": "run", "lines": [53, 102]},
+        {"name": "get_last_config", "lines": [105, 106]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/2d_max_pooling/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [5, 8]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Flat NCHW input; out = max over k x k taps at oh*stride+kh-padding, ow*stride+kw-padding with out-of-plane taps -inf; H_out/W_out floor formula; flat output (impl_triton.py 29-46, 64-66, 71).",
+      "cutile": "Same: (N*C, H, W) view, gather with padding_value=-inf for any out-of-range coordinate, same H_out/W_out, flat output written through an (N*C, H_out, W_out) view (impl_cutile.py 37-47, 55-57, 62-64).",
+      "note": "Both realise F.max_pool2d(input.view(N,C,H,W), k, stride, padding).reshape(-1) (impl_torch.py 6-8); both return an empty tensor when total_out <= 0 (unreachable in the sweep)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "torch.empty flat output (71) then one kernel launch over (N*C, ceil(H_out/rows), ceil(W_out/cols)) (impl_triton.py 73-102).",
+      "cutile": "torch.empty flat output (62), 3-D views (63-64), one kernel launch over the same 3-axis grid (impl_cutile.py 92-100).",
+      "note": "Identical single-stage stencil; no padded copy, no unfold."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Output tiles independent; taps folded sequentially inside a program (impl_triton.py 33-41).",
+      "cutile": "Same (impl_cutile.py 39-44).",
+      "note": "No inter-program dependency."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Max over k*k taps in static kh-outer/kw-inner order starting from -inf via tl.maximum (impl_triton.py 30-41).",
+      "cutile": "Max over k*k taps in the same order starting from -inf via ct.maximum (impl_cutile.py 37-44).",
+      "note": "Order-independent for non-NaN data; NaN semantics unspecified on both sides and never exercised (randn inputs)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Running tile in the input dtype (tl.full with input_ptr.dtype.element_ty, 30-31); no upcast; output in input dtype.",
+      "cutile": "Running tile in x3.dtype (37); no upcast; output in input dtype.",
+      "note": "No arithmetic; max is exact in any dtype; the contract permits a wider running type but does not require it."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "H_out/W_out/total_out arithmetic and the early empty return only (impl_triton.py 64-69); no copy/cast; nothing cached.",
+      "cutile": "Same arithmetic and early return plus zero-copy .view to (N*C, H, W)/(N*C, H_out, W_out) (impl_cutile.py 55-64); nothing cached.",
+      "note": "No device-side preprocessing on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None (impl_triton.py 71).",
+      "cutile": "None (impl_cutile.py 62).",
+      "note": "No scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output freshly allocated (impl_triton.py 71).",
+      "cutile": "No input written; output freshly allocated (impl_cutile.py 62).",
+      "note": "Idempotent; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branch; kernel_size/stride/padding are tl.constexpr (impl_triton.py 16-18).",
+      "cutile": "No architecture branch; kernel_size/stride/padding are ConstInt (impl_cutile.py 24-26).",
+      "note": "Both specialise the kernel on the problem parameters (a mapping choice the contract leaves free); no hardware dispatch."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "N * C * H * H * dtype_size + N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
+    "flops_expr": "N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * kernel_size ** 2",
+    "consistent": "true",
+    "note": "config.yaml 21-28. Assumes W = H as the generator guarantees (tensors.py 486-487). Counts one read of the input, one write of the output and one comparison per tap per output; both run() bodies contain only metadata, an uninitialised output allocation and one kernel. Cache re-reads of overlapping windows are uncounted on both sides equally."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

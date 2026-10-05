@@ -1,0 +1,28 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "matmul_int8",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "output_alloc", "description": "Allocate C (M, N) int32 inside run()."},
+    {"id": "packed_decode", "description": "On the device, inside the GEMM pass: field i of each packed byte = ((byte >> 2i) & 3) - 1, paired with A columns i*K_b + r; no unpacked B in global memory."},
+    {"id": "int32_gemm", "description": "int8 x int8 products accumulated exactly in int32 per logical output tile; int32 tile stored."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(matmul|mm|addmm|bmm|einsum|_int_mm)\\(", "message": "library GEMM computes the operator", "level": "confirmed"},
+    {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious"},
+    {"pattern": "b\\.to\\(\\s*torch\\.int32\\s*\\)|\\(\\s*b\\s*&|b\\s*>>|torch\\.bitwise_(and|right_shift)\\(", "message": "host-side decode of the packed B with PyTorch bit operations", "level": "suspicious"},
+    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of B: permitted only per call inside run(), never cached across calls", "level": "suspicious"},
+    {"pattern": "\\.to\\(\\s*torch\\.float(32|16)?\\s*\\)|\\.float\\(\\)|\\.half\\(\\)", "message": "floating-point evaluation of an integer product", "level": "suspicious"},
+    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision", "message": "process-wide precision flag changed", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "mma"], "message": "a device-side tiled matrix multiply", "level": "suspicious"},
+    {"any_of": [">>", "&\\s*\\(?\\s*(3|0x3|mask)"], "message": "a device-side 2-bit field decode (shift and mask)", "level": "suspicious"},
+    {"any_of": ["int32", "i32"], "message": "an int32 accumulator", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, N) int32 tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "A and packed B are consumed as delivered; any repack of B must be per call inside run() (timed) and never cached; decode happens on the device; output allocation timed; no prepacked inputs."},
+  "tolerance_source": "config.verify"
+}

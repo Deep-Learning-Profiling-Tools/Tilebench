@@ -1,0 +1,100 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "dropout",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/dropout/impl_triton.py",
+      "functions": [
+        {"name": "dropout_kernel", "lines": [8, 24]},
+        {"name": "_dropout_kernel_autotuned", "lines": [27, 36]},
+        {"name": "run", "lines": [39, 54]},
+        {"name": "get_last_config", "lines": [57, 61]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/dropout/impl_cutile.py",
+      "functions": [
+        {"name": "dropout_kernel", "lines": [21, 27]},
+        {"name": "_tuner", "lines": [30, 30]},
+        {"name": "run", "lines": [33, 61]},
+        {"name": "get_last_config", "lines": [64, 65]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/dropout/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out = where(x_keep != 0, x / (1 - p), 0) with x_keep an INPUT mask (impl_triton.py L21-23); no RNG anywhere in the file.",
+      "cutile": "out = x_keep * x * (1/(1-p)) with x_keep an input mask (impl_cutile.py L24-26, scale on host L37); no RNG.",
+      "note": "Both match impl_torch.py L5 ((x * x_keep) * (1/(1-p))). The mask is drawn by the generator (tensors.py L189) as exact 0/1 values in x's dtype; run() is deterministic on all sides. Select-on-nonzero vs multiply-by-mask coincide for 0/1 masks."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One element-wise kernel over a 1-D grid: load x and x_keep (L21-22), compute (L23), store (L24).",
+      "cutile": "One element-wise kernel over a 1-D grid: load x and x_keep (L24-25), compute (L26), store (L27).",
+      "note": "Single pass, no intermediates on either side."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-program dependency.",
+      "cutile": "No inter-program dependency.",
+      "note": "Embarrassingly parallel."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Purely element-wise; no RNG stream to advance."
+    },
+    "precision": {
+      "status": "mapping-only",
+      "triton": "x / (1 - p) with p a runtime fp32 scalar, so fp16/bf16 x is promoted to fp32 for the division; select via tl.where on x_keep.to(int1); one implicit rounding to x.dtype at tl.store (L23-24).",
+      "cutile": "x and x_keep cast to fp32 (L24-25), product x_keep * x * scale with scale = 1/(1-p) computed on the host (L37, L26), one explicit rounding to x.dtype (L26).",
+      "note": "Both evaluate the rescale in fp32 with exactly one rounding to the output dtype. Division by (1-p) versus multiplication by the host-computed reciprocal differs by at most one fp32 ulp (identical for the configured p = 0.5, where the factor is exactly 2) and the mask is applied as a select versus a multiply; neither changes the accumulation path or the rounding point, so the contract permits either form."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "torch.empty_like output (L41); n_elements (L42); p passed as a kernel scalar (L45, L50).",
+      "cutile": "torch.empty_like output (L35); host scalar scale = 1/(1-p) (L37).",
+      "note": "No casts, copies or cached state; computing 1/(1-p) on the host is scalar metadata."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Result written directly."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L41).",
+      "cutile": "No input written; fresh output per call (L35).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 3",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "One read of x, one read of x_keep (same dtype as x) and one write of the output match the single kernel's compulsory traffic on both sides. The mask is a pre-generated input, so no RNG cost exists inside the boundary; no preprocessing or prepacked input exists."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

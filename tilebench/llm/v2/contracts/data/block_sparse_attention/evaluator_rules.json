@@ -1,0 +1,34 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "block_sparse_attention",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (B, H, M, D) output of Q's dtype inside run()."},
+    {"id": "csr_online_softmax_attention", "description": "One kernel launch: per (query row block, batch, head) read the CSR row range, visit the listed key blocks in stored order, S = scale * Q.K^T in fp32 with causal and sequence-bound -inf masking, online-softmax update (running max with guard, running sum, alpha rescale), P cast to fp16 for P.V, final divide by the guarded row sum and store."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "flex_attention|create_block_mask|scaled_dot_product_attention|torch\\.nn\\.functional\\.softmax\\(|torch\\.softmax\\(|\\bF\\.softmax\\(|torch\\.(matmul|bmm|einsum|baddbmm)\\(", "message": "A library attention, softmax or GEMM replaces the core computation.", "level": "confirmed"},
+    {"pattern": "torch\\.(tril|triu|ones|zeros|full)\\(|torch\\.zeros_like\\(|\\.masked_fill", "message": "A dense materialised mask or zero-filled scratch is forbidden; masking must happen inside the kernel.", "level": "suspicious"},
+    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.item\\(\\)|\\.numpy\\(\\)|torch\\.repeat_interleave|torch\\.nonzero|torch\\.where\\(", "message": "Host-side decoding of the CSR layout is forbidden; the kernel must consume the CSR arrays directly.", "level": "suspicious"},
+    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b", "message": "Caching layout-derived or other state across calls is forbidden.", "level": "suspicious"},
+    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation suggests a split-key scheme, which is a different structure.", "level": "suspicious"},
+    {"pattern": "\\.transpose\\(\\s*[0-9]|\\.permute\\(|\\.contiguous\\(\\)\\s*\\.(view|reshape)", "message": "Host-side transpose/copy of Q/K/V is forbidden; in-kernel tile transposes are fine.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "nki\\.isa\\.nc_matmul"], "message": "No matrix-multiply primitive found for Q.K^T / P.V.", "level": "suspicious"},
+    {"any_of": ["tl\\.exp", "ct\\.exp", "T\\.exp", "nl\\.exp", "exp2", "\\bexp\\("], "message": "No exponential found; online softmax requires exp.", "level": "suspicious"},
+    {"any_of": ["tl\\.max\\(", "ct\\.max\\(", "T\\.reduce_max", "reduce_max", "nl\\.max\\(", "nisa\\.tensor_reduce"], "message": "No row-max reduction found; online softmax requires a running maximum.", "level": "suspicious"},
+    {"any_of": ["-inf", "float\\(\\\"-inf\\\"\\)", "float\\('-inf'\\)", "-float\\(", "NEG_INF", "neg_inf"], "message": "No -inf masking value found; causal and bound masking are required.", "level": "suspicious"},
+    {"any_of": ["csr_row|row_indices|row_ptr|layout_csr"], "message": "No CSR row-pointer access found; the key blocks must be taken from the layout.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.empty_like",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (B, H, M, D) tensor must be freshly allocated inside run() and must not share storage with Q, K, V or the layout arrays"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: shape asserts, the output allocation, optional no-op contiguity guards, host descriptor/metadata construction and the single attention kernel. The CSR layout is consumed raw by the kernel; no host decoding, dense mask, copy or cross-call cache."},
+  "tolerance_source": "config.verify"
+}

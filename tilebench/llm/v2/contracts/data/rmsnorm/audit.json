@@ -1,0 +1,101 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "rmsnorm",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/rmsnorm/impl_triton.py",
+      "functions": [
+        {"name": "rmsnorm_kernel", "lines": [8, 36]},
+        {"name": "_rmsnorm_kernel_autotuned", "lines": [39, 49]},
+        {"name": "run", "lines": [52, 86]},
+        {"name": "get_last_config", "lines": [89, 97]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/rmsnorm/impl_cutile.py",
+      "functions": [
+        {"name": "rmsnorm_kernel", "lines": [21, 54]},
+        {"name": "run", "lines": [60, 100]},
+        {"name": "get_last_config", "lines": [103, 104]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/rmsnorm/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [5, 6]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = x * rsqrt(sum(x^2)/K + eps) * w per row of the (batch*M, K) view, eps default 1e-6 (impl_triton.py 28, 36, 55).",
+      "cutile": "y = x * rsqrt(sum(x^2)/N + eps) * w per row with N = K passed as ConstInt, eps default 1e-6 (impl_cutile.py 37, 53, 63, 98).",
+      "note": "Both realise F.rms_norm(x, x.shape[-1:], weight=rms_w, eps=eps) (impl_torch.py 6); the engine passes only (x, rms_w) so eps is always 1e-6 on both sides."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, grid = batch*M programs, pass A sum of squares then pass B normalise-and-scale within the same program (impl_triton.py 22-36, 67).",
+      "cutile": "One kernel, grid = (batch*M, 1, 1), pass 1 sum of squares then pass 2 normalise-and-scale within the same CTA (impl_cutile.py 27-54, 77).",
+      "note": "Identical single-launch two-pass structure, one program per row, chunked loop over K on both sides."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "rstd (line 28) is a program-private scalar consumed by the second loop (31-36); rows independent.",
+      "cutile": "rstd (line 37) is a CTA-private scalar consumed by the second loop (40-54); rows independent.",
+      "note": "Per-row statistic before normalisation, no global intermediate, on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Lane-wise fp32 accumulation over chunks (var += x*x, line 27) then one tl.sum over the lanes (line 28); masked lanes add 0.0 (line 26).",
+      "cutile": "Lane-wise fp32 accumulation over tiles (_rms + xj*xj, line 35) then one ct.sum over the lanes (line 37); ZERO padding (line 32).",
+      "note": "Same chunk-sequential-then-tree sum structure; intra-tile order left to the compiler on both sides; divisor is the true K on both."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Explicit .to(tl.float32) on every load (26, 34, 35), fp32 var/rstd/multiply, implicit downcast at tl.store (36).",
+      "cutile": "Explicit ct.astype(..., ct.float32) on every load (29-34, 41-52), fp32 rstd/multiply, one ct.astype to x.dtype before the store (53).",
+      "note": "fp32 accumulation and fp32 normalise with a single final downcast on both sides; rsqrt primitive (tl.math.rsqrt vs ct.rsqrt) is a primitive choice within tolerance."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "x.reshape(batch_M, K), torch.empty_like(x), out.reshape; stride(0) passed (impl_triton.py 58-65, 72).",
+      "cutile": "x.contiguous().reshape(batch_M, K), torch.empty_like(x), out.reshape, rms_w.contiguous() (impl_cutile.py 67-74); contiguous() is a no-op on the generator inputs.",
+      "note": "Views plus one output allocation only, all inside run(); no cast, copy, repack or cross-call cache on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None in global memory; var vector and rstd live in registers (22, 28).",
+      "cutile": "None in global memory; _rms tile and rstd live on chip (27, 37).",
+      "note": "No scratch buffers on either side."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x and rms_w read-only; fresh out each call (64).",
+      "cutile": "x and rms_w read-only; fresh out each call (72); tuning launches overwrite out_2d (85), which the final launch rewrites.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches; allow_tma=False/latency=1 load hints are fixed mapping annotations (31, 43, 49, 54).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 3",
+    "flops_expr": "4 * n",
+    "consistent": "true",
+    "note": "n is engine-provided: infer_problem_size('rmsnorm') returns batch*M*K (tilebench/data/tensors.py 657-662, used via core/metrics.py 61), i.e. the element count. Both timed run() bodies perform only views and one empty allocation besides the kernel, so there is no clone, zero-fill, scratch or cached prepack. The 3n model corresponds to x read twice (two sweeps) plus out written once; the (K,) weight, re-read per row, is uncounted."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "bytes_expr = 3n matches a two-sweep kernel that re-reads x from memory; an implementation that keeps the row on chip moves ~2n and will report above the 3n model. Decide whether the metric stays at 3n (current, matches both references) or is changed to the minimal 2n bound. Non-blocking: the contract permits either mapping."
+  ],
+  "contract_sha256": null
+}

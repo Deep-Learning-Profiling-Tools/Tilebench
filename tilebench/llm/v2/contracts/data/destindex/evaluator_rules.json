@@ -1,0 +1,27 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "destindex",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "s1", "description": "Output initialisation: the output buffers contain o_nope / o_rope before the copy (device copy of o_* into the output; per-call or once-per-identity is the open review item)."},
+    {"id": "s2", "description": "Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once, written once, no atomics)."},
+    {"id": "s3", "description": "Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s2 and s3 independent, may be one or two launches; returns (out_nope, out_rope)."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "\\.index_copy_?\\(", "message": "index_copy replaces the whole scatter-copy", "level": "confirmed"},
+    {"pattern": "(o_nope|o_rope)\\.(index_copy_|copy_|scatter_|index_put_|fill_|zero_)\\(|(o_nope|o_rope)\\s*\\[[^\\]]*\\]\\s*=[^=]", "message": "writes into o_nope / o_rope mutate an input", "level": "confirmed"},
+    {"pattern": "\\.index_put_?\\(|torch\\.index_put|\\.scatter_\\(|torch\\.scatter\\(|torch\\.index_select|\\[\\s*dest_loc\\s*\\]\\s*=[^=]", "message": "host-side indexed copy replaces the scatter kernel", "level": "suspicious"},
+    {"pattern": "torch\\.(argsort|sort)\\(|dest_loc\\.(argsort|sort)\\(|torch\\.empty\\([^)]*dest_loc", "message": "preprocessing of dest_loc (sort / inverse permutation) is forbidden", "level": "suspicious"},
+    {"pattern": "WeakTensorKeyDictionary|_out_cache|_cache\\b|lru_cache|data_ptr\\(\\)", "message": "persistent output buffers keyed by input identity: open review item (policy b)", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["dest_loc", "dest"], "message": "destination index lookup", "level": "suspicious"},
+    {"any_of": ["tl\\.store", "ct\\.scatter", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\.dma_copy", "store"], "message": "store/scatter at the computed destination", "level": "suspicious"},
+    {"any_of": ["clone\\(", "copy_\\(", "empty_like", "torch\\.empty"], "message": "output buffer initialised from o_*", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.clone", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tuple", "count": 2, "aliasing": "none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope; whether the same buffers may be returned across calls (rewritten in place) is the open review item"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The output initialisation from o_* (read + write of both outputs) is inside run(); whether it is paid on every call or once per input identity is the open review item, and bytes_expr counts only the steady-state kv read + out write. Flattening views are metadata only."},
+  "tolerance_source": "config.verify"
+}

@@ -1,0 +1,104 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "flash_attention",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/flash_attention/impl_triton.py",
+      "functions": [
+        {"name": "_tma_set_block_size_hook", "lines": [9, 16]},
+        {"name": "fwd_kernel", "lines": [19, 73]},
+        {"name": "_fwd_kernel_autotuned", "lines": [76, 91]},
+        {"name": "run", "lines": [94, 141]},
+        {"name": "get_last_config", "lines": [144, 153]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/flash_attention/impl_cutile.py",
+      "functions": [
+        {"name": "fwd_kernel", "lines": [24, 127]},
+        {"name": "_tuner", "lines": [130, 130]},
+        {"name": "run", "lines": [133, 180]},
+        {"name": "run.build_args", "lines": [144, 156]},
+        {"name": "get_last_config", "lines": [182, 183]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/flash_attention/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Causal SDPA forward, scale 1/sqrt(head_dim) (impl_triton.py L103), causal mask key <= query (L57), output o with q's shape/dtype (L105); IS_CAUSAL constexpr from the causal argument (L121, L136).",
+      "cutile": "Same: qk_scale = 1/sqrt(D_k) (impl_cutile.py L138), causal mask offs_m >= offs_n (L98), Out = empty_like(q) (L141); CAUSAL ConstBool from the argument (L154).",
+      "note": "Both match impl_torch.py L5 (scaled_dot_product_attention with is_causal); config fixes causal = true, fp16, head_dim 128; no GQA (query group size 1 on the cuTile side, L139), no dropout, no mask tensor, no logsumexp output."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Single fused kernel, grid (ceil(S/BLOCK_M), B*H): load Q once (L44-45); loop over key tiles up to hi = (start_m+1)*BLOCK_M when causal (L47-48); per tile K^T and V loads (L51-53), QK dot (L58), online softmax update (L60-67); final normalisation and store (L69-73).",
+      "cutile": "Single fused kernel, grid (ceil(S/TILE_M), B*H): Q once (L60-62); causal trip count Tc = cdiv(min(m_end, k_seqlen), TILE_N) (L65-75); per tile K^T and V loads (L80-85, L116-119), QK mma (L86-87), online update (L103-113, L120-122); final division and store (L125-127).",
+      "note": "Same one-launch online-softmax structure; both skip key tiles strictly above the diagonal via the loop bound."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Sequential dependency along the key-tile loop through (max, denom, out_buffer) (L60-67); no cross-program dependency.",
+      "cutile": "Sequential dependency along the j loop through (m_i, l_i, acc) (L103-122); no cross-program dependency.",
+      "note": "Identical recurrence structure."
+    },
+    "reduction_scan_sort": {
+      "status": "mapping-only",
+      "triton": "Key tiles visited in ascending order; causal -inf mask applied on EVERY visited tile (L56-57); intra-tile tl.max/tl.sum over axis 1 (L60, L66); final single division (L69).",
+      "cutile": "Key tiles in ascending order; the -inf mask is applied only for tiles j >= mask_start (those intersecting the diagonal) and, when S is not a multiple of the key tile, for the overhanging tile (L90-100); intra-tile ct.max/ct.sum (L103, L108); final single division (L125).",
+      "note": "Same online reduction order (ascending key tiles, running max with rescale, one final normalisation); masking every tile versus only diagonal/overhang tiles is a mapping choice with identical results. The Triton side has no explicit key-bound mask, relying on S being a multiple of the key tile (config: multiples of 1024); the contract requires out-of-range keys to be excluded whenever the tile overhangs."
+    },
+    "precision": {
+      "status": "mapping-only",
+      "triton": "qk_scale = sm_scale * log2(e) folded into Q: Q scaled in fp32 then cast to fp16 BEFORE the QK dot (L41, L44-45); QK accumulated fp32 (L55, L58); exp2 for alpha and P (L61-62); P cast to fp16 before the PV dot, PV accumulated fp32 (L65); exact division (L69); fp16 store (L72).",
+      "cutile": "qk_scale * (1/ln 2) applied to the fp32 SCORES after the QK mma (L43, L103-104); QK accumulated fp32 (L86-87); exp2 with flush_to_zero (L107, L109); P cast to Q.dtype before the PV mma, fp32 accumulation (L120-121); final division with approximate rounding and flush_to_zero (L125); cast to Out.dtype (L126).",
+      "note": "Both: fp16 operands into both tile matmuls, fp32 accumulators for scores, statistics and output, base-2 online softmax, P rounded to fp16 before PV, single final normalisation. They differ in WHERE the scalar scale is applied (query operand with an extra fp16 rounding, versus fp32 scores) and in exact versus approximate final division; both are within the configured verify tolerance and neither changes the accumulation path, so the contract permits either."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "q/k/v .contiguous() (no-ops for generator inputs, L97-99); sm_scale host scalar (L103); output allocation (L105); host-side TMA TensorDescriptor construction (L110-114 autotune path, L126-129 default), metadata only.",
+      "cutile": "Host scalars qk_scale, input_pos, query_group_size, EVEN_K (L137-139, L155); output allocation (L141); no contiguous() calls.",
+      "note": "No data movement, cast or cached operand on either side; descriptor construction versus plain tensor arguments is a primitive choice."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None; max/denom/out_buffer are register-resident (L38-40).",
+      "cutile": "None; m_i/l_i/acc are tile-resident (L55-57).",
+      "note": "No global scratch, no S x S score matrix, no logsumexp side output."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L105).",
+      "cutile": "No input written; fresh output per call (L141).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches; the host-side TensorDescriptor path requires TMA-capable hardware with no fallback (L4, L111-114, L126-129).",
+      "cutile": "No architecture branches.",
+      "note": "The TMA requirement is a legality/mapping property of one implementation, not an algorithmic branch."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "4 * batch_size * n_heads * seq_len * head_dim * dtype_size",
+    "flops_expr": "4 * batch_size * n_heads * seq_len * seq_len * head_dim",
+    "consistent": "unclear",
+    "note": "bytes_expr counts one read each of q, k, v and one write of the output, the compulsory traffic of the single kernel on both sides (repeated K/V tile reads across query blocks are served from cache and not counted; no scratch, no preprocessing, nothing prepacked). flops_expr is the DENSE count 4*S*S*D per head while config.yaml fixes causal: true and both kernels visit only key tiles up to the diagonal (impl_triton.py L47, impl_cutile.py L72), executing roughly half of that work; derived TFLOPS and any compute-bound SOL estimate are therefore dense-equivalent, not executed, figures. This is a metric convention rather than a timed-boundary mismatch."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "(non-blocking, metric) flops_expr counts dense attention while causal is fixed to true and both implementations skip the fully masked key tiles (about half the work): decide whether to keep the dense-equivalent convention or switch flops_expr to the causal count (seq_len*(seq_len+1)/2 style) so that TFLOPS and compute-bound SOL figures reflect executed work."
+  ],
+  "contract_sha256": null
+}

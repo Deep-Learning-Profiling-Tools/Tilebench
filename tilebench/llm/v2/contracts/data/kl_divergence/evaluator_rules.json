@@ -1,0 +1,25 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "kl_divergence",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "output_alloc", "description": "Allocate the (rows,) fp32 LOSS inside run()."},
+    {"id": "row_map_reduce", "description": "Per row: fp32 term y*(guarded_log(y) - log_p) accumulated over all columns, one scalar written per row."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?kl_div\\(|F\\.kl_div\\(", "message": "library KL divergence computes the operator", "level": "confirmed"},
+    {"pattern": "torch\\.xlogy\\(", "message": "torch.xlogy computes the elementwise term in PyTorch", "level": "confirmed"},
+    {"pattern": "torch\\.log\\(|torch\\.sum\\(|\\.sum\\(\\s*(dim|-1|1)", "message": "PyTorch log or row reduction on the data path", "level": "suspicious"},
+    {"pattern": "torch\\.where\\(", "message": "PyTorch select on the data path (guard must be in the kernel)", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "a device-side row reduction", "level": "suspicious"},
+    {"any_of": ["tl\\.log", "ct\\.log", "T\\.log", "nl\\.log", "log\\("], "message": "a device-side logarithm", "level": "suspicious"},
+    {"any_of": ["tl\\.where", "ct\\.where", "T\\.if_then_else", "nl\\.where", "where\\(", ">\\s*0"], "message": "a guard for non-positive probabilities", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (rows,) fp32 tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Shape reads and the LOSS allocation are the only host work and are timed; no casts, copies or cross-call caches."},
+  "tolerance_source": "config.verify"
+}

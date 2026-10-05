@@ -1,0 +1,24 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "fused_activation",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "s1", "description": "Single element-wise pass: z = x*gate + bias and out = z*sigmoid(z) (any equivalent algebraic form) in fp32, stored into a freshly allocated fp32 output; no intermediate, one launch."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.nn\\.functional\\.silu|F\\.silu|torch\\.nn\\.SiLU|torch\\.nn\\.functional\\.swish|F\\.swish", "message": "library SiLU replaces the whole activation", "level": "confirmed"},
+    {"pattern": "torch\\.sigmoid|torch\\.special\\.expit|torch\\.nn\\.functional\\.sigmoid|F\\.sigmoid|torch\\.nn\\.Sigmoid", "message": "host-side sigmoid performs the activation", "level": "suspicious"},
+    {"pattern": "torch\\.(exp|mul|add|addcmul|multiply|div)\\(|x\\s*\\*\\s*gate\\s*\\+\\s*bias", "message": "host-side tensor arithmetic performs the fused multiply-add", "level": "suspicious"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like|cat|stack)\\(", "message": "extra buffer; only the fp32 output allocation is permitted", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["sigmoid", "exp2", "\\bexp\\(", "nl\\.exp", "T\\.exp", "nl\\.sigmoid", "nisa\\.activation"], "message": "sigmoid / exponential of z", "level": "suspicious"},
+    {"any_of": ["gate", "bias"], "message": "gate and bias consumed element-wise", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "\\.to\\(tl\\.float32\\)", "astype"], "message": "fp32 arithmetic", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated fp32 tensor of x's shape on every call"},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains the shape check, no-op .contiguous() calls, the fp32 output allocation and one launch. No casts, copies or packing of inputs; no state across calls."},
+  "tolerance_source": "config.verify"
+}

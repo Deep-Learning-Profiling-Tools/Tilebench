@@ -1,0 +1,26 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "gaussian_blur",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "s1", "description": "Per output element, fp32 accumulation of the kernel_rows*kernel_cols tap products over the zero-padded neighbourhood (cross-correlation, offsets i - kr//2, j - kc//2), read directly from the flat image inside the launch."},
+    {"id": "s2", "description": "Single rounding of the fp32 accumulator to the input dtype and store into a freshly allocated flat output; one launch, no intermediate, no host padding."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.nn\\.functional\\.conv(1|2|3)d|F\\.conv(1|2|3)d|torch\\.conv(1|2|3)d|torch\\.nn\\.Conv(1|2|3)d|torch\\.fft|scipy\\.|cv2\\.", "message": "library convolution / FFT filtering replaces the whole computation", "level": "confirmed"},
+    {"pattern": "torch\\.nn\\.functional\\.(unfold|fold|pad)|F\\.(unfold|fold|pad)|torch\\.nn\\.Unfold|im2col|torch\\.(matmul|mm|bmm|einsum)\\(", "message": "im2col/unfold + matmul or host-side padding is a different algorithm family", "level": "suspicious"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty_like|cat|stack|flip|roll)\\(|\\.flip\\(", "message": "extra buffer, host padding or kernel flip", "level": "suspicious"},
+    {"pattern": "kernel\\.(view|reshape|to|float|half|repeat|expand)\\(|input\\.(to|float|half|clone)\\(", "message": "host-side transformation of the kernel or image beyond a metadata view", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["float32", "fp32", "tl\\.zeros\\(", "ct\\.zeros\\(", "astype", "T\\.alloc_fragment", "nl\\.zeros"], "message": "fp32 accumulator over taps", "level": "suspicious"},
+    {"any_of": ["other=0", "padding_value=0", "PaddingMode\\.ZERO", "mask", "where"], "message": "zero padding of out-of-image taps", "level": "suspicious"},
+    {"any_of": ["kernel_rows", "kernel_cols", "// 2", "//2"], "message": "tap offsets centred with kernel_rows//2, kernel_cols//2", "level": "suspicious"},
+    {"any_of": ["static_range", "range\\(kernel", "range\\(0, kernel", "for kr", "for i in"], "message": "loop over all taps", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated flat (input_rows*input_cols,) tensor in input's dtype on every call"},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains the element-count guard, the output allocation, metadata-only 2-D views and one launch. No host padding, im2col, casts or copies; no state across calls. Per-tap product precision for fp16 is the open review item."},
+  "tolerance_source": "config.verify"
+}

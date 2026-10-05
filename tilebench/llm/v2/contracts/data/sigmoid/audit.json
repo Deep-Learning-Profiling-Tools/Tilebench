@@ -1,0 +1,99 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "sigmoid",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 1,
+  "status": "draft",
+  "approved_by": null,
+  "approved_on": null,
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/sigmoid/impl_triton.py",
+      "functions": [
+        {"name": "sigmoid_kernel", "lines": [8, 17]},
+        {"name": "_sigmoid_kernel_autotuned", "lines": [20, 30]},
+        {"name": "run", "lines": [33, 50]},
+        {"name": "get_last_config", "lines": [53, 61]}
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/sigmoid/impl_cutile.py",
+      "functions": [
+        {"name": "sigmoid_kernel", "lines": [19, 28]},
+        {"name": "run", "lines": [34, 60]},
+        {"name": "get_last_config", "lines": [63, 64]}
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/sigmoid/impl_torch.py",
+      "functions": [
+        {"name": "run", "lines": [4, 5]}
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = tl.sigmoid(x) in fp32 over N masked elements, stored into a fresh empty_like(X) (impl_triton.py 12-17, 35).",
+      "cutile": "y = 1/(1 + ct.exp(-x)) in fp32 over ceil(N/tile) tiles, stored into a fresh empty_like(X) (impl_cutile.py 22-28, 36).",
+      "note": "Both realise torch.sigmoid(X) (impl_torch.py 5); the sigmoid builtin versus the explicit exp formula is a primitive choice within tolerance."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch, grid = ceil(N/block) (38, 42).",
+      "cutile": "One kernel, one launch, grid = (ceil(N/tile), 1, 1) (44, 56).",
+      "note": "Identical single-stage elementwise map."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Blocks independent (10-17).",
+      "cutile": "Tiles independent (21-28).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (8-17).",
+      "cutile": "None (19-28).",
+      "note": "Purely elementwise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Explicit .to(tl.float32) before tl.sigmoid (15-16); implicit downcast at tl.store (17).",
+      "cutile": "Explicit ct.astype(ct.float32) (23), fp32 exp/add/divide (25), one ct.astype to the output dtype (27).",
+      "note": "fp32 evaluation with a single downcast on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "torch.empty_like(X) only (35); N trusted for grid and mask (38, 42, 44).",
+      "cutile": "torch.empty_like(X) only (36); N trusted for the grid (44, 56).",
+      "note": "Only the output allocation inside run() on both sides; no copy, cast or cached state."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None (whole file).",
+      "cutile": "None (whole file).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "X read-only; fresh output each call (35).",
+      "cutile": "X read-only; fresh output each call (36); tuning launches overwrite output (45), rewritten by the final launch.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "n is the case parameter and equals X.numel() (generator tensors.py 111-113 returns (x, n)). Both timed run() bodies allocate the output and launch one kernel that reads n elements once and writes n once, exactly what bytes_expr counts (config.yaml 15). flops_expr is the nominal one-operation-per-element convention."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": null
+}

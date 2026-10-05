@@ -1,0 +1,25 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "interleave",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "output_alloc", "description": "Allocate the (2N,) output of A's dtype inside run()."},
+    {"id": "interleave_copy", "description": "Single device pass reading A and B once each and writing OUT once with OUT[2i]=A[i], OUT[2i+1]=B[i]."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "\\[\\s*[01]\\s*::\\s*2\\s*\\]\\s*=", "message": "strided slice assignment performs the interleave in PyTorch", "level": "confirmed"},
+    {"pattern": "torch\\.repeat_interleave\\(", "message": "torch.repeat_interleave computes the interleave", "level": "confirmed"},
+    {"pattern": "torch\\.(stack|cat)\\(", "message": "torch.stack/torch.cat on the inputs computes the interleave in PyTorch", "level": "suspicious"},
+    {"pattern": "\\.(flatten|view|reshape)\\(\\s*-?1\\s*\\)", "message": "flatten/view after a PyTorch stack would be a torch-side interleave", "level": "suspicious"},
+    {"pattern": "\\.copy_\\(|torch\\.clone\\(|\\.clone\\(\\)", "message": "PyTorch copy of an input or output", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "T\\.copy", "nl\\.store", "nisa\\."], "message": "a device-side store of the interleaved tile", "level": "suspicious"},
+    {"any_of": ["@triton\\.jit", "@ct\\.kernel", "@tilelang\\.jit", "T\\.prim_func", "nki\\.jit"], "message": "a kernel definition", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (2N,) tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The only host work is the output allocation; it is inside run() and timed. No prepacked inputs, no cross-call cache."},
+  "tolerance_source": "config.verify"
+}

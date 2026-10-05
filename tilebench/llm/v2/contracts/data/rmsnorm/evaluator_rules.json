@@ -1,0 +1,39 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "rmsnorm",
+  "contract_revision": 1,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh output of x's shape and dtype inside run(); never write into x."},
+    {"id": "row_sum_squares", "description": "Per row, an fp32 sum of squares over the last dimension K (chunked loop or whole-row tile), divided by the true K, plus eps, then reciprocal square root, held privately by the program that owns the row."},
+    {"id": "normalise_scale", "description": "Per element, x * rstd * w evaluated in fp32 with one downcast to the output dtype at the store, in the same launch as the statistic."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.nn\\.functional\\.rms_norm\\(|F\\.rms_norm\\(|torch\\.rms_norm\\(|nn\\.RMSNorm\\(", "message": "The whole operator is performed by a PyTorch normalisation routine.", "level": "confirmed"},
+    {"pattern": "torch\\.nn\\.functional\\.layer_norm\\(|F\\.layer_norm\\(|torch\\.layer_norm\\(|nn\\.LayerNorm\\(", "message": "A library normalisation routine replaces the kernel.", "level": "confirmed"},
+    {"pattern": "torch\\.(rsqrt|mean|sum|square|var|norm)\\(", "message": "Host-side PyTorch reduction or rsqrt computes the row statistic outside the kernel.", "level": "suspicious"},
+    {"pattern": "\\.(pow|square|rsqrt|mean|var)\\(\\s*(2\\s*)?\\)|\\.pow\\(\\s*2\\s*\\)|\\.mean\\(\\s*-?1|\\.sum\\(\\s*-?1|\\.mean\\(\\s*dim|\\.sum\\(\\s*dim", "message": "Tensor-method statistics on the host (pow/mean/sum/rsqrt over the last dim) replace the in-kernel reduction.", "level": "suspicious"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b", "message": "Downcast before the store: the sum of squares and the normalise multiply must stay in fp32 until the single final cast.", "level": "suspicious"},
+    {"pattern": "atomic_add|atomic_max|atomic", "message": "Atomics suggest a cross-program row reduction, which the contract forbids.", "level": "suspicious"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\.|x\\[.*\\]\\s*=|x\\.copy_\\(|x\\.mul_\\(", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce"], "message": "No in-kernel reduction primitive found for the row sum of squares.", "level": "suspicious"},
+    {"any_of": ["rsqrt", "sqrt"], "message": "No reciprocal-square-root evidence for rstd.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 upcast evidence; the statistic and multiply must be fp32.", "level": "suspicious"},
+    {"any_of": ["eps"], "message": "eps does not appear; it must be added inside the square root.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty_like",
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.reshape",
+    "Tensor.view",
+    "Tensor.contiguous",
+    "Tensor.stride",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (batch, M, K) tensor must be freshly allocated inside run() and must not share storage with x or rms_w"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the (batch*M, K) views, the output allocation and the single two-pass kernel. No cached state across calls, no untimed repack or cast of x or rms_w, no global scratch for the row statistic. eps is always the default 1e-6 in the benchmark."},
+  "tolerance_source": "config.verify"
+}
