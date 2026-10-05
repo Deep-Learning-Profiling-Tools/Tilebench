@@ -1,8 +1,8 @@
 # Diagnose the Selected Implementation
 
-Adapted from the generalized v7 analysis skill. Keep its code-to-counter reasoning,
-counterevidence and auditability, without requiring another backend or a custom
-agent runtime. No expected operator-specific diagnosis is encoded here.
+Explain performance by connecting implementation structure to measured work,
+resource constraints and dependencies. Test competing explanations and preserve
+uncertainty. Another backend's profile is not required.
 
 ## Establish What Runs
 

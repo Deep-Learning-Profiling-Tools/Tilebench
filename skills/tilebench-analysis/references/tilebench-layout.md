@@ -1,8 +1,8 @@
 # Repository and Artifact Map
 
 Use this map to locate one case, not to read the whole repository. It describes
-TileBench main at `ea04fb36` (2026-10-05); verify paths in the assigned checkout.
-Older study branches have a different layout. Do not switch branches or borrow
+TileBench's package-based layout; verify paths in the assigned checkout.
+Other branches may have a different layout. Do not switch branches or borrow
 another worktree's data silently to make this map fit.
 
 ## Resolve Hardware Before Choosing Tools
@@ -19,7 +19,7 @@ another worktree's data silently to make this map fit.
    fit and the task names none, ask which experiment to investigate.
 4. Route NVIDIA `.ncu-rep` files to the NCU API and matching B200/GH200 reference.
    Route MI300X directories to ROCm artifact discovery, not NCU. AMD navigation is
-   supported here; AMD diagnosis has not been implemented or tested.
+   supported here; AMD diagnosis is not provided by this skill.
 
 Do not run device detection to identify an old capture: the agent's host may have
 no GPU or a different GPU. `nvidia-smi`/runtime device checks are relevant if new
@@ -88,7 +88,7 @@ revision, `ncu_driver.py` supports TileLang selection but `ncu_one.py` offers on
 Triton/cuTile. Inspect the selected tool's source/options before recommending it.
 Never bypass the existing harness with an improvised benchmark during analysis.
 
-Historical study worktrees may use `tilebench_ops/`, `tilebench_run/`,
+Other checkouts may use `tilebench_ops/`, `tilebench_run/`,
 `results/csv/`, and `profile/<op>/<run>/manifest.json` plus `harness/`/`reports/`.
 Use the manifest and workspace instructions there. Do not embed private `/scratch`
 paths, a particular Python executable, or that study's package pins into the

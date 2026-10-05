@@ -39,11 +39,11 @@ Report missing evidence and the smallest useful next measurement instead.
 
 For NVIDIA artifacts, read [saved NCU analysis](references/nvidia-ncu.md), then
 the applicable [B200](references/b200.md) or [GH200](references/gh200.md) notes.
-AMD and Trainium evidence can be located with the repository map, but diagnosis
-on those platforms is outside this version's tested scope. Do not interpret their
+AMD and Trainium evidence can be located with the repository map, but this skill
+does not provide diagnosis for those platforms. Do not interpret their
 artifacts with NCU counter definitions.
 
-For a performance explanation, read [the v7-derived diagnosis workflow](references/diagnosis.md).
+For a performance explanation, read [the diagnosis workflow](references/diagnosis.md).
 Start from the selected implementation's useful work, ownership, staging and
 operation boundaries. Inventory the diagnostic questions, then deepen only paths
 that could explain the observed behavior. Navigation-only requests need no full
@@ -71,7 +71,3 @@ Cite code paths/lines and report/action/metric identities. Keep benchmark latenc
 separate from NCU duration. Save the extraction commands and exact records used
 alongside the analysis in the task's output directory. If comparison is requested,
 match hardware, useful work, and capture methodology; explicitly name its scope.
-
-This combines TileBench navigation/tooling with v7-derived analysis guidance, not
-a validated diagnostic system. B200 is
-the initial evaluation target; GH200 notes are an untested adaptation.

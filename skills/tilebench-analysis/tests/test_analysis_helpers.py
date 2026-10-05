@@ -1,4 +1,4 @@
-"""Portable arithmetic and disassembly regressions; no GPU or NCU installation needed."""
+"""Arithmetic and disassembly regressions; no GPU or NCU installation needed."""
 
 import importlib.util
 import tempfile
