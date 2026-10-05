@@ -1,0 +1,38 @@
+{
+  "device": "B200",
+  "snapshot": "2026-10-05",
+  "kind": "device_context",
+  "arch": "blackwell",
+  "sources": [
+    {"id": "S1", "description": "Runtime capture on host dgx003 (torch.cuda.get_device_properties + nvidia-smi; driver, torch, triton, cuda-tile, tilelang versions)", "path_or_url": "runtime capture dgx003 (values recorded in the task brief; re-capture with skills/device/CAPTURE_CHECKLIST.md)", "accessed": "2026-10-05"},
+    {"id": "S2", "description": "Repo peak-performance table for B200 (measured peak_bw_GBs, datasheet dense TFLOPS, source field)", "path_or_url": "tilebench/data/peak_performance/B200.json @ ea04fb36 (worktree /projects/kzhou6/bcui2/research/tilebench/llm_wt)", "accessed": "2026-10-05"},
+    {"id": "S5", "description": "Framework architecture helpers (detect_arch, supports_tma, supports_tmem, last_level_cache_bytes)", "path_or_url": "tilebench/hardware.py @ ea04fb36", "accessed": "2026-10-05"},
+    {"id": "S6-1", "description": "CUDA C Programming Guide v12.9.0 archived single page, table 'Technical Specifications per Compute Capability', column 10.x", "path_or_url": "https://docs.nvidia.com/cuda/archive/12.9.0/cuda-c-programming-guide/index.html#features-and-technical-specifications", "accessed": "2026-10-05"},
+    {"id": "S6-2", "description": "NVIDIA Blackwell Tuning Guide (smem 228 KB/SM, 227 KB/block, 256 KB unified L1, 64K regs/SM, 255 regs/thread, 32 blocks/SM, 64 warps/SM, cluster 8, DSMEM)", "path_or_url": "https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html", "accessed": "2026-10-05"},
+    {"id": "S6-3", "description": "NVIDIA PTX ISA: Tensor Memory (512 columns x 128 lanes x 32-bit per CTA on sm_100a/sm_100f), tcgen05.mma kinds, TMEM allocation rules, cp.async.bulk.tensor target ISA notes", "path_or_url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html", "accessed": "2026-10-05"},
+    {"id": "S6-4", "description": "NVIDIA HGX platform page, HGX B200 column (8-GPU totals) with footnotes 1=sparse, 2=dense", "path_or_url": "https://www.nvidia.com/en-us/data-center/hgx/", "accessed": "2026-10-05"},
+    {"id": "S6-5", "description": "NVIDIA DGX B200 page (1,440 GB total HBM3e, 64 TB/s total, 8 GPUs)", "path_or_url": "https://www.nvidia.com/en-us/data-center/dgx-b200/", "accessed": "2026-10-05"},
+    {"id": "S6-6", "description": "NVIDIA Blackwell architecture page (two dies, 10 TB/s C2C, 208 B transistors, FP4, 2nd-gen Transformer Engine, decompression engine)", "path_or_url": "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/", "accessed": "2026-10-05"}
+  ],
+  "failed_fetches": [
+    {"url": "https://docs.nvidia.com/cuda/cuda-c-programming-guide/05-appendices/compute-capabilities.html", "result": "HTTP 404 (2026-10-05); archived v12.9.0 page used instead"},
+    {"url": "https://docs.nvidia.com/data-center-gpu/line-card.pdf", "result": "fetched, but contains no per-GPU memory or bandwidth figures"}
+  ],
+  "unknown_fields": [
+    "L2 partitioning across the two dies",
+    "verbatim kind::f16 operand table of tcgen05.mma (FP16/BF16 operands inferred from vendor throughput listing only)",
+    "non-tensor async bulk copy capability (cp.async / cp.async.bulk) - not fetched",
+    "base/boost clock schedule under load",
+    "Python version",
+    "apache-tvm-ffi version",
+    "nvidia-cuda-tileiras / nvcc / nvvm versions",
+    "OS and kernel version",
+    "Proton backend"
+  ],
+  "vendor_inconsistencies": [
+    "HGX page 2026-10-05 lists FP8 72 PFLOPS, FP16/BF16 36 PFLOPS, TF32 18 PFLOPS for 8 GPUs under footnote 'Dense specification' (= 9 / 4.5 / 2.25 PFLOPS per GPU), which is 2x the dense per-GPU values recorded in tilebench/data/peak_performance/B200.json (4500 / 2250 / 1100 TFLOPS, quoted from the HGX B200 datasheet). FP64 (37 TFLOPS) and FP4 (9 PFLOPS dense) agree."
+  ],
+  "permission": "public",
+  "status": "draft",
+  "verified_on_device": true
+}
