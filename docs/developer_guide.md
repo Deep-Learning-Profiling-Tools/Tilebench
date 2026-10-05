@@ -182,8 +182,8 @@ A typical `config.yaml` contains benchmark controls, a case grid, and metric for
 
 ```yaml
 benchmark:
-  warmup: 20
-  repeat: 100
+  warmup: 1
+  repeat: 3
   use_cuda_graph: true
   flush_l2: true
   autotune: false
@@ -410,14 +410,16 @@ TileBench++ runs the same 45 operators, case grids and autotune candidate lists 
 
 ### Hardware coverage
 
+The table records how the committed results were produced. The protocol of the current source, which future runs use, is described in [Common timing and autotune protocol](#common-timing-and-autotune-protocol).
+
 | | B200 | GH200 | MI300X |
 |---|---|---|---|
 | Device, `detect_arch()` | NVIDIA B200, sm_100, `blackwell` | NVIDIA GH200 480GB, sm_90, `hopper` | AMD Instinct MI300X, gfx942, `cdna3` |
 | Backends | PyTorch, Triton, cuTile, TileLang | PyTorch, Triton, cuTile, TileLang | PyTorch, Triton. cuTile and TileLang are not run |
 | Summary CSVs | 45 default + 45 autotune, 2200 cases per mode | 45 + 45, 2200 cases per mode | 45 + 45, 2180 cases per mode: the 20 `matmul_fp32_fp16_fp8` / `fp8_e4m3fn` cases are unsupported, because the PyTorch ROCm reference rejects e4m3fn |
 | Timing | Proton, CUDA graph | Proton, CUDA graph | Proton/roctracer, eager (graph requested, `effective_use_cuda_graph = false`) |
-| Eviction before each launch | 253 MB (2x 126.5 MB L2) in the current timer; not recorded for the committed CSVs | 120 MiB (2x 60 MiB L2) | 512 MiB (2x 256 MiB Infinity Cache) |
-| Final measurement (warmup / repeat) | not recorded; `config.yaml` has 20 / 100 | 1 / 3 (`--warmup 1 --repeat 3`) | 20 / 100 (`config.yaml`) |
+| Eviction before each launch | PyTorch/Triton/cuTile columns: a fixed 64 MB buffer (the timer before #257) for 41 operators; 2x L2, about 253 MB, for `cross_entropy`, `flash_decode`, `moe_topk_gating` (re-measured in #257) and `linear_self_attention` (#258). TileLang columns depend on the run date: 64 MB for 51 of the 90 files and 2x L2 for 6, judged from the timer in the commit that first holds the values; not recoverable for the other 33, which first appear in a squash merge | 120 MiB (2x 60 MiB L2) | 512 MiB (2x 256 MiB Infinity Cache) |
+| Final measurement (warmup / repeat) | not recorded; `config.yaml` at every result commit has 20 / 100 | 1 / 3 (`--warmup 1 --repeat 3`) | 20 / 100 (`config.yaml` at 005ab63b and 4d08985a) |
 | Software | PyTorch/Triton/cuTile columns from the paper campaign (`cuda-tile` 1.3.0); TileLang 0.1.11 | torch 2.10.0+cu130, Triton 3.6.0, `cuda-tile` 1.5.0 (pip `tileiras` 13.4.92), TileLang 0.1.11 | torch 2.10.0+rocm7.1, Triton 3.6.0, ROCm 7.14.0 |
 | Benchmark source | not recorded; the CSVs predate `tilebench/provenance.py` | c882fe50 for 89 CSVs, 3c5eccbf for `batched_matmul_autotune.csv` | 005ab63b default, 4d08985a autotune |
 | Raw logs | `archive/raw-logs-2026-09-18` (frozen) | `archive/tilebenchpp-2026-10` 66046918 | `archive/tilebenchpp-2026-10` 06a8ed00 (default), 8e991537 (autotune) |
@@ -429,14 +431,17 @@ GH200 TileLang dispatch on Hopper:
 
 ### Common timing and autotune protocol
 
-- **Final measurement.** `config.yaml` sets warmup 20 / repeat 100 (iterations) for every operator; `--warmup` and `--repeat` override it. The formal campaigns did not all use the same setting: see the table above. Each run's provenance sidecar records its overrides (`run.overrides`, `host.argv`).
+- **Final measurement.**
+  - In the current source, every operator's `config.yaml` sets warmup 1 / repeat 3 (iterations). The engine falls back to the same values (`tilebench.core.timer.DEFAULT_WARMUP`, `DEFAULT_REPEAT`) when a config omits them, and `--warmup` / `--repeat` override them.
+  - The committed results predate this default. GH200 ran 1 / 3 through `--warmup 1 --repeat 3`. MI300X ran with the config values of that time, 20 / 100, and the B200 result commits carry the same config values; see the table above.
+  - Each run's provenance sidecar records its overrides (`run.overrides`, `host.argv`).
 - **Triton and TileLang autotune.** Every candidate is timed with `warmup=1, rep=3` (time budgets in ms). This covers all 103 `warmup`/`rep` settings in the operator sources. GH200 (since b7f69a24, included in c882fe50) and the MI300X autotune run (4d08985a) used this budget. The B200 autotune CSVs predate it. In the source on `main`, Triton uses its framework default (25 / 100 ms) in 27 operators, 3 / 10 in `kl_divergence` and `matmul_int8`, 5 / 20 in `softmax` and 1 / 3 in the remaining 15, and most TileLang operators use 20 / 100. This is inferred from the source, because B200 has no provenance.
 - **cuTile autotune.** `CutileAutotuner` wraps the native `ct.tune.exhaustive_search`, which exposes no warmup/rep setting.
 - **Crash isolation.**
   - Every `exhaustive_search` call passes `single_run_timeout_sec=CRASH_ISOLATION_TIMEOUT_SEC` (60 s, `tilebench/core/cutile_autotune.py`). This covers `CutileAutotuner` and the direct call in `top_k_selection`.
   - Each candidate's first warmup launch runs in a worker subprocess. A candidate that faults the device or runs longer than 60 s is recorded in `TuningResult.failures` and skipped. The remaining warmups and all timing run in the parent process, so the timing of successful candidates is unchanged.
   - It was added in d6a6510e after a GH200 fp32 candidate of `batched_matmul` (tile 128x64x64, occupancy 4) raised a sticky CUDA illegal instruction. GH200 `batched_matmul_autotune.csv` was re-run with it (3c5eccbf). The other 44 GH200 autotune CSVs ran before it, on c882fe50, and hit no device fault.
-- **Candidate lists.** They are identical on every architecture and are never filtered by shared memory, LDS or wavefront size. A candidate that fails on a device is skipped by the error handling.
+- **Candidate lists.** They are identical on every architecture and are never filtered by shared memory, LDS or wavefront size. A candidate that fails on a device is skipped by the error handling. `tests/test_measurement_protocol.py` checks the warmup/rep settings above and compares every candidate list, contents and order, with the snapshot `tests/data/autotune_candidates.json`.
 
 ### Architecture-specific legality fallbacks
 

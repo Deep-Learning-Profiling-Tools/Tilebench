@@ -5,7 +5,7 @@ import os
 import torch
 import yaml
 from tilebench.core.dtypes import resolve_dtype
-from tilebench.core.timer import report_benchmark, timing_mode
+from tilebench.core.timer import DEFAULT_REPEAT, DEFAULT_WARMUP, report_benchmark, timing_mode
 from tilebench.core.verifier import config_tolerance, verify
 from tilebench.data.tensors import expand_cases, get_generator, infer_problem_size
 from tilebench.hardware import detect_arch
@@ -126,8 +126,8 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     if benchmark_overrides:
         bench_cfg.update(benchmark_overrides)
 
-    warmup            = int(bench_cfg.get("warmup", 20))
-    repeat            = int(bench_cfg.get("repeat", 100))
+    warmup            = int(bench_cfg.get("warmup", DEFAULT_WARMUP))
+    repeat            = int(bench_cfg.get("repeat", DEFAULT_REPEAT))
     autotune          = bool(bench_cfg.get("autotune", False))
 
     verify_atol, verify_rtol = config_tolerance(config.get("verify", {}), detect_arch())

@@ -38,6 +38,12 @@ def _build_profile_base(kind: str, output_dir: str | None, label: str | None = N
     return os.path.join(base_dir, f"tilebench_proton_{kind}{suffix}")
 
 
+#: Formal measurement protocol when neither config.yaml nor the CLI sets one:
+#: warmup launches, then timed launches whose kernel time is averaged.
+DEFAULT_WARMUP = 1
+DEFAULT_REPEAT = 3
+
+
 #: Why a requested CUDA-graph measurement runs eagerly on ROCm.
 HIP_GRAPH_TIMING_NOTE = (
     "ROCm HIP Graph timing fallback: Proton/roctracer does not reliably attribute "
@@ -204,8 +210,8 @@ def report_benchmark(
     tuple_of_args: tuple[Any, ...],
     kwargs: dict[str, Any] | None = None,
     *,
-    warmup: int = 20,
-    repeat: int = 100,
+    warmup: int = DEFAULT_WARMUP,
+    repeat: int = DEFAULT_REPEAT,
     use_cuda_graph: bool = False,
     proton_scope_name: str = "launch",
     proton_context: str = "shadow",
