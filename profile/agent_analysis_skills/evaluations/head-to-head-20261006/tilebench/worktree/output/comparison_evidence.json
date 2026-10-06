@@ -1,0 +1,983 @@
+{
+  "case": {
+    "hardware": "NVIDIA B200",
+    "operator": "2d_max_pooling",
+    "dtype": "fp32",
+    "tuning_mode": "autotune",
+    "shape": {
+      "N": 4,
+      "C": 128,
+      "H": 640,
+      "W": 640,
+      "H_out": 320,
+      "W_out": 320
+    },
+    "semantics": {
+      "kernel_size": 3,
+      "stride": 2,
+      "padding": 1,
+      "out_of_bounds_value": "-inf",
+      "useful_outputs": 52428800
+    }
+  },
+  "implementations": [
+    {
+      "backend": "tilelang",
+      "benchmark": {
+        "path": "results/B200/csv/2d_max_pooling_autotune.csv",
+        "csv_line": 61,
+        "column": "tilelang_ms",
+        "value": "0.2063",
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "BLOCK_R": 1,
+        "BLOCK_C": 512,
+        "threads": 128
+      },
+      "source_path": "tilebench/benchmarks/operators/2d_max_pooling/impl_tilelang.py",
+      "profile": {
+        "path": "evidence/tilelang_fp32.ncu-rep",
+        "sha256": "bc6a95918a9fa575db0518269c3ff5373b729ed98f65bdf401598b8a83379be8",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+        "hash_matches": true
+      },
+      "action_identity": {
+        "report": "evidence/tilelang_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel_kernel"
+      },
+      "source_correspondence": "inferred",
+      "selected_configuration_correspondence": "1x512 inferred from grid and shape strides/output ownership; full source missing",
+      "provenance_limits": "No complete capture-time revision/compiler/library/cache/replay manifest; reader version is not capture version."
+    },
+    {
+      "backend": "triton",
+      "benchmark": {
+        "path": "results/B200/csv/2d_max_pooling_autotune.csv",
+        "csv_line": 61,
+        "column": "triton_ms",
+        "value": "0.2257",
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "BLOCK_R": 1,
+        "BLOCK_C": 512,
+        "num_warps": 4
+      },
+      "source_path": "tilebench/benchmarks/operators/2d_max_pooling/impl_triton.py",
+      "profile": {
+        "path": "evidence/triton_fp32.ncu-rep",
+        "sha256": "27f003e34847d42bb1a3c4c65c25f9143f7c10e14da58df9f5304de8a6bcc713",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+        "hash_matches": true
+      },
+      "action_identity": {
+        "report": "evidence/triton_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel"
+      },
+      "source_correspondence": "observed kernel AST match",
+      "selected_configuration_correspondence": "1x512 supported by grid and emitted CTA-column shift 0x9; 128 threads observed",
+      "provenance_limits": "No complete capture-time revision/compiler/library/cache/replay manifest; reader version is not capture version."
+    },
+    {
+      "backend": "cutile",
+      "benchmark": {
+        "path": "results/B200/csv/2d_max_pooling_autotune.csv",
+        "csv_line": 61,
+        "column": "cutile_ms",
+        "value": "0.2995",
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "tile_r": 4,
+        "tile_c": 128,
+        "occupancy": 8
+      },
+      "source_path": "tilebench/benchmarks/operators/2d_max_pooling/impl_cutile.py",
+      "profile": {
+        "path": "evidence/cutile_fp32.ncu-rep",
+        "sha256": "b0045afa02ae34c6dbe800217045a74e5594786d8260212e6b7f7e955e7c560f",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+        "hash_matches": true
+      },
+      "action_identity": {
+        "report": "evidence/cutile_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128"
+      },
+      "source_correspondence": "observed kernel AST match",
+      "selected_configuration_correspondence": "3/2/1/4/128 constant suffix and 512x80x3 grid match; occupancy hint 8 is recorded winner, not proven capture metadata",
+      "provenance_limits": "No complete capture-time revision/compiler/library/cache/replay manifest; reader version is not capture version."
+    }
+  ],
+  "timing": {
+    "benchmark_ratios": [
+      {
+        "name": "tilelang_ms / triton_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "triton_ms",
+        "status": "ok",
+        "numerator": 0.2063,
+        "denominator": 0.2257,
+        "ratio": 0.9140451927337173
+      },
+      {
+        "name": "tilelang_ms / cutile_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "cutile_ms",
+        "status": "ok",
+        "numerator": 0.2063,
+        "denominator": 0.2995,
+        "ratio": 0.68881469115192
+      }
+    ],
+    "profiler_durations": [
+      {
+        "backend": "tilelang",
+        "report": "evidence/tilelang_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel_kernel",
+        "metric": "gpu__time_duration.sum",
+        "value": 211712.0,
+        "unit": "ns"
+      },
+      {
+        "backend": "triton",
+        "report": "evidence/triton_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel",
+        "metric": "gpu__time_duration.sum",
+        "value": 227520.0,
+        "unit": "ns"
+      },
+      {
+        "backend": "cutile",
+        "report": "evidence/cutile_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+        "metric": "gpu__time_duration.sum",
+        "value": 306432.0,
+        "unit": "ns"
+      }
+    ],
+    "profiler_ratios": {
+      "tilelang_over_triton": 0.9305203938115331,
+      "tilelang_over_cutile": 0.6908939014202172
+    }
+  },
+  "mechanisms": [
+    {
+      "claim": "Triton performs more address/bounds and output-layout work than TileLang; net performance difference remains parity-scale.",
+      "status": "inferred",
+      "code_difference": [
+        "impl_triton.py:9 runtime shape arguments and :39 masked loads",
+        "impl_tilelang.py:45 specialized unrolled fragment",
+        "Saved Triton STSM/BAR/LDS.128/STG.E.128 versus TileLang scalar STG.E"
+      ],
+      "expected_consequences": "More integer/predicate instructions and shared conversion, but fewer global-store instructions; similar input traffic.",
+      "observations": [
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "dram__bytes_read.sum",
+          "value": 839020032.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "dram__bytes_write.sum",
+          "value": 251604480.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__inst_executed.sum",
+          "value": 62259200.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__inst_executed_op_shared_stsm.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__issue_active.sum.pct_of_peak_sustained_active",
+          "value": 26.441655957290322,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__sass_inst_executed_op_global_st.sum",
+          "value": 1638400.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__sass_inst_executed_op_shared_ld.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__warps_eligible.avg.per_cycle_active",
+          "value": 0.6159580850283696,
+          "unit": "warp"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "dram__bytes_read.sum",
+          "value": 839145472.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "dram__bytes_write.sum",
+          "value": 251399680.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__inst_executed.sum",
+          "value": 160399360.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__inst_executed_op_shared_stsm.sum",
+          "value": 655360.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__issue_active.sum.pct_of_peak_sustained_active",
+          "value": 64.27515724364858,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__sass_inst_executed_op_global_st.sum",
+          "value": 491520.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__sass_inst_executed_op_shared_ld.sum",
+          "value": 491520.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__warps_eligible.avg.per_cycle_active",
+          "value": 1.608940168273434,
+          "unit": "warp"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 2,
+          "correlation_id": "IMAD",
+          "value": 14417920.0,
+          "unit": ""
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 3,
+          "correlation_id": "ISETP",
+          "value": 4587520.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 0,
+          "correlation_id": "ISETP",
+          "value": 39321600.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 1,
+          "correlation_id": "IMAD",
+          "value": 35880960.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 20,
+          "correlation_id": "BAR",
+          "value": 655360.0,
+          "unit": ""
+        }
+      ],
+      "alternative": "Memory delivery/dependencies limit TileLang; vector-store benefit and overlap can hide Triton's extra instructions.",
+      "limits": "No critical-path latency share or proven compiler defect; CSV TileLang/Triton=0.9140 is within +/-10% parity band."
+    },
+    {
+      "claim": "cuTile's selected generic gather/output layout entails extra indexing work and a lower register residency ceiling.",
+      "status": "inferred",
+      "code_difference": [
+        "impl_cutile.py:43 generic 3D ct.gather and :46 ct.store",
+        "4x128 ownership",
+        "SASS IMAD.X/LEA bounds path and STS/BAR/LDS.128 output conversion"
+      ],
+      "expected_consequences": "Higher instruction and ALU work, greater register allocation, fewer resident CTAs; tile still reduces CTA count and padded columns.",
+      "observations": [
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "launch__grid_size",
+          "value": 163840,
+          "unit": ""
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "launch__occupancy_limit_registers",
+          "value": 12.0,
+          "unit": "block"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "launch__registers_per_thread",
+          "value": 37,
+          "unit": "register/thread"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_active",
+          "value": 18.939618864038003,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sm__maximum_warps_per_active_cycle_pct",
+          "value": 75.0,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sm__warps_active.sum.pct_of_peak_sustained_active",
+          "value": 65.22488892367225,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__inst_executed.sum",
+          "value": 62259200.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__sass_inst_executed_op_local_ld.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "smsp__sass_inst_executed_op_local_st.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "launch__grid_size",
+          "value": 163840,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "launch__occupancy_limit_registers",
+          "value": 12.0,
+          "unit": "block"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "launch__registers_per_thread",
+          "value": 39,
+          "unit": "register/thread"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_active",
+          "value": 64.71021869455662,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sm__maximum_warps_per_active_cycle_pct",
+          "value": 75.0,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sm__warps_active.sum.pct_of_peak_sustained_active",
+          "value": 67.36426727766631,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__inst_executed.sum",
+          "value": 160399360.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__sass_inst_executed_op_local_ld.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "smsp__sass_inst_executed_op_local_st.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "launch__grid_size",
+          "value": 122880,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "launch__occupancy_limit_registers",
+          "value": 8.0,
+          "unit": "block"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "launch__registers_per_thread",
+          "value": 64,
+          "unit": "register/thread"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sm__inst_executed_pipe_alu.sum.pct_of_peak_sustained_active",
+          "value": 77.16995531383911,
+          "unit": "%"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sm__maximum_warps_per_active_cycle_pct",
+          "value": 50.0,
+          "unit": "%"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sm__warps_active.sum.pct_of_peak_sustained_active",
+          "value": 46.01499814274721,
+          "unit": "%"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "smsp__inst_executed.sum",
+          "value": 234946560.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "smsp__sass_inst_executed_op_local_ld.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "smsp__sass_inst_executed_op_local_st.sum",
+          "value": 0.0,
+          "unit": "inst"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 2,
+          "correlation_id": "IMAD",
+          "value": 14417920.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 1,
+          "correlation_id": "IMAD",
+          "value": 35880960.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 4,
+          "correlation_id": "LEA",
+          "value": 7536640.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 20,
+          "correlation_id": "BAR",
+          "value": 655360.0,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 0,
+          "correlation_id": "IMAD",
+          "value": 52101120.0,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 1,
+          "correlation_id": "LEA",
+          "value": 36864000.0,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 13,
+          "correlation_id": "STS",
+          "value": 1966080.0,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "sass__inst_executed_per_opcode",
+          "instance_index": 31,
+          "correlation_id": "BAR",
+          "value": 491520.0,
+          "unit": ""
+        }
+      ],
+      "alternative": "Transaction/reuse inefficiency also contributes; eligible warp count is higher than TileLang despite lower residency, so occupancy alone cannot explain latency.",
+      "limits": "Separate indexing, output conversion and residency time shares are unresolved; no spill observed and no config sweep performed."
+    },
+    {
+      "claim": "cuTile's row-interleaved ownership increases input sectors and HBM reads despite better L1 hit rate.",
+      "status": "inferred",
+      "code_difference": "Saved cuTile lane-index SASS splits tid into tid/4 columns and tid mod 4 rows; TileLang/Triton use adjacent output columns with stride-2 input access.",
+      "expected_consequences": "More sector demand per global-load request; cache hit percentage need not imply less traffic.",
+      "observations": [
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "dram__bytes_read.sum",
+          "value": 839020032.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "dram__bytes_write.sum",
+          "value": 251604480.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "dram__cycles_active.avg.pct_of_peak_sustained_elapsed",
+          "value": 67.15615246382295,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum",
+          "value": 15221248.0,
+          "unit": ""
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "l1tex__t_sector_hit_rate.pct",
+          "value": 64.59960357478718,
+          "unit": "%"
+        },
+        {
+          "backend": "tilelang",
+          "report": "evidence/tilelang_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_kernel",
+          "metric": "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
+          "value": 122752000.0,
+          "unit": "sector"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "dram__bytes_read.sum",
+          "value": 839145472.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "dram__bytes_write.sum",
+          "value": 251399680.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "dram__cycles_active.avg.pct_of_peak_sustained_elapsed",
+          "value": 62.48292330190077,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum",
+          "value": 15221248.0,
+          "unit": ""
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "l1tex__t_sector_hit_rate.pct",
+          "value": 64.58849268709166,
+          "unit": "%"
+        },
+        {
+          "backend": "triton",
+          "report": "evidence/triton_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel",
+          "metric": "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
+          "value": 122752000.0,
+          "unit": "sector"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "dram__bytes_read.sum",
+          "value": 922841088.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "dram__bytes_write.sum",
+          "value": 254654464.0,
+          "unit": "byte"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "dram__cycles_active.avg.pct_of_peak_sustained_elapsed",
+          "value": 50.08910116935756,
+          "unit": "%"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum",
+          "value": 14868480.0,
+          "unit": ""
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "l1tex__t_sector_hit_rate.pct",
+          "value": 74.49128078122779,
+          "unit": "%"
+        },
+        {
+          "backend": "cutile",
+          "report": "evidence/cutile_fp32.ncu-rep",
+          "range_index": 0,
+          "action_index": 0,
+          "kernel": "max_pool2d_kernel_Kt1_A3f32_3v4l0_4t1_7i16_p16_A3f32_3v4l0_4t1_7i16_p16_I3_I2_I1_I4_I128",
+          "metric": "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
+          "value": 137482240.0,
+          "unit": "sector"
+        }
+      ],
+      "alternative": "Instruction scheduling and inter-CTA cache reuse can affect observed sectors/HBM and explain part of the difference; HBM traffic alone does not explain latency ratio.",
+      "limits": "Request width/participation differs and replay/cache equivalence is unproven; no universal sectors/request ideal or temporal bandwidth share asserted."
+    }
+  ],
+  "smallest_additional_evidence": "Matched capture manifest and per-PC dependency timeline; no collection authorized or performed."
+}

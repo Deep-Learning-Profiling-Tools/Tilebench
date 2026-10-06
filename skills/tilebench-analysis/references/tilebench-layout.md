@@ -27,12 +27,12 @@ collection is explicitly authorized, not a prerequisite for reading saved report
 
 ## Source and Results
 
-| Evidence | Main-branch location | How to use it |
+| Evidence | Package-layout path or output convention | How to use it |
 |---|---|---|
 | Operator semantics, case grid, formulas | `tilebench/benchmarks/operators/<op>/config.yaml` | Resolve dtype/shape and useful work. |
 | Implementation | Same directory, `impl_<backend>.py` | Inspect only the requested backend; `impl_torch.py` is the semantic reference when needed. |
 | Benchmark summary | `results/<hardware>/csv/<op>_<mode>.csv` | Match the exact params/dtype row; inspect actual columns and valid numeric entries. |
-| Timing and winning-config logs | `results/<hardware>/logs/{time_measurement_logs,autotune_logs}/<op>_<mode>_<backend-tag>.json` | Match the explicitly identified run, not the newest glob match. |
+| Winning-config logs | `results/<hardware>/logs/autotune_logs/` | Match the selected winner to the case/backend; use CSVs, not timing logs, for benchmark latency. |
 | Run provenance | `results/<hardware>/logs/provenance/<op>_<mode>_<backend-tag>.json` | Check source, software, device, timing mode, and named outputs. |
 | Canonical path helpers | `tilebench/paths.py` | Confirm namespace and naming conventions without importing the benchmark engine. |
 | Backend selection | `tilebench/backends.py` | Backend tags have canonical order `triton-cutile-tilelang-nki`; they identify the run selection, not hardware support. |
@@ -43,6 +43,11 @@ failed, or unsupported entries rather than treating them as zero. Autotune logs,
 source snapshots and generated code are not guaranteed to be included in a fresh
 clone. Do not infer a winner from a default config or the fastest candidate you
 happen to find. A current winner does not automatically describe an older capture.
+If logs are absent, follow [archived log discovery](released-artifacts.md#archived-benchmark-logs).
+Public archives supply evidence missing from main without switching the source
+checkout: the frozen raw-log archive holds B200 winners; the TileBench++ archive
+holds GH200/MI300X winners. Timing logs are for explicit timing/provenance audits,
+not required inputs to ordinary performance diagnosis.
 
 NKI measurements may appear beside GPU results, but run on Trainium. Their
 device-local baseline is `torch_nki_ms`, not the NVIDIA/AMD `torch_ms` column.

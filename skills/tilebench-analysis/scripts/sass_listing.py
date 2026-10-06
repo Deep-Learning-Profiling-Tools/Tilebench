@@ -10,7 +10,7 @@ from pathlib import Path
 
 ADDRESS_PREFIX = re.compile(r"^\s*(0x[0-9a-fA-F]+)\s+(.*)$")
 COMMENT_ADDRESS_PREFIX = re.compile(r"^\s*/\*\s*([0-9a-fA-F]+)\s*\*/\s*(.*)$")
-OPCODE = re.compile(r"^[A-Z][A-Z0-9_]*(?:\.[A-Z0-9_]+)*$")
+OPCODE = re.compile(r"^[A-Z][A-Z0-9_]*(?:\.[A-Za-z0-9_]+)*$")
 PREDICATE = re.compile(r"^@(!?)(P[0-7]|PT|UP[0-7]|UPT)$", re.IGNORECASE)
 KERNEL_LINE = re.compile(r"^\s*(?:Kernel Name|Function)\s*:?\s*(.*?)\s*$", re.IGNORECASE)
 
@@ -72,8 +72,7 @@ def parse_listing(text, strict=False):
                 candidate = match.group(2).strip()
                 if re.match(r"(?:0x[0-9a-fA-F]+\s*)?$", candidate) or not candidate:
                     continue
-                if re.match(r"^[A-Z][A-Z0-9_?.]*\s+", candidate):
-                    unparsed.append({"line": line_number, "text": line})
+                unparsed.append({"line": line_number, "text": line})
                 continue
             if current is None:
                 begin_kernel("kernel_1")
@@ -94,7 +93,7 @@ def parse_listing(text, strict=False):
             continue
 
         # Spot address-bearing disassembly rows that resemble an instruction but did not parse.
-        if re.search(r"(?:0x[0-9a-fA-F]{4,}|/\*\s*[0-9a-fA-F]{4,}\s*\*/)", line) and re.search(r"\b[A-Z][A-Z0-9_]*(?:\.[A-Z0-9_]+)*\s+", line):
+        if re.search(r"(?:0x[0-9a-fA-F]{4,}|/\*\s*[0-9a-fA-F]{4,}\s*\*/)", line) and re.search(r"\b[A-Z][A-Z0-9_]*(?:\.[A-Za-z0-9_]+)*\s+", line):
             unparsed.append({"line": line_number, "text": line})
 
     if current is not None:

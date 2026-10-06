@@ -26,8 +26,11 @@ only the files needed for this case. Separate what the checkout currently offers
 from what a particular experiment actually measured; a report filename alone
 does not establish its shape, winning configuration, or source version.
 If the needed artifacts are not supplied locally, follow [released artifact
-discovery](references/released-artifacts.md) to find the requested saved capture
-on Hugging Face. Missing local files do not imply a new profile is needed.
+discovery](references/released-artifacts.md): archived GitHub autotune logs provide
+winning configurations, while Hugging Face provides saved profiles. Use the selected
+CSV for benchmark latency; do not fetch timing logs during ordinary diagnosis.
+Check matching winner logs before trying to infer configuration from SASS.
+Missing local files do not imply a new profile is needed.
 Use the bundled `scripts/hf_ncu_report.py` for a narrowly scoped NVIDIA download
 and optional exact extraction; no handwritten downloader or new GPU run is needed.
 

@@ -22,8 +22,11 @@ to this installed skill; `<python>` is the workspace-approved interpreter:
 
 The JSON contains `actions`, `metrics`, and `errors`. Missing requested counters,
 unsupported scalar values, and extraction failures are explicit errors, not zeros.
-No errors does not establish capture completeness or causal accuracy. Check kernel
-names, repeated launches, and expected stages against matching capture metadata.
+No errors does not establish capture completeness or causal accuracy.
+Some derived unit labels can vary with NCU API access/initialization paths. Preserve
+the returned values/labels and reader version; disclose mismatches rather than
+silently repairing units. A repeat extraction is not an independent physical-unit proof.
+Check kernel names, repeated launches, and expected stages against matching capture metadata.
 Keep each action separate before making operation-level aggregates. Kernel duration
 sums exclude uncaptured work/host overhead and can be misleading with overlap.
 
@@ -63,6 +66,11 @@ Read embedded SASS when it answers a specific question:
 Record failed imports/empty listings. Missing source-line correlation is different
 from missing machine code. Follow relevant compiler source only if emission or
 capability remains material; no mandatory source -> PTX -> SASS -> NCU chain.
+Before calling capture-time source unavailable, inspect `action.source_files()`:
+it maps original paths to embedded source text. Preserve the kernel snapshot when
+present; an entry with empty text is not recovered source, and embedded headers
+alone do not establish the kernel implementation. A matching kernel body does not
+prove its launch configuration, benchmark winner, full source revision or versions.
 Parse a saved listing with `<python> <skill-dir>/scripts/sass_listing.py <listing>`.
 Inspect per-kernel opcode families, predicates, NOPs and parsing warnings, not just
 the total. Multiple kernel scopes are a notice, not necessarily a parsing failure;

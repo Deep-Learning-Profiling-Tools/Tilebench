@@ -55,6 +55,21 @@ class CsvTests(unittest.TestCase):
 
 
 class SassTests(unittest.TestCase):
+    def test_lowercase_tmem_suffixes(self):
+        result = sass_listing.parse_listing("Kernel Name: sample\n"
+                                            "0x0000 LDTM.x8 R0, [R2];\n"
+                                            "0x0010 @!P0 STTM.x8 [R2], R0;\n", strict=True)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["kernels"][0]["opcodes"], {"LDTM.x8": 1, "STTM.x8": 1})
+        self.assertEqual(result["kernels"][0]["instruction_count"], 2)
+
+    def test_unrecognized_address_rows_are_not_silently_dropped(self):
+        result = sass_listing.parse_listing("0x0000 @!P0 FUTURE.? R0, R1;\n"
+                                            "0x0010 UNKNOWN?;\n"
+                                            "/*0020*/ 0x0123456789abcdef\n", strict=True)
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(len(result["warnings"]), 2)
+
     def test_uniform_predication_and_nops(self):
         result = sass_listing.parse_listing("Kernel Name: sample\n"
                                             "0x0000 @!UP0 LDG.E.U16 R1, [R2];\n"

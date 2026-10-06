@@ -1,0 +1,236 @@
+[
+  {
+    "rule_identifier": "SOLBottleneck",
+    "name": "Bottleneck",
+    "section_identifier": "SpeedOfLight",
+    "rule_message": {
+      "title": "High Memory Throughput",
+      "message": "Memory is more heavily utilized than Compute: Look at the @section:MemoryWorkloadAnalysis:Memory Workload Analysis@ section to identify the L1 bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or whether there are values you can (re)compute.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "gpu__compute_memory_throughput.avg.pct_of_peak_sustained_elapsed",
+        "value": 77.25352591161626,
+        "severity": 1,
+        "info": "77.254 - 63.450 >= 10.000"
+      }
+    ]
+  },
+  {
+    "rule_identifier": "CPIStall",
+    "name": "Warp Stall",
+    "section_identifier": "WarpStateStats",
+    "rule_message": {
+      "title": "Long Scoreboard Stalls",
+      "message": "On average, each warp of this workload spends 9.8 cycles being stalled waiting for a scoreboard dependency on a L1TEX (local, global, surface, texture) operation. Find the instruction producing the data being waited upon to identify the culprit. To reduce the number of cycles waiting on L1TEX data accesses verify the memory access patterns are optimal for the target architecture, attempt to increase cache hit rates by increasing data locality (coalescing), or by changing the cache configuration. Consider moving frequently used data to shared memory. This stall type represents about 58.8% of the total average of 16.7 cycles between issuing two instructions.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "smsp__issue_active.avg.per_cycle_active",
+        "value": 0.6427515724364857,
+        "severity": 2,
+        "info": "Increase the average number of instructions issued per cycle"
+      },
+      {
+        "name": "smsp_average_long_scoreboard",
+        "value": 9.796465266444955,
+        "severity": 0,
+        "info": "Decrease the number of cycles spent in long scoreboard stalls"
+      }
+    ],
+    "speedup_estimation": {
+      "type": 1,
+      "speedup": 58.78578337455088
+    }
+  },
+  {
+    "rule_identifier": "CPIStall",
+    "name": "Warp Stall",
+    "section_identifier": "WarpStateStats",
+    "rule_message": {
+      "title": "",
+      "message": "Check the @section:SourceCounters:Warp Stall Sampling (All Samples)@ table for the top stall locations in your source based on sampling data. The @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference@ provides more details on each stall reason.",
+      "type": 1
+    }
+  },
+  {
+    "rule_identifier": "HighPipeUtilization",
+    "name": "High Pipe Utilization",
+    "section_identifier": "ComputeWorkloadAnalysis",
+    "rule_message": {
+      "title": "High Utilization",
+      "message": "ALU is the highest-utilized pipeline (63.4%) based on elapsed cycles in the workload, taking into account the rates of its different instructions. It executes integer and logic operations. The pipeline is well-utilized, but might become a bottleneck if more work is added. Based on the number of executed instructions, the highest utilized pipeline (63.4%) is ALU. It executes integer and logic operations. Comparing the two, the overall pipeline utilization appears to be caused by frequent, low-latency instructions. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-decoder@ or hover over the pipeline name to understand the workloads handled by each pipeline. The @section:InstructionStats:Instruction Statistics@ section shows the mix of executed instructions for this workload. Check the @section:WarpStateStats:Warp State Statistics@ section for which reasons cause warps to stall.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_elapsed",
+        "value": 63.44987938984048,
+        "severity": 0,
+        "info": "Try to decrease the utilization of the busiest pipeline (currently: ALU)"
+      }
+    ],
+    "result_tables": [
+      {
+        "title": "Most frequently executed instructions for pipeline ALU",
+        "description": "Source lines with the highest number of executed instructions on pipeline ALU.",
+        "headers": [
+          "Location",
+          "Source",
+          "Opcodes",
+          "Executed Instructions"
+        ],
+        "data": [
+          [
+            "@source:impl_triton.py:38:impl_triton.py, line 39@",
+            "@source:impl_triton.py:40:impl_triton.py, line 41@",
+            "@source:impl_triton.py:37:impl_triton.py, line 38@"
+          ],
+          [
+            "x = tl.load(in_base + ih[:, None] * W + iw[None, :],",
+            "acc = tl.maximum(acc, x)",
+            "& (iw[None, :] >= 0) & (iw[None, :] < W))"
+          ],
+          [
+            "LEA, P2R, ISETP.GT.AND, ISETP.LE.AND, ISETP.LT.AND, ISETP.NE.AND",
+            "ISETP.GT.AND, FMNMX",
+            "PLOP3.LUT, ISETP.GE.AND, ISETP.GT.AND, P2R"
+          ],
+          [
+            29491200.0,
+            24903680.0,
+            11796480.0
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "rule_identifier": "MemoryCacheAccessPattern",
+    "name": "Memory Cache Access Pattern",
+    "section_identifier": "MemoryWorkloadAnalysis_Tables",
+    "rule_message": {
+      "title": "L1TEX Global Load Access Pattern",
+      "message": "The memory access pattern for global loads from L1TEX might not be optimal. On average, only 15.4 of the 32 bytes transmitted per sector are utilized by each thread. This could possibly be caused by a stride between threads. Check the @section:SourceCounters:Source Counters@ section for uncoalesced global loads.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "smsp__sass_average_data_bytes_per_sector_mem_global_op_ld.ratio",
+        "value": 15.36,
+        "severity": 2,
+        "info": "Increase the average number of bytes utilized per sector towards 32 bytes"
+      },
+      {
+        "name": "l1tex__throughput.avg.pct_of_peak_sustained_elapsed",
+        "value": 77.25352591161626,
+        "severity": 1,
+        "info": "The higher the L1TEX throughput the more severe the issue becomes"
+      }
+    ],
+    "speedup_estimation": {
+      "type": 2,
+      "speedup": 40.17183347404046
+    }
+  },
+  {
+    "rule_identifier": "MemoryL2Compression",
+    "name": "Memory L2 Compression",
+    "section_identifier": "MemoryWorkloadAnalysis_Chart",
+    "rule_message": {
+      "title": "Low Compression Rate",
+      "message": "Out of the 209829184.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To increase this success rate, consider marking only those memory regions as compressible that contain the most zero values and/or expose the most homogeneous values.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "lrc__average_ilc_input_sector_success_rate.pct",
+        "value": 0.0,
+        "severity": 2,
+        "info": "Increase the compression success rate"
+      },
+      {
+        "name": "lrc__ilc_input_sectors.sum",
+        "value": 6557162.0,
+        "severity": 2,
+        "info": "Increase the number of compressed sectors towards all L2 input sectors (69,551,394)"
+      },
+      {
+        "name": "dram__bytes_read.sum.pct_of_peak_sustained_elapsed",
+        "value": 48.07894663504342,
+        "severity": 1,
+        "info": "The higher the DRAM peak read utilization the more can be gained by compression"
+      }
+    ],
+    "speedup_estimation": {
+      "type": 2,
+      "speedup": 43.546162692922366
+    }
+  },
+  {
+    "rule_identifier": "SOLFPRoofline",
+    "name": "Roofline Analysis",
+    "section_identifier": "SpeedOfLight_RooflineChart",
+    "rule_message": {
+      "title": "Roofline Analysis",
+      "message": "The ratio of peak float (FP32) to double (FP64) performance on this device is 2:1. The workload achieved 0% of this device's FP32 peak performance and 0% of its FP64 peak performance. See the @url:Profiling Guide:https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline@ for more details on roofline analysis.",
+      "type": 1
+    }
+  },
+  {
+    "rule_identifier": "TheoreticalOccupancy",
+    "name": "Theoretical Occupancy",
+    "section_identifier": "Occupancy",
+    "rule_message": {
+      "title": "",
+      "message": "The 12.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the hardware maximum of 16. This kernel's theoretical occupancy (75.0%) is limited by the number of required registers.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "smsp__maximum_warps_avg_per_active_cycle",
+        "value": 12.0,
+        "severity": 2,
+        "info": "Increase the theoretical number of warps per scheduler that can be issued"
+      }
+    ],
+    "speedup_estimation": {
+      "type": 1,
+      "speedup": 25.0
+    }
+  },
+  {
+    "rule_identifier": "UncoalescedGlobalAccess",
+    "name": "Uncoalesced Global Accesses",
+    "section_identifier": "SourceCounters",
+    "rule_message": {
+      "title": "",
+      "message": "This workload has uncoalesced global accesses resulting in a total of 63340032 excessive sectors (49% of the total 129305600 sectors). Check the L2 Theoretical Sectors Global Excessive table for the primary source locations. The @url:CUDA Programming Guide:https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses@ has additional information on reducing uncoalesced device memory accesses.",
+      "type": 2
+    },
+    "focus_metrics": [
+      {
+        "name": "derived__memory_l2_theoretical_sectors_global_excessive",
+        "value": 63340032.0,
+        "severity": 0,
+        "info": "Reduce the number of excessive wavefronts in L2"
+      }
+    ],
+    "speedup_estimation": {
+      "type": 2,
+      "speedup": 48.097207431462664
+    }
+  },
+  {
+    "rule_identifier": "UncoalescedGlobalAccess",
+    "name": "Uncoalesced Global Accesses",
+    "section_identifier": "SourceCounters",
+    "rule_message": {
+      "title": "",
+      "message": "",
+      "type": 0
+    }
+  }
+]
