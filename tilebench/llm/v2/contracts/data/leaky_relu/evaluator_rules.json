@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "leaky_relu",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "output_alloc", "description": "Allocate Y with X's shape/dtype inside run()."},
-    {"id": "elementwise_map", "description": "Single device pass: Y = X if X > 0 else 0.01 * X, X read once, Y written once."}
+    {"id": "elementwise_map", "description": "Single logical pass (any split across programs or launches, no global intermediate): Y = X if X > 0 else 0.01 * X, each X element read once and each Y element written once by the algorithm."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.(nn\\.functional\\.)?leaky_relu\\(|F\\.leaky_relu\\(|torch\\.nn\\.LeakyReLU\\(", "message": "library leaky ReLU computes the operator", "level": "confirmed", "scope": "host"},
@@ -18,6 +18,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh tensor with X's shape/dtype allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Output allocation is the only host work and is timed; no casts, copies or cross-call caches."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No casts, copies or cross-call caches."},
   "tolerance_source": "config.verify"
 }

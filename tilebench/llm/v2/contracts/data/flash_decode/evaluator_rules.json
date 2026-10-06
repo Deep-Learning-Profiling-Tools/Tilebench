@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "flash_decode",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
-    {"id": "s1", "description": "Per (batch, head) program: valid split count nb = ceil(b_seqlen[b] / block_seq) read from b_seqlen on the device."},
-    {"id": "s2", "description": "fp32 log-sum-exp weighted combine over the valid splits (online running-max recurrence in ascending order, or max pass then weighted-sum pass); invalid splits skipped or neutralised."},
-    {"id": "s3", "description": "Single final normalisation numerator / denominator (epsilon optional), rounded to mid_o.dtype and stored into a freshly allocated (batch, heads, head_dim) output; one launch, no global intermediate."}
+    {"id": "s1", "description": "Per (batch, head): valid split count nb = ceil(b_seqlen[b] / block_seq) read from b_seqlen on the device."},
+    {"id": "s2", "description": "fp32 log-sum-exp weighted combine over the valid splits inside one program per (batch, head) (online running-max recurrence in any order or in chunks, max pass then weighted-sum pass, or max and sums over the split axis held on chip); invalid splits skipped or neutralised."},
+    {"id": "s3", "description": "Single final normalisation numerator / denominator (epsilon optional), rounded to mid_o.dtype and stored into a freshly allocated (batch, heads, head_dim) output; no global intermediate and no cross-program combine over splits."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.(exp|max|amax|sum|logsumexp|softmax|log_softmax)\\(|\\.masked_fill_?\\(|\\.softmax\\(|torch\\.special\\.logsumexp", "message": "host-side tensor arithmetic performs the combine", "level": "suspicious", "scope": "host"},
@@ -23,6 +23,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated (batch, heads, head_dim) tensor in mid_o.dtype on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains a host .item() on the CPU block_seq scalar, the output allocation (plus metadata-only view) and one launch. No clone/masking of mid_o_lse, no copies, no state across calls. bytes_expr counts the mid_o read only (small undercount of lse/b_seqlen/output traffic)."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "Measured: GPU time of all device work run() causes (the combine kernel); the host .item() on the CPU block_seq scalar, the output allocation call and the metadata-only view are host work, not GPU time. No clone/masking of mid_o_lse, no copies, no state across calls. bytes_expr counts the mid_o read only (small undercount of lse/b_seqlen/output traffic)."},
   "tolerance_source": "config.verify"
 }

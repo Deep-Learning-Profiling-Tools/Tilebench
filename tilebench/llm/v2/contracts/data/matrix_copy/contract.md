@@ -17,19 +17,23 @@ The entry point is called as `run(A, N)`. `N` is the side length and equals
   Read-only: `A` must not be written, and the result must not alias it.
 - `B` (returned): `(N, N)`, same dtype as `A`, freshly allocated inside
   `run()` on every call, contiguous row-major. Returned as a single tensor.
-- `N*N` is not guaranteed to be a multiple of any tile length in general; an
-  implementation must not read or write outside the `N*N` elements.
+- Edge handling is required wherever the task's fixed `N*N` is not a
+  multiple of the chosen tile; an implementation must not read or write
+  outside the `N*N` elements.
 
 ## Required logical stages
 
 1. **Allocate** the output `B` (uninitialised allocation is sufficient).
-2. **Stream copy**: read every element of `A` exactly once and write it
-   unchanged to the corresponding position of `B` exactly once.
+2. **Stream copy**: one logical traversal that reads every element of `A`
+   once and writes it unchanged to the corresponding position of `B` once.
 
-Stage 2 is a single logical stage with no inter-element dependencies. It is
-expected to be one launch; splitting the copy across several launches is
-permitted but pointless. Nothing may be fused with host-side work, and no
-additional passes over the data are allowed.
+Stage 2 is a single logical stage with no inter-element dependencies.
+Nothing may be fused with host-side work, and no additional passes over the
+data are allowed, because a staged or repeated copy adds a full extra read
+and write of the matrix and so changes the algorithm rather than its
+mapping. These are logical traversal counts, not a guarantee about physical
+DRAM transactions, which caches, bulk copies and the compiler may change.
+How the copy is split across programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
@@ -37,7 +41,8 @@ Flat streaming memory copy. No reduction, scan, sort or arithmetic is
 involved. The 2-D structure of the matrix carries no semantic weight: because
 both `A` and `B` are contiguous with identical layouts, the copy may be
 expressed over the flattened `N*N` element range or over 2-D tiles, in any
-traversal order, as long as each element is moved exactly once.
+traversal order, as long as the algorithm moves each element exactly once
+(a logical count, not a count of physical memory transactions).
 
 ## Precision and accumulation
 
@@ -49,17 +54,24 @@ lanes are never written.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the output allocation and the
-copy. There is no cast, transpose, packing or cached state of any kind. The
-input arrives contiguous and must be consumed as-is; no copy of `A` may be
-made before the kernel reads it. Nothing may be cached across calls.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+There is no cast, transpose, packing or cached state of any kind. The input
+arrives contiguous and must be consumed as-is; no copy of `A` may be made
+before the kernel reads it. Nothing may be cached across calls.
 
 ## Permitted implementation mappings
 
 - Tile shape (1-D element ranges or 2-D tiles), elements per program, number
   of programs, vector width, pipelining depth and launch geometry are free.
+- The number of launches is free: the copy may be one launch or split across
+  several, provided each element is still copied once and nothing but `B` is
+  written to global memory.
 - Tail handling by explicit masks or by the DSL's bounds-padded loads and
   bounds-clipped stores is free, provided no out-of-range element is written.
+  Edge handling is required wherever the task's fixed `N*N` (or, for 2-D
+  tiles, `N`) is not a multiple of the chosen tile; supporting shapes other
+  than the task's declared shape is not required.
 - Flattening `A` and `B` to 1-D views on the host is permitted (metadata
   only; it must not copy).
 - Whether the lowering uses bulk/asynchronous copies or ordinary loads and
@@ -72,8 +84,10 @@ made before the kernel reads it. Nothing may be cached across calls.
 - Performing the copy with a PyTorch operation (`A.clone()`, `A.contiguous()`
   on a non-contiguous input, `A + 0`, `A * 1`, `torch.clone`, `B.copy_(A)`,
   `torch.Tensor.to` with `copy=True`, and similar) instead of a kernel.
-- Reading or writing the data more than once (for example a staged copy
-  through a scratch buffer).
+- Reading or writing the data in more than one logical traversal (for
+  example a staged copy through a scratch buffer), because that adds a full
+  extra read and write of the matrix; this counts passes in the algorithm,
+  not physical memory transactions.
 - Changing the dtype at any point.
 - Mutating `A`.
 

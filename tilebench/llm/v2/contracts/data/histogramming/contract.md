@@ -25,9 +25,9 @@ int32 integers and verification is exact (zero tolerance).
 1. Scratch initialisation: inside run(), allocate a global int32 scratch of
    P private partial histograms, shape (P, num_bins), and zero-initialise
    it. The zero fill may be a device fill issued by run() or done by each
-   owning program before it counts. P is bounded independently of N (a
-   fixed cap, reduced for small N) and the scratch is never kept across
-   calls.
+   owning program before it counts. P is a configuration choice for the
+   task's fixed input length (see the permitted mappings), and the scratch
+   is never kept across calls.
 2. Private counting: partition the input among P programs; each program
    owns exactly one private row of the scratch and counts the values of its
    share of the input into that row (bins outside [0, num_bins) are
@@ -45,13 +45,15 @@ two stages). Stage 1 may be fused into stage 2 as described.
 
 ## Algorithm family and structure
 Two-level privatised histogram: order-free exact integer counting into
-per-program private partial histograms held in a global scratch, followed
-by a column-wise sum over the partials. Stage 2 walks the input once in
-chunks (grid-stride or contiguous partitioning); stage 3 is a sequential or
-tree sum over the P rows per bin slice (order irrelevant for int32). No
-sort, no scan, no prefix structure. A single shared histogram updated by
-all programs (no privatisation) is a different algorithm and is not
-permitted.
+per-program private partial histograms held in a global scratch, followed by
+a column-wise sum over the partials. Stage 2 makes a single logical
+traversal of the input in chunks (grid-stride or contiguous partitioning);
+this counts passes in the algorithm, not physical memory transactions. Stage
+3 is a sequential or tree sum over the P rows per bin slice (order
+irrelevant for int32). No sort, no scan, no prefix structure. A single
+shared histogram updated by all programs (no privatisation) is a different
+algorithm and is not permitted, because it replaces private partial counts
+plus a reduction with contended updates of one global histogram.
 
 ## Precision and accumulation
 - int32 everywhere: the input values, the private counts, the reduction
@@ -60,12 +62,17 @@ permitted.
 - Tolerance: the operator config's verify section (exact).
 
 ## Preprocessing and timing boundary
-run() performs only: the input assertions, the output allocation, the
-scratch allocation and its zero fill (stage 1), host arithmetic for P and
-the chunking, and the launches. `.contiguous()` on the input is permitted
-only as a no-op. No host-side sort, cast, copy or compaction of the input;
-no scratch or partial result cached across calls; nothing precomputed
-outside run().
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides host work (the input assertions, the output and scratch allocation
+calls, host arithmetic for P and the chunking), run() issues only the
+scratch zero fill of stage 1 and the counting and reduction launches. The
+zero fill, whether a device fill issued by run() or done in-kernel by the
+owning program, is device work and is counted. `.contiguous()` on the input
+is permitted only as a no-op. No host-side sort, cast, copy or compaction of
+the input; no scratch or partial result cached across calls; nothing
+precomputed outside run().
 
 ## Permitted implementation mappings
 - The partial cap P and the chunk size; grid-stride versus contiguous

@@ -41,9 +41,11 @@ no keyword arguments are passed.
    `(q[i], q[i + D/2])` and write the two rotated outputs to the same
    positions of the output.
 
-This is one logical stage of elementwise work and is expected as a single
-launch. The copy of `q` that an in-place scheme needs is part of `run()`,
-is timed, and may be fused away by writing out-of-place.
+This is one logical stage of elementwise work; how it is distributed over
+launches is a mapping choice, provided no global-memory intermediate other
+than the output buffer is introduced. The copy of `q` that an in-place
+scheme needs is device work launched by `run()`, is counted in the measured
+time, and may be fused away by writing out-of-place.
 
 ## Algorithm family and structure
 
@@ -65,16 +67,19 @@ element is written exactly once.
 
 ## Preprocessing and timing boundary
 
-All work is inside `run()` and timed: any clone or copy of `q`, the views
-used to address halves (for example `(B*S, H, 2, D/2)` or `(B*S, H*D)`), the
-output allocation and the launch. The tables are consumed as given; no table
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Any clone or copy of `q` made for an in-place scheme is device work and is
+counted. The views used to address halves (for example `(B*S, H, 2, D/2)` or
+`(B*S, H*D)`) are metadata only. The tables are consumed as given; no table
 transformation, no state cached across calls, nothing precomputed outside
 `run()`.
 
 ## Permitted implementation mappings
 
 - Out-of-place (read `q`, write the fresh output) or clone-then-in-place.
-- Heads per program, rows per program, grid shape, pipelining, vector width.
+- Heads per program, rows per program, grid shape, number of launches,
+  pipelining, vector width.
 - Handling `D/2` as one tile or as chunks with masking; whether `S`, `H`, `D`
   are compile-time constants or runtime arguments; explicit strides versus
   the contiguous layout.

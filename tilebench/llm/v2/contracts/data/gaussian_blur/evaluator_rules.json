@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "gaussian_blur",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "s1", "description": "Per output element, fp32 accumulation of the kernel_rows*kernel_cols tap products over the zero-padded neighbourhood (cross-correlation, offsets i - kr//2, j - kc//2), read directly from the flat image inside the launch."},
-    {"id": "s2", "description": "Single rounding of the fp32 accumulator to the input dtype and store into a freshly allocated flat output; one launch, no intermediate, no host padding."}
+    {"id": "s2", "description": "Single rounding of the fp32 accumulator to the input dtype and store into a freshly allocated flat output; one logical pass (the output tiles may be spread over several launches, each tap sum stays within one program), no intermediate, no host padding."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.nn\\.functional\\.conv(1|2|3)d|F\\.conv(1|2|3)d|torch\\.conv(1|2|3)d|torch\\.nn\\.Conv(1|2|3)d|torch\\.fft|scipy\\.|cv2\\.", "message": "library convolution / FFT filtering replaces the whole computation", "level": "confirmed", "scope": "host"},
@@ -21,6 +21,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated flat (input_rows*input_cols,) tensor in input's dtype on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains the element-count guard, the output allocation, metadata-only 2-D views and one launch. No host padding, im2col, casts or copies; no state across calls. Per-tap product precision for fp16 is the open review item."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "The GPU time of all device work launched by run() is counted (here only the stencil launch(es)); the element-count guard, the output allocation call and metadata-only 2-D views are host-side work and not GPU time. No host padding, im2col, casts or copies; no state across calls. Per-tap product precision for fp16 is the open review item."},
   "tolerance_source": "config.verify"
 }

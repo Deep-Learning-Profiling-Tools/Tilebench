@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "jacobi_stencil_2d",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "output_alloc", "description": "Allocate the (rows, cols) output of IN's dtype inside run()."},
-    {"id": "stencil_sweep", "description": "One device pass: interior = 0.25*(up+down+left+right), boundary = centre copied; OUT fully written by the kernel."}
+    {"id": "stencil_sweep", "description": "One logical sweep in which every OUT element is written once from IN: interior = 0.25*(up+down+left+right), boundary = centre copied; boundary and interior may be written by one launch or by separate launches over disjoint positions, but not by a full copy of IN followed by an interior update."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.(nn\\.functional\\.)?conv2d\\(|F\\.conv2d\\(", "message": "convolution primitive computes the stencil", "level": "confirmed", "scope": "host"},
@@ -20,6 +20,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (rows, cols) tensor allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Output allocation is the only host work and is timed; no halo preprocessing, no cross-call cache."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (here only the sweep launch(es)); the output allocation call is host-side work and not GPU time. No halo preprocessing, no cross-call cache."},
   "tolerance_source": "config.verify"
 }

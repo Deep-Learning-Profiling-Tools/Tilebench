@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "swiglu",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh output of x's shape and dtype inside run() (a flat buffer viewed back to x.shape is acceptable)."},
-    {"id": "fused_gate", "description": "One kernel pass over all M*N elements: load x and y, upcast both to fp32, compute x * sigmoid(x) * y (any equivalent sigmoid formulation), downcast once, masked store."}
+    {"id": "fused_gate", "description": "One logical pass over all M*N elements (any split across programs or launches, no global intermediate): load x and y, upcast both to fp32, compute x * sigmoid(x) * y (any equivalent sigmoid formulation), downcast once, store with edge handling wherever M*N is not a multiple of the chosen tile."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.nn\\.functional\\.silu\\(|F\\.silu\\(|torch\\.silu\\(|nn\\.SiLU\\(|\\.silu\\(\\s*\\)|torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|F\\.gelu\\(|torch\\.nn\\.functional\\.gelu\\(", "message": "The gate (or its activation) is computed by a PyTorch routine instead of the kernel.", "level": "confirmed", "scope": "host"},
@@ -31,6 +31,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned tensor must be freshly allocated inside run() with x's shape and dtype and must not share storage with x or y"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the flattening views, the output allocation and the single fused elementwise kernel. No cached state, no copy or cast of the inputs, no separate activation pass or global intermediate."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the flattening views, the output allocation, metadata reads, Python) is not GPU time. No cached state, no copy or cast of the inputs, no separate activation pass or global intermediate."},
   "tolerance_source": "config.verify"
 }

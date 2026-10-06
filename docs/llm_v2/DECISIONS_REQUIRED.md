@@ -79,6 +79,11 @@ each in CANONICAL_AUDIT.
 
 ## B. SOL model
 
+> **2026-10-06**: B1–B3 are superseded by the empirical calibration (`docs/llm_v2/CALIBRATION.md`): the
+> scoring ceiling is a measured per-device profile (B200 registered as candidate), modes are declared per
+> operator in `arithmetic_modes.yaml` revision 2, and the open questions are now M1–M4 in
+> `FREEZE_DECISIONS.md` §D. The datasheet table stays a reference only. The text below is kept as history.
+
 B1. **Arithmetic mode per task** — `tilebench/llm/v2/manifests/arithmetic_modes.yaml`
 is `status: proposed`: fp32 GEMM/conv/attention-class operators map to
 `tf32` (the manual kernels use TF32), other fp32 operators to `fp32_vector`,

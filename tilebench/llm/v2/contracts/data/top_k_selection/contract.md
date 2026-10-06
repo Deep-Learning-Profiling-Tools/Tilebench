@@ -24,13 +24,14 @@ no keyword arguments are passed.
 ## Required logical stages
 
 Let `K'` be the smallest power of two that is `>= k`, and let `B` be the
-block width, a power of two with `B >= 2 * K'`.
+block width, with `B >= 2 * K'` (it need not be a power of two).
 
-1. **Level 0, block selection**: the input is cut into `ceil(N / B)`
-   contiguous blocks (address order). Each block, padded with `-inf` beyond
-   `N`, yields its `K'` largest values in descending order, written as one
-   row of a fresh `(ceil(N / B), K')` fp32 candidate buffer allocated inside
-   `run()`.
+1. **Level 0, block selection**: the input is cut into `ceil(N / B)` blocks
+   of at most `B` elements (contiguous blocks in address order are the
+   natural partition; any fixed partition is permitted). Each block, padded
+   with `-inf` beyond `N`, yields its `K'` largest values in descending
+   order, written as one row of a fresh `(ceil(N / B), K')` fp32 candidate
+   buffer allocated inside `run()`.
 2. **Higher levels**: while the previous level produced more than one
    block, view its candidate buffer as a flat vector of `nb * K'`
    candidates and apply the same block selection to it, producing a new
@@ -40,25 +41,26 @@ block width, a power of two with `B >= 2 * K'`.
 3. **Result**: the final level's single row holds the global top `K'` in
    descending order; return its first `k` entries.
 
-Each level is one launch and depends on the previous level's buffer; levels
-cannot be fused into one launch (a level needs all candidates of the
-previous one). When `N <= B` the hierarchy is a single level.
+Each level needs all candidates of the previous level, so consecutive
+levels are separated by a device-wide dependency and each level reads the
+previous level's candidates from that level's global buffer. One launch per
+level is the natural realisation; how the dependency is enforced is a
+mapping choice. When `N <= B` the hierarchy is a single level.
 
 ## Algorithm family and structure
 
 Hierarchical (tournament) block top-`K'` selection: leaves are the input
-blocks in address order; every internal node is the top `K'` of the
-concatenation of its children's top-`K'` lists; the fan-in per level is
-`B / K' >= 2`. Exactness follows from `K' >= k`: the `k` largest of any set
-lie within the `K'` largest of each block. Within a block, how the top `K'`
-is obtained (a DSL block top-k primitive, a full bitonic sort followed by
-taking the prefix, or another exact in-block selection network) is a
-mapping choice, provided it is exact, emits the values in descending order,
-keeps duplicates with their multiplicity, and treats `-inf` padding so that
-it can never displace a real value (a genuine `-inf` input is
-indistinguishable from padding, which is harmless for values-only output).
-Comparisons only: no arithmetic on the values. NaN inputs are outside the
-benchmark.
+blocks; every internal node is the top `K'` of the concatenation of its
+children's top-`K'` lists; the fan-in per level is `B / K' >= 2`. Exactness
+follows from `K' >= k`: the `k` largest of any set lie within the `K'`
+largest of each block. Within a block, how the top `K'` is obtained (a DSL
+block top-k primitive, a full bitonic sort followed by taking the prefix, or
+another exact in-block selection network) is a mapping choice, provided it
+is exact, emits the values in descending order, keeps duplicates with their
+multiplicity, and treats `-inf` padding so that it can never displace a real
+value (a genuine `-inf` input is indistinguishable from padding, which is
+harmless for values-only output). Comparisons only: no arithmetic on the
+values. NaN inputs are outside the benchmark.
 
 ## Precision and accumulation
 
@@ -70,20 +72,25 @@ benchmark.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: computing `K'` and `B`, every per-level
-candidate buffer allocation, every level's launch, and the final slice.
-`input` is consumed as given; no copy, sort, cast, cached state or
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Every level's launch is device work and is counted; computing `K'` and `B`,
+the per-level candidate buffer allocations and the final slice are host
+work. `input` is consumed as given; no copy, sort, cast, cached state or
 precomputation outside `run()`.
 
 ## Permitted implementation mappings
 
-- The block width `B` (subject to `B >= 2 K'`), elements per program,
-  launch parameters, pipelining.
+- The block width `B` (subject to `B >= 2 K'`; not necessarily a power of
+  two), the partition of each level's vector into blocks, elements per
+  program, launch parameters, pipelining, and how the dependency between
+  levels is enforced.
 - The in-block selection primitive (see above); a special case for
   `K' == 1` (block maximum) is fine.
 - Allocating a fresh buffer per level or reusing one scratch buffer
   between levels; returning a slice of the final buffer or copying the `k`
-  values into a separate `(k,)` tensor (both are timed).
+  values into a separate `(k,)` tensor (the slice is metadata only; a copy
+  is device work and is counted).
 - Whether `K'` and `B` are compile-time constants.
 
 ## Forbidden substitutions
@@ -94,7 +101,9 @@ precomputation outside `run()`.
   `heapq`, `sorted`).
 - A different selection family: radix select, histogram or threshold
   passes, a global sort of the whole input followed by slicing, or a
-  single-program sequential selection.
+  single-program sequential selection; each replaces the hierarchical
+  block tournament, and with it the passes and the work decomposition
+  that define this operator.
 - A per-block candidate width smaller than `k`, or a fan-in below 2 (a
   level that does not shrink the candidate set).
 - Returning more or fewer than `k` values, unsorted or ascending output, or

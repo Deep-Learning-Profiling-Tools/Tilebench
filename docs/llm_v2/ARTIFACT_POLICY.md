@@ -13,6 +13,8 @@ them silently; the rule below says exactly what is tracked and what is not.
 | `tilebench/llm/v2/**`, `tests/llm_v2/**`, `skills/**`, `docs/llm_v2/**` | yes | source, templates, manifests, contracts, publishable Skills, documentation |
 | `outputs/llm_v2/<campaign>/...` | no (`outputs/` is git-ignored) | the live run cache: every trajectory as the runner writes it, the per-campaign `_sandbox/` (compile caches of the isolated worker, deleted per evaluation), device locks, provider probes |
 | `artifacts/llm_v2/<campaign>/...` | **yes** | the publication export of a campaign, produced by `python -m tilebench.llm.v2 export-publication` from the run cache |
+| `artifacts/llm_v2/calibration/<device>/<calibration_id>/` | **yes** | one empirical calibration run: protocol, environment, raw per-batch samples, sealed `profile.json`, `SHA256SUMS`; written once, never edited (a new calibration is a new directory) |
+| `artifacts/llm_v2/scoring/<device>/` | **yes** | scoring tables (T_emp / status / hashes of every eligible task) derived from a registered profile and the declaration file |
 
 `llm_wt` is a worktree of the same repository on branch `exp/llm`; tracked
 paths reach `main` through the branch's PR. Nothing is copied by hand

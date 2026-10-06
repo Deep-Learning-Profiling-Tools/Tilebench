@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "top_k_selection",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "candidate_width", "description": "Compute K' = smallest power of two >= k and choose a block width B >= 2*K' inside run()."},
-    {"id": "block_topk_level", "description": "A launch that cuts the current vector into contiguous blocks of width B padded with -inf, selects each block's K' largest values in descending order with an exact in-block primitive (block top-k builtin, bitonic sort + prefix, or equivalent) and writes them as rows of a fresh (nb, K') fp32 buffer."},
-    {"id": "hierarchy_loop", "description": "Repeat the block level on the flattened candidate buffer until a single block remains; each level is its own launch and depends on the previous level's buffer."},
+    {"id": "block_topk_level", "description": "A level that cuts the current vector into blocks of at most B elements (contiguous blocks are natural; any fixed partition) padded with -inf, selects each block's K' largest values in descending order with an exact in-block primitive (block top-k builtin, bitonic sort + prefix, or equivalent) and writes them as rows of a fresh (nb, K') fp32 buffer."},
+    {"id": "hierarchy_loop", "description": "Repeat the block level on the flattened candidate buffer until a single block remains; each level depends on the whole previous level's global candidate buffer (one launch per level is the natural realisation)."},
     {"id": "final_slice", "description": "Return the first k entries of the final single-block row as a 1-D (k,) fp32 tensor that does not alias the input."}
   ],
   "forbidden_substitutions": [
@@ -35,6 +35,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "a 1-D fp32 (k,) tensor; may be a slice/view of a candidate buffer allocated inside run() (both references return out[0, :k] of the final (1, K') buffer); must never be a view of or share storage with input"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: K' and block-width arithmetic, every per-level candidate buffer allocation, every level launch and the final slice. No cached state across calls, no host-side sort or copy of the input, no prepacking. The per-level candidate buffers are part of the canonical algorithm, not preprocessing."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (every level's selection kernel, and a device copy of the result if one is made); K' and block-width arithmetic, the per-level buffer allocation calls and the final slice are host work, not GPU time. No cached state across calls, no host-side sort or copy of the input, no prepacking. The per-level candidate buffers are part of the canonical algorithm, not preprocessing."},
   "tolerance_source": "config.verify"
 }

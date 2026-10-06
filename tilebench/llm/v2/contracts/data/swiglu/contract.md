@@ -28,20 +28,25 @@ arguments are passed.
 1. **Allocate** the output.
 2. **Elementwise map** over all `M*N` elements: load `x` and `y`, upcast
    both to fp32, compute `x * sigmoid(x) * y`, cast once to the output
-   dtype, store under a bounds mask.
+   dtype, and store, with edge handling where the last tile is partial.
 
-Stage 2 is a single logical stage with no inter-block dependency and is
-expected to be one launch. No separate silu pass followed by a multiply
-pass, and no global scratch, is permitted.
+Stage 2 is a single logical stage with no inter-element dependency: each
+element of `x` and `y` is read once and each output element written once,
+and no intermediate tensor is materialised in global memory. No separate
+silu pass followed by a multiply pass, and no global scratch, is permitted,
+because materialising `silu(x)` adds an intermediate and a second traversal
+and so changes the algorithm rather than its mapping. These are logical
+traversal counts, not a guarantee about physical DRAM transactions, which
+caches and the compiler may change. How the elements are split across
+programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
-Memory-bound elementwise fused gate with flat contiguous blocking over the
-flattened tensors: two reads and one write per element. No reduction, scan
-or sort. The sigmoid formulation (direct `1/(1+exp(-x))`, a DSL sigmoid
-builtin, `exp2` with a `log2(e)` scale, or a `tanh` identity) is free as
-long as the result stays within the verifier tolerance for standard-normal
-inputs.
+Memory-bound elementwise fused gate: two logical reads and one logical write
+per element. No reduction, scan or sort. The sigmoid formulation (direct
+`1/(1+exp(-x))`, a DSL sigmoid builtin, `exp2` with a `log2(e)` scale, or a
+`tanh` identity) is free as long as the result stays within the verifier
+tolerance for standard-normal inputs.
 
 ## Precision and accumulation
 
@@ -55,16 +60,25 @@ inputs.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: flattening views of `x` and `y`, the
-output allocation and the launch. The inputs are consumed as given; no copy,
-cast, cached state or precomputation outside `run()`.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Flattening views of `x`, `y` and the output are permitted. The inputs are
+consumed as given; no copy, cast, cached state or precomputation outside
+`run()`.
 
 ## Permitted implementation mappings
 
-- Elements per program, 1-D flat versus 2-D grid, pipelining, vector width
-  and other launch parameters.
+- Elements per program, the assignment of elements to programs (contiguous
+  blocks over the flattened tensors or any other partition), 1-D flat versus
+  2-D grid, pipelining, vector width and other launch parameters.
+- The number of launches is free: the element range may be covered by one
+  launch or partitioned across several, provided each element is still
+  processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
-  for the last partial block; padded lanes are never stored.
+  for the last partial block; padded lanes are never stored. Edge handling is
+  required wherever the task's fixed shape is not a multiple of the chosen
+  tile; supporting shapes other than the task's declared shape is not
+  required.
 - The exact sigmoid formulation (see above).
 - Whether the element count is a compile-time constant or runtime argument.
 
@@ -78,7 +92,8 @@ cast, cached state or precomputation outside `run()`.
   inputs.
 - Gating `y` instead of `x` (`y * sigmoid(y) * x`), or applying any other
   activation.
-- A second pass over the data or a global intermediate for `silu(x)`.
+- A second logical pass over the data or a global intermediate for
+  `silu(x)`, because either adds a traversal the fused gate does not have.
 - Writing into `x` or `y` in place or returning a view of an input.
 
 ## Permitted PyTorch operations

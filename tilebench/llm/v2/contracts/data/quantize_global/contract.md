@@ -23,19 +23,25 @@ arguments are passed.
   to infinity is outside the verified domain.
 - `out` (returned): `(n,)`, dtype float16, freshly allocated inside `run()`
   on every call. Returned as a single tensor.
-- `n` need not be a multiple of any tile length; no element outside `[0, n)`
-  may be read or written.
+- Edge handling is required wherever the task's fixed `n` is not a multiple
+  of the chosen tile length; no element outside `[0, n)` may be read or
+  written. Supporting lengths other than the task's declared `n` is not
+  required.
 
 ## Required logical stages
 
 1. **Allocate** the float16 output (uninitialised allocation is sufficient).
-2. **Elementwise convert**: read each float32 element exactly once, convert
-   it to float16, and write it exactly once to the same position of `out`.
+2. **Elementwise convert**: in one logical traversal, read each float32
+   element, convert it to float16, and write it to the same position of
+   `out`.
 
-Stage 2 is a single logical stage with no inter-element dependencies and is
-expected to be one launch. There is no reduction stage of any kind; adding a
-preliminary pass over the data (for example to compute a maximum) is
-forbidden.
+Stage 2 is a single logical stage with no inter-element dependencies; how it
+is distributed over launches is a mapping choice. There is no reduction
+stage of any kind; adding a preliminary pass over the data (for example to
+compute a maximum) is forbidden, because no maximum or scale is part of this
+operator. Pass counts are logical traversals in the algorithm, not
+guarantees about physical DRAM transactions, which caches, TMA and the
+compiler may change.
 
 ## Algorithm family and structure
 
@@ -54,15 +60,16 @@ involved.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the output allocation and
-the conversion kernel. There is no cast, copy or packing of `x` on the host,
-no scale computation, and nothing cached across calls. `x.contiguous()` may
-be called only as a no-op guard on the already-contiguous input.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+There is no cast, copy or packing of `x` on the host, no scale computation,
+and nothing cached across calls. `x.contiguous()` may be called only as a
+no-op guard on the already-contiguous input.
 
 ## Permitted implementation mappings
 
-- Tile length, elements per program, number of programs, vector width,
-  pipelining depth and launch geometry are free.
+- Tile length, elements per program, number of programs, number of launches,
+  vector width, pipelining depth and launch geometry are free.
 - Tail handling by explicit masks or by the DSL's bounds-padded loads and
   bounds-clipped stores is free, provided no out-of-range element is
   written.
@@ -76,7 +83,8 @@ be called only as a no-op guard on the already-contiguous input.
   kernel.
 - Adding an absolute-maximum reduction, a scale factor, a second output, an
   int8 or other integer output, or any clamping.
-- Reading or writing the data more than once.
+- More than one logical traversal of the input or of the output (a count of
+  passes in the algorithm, not of physical memory transactions).
 - Returning `x`, a view of `x`, or a float32 result.
 - Mutating `x`.
 

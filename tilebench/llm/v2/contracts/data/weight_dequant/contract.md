@@ -27,8 +27,9 @@ arguments positional; no keyword arguments are passed.
   Read-only.
 - `S`: `(ceil(M / T), ceil(N / T))`, contiguous row-major, same dtype as
   `X`. Read-only.
-- `M`, `N`, `TILE_SIZE`: Python ints (the benchmark sweeps square `X`,
-  `N == M`, but the implementation must honour a distinct `N`).
+- `M`, `N`, `TILE_SIZE`: Python ints (the task's fixed shape is square,
+  `N == M`; the implementation may specialise on the declared shape and
+  need not support other shapes).
 - Returned: one new tensor `(M, N)` of `X`'s dtype, allocated inside
   `run()` on every call. It must not alias either input.
 
@@ -37,17 +38,22 @@ arguments positional; no keyword arguments are passed.
 1. **Allocate** the output.
 2. **Scaled elementwise map**: for every element, determine its block
    coordinates `(i // T, j // T)`, fetch the corresponding scale from `S`,
-   multiply, store under a bounds mask.
+   multiply, store (with edge handling wherever the task's fixed shape is
+   not a multiple of the chosen tile).
 
-Stage 2 is a single logical stage with no inter-block dependency and is
-expected to be one launch. No pass that materialises an expanded `(M, N)`
-scale map, and no global scratch, is permitted.
+Stage 2 is a single logical stage with no inter-block dependency; how it is
+distributed over launches is a mapping choice. No pass that materialises an
+expanded `(M, N)` scale map, and no global scratch, is permitted, because
+the canonical algorithm derives each scale address on the fly and has no
+global-memory intermediate.
 
 ## Algorithm family and structure
 
-Memory-bound elementwise multiply with a block-constant broadcast scale:
-one read of `X`, one write of `Y`, and a scale lookup whose address derives
-from the element's row and column by floor division by `T`. No reduction,
+Memory-bound elementwise multiply with a block-constant broadcast scale: one
+logical traversal of `X`, one write of `Y` per element, and a scale lookup
+whose address derives from the element's row and column by floor division by
+`T`; these are passes in the algorithm, not guarantees about physical DRAM
+transactions, which caches, TMA and the compiler may change. No reduction,
 scan or sort. Whether the lookup is a per-element gather (flat 1-D
 addressing, recovering `row = off // N`, `col = off % N`) or one scale load
 per logical tile aligned to the `T x T` blocks (2-D addressing) is a mapping
@@ -64,14 +70,17 @@ choice.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: the output allocation, flattening or
-2-D views, and the launch. `X` and `S` are consumed as given; no copy,
-cast, expansion of `S`, cached state or precomputation outside `run()`.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Flattening or 2-D views are metadata only. `X` and `S` are consumed as
+given; no copy, cast, expansion of `S`, cached state or precomputation
+outside `run()`.
 
 ## Permitted implementation mappings
 
 - Elements per program, 1-D flat versus 2-D tiled grid (tile-aligned or
-  not), pipelining, vector width and other launch parameters.
+  not), number of launches, pipelining, vector width and other launch
+  parameters.
 - Per-element scale gather versus per-tile scale hoisting.
 - Explicit masks or the DSL's bounds-padded loads, gathers and
   bounds-clipped stores for edge tiles; padded lanes are never stored.
@@ -88,7 +97,7 @@ cast, expansion of `S`, cached state or precomputation outside `run()`.
   or any other PyTorch arithmetic on the tensors inside `run()`.
 - Any scale indexing other than floor division of the row and column by
   `T` (for example rounding, or indexing `S` by the flat offset).
-- A second pass over the data or a global intermediate.
+- A second logical traversal of the data or a global-memory intermediate.
 - Writing into `X` or `S` in place or returning a view of an input.
 
 ## Permitted PyTorch operations

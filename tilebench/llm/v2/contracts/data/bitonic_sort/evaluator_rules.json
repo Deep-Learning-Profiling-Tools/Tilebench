@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "bitonic_sort",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_work", "description": "Allocate a working buffer of M = next power of two >= N elements in data's dtype inside run()."},
     {"id": "pad", "description": "One kernel pass copying data[0:N] into work[0:N] and filling work[N:M] with +inf (may be fused into the first stage group)."},
-    {"id": "compare_exchange_network", "description": "The bitonic schedule k = 2..M ascending, j = k/2..1 descending; per stage, partner i XOR j, direction (i AND k) == 0, strict-comparison swap performed once per pair by the lower index, in place in work; stages separated by global synchronisation unless confined to one program's slice."},
+    {"id": "compare_exchange_network", "description": "The bitonic schedule k = 2..M ascending, j = k/2..1 descending; per stage, partner i XOR j, direction (i AND k) == 0, strict-comparison swap performed once per pair by a single owner (lower-index lane is natural), in place in work; stages separated by global synchronisation unless confined to one program's slice."},
     {"id": "return_leading_slice", "description": "Return work[:N] as a zero-copy view."}
   ],
   "forbidden_substitutions": [
@@ -32,6 +32,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "view of the run-allocated working buffer (length M = next power of two >= N), i.e. work[:N]; must never share storage with data"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the M-element allocation, the pad kernel, every network stage launch and the zero-copy slice. Nothing is cached across calls; the metric counts only 2*N*dtype_size bytes while the executed work is the pad plus L(L+1)/2 in-place passes over M elements."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (the pad pass and every network stage); the M-element allocation call and the zero-copy slice are host work, not GPU time. Nothing is cached across calls; the metric counts only 2*N*dtype_size bytes while the executed work is the pad plus L(L+1)/2 in-place passes over M elements."},
   "tolerance_source": "config.verify"
 }

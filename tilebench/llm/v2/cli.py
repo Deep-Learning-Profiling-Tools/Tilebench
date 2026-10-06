@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-from tilebench.paths import list_operators
+from tilebench.paths import REPO_ROOT, list_operators
 
 from tilebench.llm.v2 import PROTOCOL
 from tilebench.llm.v2.manifests import schema as ms
@@ -50,6 +50,18 @@ def cmd_doctor(a) -> int:
         out["manifests"]["config_hash"] = ms.study_config_hash(study, ms.load_models(), folds, ms.load_arithmetic_modes())
         out["manifests"]["model_blockers_formal"] = ms.blockers_models(ms.load_models())
         out["manifests"]["model_blockers_validation"] = ms.blockers_models(ms.load_models(), accept_status=("approved", "candidate"))
+        from tilebench.llm.v2.metrics import empirical
+        out["calibration"] = {}
+        for dev, ent in (empirical.load_calibration_manifest().get("devices") or {}).items():
+            row = {"status": ent.get("status"), "profile": ent.get("profile"), "sha256": (ent.get("sha256") or "")[:12] or None}
+            if ent.get("status") != "none":
+                try:
+                    row["calibration_id"] = empirical.load_profile(ent).get("calibration_id")
+                except empirical.ProfileUnavailable as e:
+                    row["error"] = str(e)
+            out["calibration"][dev] = row
+        out["arithmetic_modes"] = {"revision": empirical.load_modes().get("revision"), "status": empirical.load_modes().get("status"),
+                                   "sha256": empirical.modes_sha256()[:12]}
     except ms.ManifestError as e:
         out["manifests"]["error"] = str(e)
     from tilebench.llm.v2.skills.loader import SkillError, load_manifest
@@ -92,9 +104,23 @@ def cmd_validate_manifests(a) -> int:
     except ms.ManifestError as e:
         errors.append(str(e))
     try:
-        ms.load_arithmetic_modes()["default_by_dtype"]
+        from tilebench.llm.v2.metrics import empirical
+        from tilebench.llm.v2.tasks.case_selection import load_operator_config, operator_dtypes
+        od = {op: operator_dtypes({**load_operator_config(op), "_operator": op}) for op in list_operators()}
+        errors.extend(f"arithmetic_modes.yaml: {e}" for e in empirical.validate_modes(empirical.load_modes(), od))
+        cal = empirical.load_calibration_manifest()
+        if cal.get("schema") != "tilebench-calibration-manifest/1":
+            errors.append("calibration.yaml: unknown schema")
+        for dev, ent in (cal.get("devices") or {}).items():
+            if ent.get("status") not in ("none", "candidate", "frozen"):
+                errors.append(f"calibration.yaml: {dev}: status {ent.get('status')!r}")
+            if ent.get("status") != "none":
+                try:
+                    empirical.load_profile(ent)
+                except empirical.ProfileUnavailable as e:
+                    errors.append(f"calibration.yaml: {dev}: {e}")
     except Exception as e:  # noqa: BLE001
-        errors.append(f"arithmetic_modes.yaml: {e}")
+        errors.append(f"arithmetic_modes.yaml / calibration.yaml: {e}")
     from tilebench.llm.v2.skills.loader import SkillError, load_component, load_manifest
     try:
         m = load_manifest()
@@ -302,15 +328,18 @@ def cmd_distill(a) -> int:
     (out / "scope.json").write_text(json.dumps({**report, "scope_sha256": scope.sha256(), "distiller": dspec.record(),
                                                 "partial_coverage_allowed": bool(a.allow_partial_coverage)},
                                                indent=1, sort_keys=True) + "\n")
-    # offline SOL records per selected trajectory (never shown to generators; input of the distiller only)
-    from tilebench.llm.v2.metrics.sol import t_sol
+    # offline empirical target per selected trajectory (never shown to generators; input of the distiller only)
+    from tilebench.llm.v2.devtools import campaign_scoring
+    from tilebench.llm.v2.metrics import empirical
     from tilebench.llm.v2.tasks.case_selection import load_operator_config
     sol_info = {}
+    scoring_cache: dict[str, dict] = {}
     for ref in scope.selected:
         st = json.loads(Path(ref.path).read_text()); tk = st["task"]
-        rec = t_sol(tk["device"], tk["operator"], tk["dtype"], tk["params"], tk.get("problem_size", 1),
-                    load_operator_config(tk["operator"]).get("metrics", {}), modes)
-        sol_info[ref.trajectory_id] = rec.to_dict()
+        sc = scoring_cache.setdefault(tk["device"], campaign_scoring(Path(a.campaign_dir), tk["device"]))
+        rec = empirical.t_emp(tk["device"], tk["operator"], tk["dtype"], tk["params"], tk.get("problem_size", 1),
+                              load_operator_config(tk["operator"]).get("metrics", {}), sc["modes_doc"], sc["profile"])
+        sol_info[ref.trajectory_id] = {**rec.to_dict(), "scoring_binding_source": sc["source"]}
     (out / "sol_info.json").write_text(json.dumps(sol_info, indent=1, sort_keys=True) + "\n")
     try:
         obs = extract_observations(scope, provider, cfg, read_state=lambda p: json.loads(p.read_text()), out_dir=out,
@@ -464,6 +493,68 @@ def cmd_calibrate(a) -> int:
         print(f"REFUSED: {e}", file=sys.stderr)
         return 2
     _print(r)
+    return 0
+
+
+def cmd_calibration_register(a) -> int:
+    """Register a calibration profile for a device in manifests/calibration.yaml.
+    `candidate` records a measured, schema-valid profile; `frozen` is the
+    owner's decision and needs --by. Quick-protocol profiles are refused."""
+    import yaml
+    from tilebench.llm.v2.calibration import schema as cs
+    from tilebench.llm.v2.metrics import empirical
+    path = Path(a.profile)
+    try:
+        rel = str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        print(f"REFUSED: {path} is outside the repository; register a tracked artifact", file=sys.stderr)
+        return 2
+    p = json.loads(path.read_text())
+    errs = cs.validate_profile(p)
+    if errs or p.get("device") != a.device or p.get("protocol", {}).get("quick"):
+        print(f"REFUSED: {errs or 'device mismatch / quick protocol'}", file=sys.stderr)
+        return 2
+    if a.status == "frozen" and not a.by:
+        print("REFUSED: --status frozen needs --by <owner>", file=sys.stderr)
+        return 2
+    man = empirical.load_calibration_manifest()
+    cur = man["devices"].get(a.device) or {}
+    if cur.get("status") == "frozen" and not a.replace_frozen:
+        print(f"REFUSED: {a.device} already has a frozen profile ({cur.get('sha256', '')[:12]}); pass --replace-frozen "
+              "to supersede it (a new campaign is required; running campaigns keep their pinned binding)", file=sys.stderr)
+        return 2
+    man["devices"][a.device] = {"profile": rel, "sha256": empirical.sha256_file(path), "status": a.status,
+                               "frozen_by": a.by if a.status == "frozen" else None,
+                               "calibration_id": p.get("calibration_id"), "registered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    head = empirical.CALIBRATION_MANIFEST.read_text().split("schema:")[0]
+    empirical.CALIBRATION_MANIFEST.write_text(head + yaml.safe_dump({"schema": man["schema"], "devices": man["devices"]},
+                                                                      sort_keys=False, default_flow_style=None))
+    _print({"registered": a.device, "entry": man["devices"][a.device], "manifest": str(empirical.CALIBRATION_MANIFEST)})
+    return 0
+
+
+def cmd_scoring_table(a) -> int:
+    """T_emp / status / hash table of every eligible task of a device."""
+    from tilebench.llm.v2.metrics import empirical
+    from tilebench.llm.v2.tasks.support import task_table
+    rows = [e.to_dict() for e in task_table(ms.load_study(), ms.load_folds()) if e.key.device == a.device
+            and (not a.dsl or e.key.dsl == a.dsl)]
+    entry = empirical.device_entry(a.device)
+    profile, note = None, None
+    try:
+        profile = empirical.load_profile(entry)
+    except empirical.ProfileUnavailable as e:
+        note = str(e)
+    table = empirical.scoring_table(a.device, rows, profile=profile)
+    table["profile_entry"] = entry
+    table["profile_note"] = note
+    table["eligibility_rows"] = len(rows)
+    if a.out:
+        Path(a.out).write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
+    _print({k: v for k, v in table.items() if k != "rows"})
+    for r in table["rows"]:
+        print(f"{r['operator']:24s} {r['dtype']:10s} {str(r['mode']):22s} {r['status']:20s} "
+              f"T={r['t_emp_ms'] if r['t_emp_ms'] is not None else r['provisional_t_emp_ms']!s:>22s} ms  {r.get('reason') or ''}")
     return 0
 
 
@@ -664,6 +755,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_calibrate)
     s = sub.add_parser("calibration-check", help="validate empirical profile JSON files (schema, units, seal)")
     s.add_argument("profiles", nargs="+"); s.set_defaults(fn=cmd_calibration_check)
+    s = sub.add_parser("calibration-register", help="register a device's empirical profile in manifests/calibration.yaml "
+                       "(candidate; frozen is the owner's decision and needs --by)")
+    s.add_argument("--device", required=True); s.add_argument("--profile", required=True, help="profile.json of a calibration directory")
+    s.add_argument("--status", choices=["candidate", "frozen"], default="candidate"); s.add_argument("--by", help="owner name for --status frozen")
+    s.add_argument("--replace-frozen", action="store_true"); s.set_defaults(fn=cmd_calibration_register)
+    s = sub.add_parser("scoring-table", help="T_emp / status / hash table of every eligible task of a device against its registered profile")
+    s.add_argument("--device", required=True); s.add_argument("--dsl"); s.add_argument("--out"); s.set_defaults(fn=cmd_scoring_table)
     s = sub.add_parser("metrics", help="recompute E(B) curves from a campaign directory")
     s.add_argument("campaign_dir"); s.add_argument("--budgets", nargs="*", type=int); s.set_defaults(fn=cmd_metrics)
     s = sub.add_parser("coverage", help="task coverage / status counts of a campaign directory"); s.add_argument("campaign_dir"); s.set_defaults(fn=cmd_coverage)

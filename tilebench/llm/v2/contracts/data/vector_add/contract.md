@@ -26,16 +26,21 @@ arguments are passed.
 ## Required logical stages
 
 1. **Allocate** the output.
-2. **Elementwise add**: load a contiguous block of `x` and of `y`, add,
-   store under a bounds mask.
+2. **Elementwise add**: load each element of `x` and of `y`, add, and
+   store, with edge handling where the last tile is partial.
 
-Stage 2 is a single logical stage with no inter-block dependency and is
-expected to be one launch. No second pass over the data is permitted.
+Stage 2 is a single logical stage with no inter-element dependency: each
+element of `x` and `y` is read once and each output element written once,
+and no intermediate tensor is materialised in global memory. No second pass
+over the data is permitted, because it would change the algorithm rather
+than its mapping. These are logical traversal counts, not a guarantee about
+physical DRAM transactions, which caches and the compiler may change. How
+the elements are split across programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
-Memory-bound 1-D elementwise binary map with flat contiguous blocking: two
-reads and one write per element. No reduction, scan or sort.
+Memory-bound 1-D elementwise binary map: two logical reads and one logical
+write per element. No reduction, scan or sort.
 
 ## Precision and accumulation
 
@@ -50,18 +55,24 @@ reads and one write per element. No reduction, scan or sort.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: the output allocation and the launch.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
 The inputs are consumed as given; no copy, cast, cached state or
 precomputation outside `run()`.
 
 ## Permitted implementation mappings
 
-- Elements per program, grid shape, pipelining, vector width and other
-  launch parameters.
+- Elements per program, the assignment of elements to programs (contiguous
+  blocks or any other partition), grid shape, pipelining, vector width and
+  other launch parameters.
+- The number of launches is free: the element range may be covered by one
+  launch or partitioned across several, provided each element is still
+  processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
-  for a last partial block (the benchmark sizes are multiples of common
-  block widths, but correctness for arbitrary `n` is required: no element at
-  index `>= n` may be read or written).
+  for a last partial block. Edge handling is required wherever the task's
+  fixed `n` is not a multiple of the chosen tile (no element at index `>= n`
+  may be read or written); supporting shapes other than the task's declared
+  shape is not required.
 - Whether `n` is a compile-time constant or a runtime argument.
 
 ## Forbidden substitutions
@@ -73,7 +84,9 @@ precomputation outside `run()`.
 - A dtype conversion that changes the rounding of the result (for example
   adding fp16 inputs in fp16 after an intermediate bf16 cast), or
   producing an output dtype different from `x`'s.
-- Any additional pass over the data or global scratch buffer.
+- Any additional logical pass over the data or global scratch buffer,
+  because either changes the algorithm's data movement rather than its
+  mapping.
 
 ## Permitted PyTorch operations
 

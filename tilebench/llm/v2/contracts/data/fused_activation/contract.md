@@ -24,9 +24,11 @@ per-element tensor (same shape as x), not a broadcast scalar or vector.
    and bias, compute z = x*gate + bias and out = z * sigmoid(z) in fp32, and
    store.
 
-A single launch; no reduction, no intermediate, no second pass. The three
-input reads for an element and the write of its result belong to the same
-program.
+One logical pass; no reduction, no intermediate, no second pass. In
+particular z is never materialised in global memory between the multiply-add
+and the activation, because fusing the two steps is what defines this
+operator. How the index range is split across programs or launches is a
+mapping choice.
 
 ## Algorithm family and structure
 Memory-bound streaming map with three input streams and one output stream.
@@ -43,27 +45,37 @@ of the index range across programs is acceptable.
 - Tolerance: the operator config's verify section.
 
 ## Preprocessing and timing boundary
-run() performs only: the shape check, the output allocation and the launch.
-`.contiguous()` on the inputs is permitted only as a no-op (they are
-contiguous). No casts, copies, packing or fusion of the three inputs into
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, run() may perform the shape check and the output
+allocation. `.contiguous()` on the inputs is permitted only as a no-op (they
+are contiguous). No casts, copies, packing or fusion of the three inputs into
 one buffer on the host; no state across calls; nothing precomputed outside
 run().
 
 ## Permitted implementation mappings
 - Elements per program, launch geometry, vector width, number of resident
   programs.
+- The number of launches is free: the index range may be covered by one
+  launch or partitioned across several, provided each element is still
+  processed once and nothing but the output is written to global memory.
 - Masked tail handling versus zero-padded loads with clipped stores (padded
-  lanes evaluate to silu(0) = 0 and must never be written).
+  lanes evaluate to silu(0) = 0 and must never be written). Edge handling is
+  required wherever the task's fixed n is not a multiple of the chosen tile;
+  supporting shapes other than the task's declared shape is not required.
 - Order and interleaving of the three loads; algebraic form of SiLU.
 
 ## Forbidden substitutions
 - torch.nn.functional.silu / torch.nn.SiLU, torch.sigmoid, torch.special.expit
   or any host-side tensor arithmetic (x * gate + bias, torch.addcmul,
   torch.exp on tensors) for any part of the computation.
-- Splitting the FMA and the activation into separate launches or writing z
-  to global memory.
+- Materialising z in global memory between the multiply-add and the
+  activation (for example by running them as separate passes), because the
+  fused single pass defines this operator.
 - Reduced-precision evaluation (fp16/bf16) of z or the activation.
-- Any buffer other than the output.
+- Any buffer other than the output, because a global intermediate or
+  scratch would add data movement the fused pass does not have.
 - Autotuning, timing, benchmarking or configuration search inside the
   generated file.
 

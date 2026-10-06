@@ -46,25 +46,32 @@ Values are copied bit-exactly; no arithmetic is performed.
 Stages 2 and 3 depend on stage 1 (for the rows they do not overwrite) and are
 independent of each other; they may run as two launches of one kernel, or be
 fused into a single launch. Stage 1 may be a plain device copy; it must not
-be fused into the scatter in a way that re-reads `o_*` per element.
+be fused into the scatter in a way that re-reads `o_*` per element, because
+that adds reads of `o_*` beyond the single stage-1 copy.
 
 ## Algorithm family and structure
 Index-driven scatter copy (row permutation along dimension 0): a streaming
 copy whose destination address is computed from an index looked up per
 source row. No reduction, scan, sort, atomics or conflict resolution. The
 index may be read once per token or once per element; either way each
-source element is read exactly once and written exactly once.
+source element is read once and written once in the algorithm (logical
+accesses, not a guarantee about physical DRAM transactions).
 
 ## Precision and accumulation
 Exact copy for every dtype, including int8; no conversion of values. Index
 arithmetic in int32 or int64.
 
 ## Preprocessing and timing boundary
-run() performs only: shape/stride reads, metadata-only flattening (`.view`)
-of contiguous tensors, the output initialisation of stage 1 (when the policy
-requires it on this call), and the launches. No casts, transposes or packing
-of inputs; no precomputation outside run(); no derived operand cached across
-calls other than the output buffers covered by the open review item.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides host work (shape/stride reads, metadata-only flattening (`.view`) of
+contiguous tensors, allocation calls), run() issues only the output
+initialisation of stage 1 (when the policy requires it on this call), which
+is a device copy and is counted, and the scatter launches. No casts,
+transposes or packing of inputs; no precomputation outside run(); no derived
+operand cached across calls other than the output buffers covered by the
+open review item.
 
 ## Permitted implementation mappings
 - Flat element addressing with offset decomposition into (token, head, d)
@@ -79,8 +86,8 @@ calls other than the output buffers covered by the open review item.
   (`out[dest_loc] = kv`) or `torch.index_select` for the copy itself.
 - Writing the results into `o_nope` / `o_rope` (input mutation).
 - Any sort or inverse-permutation preprocessing of `dest_loc`.
-- Re-reading `o_*` inside the scatter, or any additional full pass over the
-  data beyond stage 1 and the single scatter-copy.
+- Re-reading `o_*` inside the scatter, or any additional logical traversal
+  of the data beyond stage 1 and the single scatter-copy.
 - Autotuning, timing, benchmarking or configuration search inside the
   generated file.
 

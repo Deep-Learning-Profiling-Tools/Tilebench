@@ -9,6 +9,23 @@ denominators, distillation/Enhanced boundaries, bounded isolation).
 `S_llm` is **not** frozen; `docs/llm_v2/FREEZE_DECISIONS.md` lists what a
 freeze still needs and who decides.
 
+## 0. Round of 2026-10-06 — empirical calibration (`NEXT_STEP_EMPIRICAL_CALIBRATION.md`)
+
+- Scoring ceiling: `ceiling_basis = empirical` (`tilebench/llm/v2/metrics/empirical.py`); the legacy datasheet
+  table is a reference only. B200 calibrated on dgx003 under protocol
+  `tilebench-empirical-roofline/2` (`artifacts/llm_v2/calibration/B200/B200-20261006T063415Z-39b55bd3/`,
+  10 modes, registered `candidate`; freezing is the owner's). `docs/llm_v2/CALIBRATION.md` has the values,
+  the protocol and the per-device commands.
+- Declarations: `arithmetic_modes.yaml` revision 2 (`proposed`), per operator; scoring table of all 110 B200
+  (operator, dtype) tasks in `artifacts/llm_v2/scoring/B200/`: every target computable, all `definition_pending`
+  until M1 (and M2–M4, C1') are decided.
+- Contracts: revision 2 of all 45 (wording classes 1–5, `docs/llm_v2/CONTRACT_REVISION_2.md`); prompt
+  snapshots regenerated.
+- Campaign binding: each campaign pins its device's profile sha + declaration sha; formal resume refuses a
+  change; other devices' profiles do not affect it. Formal preflight adds the scoring gate.
+- Formal B200 Base: **not started** (blocked by owner decisions: profile freeze, M1/M2/M3/M4/C1', C1 contract
+  approval, skill approvals D4). GH200 / MI300X / Trn2: no profile yet.
+
 ## 1. Three states
 
 ### Implemented and evidenced (code + regression tests)

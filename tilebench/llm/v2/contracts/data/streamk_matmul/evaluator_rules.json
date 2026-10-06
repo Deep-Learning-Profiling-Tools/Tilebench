@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "streamk_matmul",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "zero_fill_accumulator", "description": "Every call, inside run(), zero-fill the fp32 (M, N) accumulation target before the Stream-K wave (the output itself for fp32 inputs, a separate fp32 buffer for fp16/bf16)."},
     {"id": "streamk_wave", "description": "A persistent launch of one program per SM covering the Stream-K region (remainder tiles plus one extra full wave when at least two full waves remain): the region's K-iterations are split into equal contiguous ranges, each segment is reduced in a local fp32 accumulator and added into the zeroed accumulator with fp32 atomic adds; no fixup kernel, semaphores or partials workspace."},
-    {"id": "data_parallel_tiles", "description": "The remaining full tiles, one per program, full-K fp32 accumulation and ordinary (non-atomic) stores into the accumulation target; launched only when such tiles exist. May be merged with the wave into one persistent launch."},
+    {"id": "data_parallel_tiles", "description": "The remaining full tiles, each reduced over the full K range by a single program (one or several tiles per program), fp32 accumulation and ordinary (non-atomic) stores into the accumulation target; launched only when such tiles exist. May be merged with the wave into one persistent launch."},
     {"id": "final_cast", "description": "For fp16/bf16 inputs only, one rounding of the fp32 accumulation target into the output tensor after both regions have completed."}
   ],
   "forbidden_substitutions": [
@@ -43,6 +43,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (M, N) tensor of the input dtype must be freshly allocated inside run() and must not share storage with a or b (for fp32 it may be the fp32 accumulation target itself)"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed on every call: SM-count query, output allocation, zero-fill of the fp32 accumulation target, any operand re-layout or descriptor construction, both launches and the final half-dtype cast. No state keyed on input identity may be cached across calls; a transposed/repacked copy of B is permitted only as in-run, per-call, timed work (open review item: the Triton reference caches it untimed, the cuTile reference does not repack)."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() on every call is counted: the zero-fill of the fp32 accumulation target, any operand re-layout copy, the Stream-K and data-parallel launch(es) and the final half-dtype cast. The SM-count query, the output allocation call and descriptor/metadata construction are host-side work and not GPU time. No state keyed on input identity may be cached across calls; a transposed/repacked copy of B is permitted only as in-run, per-call device work whose time is counted (open review item: the Triton reference caches it untimed, the cuTile reference does not repack)."},
   "tolerance_source": "config.verify"
 }

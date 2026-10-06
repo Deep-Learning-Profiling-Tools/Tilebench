@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "dequantize_rowwise",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "s1", "description": "Element-wise: int8 x converted to fp32, multiplied by the fp32 row scale and by the fp32 constant 1/127."},
-    {"id": "s2", "description": "Single rounding from fp32 to fp16 at the store into a freshly allocated (rows, cols) fp16 output; one launch, no intermediate."}
+    {"id": "s2", "description": "Single rounding from fp32 to fp16 at the store into a freshly allocated (rows, cols) fp16 output, fused with s1 per element: no global intermediate and no second pass (the number of launches is a mapping choice)."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.dequantize|torch\\._make_per_channel_quantized_tensor|torch\\._make_per_tensor_quantized_tensor|torch\\.ops\\.quantized|torch\\.ao\\.", "message": "library dequantisation replaces the whole computation", "level": "confirmed", "scope": "host"},
@@ -21,6 +21,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated (rows, cols) fp16 tensor on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains only the fp16 output allocation and one launch. No host-side cast, copy or transpose of x/state_x is permitted; no state across calls."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "All device work launched by run() is counted (the dequantisation launch(es)); host-side work (the fp16 output allocation call, shape reads) is not GPU time. No host-side cast, copy or transpose of x/state_x is permitted; no state across calls."},
   "tolerance_source": "config.verify"
 }

@@ -16,19 +16,24 @@ keyword arguments are passed.
   Read-only: it must not be written and the result must not alias it.
 - `out` (returned): `(N,)`, same dtype as `input`, freshly allocated inside
   `run()` on every call, contiguous. Returned as a single tensor.
-- `N` is not a multiple of the tile length in the benchmark, so tail
-  handling is exercised: no element outside `[0, N)` may be read or written
+- Tail handling is required wherever the task's fixed `N` is not a
+  multiple of the chosen tile: no element outside `[0, N)` may be read or written
   (note that the mirrored index of an out-of-range output position is
   negative).
 
 ## Required logical stages
 
 1. **Allocate** the output (uninitialised allocation is sufficient).
-2. **Mirrored copy**: read every element of `input` exactly once and write
-   it exactly once to its mirrored position in `out`.
+2. **Mirrored copy**: one logical traversal that reads every element of
+   `input` once and writes it once to its mirrored position in `out`.
 
-Stage 2 is a single logical stage with no inter-element dependencies and is
-expected to be one launch. No additional pass over the data is permitted.
+Stage 2 is a single logical stage with no inter-element dependencies, and no
+intermediate tensor is materialised in global memory. No additional pass over
+the data is permitted, because it adds a full extra read and write of the
+array and so changes the algorithm rather than its mapping. These are
+logical traversal counts, not a guarantee about physical DRAM transactions,
+which caches and the compiler may change. How the index range is split
+across programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
@@ -47,20 +52,27 @@ lanes may hold any fill value because they are never stored.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the output allocation and
-the kernel. There is no cast, copy, packing or cached state. The input must
-be consumed as-is; no host-side copy, view or conversion may precede the
-kernel, and nothing may be cached across calls.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+There is no cast, copy, packing or cached state. The input must be consumed
+as-is; no host-side copy, view or conversion may precede the kernel, and
+nothing may be cached across calls.
 
 ## Permitted implementation mappings
 
 - Tile length, elements per program, number of programs, vector width,
   pipelining depth and launch geometry are free.
+- The number of launches is free: the index range may be covered by one
+  launch or partitioned across several, provided each element is still
+  processed once and no intermediate is written to global memory.
 - The read strategy: a masked load at mirrored addresses, a per-element
   gather at mirrored indices, or a contiguous tile load followed by an
   on-chip tile reversal; likewise on the write side.
 - Tail handling by explicit masks, by gather padding values whose lanes are
-  never stored, or by the DSL's bounds-clipped stores.
+  never stored, or by the DSL's bounds-clipped stores. Edge handling is
+  required wherever the task's fixed `N` is not a multiple of the chosen
+  tile; supporting shapes other than the task's declared shape is not
+  required.
 - Whether `N` is a runtime argument or a compile-time constant.
 
 ## Forbidden substitutions
@@ -71,8 +83,10 @@ kernel, and nothing may be cached across calls.
   instead of a kernel.
 - Returning `input`, a view of it, or a negative-stride view.
 - Any dtype conversion.
-- Reading or writing the data more than once, or staging through a scratch
-  buffer in global memory.
+- Reading or writing the data in more than one logical traversal, or
+  staging through a scratch buffer in global memory, because either adds a
+  full extra read and write of the array; this counts passes in the
+  algorithm, not physical memory transactions.
 - Mutating `input`.
 
 ## Permitted PyTorch operations

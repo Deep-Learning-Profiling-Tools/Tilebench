@@ -32,20 +32,21 @@ The entry point is called as `run(data, N)`; `N` is positional and equals
    satisfies `p > i`: `ascending = (i AND k) == 0`; swap `work[i]` and
    `work[p]` when `ascending and work[i] > work[p]` or
    `not ascending and work[i] < work[p]`. Comparisons are strict: equal
-   values are never exchanged. Each pair is exchanged exactly once per
-   stage, by the lane owning the lower index. There are `L*(L+1)/2` stages
+   values are never exchanged. Each pair is compared and exchanged exactly
+   once per stage, by a single owner (the lane owning the lower index is
+   natural; which lane does it is free). There are `L*(L+1)/2` stages
    for `L = log2(M)`.
 4. **Return** `work[:N]` as a zero-copy view.
 
 Dependencies and fusion: stage `(k, j)` for index `i` depends on the
 preceding stage's results for both `i` and `i XOR j`, so stages are
-separated by a global synchronisation (a launch boundary) unless every
-compare-exchange of a group of consecutive stages is confined to data owned
-by one program (an aligned power-of-two slice longer than every partner
-distance `j` in the group); such a group may be executed by that program
-locally. The pad pass may be fused into the first such group. At every
-global synchronisation point the entire array lives in `work`; the network
-is executed in place and no second buffer is permitted.
+separated by a global synchronisation (for example a launch boundary) unless
+every compare-exchange of a group of consecutive stages is confined to data
+owned by one program (an aligned power-of-two slice longer than every
+partner distance `j` in the group); such a group may be executed by that
+program locally. The pad pass may be fused into the first such group. At
+every global synchronisation point the entire array lives in `work`; the
+network is executed in place and no second buffer is permitted.
 
 ## Algorithm family and structure
 
@@ -66,17 +67,20 @@ because those lanes are never written.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: the allocation of `work`, the pad pass,
-every stage of the network and the final zero-copy slice. Nothing may be
-cached across calls and nothing may be computed on the host beyond `M` and
-the `(k, j)` schedule. The metric formulas count one read and one write of
-`N` elements (the compulsory traffic of a sort); the pad pass and the
-multiple passes over `M` elements that the network performs are expected
-and not counted.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+The pad pass and every stage of the network are device work and are counted;
+the allocation of `work` and the final zero-copy slice are host work.
+Nothing may be cached across calls and nothing may be computed on the host
+beyond `M` and the `(k, j)` schedule. The metric formulas count one read and
+one write of `N` elements (the compulsory traffic of a sort); the pad pass
+and the multiple passes over `M` elements that the network performs are
+expected and not counted.
 
 ## Permitted implementation mappings
 
-- Elements per program, grid shape, vector width, pipelining.
+- Elements per program, grid shape, vector width, pipelining; which lane
+  performs each compare-exchange.
 - Whether `k` and `j` are runtime arguments or compile-time specialisations
   of the stage kernel.
 - Block loads plus gathers for partner values, or two gathers; how inactive

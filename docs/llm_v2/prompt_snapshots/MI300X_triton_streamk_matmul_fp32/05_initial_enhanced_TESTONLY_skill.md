@@ -857,17 +857,21 @@ arguments are passed.
    `T mod P` tiles, plus `P` further tiles when `T - (T mod P) > P` (at
    least two full waves remain). Its `S * I` K-iterations (S = region size)
    are divided into `P` contiguous ranges of equal length (the leading
-   programs take the remainder). Each program walks its range segment by
+   programs take the remainder; which programs take it is a mapping
+   choice). Each program walks its range segment by
    segment: a segment is the intersection of the range with one tile; the
    program accumulates that tile's K-slabs for the segment in a local fp32
    accumulator and then adds the partial result into `Cacc` with fp32
    atomic adds (masked to `M`, `N`). There is no fixup kernel, no semaphore
    or flag array and no partial-sum workspace: the zero-filled `Cacc` is the
    only combination target, and a tile cut across several programs is
-   completed purely by the atomic adds.
-3. **Data-parallel tiles**: the remaining `T - S` tiles, one tile per
-   program, each reducing the full K range in a local fp32 accumulator and
-   writing the tile to `Cacc` with ordinary (non-atomic) stores. These tiles
+   completed purely by the atomic adds, because a workspace or flag array
+   would add global-memory intermediates and inter-program synchronisation
+   that the canonical atomic-add combination does not have.
+3. **Data-parallel tiles**: the remaining `T - S` tiles, each reduced over
+   the full K range by a single program in a local fp32 accumulator and
+   written to `Cacc` with ordinary (non-atomic) stores (whether a program
+   handles one such tile or several in turn is a mapping choice). These tiles
    are disjoint from the Stream-K region. Launched only when `T - S > 0`.
 4. **Final cast** (fp16/bf16 only): copy `Cacc` into the output with one
    rounding to the output dtype. For fp32 inputs there is nothing to do.
@@ -902,14 +906,18 @@ tiles are reduced sequentially within one program. No sort or scan.
 
 ## Preprocessing and timing boundary
 
-Inside `run()` and timed, on every call: the device SM-count query, the
-output allocation, the zero-fill of `Cacc` (a memset of `M*N` fp32 values),
-any descriptor or metadata construction, both launches, and the final cast
-for half dtypes. `A` and `B` are delivered row-major as `(M, K)` and
-`(K, N)`. Any layout transformation of an operand that an implementation
-chooses to perform (for example a transposed copy of `B`) must be done
-inside `run()` on every call and is timed; no state keyed on input identity
-or contents may be cached across calls (see open review items).
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Device work inside `run()` on every call, all of it counted: the zero-fill
+of `Cacc` (a device fill of `M*N` fp32 values), the Stream-K and
+data-parallel launch or launches, and the final cast for half dtypes. The
+device SM-count query, the output allocation and any descriptor or metadata
+construction are host-side work inside `run()` and are not GPU time. `A` and
+`B` are delivered row-major as `(M, K)` and `(K, N)`. Any layout
+transformation of an operand that an implementation chooses to perform (for
+example a transposed copy of `B`) must be done inside `run()` on every call
+and its device time is counted; no state keyed on input identity or contents
+may be cached across calls (see open review items).
 
 ## Permitted implementation mappings
 
@@ -920,6 +928,9 @@ or contents may be cached across calls (see open review items).
   `while` loop versus a static-trip-count loop for the K-slabs.
 - Two launches (Stream-K wave, data-parallel tiles) in either order, or one
   persistent launch covering both regions.
+- Whether each data-parallel program handles one tile or several tiles in
+  turn; which programs of the Stream-K wave take the remainder of the even
+  split.
 - Host-side or device-side evaluation of the partition arithmetic.
 - Using the output as `Cacc` for fp32 versus a separate fp32 buffer.
 
@@ -928,9 +939,13 @@ or contents may be cached across calls (see open review items).
 - `torch.matmul`, `torch.mm`, `torch.addmm`, `torch.einsum`, the `@`
   operator, `F.linear`, or any BLAS / library GEMM.
 - A pure data-parallel GEMM (no Stream-K region) or a split-K scheme with a
-  separate reduction kernel or partials workspace.
+  separate reduction kernel or partials workspace (each changes the work
+  decomposition and cross-program communication that define the hybrid
+  Stream-K algorithm).
 - Combining Stream-K segments through semaphores, flags or an owner program
-  instead of atomic adds into the zero-filled `Cacc`.
+  instead of atomic adds into the zero-filled `Cacc` (this adds a partials
+  workspace and inter-program synchronisation in global memory that the
+  canonical combination does not have).
 - Accumulating in fp16/bf16, or rounding half-dtype partials before the
   final combination; skipping TF32 rounding for fp32 operands is a
   different numeric mode and is not the canonical behaviour.

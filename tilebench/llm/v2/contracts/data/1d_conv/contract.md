@@ -37,7 +37,7 @@ have defaults and must not affect the computation).
 1. **Allocate** the output (uninitialised allocation suffices: every element
    is written exactly once by stage 2). Host shape arithmetic (`out_L`,
    channels per group) is metadata only.
-2. **Implicit-GEMM convolution**: one device pass that, for each group,
+2. **Implicit-GEMM convolution**: one logical pass that, for each group,
    treats the output as a `(batch*out_L) x Cout_g` matrix, the reduction
    axis as the flattened `(ic_local, kl)` pair of length
    `Cin_g * kernel_size`, gathers the input patch and weight tiles on the fly
@@ -45,24 +45,31 @@ have defaults and must not affect the computation).
    matrix-multiply primitive into a local fp32 accumulator, and stores the
    cast result.
 
-Stage 2 is the only device work and is a single launch. It must not be
-split into an im2col/unfold pass plus a GEMM, a padded-copy pass plus a
-convolution, or a split-K partial pass plus a reduce pass.
+Stage 2 is the only device work. Its invariant is that no intermediate is
+materialised in global memory: it must not be split into an im2col/unfold
+pass plus a GEMM, a padded-copy pass plus a convolution, or a split-K partial
+pass plus a reduce pass, because each of these adds a global-memory round
+trip of an intermediate (patch matrix, padded input or partial sums) that
+the canonical implicit GEMM does not have. Spreading the output tiles over
+more than one launch without such an intermediate is a mapping choice.
 
 ## Algorithm family and structure
 
 Implicit GEMM (im2col-free) grouped convolution. Each output element is
 produced by exactly one local accumulator that sums the full reduction axis
 sequentially in chunks; within a chunk the product is a tensor-core (or
-equivalent) matrix multiply. The order in which the flattened reduction axis
-is enumerated (channel-major or tap-major) is free and only changes the
-summation order. No split-K, no atomics, no partial-sum scratch. Groups are
-independent GEMMs and may be mapped to a grid axis or folded into the row
-index. Out-of-range input positions (padding region), out-of-range reduction
-lanes and out-of-range output-channel lanes must contribute exactly zero:
-zero-filled masked loads, clamped addresses plus masking, or an equivalent.
-Out-of-range output lanes must not be stored (mask, clip, or redirect to a
-discarded index).
+equivalent) matrix multiply (this is what makes it an implicit GEMM rather
+than a direct multiply-accumulate convolution). The order in which the
+flattened reduction axis is enumerated (channel-major or tap-major) is free
+and only changes the summation order. No split-K, no atomics, no partial-sum
+scratch, because splitting the reduction would combine partial sums through
+global memory, a different reduction structure. Groups are independent GEMMs
+and may be mapped to a grid axis or folded into the row index. Out-of-range
+input positions (padding region), out-of-range reduction lanes and
+out-of-range output-channel lanes must contribute exactly zero: zero-filled
+masked loads, clamped addresses plus masking, or an equivalent. Out-of-range
+output lanes must not be stored (mask, clip, or redirect to a discarded
+index).
 
 ## Precision and accumulation
 
@@ -78,14 +85,16 @@ discarded index).
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed. It must not cast, transpose, pack, pad or
-copy `input` or `weight`, must not materialise an im2col matrix, and must not
-cache anything derived from input or weight contents across calls. It may
-compute scalar metadata, allocate the output, take zero-copy views of the
-contiguous tensors, and launch. The metric formulas count one read of
-`input`, one read of `weight` and one write of the output; the redundant
-re-reads of overlapping input windows that an implicit GEMM performs through
-the cache are expected and not counted.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+`run()` must not cast, transpose, pack, pad or copy `input` or `weight`,
+must not materialise an im2col matrix, and must not cache anything derived
+from input or weight contents across calls. It may compute scalar metadata,
+allocate the output, take zero-copy views of the contiguous tensors, and
+launch. The metric formulas count one read of `input`, one read of `weight`
+and one write of the output; the redundant re-reads of overlapping input
+windows that an implicit GEMM performs through the cache are expected and
+not counted.
 
 ## Permitted implementation mappings
 
@@ -96,6 +105,9 @@ the cache are expected and not counted.
 - How out-of-range addresses are made safe (clamp plus mask, zero-fill loads,
   index redirection) and how out-of-range output lanes are suppressed.
 - Flattening contiguous tensors to 1-D views and passing explicit strides.
+- The number of launches over which the output tiles (or the groups) are
+  spread, provided no intermediate is written to global memory and every
+  output element is still produced by one full-reduction accumulator.
 
 ## Forbidden substitutions
 
@@ -103,8 +115,11 @@ the cache are expected and not counted.
   `conv3d`, `torch.conv1d`, `torch.matmul`, `torch.bmm`, `torch.mm`,
   `torch.einsum`, cuDNN/cuBLAS).
 - Materialising im2col/unfold, a Toeplitz matrix, or a padded copy of the
-  input.
-- Split-K with a second reduce pass, or atomic accumulation into the output.
+  input (each adds a global-memory intermediate that the implicit GEMM
+  avoids).
+- Split-K with a second reduce pass, or atomic accumulation into the output
+  (partial sums would round-trip through global memory instead of staying in
+  one on-chip accumulator).
 - Accumulating in less than fp32, or casting fp32 operands below TF32
   precision.
 - Writing to `input` or `weight`, or returning a view of either.

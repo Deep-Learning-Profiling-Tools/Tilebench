@@ -36,9 +36,10 @@ The entry point is called as `run(logits, M, E, k)` where
 ## Required logical stages
 
 1. **Allocate** both outputs.
-2. **Row load**: read the row of `E` logits once and convert it to float32.
-   Positions beyond `E` in a padded working tile must hold `-inf` so they
-   can never be selected.
+2. **Row load**: one logical traversal of the row of `E` logits, converted
+   to float32 and kept on chip across the selection rounds. Positions
+   beyond `E` in a padded working tile must hold `-inf` so they can never
+   be selected.
 3. **Selection**: `k` sequential rounds; each round finds the maximum of the
    remaining row and its column index, records both in the next output slot,
    and excludes that column from later rounds by overwriting it with `-inf`.
@@ -49,19 +50,25 @@ The entry point is called as `run(logits, M, E, k)` where
 5. **Store**: write the `k` weights cast to `logits.dtype` and the `k`
    int32 indices for the row.
 
-Stages 2 to 5 must be fused into one launch per row group: every row is
-independent, and nothing is written to global memory between the stages.
+Stages 2 to 5 are fused: every row is independent, and nothing is written
+to global memory between the stages, because the canonical algorithm keeps
+the row, the partial selection and the selected values on chip; how rows
+are grouped into programs and launches is free.
 Within a row, round `i` of stage 3 depends on round `i - 1`, and stage 4
 depends on all rounds.
 
 ## Algorithm family and structure
 
 Row-parallel selection by repeated maximum extraction with exclusion masking
-(`k` rounds of full-row max and argmax), followed by a numerically stable
-softmax over the `k` selected values. The reductions inside a round may use
-any tree order. The selection must read the row from global memory once and
-keep it on chip across the rounds; the softmax must be over the `k` selected
-values only, never over all `E` experts.
+(`k` rounds of full-row max and argmax, which is the selection work this
+operator measures), followed by a numerically stable softmax over the `k`
+selected values. The reductions inside a round may use
+any tree order. The selection makes one logical traversal of the row and
+keeps it on chip across the rounds (re-reading the row in every round would
+make it a `k`-pass algorithm; this counts passes of the algorithm, not
+physical DRAM transactions, which caches, TMA and the compiler may change);
+the softmax must be over the `k` selected values only, never over all `E`
+experts.
 
 ## Precision and accumulation
 
@@ -75,15 +82,16 @@ values only, never over all `E` experts.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the two output allocations,
-derivation of padded tile widths from `E` and `k`, and the fused kernel. No
-cast, copy, sort or partial preprocessing of `logits` may happen on the host,
-and nothing may be cached across calls.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, `run()` allocates the two outputs and derives padded
+tile widths from `E` and `k`. No cast, copy, sort or partial preprocessing
+of `logits` may happen on the host, and nothing may be cached across calls.
 
 ## Permitted implementation mappings
 
-- Rows per program, the padded tile width (any power of two at least `E`),
-  the number of lanes and launch geometry are free.
+- Rows per program, the padded tile width (any width at least `E`), the
+  number of lanes and launch geometry are free.
 - Whether the `k` rounds are unrolled at compile time or executed as a loop
   is free; `k` may be specialised as a compile-time constant.
 - The tree order of max, argmax and sum reductions, and the exp

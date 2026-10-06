@@ -36,13 +36,16 @@ The entry point is called as `run(x, rms_w)`: `x` and `rms_w` positional;
 2. **Normalise and scale**: `y = x * rstd * w` for every element of the row,
    evaluated in fp32 and cast once to the output dtype at the store.
 
-Stage 2 depends on stage 1 for the same row only. Both stages belong to one
-launch: the row statistic is a private value of the program that owns the
-row and never touches global memory. Splitting one row across several
-programs (cross-program reduction, atomics) or splitting the two stages into
-separate launches with a global `rstd` buffer is not the canonical structure
-and is not permitted. Rows are independent; several rows per program, or a
-chunked loop over a long row, is free.
+Stage 2 depends on stage 1 for the same row only. The row statistic is a
+private value of the program that owns the row and never round-trips through
+global memory, because the canonical algorithm keeps it on chip between the
+two sweeps; splitting the two stages into separate launches with a global
+`rstd` buffer is therefore not permitted. Splitting one row across several
+programs (cross-program reduction, atomics) is not permitted either, because
+combining the partial sums would need a global-memory intermediate or
+atomics that the canonical algorithm does not have. Rows are independent;
+several rows per program, a chunked loop over a long row, or distributing
+the rows over more than one launch is free.
 
 ## Algorithm family and structure
 
@@ -68,15 +71,19 @@ second sweep may re-read the row from memory or keep it on chip when it fits.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: viewing `x` as `(batch*M, K)`, allocating
-the output, and the launch. No input repacking, no cast copies, no state
-cached across calls, nothing precomputed outside `run()`. The weight is
-consumed as given, a contiguous `(K,)` vector, and may be re-read per row.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Viewing `x` as `(batch*M, K)` is metadata only. No input repacking, no cast
+copies, no state cached across calls, nothing precomputed outside `run()`.
+The weight is consumed as given, a contiguous `(K,)` vector, and may be
+re-read per row.
 
 ## Permitted implementation mappings
 
 - Chunk width along `K`, rows per program, vectorisation, pipelining depth
   and other launch parameters.
+- Distributing the rows over one or several launches, provided each row's
+  statistic stays private to the program that owns the row.
 - Re-reading the row for the second sweep versus holding it on chip.
 - Internal order of the fp32 sum.
 - Fill values for out-of-range lanes of `x` (must act as zero in the sum) and
@@ -94,7 +101,9 @@ consumed as given, a contiguous `(K,)` vector, and may be re-read per row.
 - Accumulating the sum of squares, or evaluating the normalise multiply, in
   fp16/bf16.
 - Dividing by a padded row length instead of `K`, or omitting `eps`.
-- Splitting one row's reduction across programs or launches.
+- Splitting one row's reduction across programs, or passing the row
+  statistic between launches through global memory (both add a global-memory
+  intermediate that the canonical algorithm keeps on chip).
 - Writing the result into `x` in place, or returning a view of `x`.
 
 ## Permitted PyTorch operations

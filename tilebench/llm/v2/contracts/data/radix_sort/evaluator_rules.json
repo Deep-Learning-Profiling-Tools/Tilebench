@@ -1,9 +1,9 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "radix_sort",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
-    {"id": "working_copy_and_scratch", "description": "Copy input into a run-allocated key buffer (timed), allocate a second key buffer and the per-pass histogram/scan scratch inside run()."},
+    {"id": "working_copy_and_scratch", "description": "Copy input into a run-allocated key buffer (device work, counted), allocate a second key buffer and the per-pass histogram/scan scratch inside run()."},
     {"id": "pass_count", "description": "Per digit pass: per-block exact counts of keys per digit value written to a histogram."},
     {"id": "pass_scan", "description": "Per digit pass: exclusive prefix sum over the histogram yielding the global write base for each (digit value, block), completed before any scatter of that pass."},
     {"id": "pass_stable_scatter", "description": "Per digit pass: each key written to base[digit, block] + its rank among same-digit keys preceding it in the block, into the other key buffer (stable partition)."},
@@ -37,6 +37,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none with respect to input; the returned (N,) int32 tensor is one of the key buffers allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the working copy (clone) of input, all allocations (two key buffers plus histogram/scan scratch), every digit pass (count, scan, stable scatter) and the buffer swaps. No cached state across calls, no untimed presort or prepacking. bytes_expr in config.yaml assumes a fixed pass count and omits the clone; see audit review items."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes: the working copy (clone) of input, any zero-fill of scratch and every digit pass (count, scan, stable scatter); the allocation calls (two key buffers plus histogram/scan scratch) and the Python buffer swaps are host work, not GPU time. No cached state across calls, no untimed presort or prepacking. bytes_expr in config.yaml assumes a fixed pass count and omits the clone; see audit review items."},
   "tolerance_source": "config.verify"
 }

@@ -26,31 +26,38 @@ have defaults and must not affect the computation).
   `A`, freshly allocated inside `run()` on every call and returned as a
   single tensor (a flat view of a freshly allocated 3-D buffer is fine). It
   must not alias `A` or `B`.
-- The benchmark uses `N == K == M`, but the implementation must not assume
-  it, and `M`, `N`, `K` need not be multiples of any tile extent.
+- The task's declared shape has `N == K == M`; supporting shapes other than
+  the declared one is not required. Edge handling is required wherever that
+  shape is not a multiple of the chosen tile.
 
 ## Required logical stages
 
 1. **Allocate** the output (uninitialised allocation suffices).
-2. **Batched GEMM**: one device pass in which every `(batch, M-tile,
+2. **Batched GEMM**: one logical pass in which every `(batch, M-tile,
    N-tile)` output tile is accumulated over the full `K` range into a local
    fp32 accumulator and stored, cast, exactly once.
 
-Stage 2 is the only device work and is a single launch. There is no
-split-K pass followed by a reduction pass, and no separate repacking pass
-over `A` or `B` (see the open review item).
+Stage 2 is the only device work. There is no split-K pass followed by a
+reduction pass (partial sums would round-trip through global memory instead
+of staying in one on-chip accumulator), and no separate repacking pass over
+`A` or `B` (see the open review item). Spreading the output tiles over more
+than one launch (for example one launch per batch slice) without any
+intermediate is a mapping choice.
 
 ## Algorithm family and structure
 
 Classic 2-D output tiling of `BATCH` independent GEMMs. Each output element
 is produced by exactly one local accumulator that sums the whole `K` extent
 sequentially in chunks; each chunk is a tensor-core (or equivalent) matrix
-multiply. No split-K, no atomics, no partial-sum scratch. The batch index
-may be a grid axis or folded into a linear tile index; the raster order of
-tiles (including grouped or swizzled orderings) is free. Edge tiles must be
-handled by zero-filled loads (out-of-range `K` lanes contribute zero) and
-clipped or masked stores (no out-of-range element is written); tile-multiple
-shapes must not be assumed.
+multiply. No split-K, no atomics, no partial-sum scratch, because splitting
+`K` would combine partial sums through global memory, a different reduction
+structure. The batch index may be a grid axis or folded into a linear tile
+index; the raster order of tiles (including grouped or swizzled orderings)
+is free. Wherever the chosen tile does not divide the task's `M`, `N` or
+`K`, edge tiles must be handled by zero-filled loads (out-of-range `K` lanes
+contribute zero) and clipped or masked stores (no out-of-range element is
+written); supporting shapes other than the task's declared shape is not
+required.
 
 ## Precision and accumulation
 
@@ -65,13 +72,14 @@ shapes must not be assumed.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed, on every call. The provisional rule,
-pending the open review item below, is: consume `A` and `B` in their given
-row-major layouts through zero-copy views; do not transpose, pack, cast or
-copy either operand; do not cache anything derived from input values or
-input identity across calls. Host-side descriptor or metadata construction
-is permitted. The metric formulas count one read of `A`, one read of `B`
-and one write of the output.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+The provisional rule, pending the open review item below, is: consume `A`
+and `B` in their given row-major layouts through zero-copy views; do not
+transpose, pack, cast or copy either operand; do not cache anything derived
+from input values or input identity across calls. Host-side descriptor or
+metadata construction is permitted. The metric formulas count one read of
+`A`, one read of `B` and one write of the output.
 
 ## Permitted implementation mappings
 
@@ -82,13 +90,17 @@ and one write of the output.
   to suit the matrix-multiply primitive's operand layout.
 - Whether the batch index is a grid axis or folded into a linear tile
   index.
+- The number of launches over which the output tiles are spread (for
+  example one launch per batch slice), provided no intermediate is written
+  to global memory.
 
 ## Forbidden substitutions
 
 - `torch.matmul`, `torch.bmm`, `torch.mm`, `torch.einsum`, `torch.baddbmm`,
   the `@` operator on tensors, or any other library GEMM.
 - Split-K with a separate reduce pass, or atomic accumulation into the
-  output.
+  output (partial sums would round-trip through global memory instead of
+  staying in one on-chip accumulator).
 - Accumulating in less than fp32, or casting fp32 operands below TF32
   precision.
 - Materialised transposed or packed copies of `A` or `B` (provisional, see

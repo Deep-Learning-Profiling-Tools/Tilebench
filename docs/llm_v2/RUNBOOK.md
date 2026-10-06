@@ -16,7 +16,7 @@ hidden.
 python -m tilebench.llm.v2 doctor                 # versions, device, manifests, skills, contracts, isolation backend
 python -m tilebench.llm.v2 validate-manifests     # study/folds/modes/skills/contracts/rule scopes; exit 1 on errors
 python -m tilebench.llm.v2 inventory              # registered assets with hashes and provider/publication grants
-python -m pytest tests/llm_v2 -q                  # CPU/mock tests of the protocol (146 tests)
+python -m pytest tests/llm_v2 -q                  # CPU/mock tests of the protocol (155 tests)
 ```
 
 ## Task definition
@@ -146,6 +146,23 @@ python -m tilebench.llm.v2 base ... --resume        # continue
 
 Decisions are appended to `reviews.jsonl` and to `trajectory.json.notes`.
 There is no automatic clearance; the optional LLM reviewer is disabled.
+
+## Empirical calibration (GPU; exclusive with campaigns; writes only a new calibration directory)
+
+```
+python -m tilebench.llm.v2 calibrate --device B200                       # dgx003: run with LD_LIBRARY_PATH unset
+python -m tilebench.llm.v2 calibration-check artifacts/llm_v2/calibration/B200/<id>/profile.json
+python -m tilebench.llm.v2 calibration-register --device B200 --profile artifacts/llm_v2/calibration/B200/<id>/profile.json --status candidate
+python -m tilebench.llm.v2 calibration-register --device B200 --profile ... --status frozen --by "<owner>"   # owner decision
+python -m tilebench.llm.v2 scoring-table --device B200 --out artifacts/llm_v2/scoring/B200/<file>.json
+```
+
+`calibrate --quick` smoke-tests the code path (never registrable). The
+legacy table `tilebench/data/peak_performance/<GPU>.json` is never written;
+`scripts/measure_peak.py` is not part of the v2 chain. See
+`docs/llm_v2/CALIBRATION.md` for the protocol, the modes and the per-device
+instructions (GH200 / MI300X run the same command locally; Trn2 needs the
+native adapter from the NKI window).
 
 ## Clean-tree publication check
 

@@ -17,20 +17,25 @@ No keyword arguments are passed. Input that is not 2-D is outside the benchmark.
 - `out` (returned): `(n, m)`, same dtype as `x`, freshly allocated inside
   `run()` on every call, contiguous row-major (`out.stride() == (m, 1)`).
   Returned as a single tensor.
-- `m` and `n` need not be multiples of any tile size in general; no element
+- Edge handling is required wherever the task's fixed `m` or `n` is not a
+  multiple of the chosen tile size; no element
   outside `[0, m) x [0, n)` may be read, and no element outside
   `[0, n) x [0, m)` of `out` may be written.
 
 ## Required logical stages
 
 1. **Allocate** the `(n, m)` output (uninitialised allocation is sufficient).
-2. **Tiled transpose**: read every element of `x` exactly once and write it
-   exactly once to its transposed position in `out`.
+2. **Tiled transpose**: one logical traversal that reads every element of
+   `x` once and writes it once to its transposed position in `out`.
 
-Stage 2 is a single logical stage with no inter-tile dependencies and is
-expected to be one launch. No additional pass over the data is permitted (for
-example a first pass producing a strided intermediate followed by a
-compaction pass).
+Stage 2 is a single logical stage with no inter-tile dependencies, and no
+intermediate tensor is materialised in global memory. No additional pass over
+the data is permitted (for example a first pass producing a strided
+intermediate followed by a compaction pass), because it adds a full extra
+read and write of the matrix and so changes the algorithm rather than its
+mapping. These are logical traversal counts, not a guarantee about physical
+DRAM transactions, which caches, bulk copies and the compiler may change.
+How the tiles are split across programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
@@ -52,21 +57,26 @@ written.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the output allocation and the
-transpose kernel. There is no cast, packing, host-side copy or cached state.
-The input must be consumed in its given layout; it may not be copied, padded
-or re-laid-out before the kernel reads it. Nothing may be cached across
-calls.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+There is no cast, packing, host-side copy or cached state. The input must be
+consumed in its given layout; it may not be copied, padded or re-laid-out
+before the kernel reads it. Nothing may be cached across calls.
 
 ## Permitted implementation mappings
 
 - Tile shape (square or rectangular), elements per program, grid shape and
   traversal order, pipelining depth and vector width are free.
+- The number of launches is free: the tiles may be covered by one launch or
+  split across several, provided each element is still moved once and
+  nothing but `out` is written to global memory.
 - Reading strided and writing coalesced, reading coalesced and writing
   strided, or re-laying out the tile on chip so that both sides are
   coalesced are all acceptable.
 - Edge tiles may be handled by explicit masks or by the DSL's bounds-padded
-  loads and bounds-clipped stores.
+  loads and bounds-clipped stores. Edge handling is required wherever the
+  task's fixed `m` or `n` is not a multiple of the chosen tile dimension;
+  supporting shapes other than the task's declared shape is not required.
 - Passing explicit strides of `x` and `out` to the kernel is permitted; so is
   assuming the contiguous layouts stated above.
 
@@ -78,7 +88,9 @@ calls.
 - Materialising the transpose with PyTorch (`x.t().contiguous()`,
   `x.t().clone()`, `out.copy_(x.t())`, `torch.as_strided` followed by a copy,
   and similar) instead of a kernel.
-- Multiple passes over the data or scratch buffers in global memory.
+- Multiple logical passes over the data or scratch buffers in global
+  memory, because either adds a full extra read and write of the matrix;
+  this counts passes in the algorithm, not physical memory transactions.
 - Any dtype conversion.
 - Mutating `x`.
 

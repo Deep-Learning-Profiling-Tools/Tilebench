@@ -34,26 +34,35 @@ b_seqlen[b] = seq_len >= 1; rows with no valid split are unspecified.
   no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
-1. Per (batch, head) program: read b_seqlen[b], compute nb.
+1. For each (batch, head): read b_seqlen[b], compute nb.
 2. Weighted combine over the valid splits in fp32, producing the head_dim
    numerator vector and the scalar denominator, either as a single online
-   pass over splits in ascending index order (running max m, rescale factor
-   exp(m_old - m_new) applied to the running numerator and denominator,
-   weight exp(lse_s - m_new)), or as a max pass followed by a weighted-sum
-   pass over the same splits. Invalid splits are excluded either by the
-   loop bound or by neutralising them (weight 0, value 0).
+   pass over the splits (running max m, rescale factor exp(m_old - m_new)
+   applied to the running numerator and denominator, weight
+   exp(lse_s - m_new)), or as a max pass followed by a weighted-sum pass
+   over the same splits. The splits may be visited in any order and in
+   chunks: each chunk subtracts the running maximum known at that point,
+   with the rescaling above, and only the final normalised result must
+   equal the exact stable combine. If the whole split axis is held on
+   chip, the max and the weighted sums are evaluated over the held values,
+   with no streaming loop and no -inf initial state. Invalid splits are
+   excluded either by the loop bound or by neutralising them (weight 0,
+   value 0).
 3. Normalise numerator / denominator, round to the output dtype, store the
    head_dim vector.
 
-All three stages execute in ONE launch; no global intermediate, no
-cross-program reduction, no second launch.
+The weights and running statistics never round-trip through global memory
+and the split axis of one (batch, head) is not reduced across programs,
+because the canonical combine keeps them on chip and a cross-program
+combine would add a global intermediate. The number of kernel launches is
+not otherwise fixed.
 
 ## Algorithm family and structure
 Numerically stable log-sum-exp weighted average over the split axis (the
 softmax of the per-split log-sum-exp values applied to the partial outputs).
-The split axis is reduced sequentially per (batch, head) program (ascending
-order for the online form); the head_dim axis is element-wise and may be
-held whole or tiled. No sort, no scan.
+The split axis of each (batch, head) is reduced inside one program (in any
+order, streamed or held whole); the head_dim axis is element-wise and may
+be held whole or tiled. No sort, no scan.
 
 ## Precision and accumulation
 - fp32 for the running max, the weights, the denominator and the numerator
@@ -63,26 +72,33 @@ held whole or tiled. No sort, no scan.
 - Tolerance: the framework's per-dtype defaults (no verify override).
 
 ## Preprocessing and timing boundary
-run() performs only: the host `.item()` on the CPU scalar, shape reads, the
-output allocation (and metadata-only views of it), and the launch. No casts,
-copies, masking or cloning of `mid_o_lse` on the host, no padding or
-re-layout of `mid_o`, no state across calls, nothing precomputed outside
-run().
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+The host `.item()` on the CPU `block_seq` scalar is permitted (it causes no
+device synchronisation), as are shape reads, the output allocation and
+metadata-only views of it. No casts, copies, masking or cloning of
+`mid_o_lse` on the host, no padding or re-layout of `mid_o`, no state across
+calls, nothing precomputed outside run().
 
 ## Permitted implementation mappings
 - One (batch, head) per program (or several per program, or head_dim split
   across programs with the same per-program recurrence).
 - Runtime (data-dependent) versus compile-time loop trip count over splits;
   skipping versus neutralising invalid splits.
-- Online single pass versus two-pass max-then-sum over the split axis.
+- Online single pass versus two-pass max-then-sum over the split axis; the
+  order in which splits are visited; chunked processing with rescaling
+  between chunks, or holding the whole split axis on chip.
+- How (batch, head) work is grouped into programs and launches.
 - Vector width, pipelining, number of resident programs, specialisation on
   block_seq / num_blocks / head_dim.
 
 ## Forbidden substitutions
 - Host-side tensor arithmetic for any stage (torch.exp, torch.max,
   torch.sum, torch.logsumexp, torch.softmax, masked_fill on tensors).
-- Materialising the weights or masked log-sum-exp values in global memory;
-  any second launch or global scratch.
+- Materialising the weights or masked log-sum-exp values in global memory,
+  or any other global scratch (for example partial combines of a split
+  range merged by a second launch).
 - Recomputing attention from keys/values (there are none); ignoring
   b_seqlen (assuming all splits valid from the shape alone).
 - Reduced-precision accumulation.

@@ -27,9 +27,9 @@ the entry point on every call.
 
 ## Algorithm family and structure
 Blocked dense matrix multiplication with fp32 accumulation. The K reduction
-order is free. Tails beyond M, N or K must contribute 0 and must never be
-stored; the benchmark shapes happen to be tile-aligned, but correctness
-must not depend on it.
+order is free. Wherever the chosen tile does not divide the task's M, N or
+K, tails beyond them must contribute 0 and must never be stored; supporting
+shapes other than the task's declared shape is not required.
 
 ## Precision and accumulation
 - fp32 inputs: operands may be rounded to TF32 (10-bit mantissa) for the
@@ -42,13 +42,15 @@ must not depend on it.
   including the fp8 output of the fp8 case.
 
 ## Preprocessing and timing boundary
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
 The entry point must consume A and B exactly as delivered. Any layout
-transform of B (for example forming a K-major copy so that both operands
-are read along K) must be performed inside the entry point on every call
-and is timed. No cross-call cache keyed by tensor identity, address, shape
-or dtype may hold a transformed operand, a descriptor or an output. The
-output allocation is timed. No prepacked inputs are provided or may be
-assumed.
+transform of B (for example forming a K-major copy so that both operands are
+read along K) must be performed inside the entry point on every call and its
+device time is counted. No cross-call cache keyed by tensor identity,
+address, shape or dtype may hold a transformed operand, a descriptor or an
+output. No prepacked inputs are provided or may be assumed.
 
 ## Permitted implementation mappings
 Logical tile shapes, launch parameters, grouped or swizzled tile ordering,

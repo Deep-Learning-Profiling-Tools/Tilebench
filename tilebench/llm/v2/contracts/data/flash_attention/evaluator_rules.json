@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "flash_attention",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
-    {"id": "s1", "description": "Per (batch, head, query block) program: query tile loaded once; running max = -inf, running sum = 0, fp32 output accumulator = 0."},
-    {"id": "s2", "description": "Single ascending pass over key/value tiles up to the diagonal (causal skip by loop bound): fp32 QK^T, -inf mask on key > query (and overhang), online rescale (alpha = exp(m_old - m_new)), P rounded to fp16 before the fp32-accumulated PV product."},
-    {"id": "s3", "description": "Final normalisation O / l, rounded to the output dtype and stored; the whole operator is one launch with no global intermediate."}
+    {"id": "s1", "description": "Per (batch, head, query block), in the program that owns it: query tile loaded; running max (-inf or the first visited tile's max), running sum 0 and fp32 output accumulator 0 held on chip."},
+    {"id": "s2", "description": "Single logical pass over the key/value tiles up to the diagonal, each visited once in any order (fully masked tiles not visited): fp32 QK^T, -inf mask on key > query (and overhang), online rescale (alpha = exp(m_old - m_new)) when more than one tile is processed, P rounded to fp16 before the fp32-accumulated PV product."},
+    {"id": "s3", "description": "Final normalisation O / l, rounded to the output dtype and stored; no global intermediate (scores, probabilities, statistics or partial outputs) and no cross-program combine; the launch count is not fixed."}
   ],
   "forbidden_substitutions": [
     {"pattern": "scaled_dot_product_attention|torch\\.nn\\.functional\\.multi_head_attention_forward|torch\\.nn\\.MultiheadAttention|flash_attn", "message": "library attention replaces the whole computation", "level": "confirmed", "scope": "host"},
@@ -25,6 +25,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated tensor with q's shape and dtype on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains only host scalars, the output allocation, optional descriptor metadata and one launch. No casts, copies or re-layouts of q/k/v; .contiguous() must be a no-op; no state across calls. flops_expr is the dense count while causal is fixed true (metric review item), bytes_expr is compulsory traffic."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "Measured: GPU time of all device work run() causes (the attention kernel); host scalars, the output allocation call and descriptor metadata are host work, not GPU time. No casts, copies or re-layouts of q/k/v; .contiguous() must be a no-op; no state across calls. flops_expr is the dense count while causal is fixed true (metric review item), bytes_expr is compulsory traffic."},
   "tolerance_source": "config.verify"
 }

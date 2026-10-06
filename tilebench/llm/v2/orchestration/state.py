@@ -92,6 +92,7 @@ class TrajectoryState:
     stop_reason: str | None = None        # why status is incomplete (provider refusal, transport exhaustion, ...)
     evaluator_fingerprint: dict | None = None   # evaluation.fingerprint record at trajectory creation
     evaluator_changes: list[dict] = field(default_factory=list)   # recorded (validation-only) evaluator changes on resume
+    scoring_binding: dict | None = None   # metrics.empirical.scoring_binding at creation: this device's profile sha + declaration sha
 
     # -- persistence -------------------------------------------------------
     def to_dict(self) -> dict:

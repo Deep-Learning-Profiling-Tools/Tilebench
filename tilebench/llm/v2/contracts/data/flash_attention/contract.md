@@ -30,14 +30,17 @@ case; the flag must be honoured, with `causal=False` meaning full attention.
   no keyword arguments are passed. Never run a configuration search.
 
 ## Required logical stages
-1. Query block setup: one program owns one block of query rows of one
-   (batch, head); it loads its query tile once and initialises a running
-   row-max m = -inf, a running row-sum l = 0 and an fp32 output accumulator
-   O = 0.
-2. Streaming key/value loop, in ascending key order, over exactly the key
-   tiles that contain at least one unmasked key for this query block (tiles
-   lying entirely above the diagonal are skipped by the loop bound when
-   causal). Per key tile:
+1. Query block setup: the program that owns a block of query rows of one
+   (batch, head) loads its query tile and initialises the running row
+   statistics (row-max m, either -inf or taken from the first visited key
+   tile; row-sum l = 0) and an fp32 output accumulator O = 0.
+2. Streaming key/value loop over exactly the key tiles that contain at
+   least one unmasked key for this query block, each visited once (tiles
+   lying entirely above the diagonal are not visited when causal, because
+   visiting them would roughly double the executed work). The visiting
+   order is free; an order in which a row can meet a fully masked tile
+   before any unmasked key needs a guard against exp(-inf - (-inf)).
+   Per key tile:
    a. scores S = Q . K^T accumulated in fp32, with the scale 1/sqrt(head_dim)
       applied either to the query operand beforehand or to the scores;
    b. masked positions (key > query when causal; keys beyond seq_len if the
@@ -46,22 +49,35 @@ case; the flag must be honoured, with `causal=False` meaning full attention.
       P = exp(S - m_new); l = l * alpha + rowsum(P); O = O * alpha + P . V
       with P rounded to the input dtype before the product and fp32
       accumulation; m = m_new.
+   Each tile subtracts the running maximum known at that point, with the
+   rescaling above; only the final normalised result must equal the exact
+   stable softmax. If the whole key range of a query block is held on chip
+   at once, the loop may degenerate to a single tile: max and sum are
+   evaluated over the held values, with no rescaling and no -inf initial
+   state.
 3. Finalisation: O = O / l, round to the output dtype, store the query block.
 
-All three stages execute in ONE launch per call. Stage 2 must be a single
-pass over K/V per query block; a separate score/softmax pass, a materialised
-score matrix, or a split-key reduction with a global combine are not
-permitted.
+The running statistics and the accumulator stay on chip from stage 1 to
+stage 3 and the output is the only global-memory write: a separate
+score/softmax pass, a materialised score matrix, or a split-key reduction
+with a cross-program combine is not permitted, because each would
+round-trip scores, statistics or partial outputs through global memory
+that the canonical algorithm keeps on chip. Stage 2 is a single logical
+pass over K/V per query block; this counts passes of the algorithm, not
+physical DRAM transactions, which caches, TMA and the compiler may change.
+The number of kernel launches is not otherwise fixed.
 
 ## Algorithm family and structure
 Online-softmax (flash-style) fused attention forward: tile matmul for QK^T,
 running max with exponential rescaling of the running sum and accumulator,
 tile matmul for PV, one final normalisation. Reductions: per query row,
-a sequential combine over key tiles in ascending order, each step using an
-intra-tile row max and row sum (tree order free); the inner-product
-accumulation order inside each tile matmul is free. No sort, no scan, no
-cross-program reduction. Causal tiles strictly above the diagonal are
-skipped; the diagonal tile is masked with -inf.
+a combine over the visited key tiles inside the program that owns the
+query block, each step using an intra-tile row max and row sum (tree order
+free; key-tile order free); the inner-product accumulation order inside
+each tile matmul is free. No sort, no scan, no cross-program reduction (a
+split-key combine would add a global round trip of partial outputs and
+statistics). Causal tiles strictly above the diagonal are skipped (they
+would add about half the work); the diagonal tile is masked with -inf.
 
 ## Precision and accumulation
 - fp16 operands into both tile matmuls; fp32 accumulation of scores, of the
@@ -76,11 +92,14 @@ skipped; the diagonal tile is masked with -inf.
 - Tolerance: the operator config's verify section.
 
 ## Preprocessing and timing boundary
-run() performs only: shape reads, host scalars (scale, flags), the output
-allocation, optional descriptor/metadata objects for the launch, and the
-launch. No casts, copies, transposes, padding, re-layout or packing of
-q/k/v; a `.contiguous()` call is permitted only as a no-op; nothing cached
-across calls or precomputed outside run().
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, run() may read shapes, compute host scalars (scale,
+flags), allocate the output and build optional descriptor/metadata objects
+for the launch. No casts, copies, transposes, padding, re-layout or packing
+of q/k/v; a `.contiguous()` call is permitted only as a no-op; nothing
+cached across calls or precomputed outside run().
 
 ## Permitted implementation mappings
 - Query-block and key-tile extents, launch ordering of (batch, head) versus
@@ -92,17 +111,23 @@ across calls or precomputed outside run().
   intersect the diagonal; compile-time versus runtime loop trip count.
 - Where the scale is applied and the base of the exponential (see
   Precision).
+- The order in which key tiles are visited, and holding the whole key
+  range of a query block on chip as a single tile (see stage 2).
+- How the (batch, head, query block) work is spread over programs and
+  launches, provided nothing but the output is written to global memory.
 
 ## Forbidden substitutions
 - torch.nn.functional.scaled_dot_product_attention or any library attention;
   host-side torch.matmul/bmm/einsum/softmax for any stage.
 - Materialising the (seq_len x seq_len) score or probability matrix, or any
-  global scratch; a two-pass (max first, then exponentials) softmax over the
-  full key axis; split-key partial results combined in a second launch.
-- Processing fully masked key tiles when causal (the loop bound must skip
-  them); omitting the -inf mask on the diagonal tile.
+  global scratch; a two-pass softmax that traverses K twice (max first, then
+  exponentials); split-key partial results combined across programs (in a
+  second launch or otherwise). Each adds a global round trip or a second
+  logical pass over K/V that the canonical algorithm does not have.
+- Processing fully masked key tiles when causal (they must be skipped, for
+  example by the loop bound); omitting the -inf mask on the diagonal tile.
 - fp32 operands into the matmuls or fp16 accumulators; omitting the running
-  rescale.
+  rescale when the key range is processed in more than one tile.
 - Autotuning, timing, benchmarking or configuration search inside the
   generated file.
 

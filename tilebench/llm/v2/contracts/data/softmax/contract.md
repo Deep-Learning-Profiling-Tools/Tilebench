@@ -23,37 +23,47 @@ are passed.
   allocated inside `run()` on every call. It must not alias `x`.
 
 ## Required logical stages
-
 1. **Row statistics**: for each row, the exact row maximum `m` and the
-   denominator `l = sum exp(x - m)`, both in fp32, obtained in a single
-   streaming sweep over the row with the online rescaling recurrence
-   (running max `m`, running sum `l`; on a new chunk with maximum `m_c`:
-   `m_new = max(m, m_c)`, `l = l * exp(m - m_new) + sum exp(chunk - m_new)`,
-   `m = m_new`). Depends on the whole row.
-2. **Normalise**: for every element, `y = exp(x - m) / l` in fp32, cast once
-   to the output dtype at the store.
+   denominator `l = sum_j exp(x[i, j] - m)`, both in fp32. When the row is
+   processed in chunks, they are obtained in one logical traversal of the
+   row with the online rescaling recurrence (running max `m`, running sum
+   `l`; on a new chunk with maximum `m_c`: `m_new = max(m, m_c)`,
+   `l = l * exp(m - m_new) + sum exp(chunk - m_new)`, `m = m_new`).
+   Subtracting the running maximum inside a chunk is part of this
+   recurrence and is correct: only the final `m` and `l` must be the exact
+   row statistics. When the whole row is held on chip, `m` and `l` may be
+   evaluated directly over the held values (the recurrence then degenerates
+   to one chunk: no streaming loop, no repeated load and no literal `-inf`
+   initial state are required). Depends on the whole row.
+2. **Normalise**: for every element, `y = exp(x - m) / l` with the final
+   row statistics, in fp32, cast once to the output dtype at the store.
 
-Stage 2 depends on stage 1 for the same row only. Both stages belong to one
-launch: the statistics are private values of the program that owns the row
-and never touch global memory. Splitting one row across several programs
-(cross-program max/sum, atomics) or splitting the two stages into separate
-launches with global `m`/`l` buffers is not permitted. Several rows per
-program, or a chunked loop over a long row, is free. When a whole row is
-held on chip, the order in which `m` and `l` are evaluated over the held
-values is free, but the row may be read from memory at most twice (once for
-the statistics, once for the normalisation).
+Stage 2 depends on stage 1 for the same row only. `m` and `l` are private
+values of the program that owns the row and never pass through global
+memory, because a global round trip of the statistics (cross-program
+max/sum, atomics, or a separate statistics launch writing `m`/`l` buffers)
+adds traffic and a dependency that the canonical algorithm does not have.
+Several rows per program, or a chunked loop over a long row, is free. The
+algorithm traverses each row at most twice logically (once for the
+statistics, once for the normalisation, or once in total when the row is
+held on chip); this counts logical traversals of the input in the
+algorithm, not physical DRAM transactions, which caches, TMA and the
+compiler may change.
 
 ## Algorithm family and structure
-
-Online (streaming, rescaling) two-sweep row softmax inside one program:
-sweep one yields both statistics, sweep two normalises. Within a chunk the
-max and the sum are tile-wide reductions whose internal order is free;
-across chunks the recurrence is sequential. The initial state is
-`m = -inf, l = 0`. Out-of-range lanes of a partial chunk must behave as
-`-inf` in sweep one (they contribute `exp(-inf) = 0` to the sum and never
-win the max) and must never be stored in sweep two. The classic three-sweep
-scheme (max sweep, then sum sweep, then normalise) is not the canonical
-structure.
+Online (rescaling) two-traversal row softmax inside the program that owns
+the row: the first traversal yields both statistics, the second
+normalises; a row held on chip needs a single load. Within a chunk the max
+and the sum are tile-wide reductions whose internal order is free; across
+chunks the recurrence is sequential. When the recurrence is used over
+several chunks its initial state is `m = -inf, l = 0` (or the statistics
+of the first chunk). Out-of-range lanes of a partial chunk (only when the
+task's fixed row length is not a multiple of the chosen chunk width) must
+behave as `-inf` in the statistics (they contribute `exp(-inf) = 0` to the
+sum and never win the max) and must never be stored. The classic
+three-traversal scheme (a max traversal, then a sum traversal, then the
+normalisation) is not the canonical structure, because it adds a third
+logical traversal of every row.
 
 ## Precision and accumulation
 
@@ -67,32 +77,36 @@ structure.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed: the output allocation and the launch. `x`
-is consumed as given; no copy, cast, transpose, padding, cached state or
-precomputation outside `run()`.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+`x` is consumed as given; no copy, cast, transpose or padding of `x`, no
+state cached across calls and no precomputation outside `run()`. The
+output is allocated inside `run()` on every call.
 
 ## Permitted implementation mappings
-
-- Chunk width along the row, rows per program, vectorisation, pipelining
-  depth and other launch parameters.
-- Re-reading the row for sweep two versus holding it on chip; a single
-  sweep when the whole row fits in one chunk.
+- Chunk width along the row, rows per program, grid shape, vectorisation,
+  pipelining depth and other launch parameters; the kernel may be
+  specialised on the task's fixed shape (supporting other shapes is not
+  required).
+- Holding the whole row on chip (single load, direct max/sum) versus a
+  chunked online traversal followed by a second traversal for the
+  normalisation.
 - `exp` versus `exp2` formulation; division versus reciprocal multiply;
   internal order of the per-chunk max and sum.
 - Whether the number of chunks or the row length is a compile-time constant
   or a runtime argument; explicit strides versus the contiguous layout.
 
 ## Forbidden substitutions
-
 - Calling `torch.softmax`, `torch.nn.functional.softmax`, `x.softmax(...)`,
   `log_softmax`, `nn.Softmax`, or any library softmax routine.
 - Computing `m` or `l` with PyTorch reductions on the host (`torch.max`,
   `torch.amax`, `torch.sum`, `torch.exp`, `torch.logsumexp`, ...).
-- Omitting the max subtraction, or subtracting anything other than the
-  exact row maximum in the final normalisation.
+- Omitting the max subtraction, or normalising with anything other than the
+  final exact row statistics (subtracting a running maximum inside the
+  recurrence is permitted).
 - Evaluating the exponentials or the sum in fp16.
-- A third sweep over the row from memory; splitting a row across programs
-  or launches; global scratch for the statistics.
+- A third logical traversal of the row; passing statistics or partial sums
+  between programs or launches through global memory.
 - Writing into `x` in place or returning a view of `x`.
 
 ## Permitted PyTorch operations

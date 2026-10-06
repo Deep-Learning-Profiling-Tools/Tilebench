@@ -24,13 +24,14 @@ keyword arguments are passed.
   It may be whichever of the run-allocated key buffers holds the final
   result; it must not be `input`, a view of `input`, or shared storage with
   it.
-- `N` is arbitrary (not a multiple of any block size); keys outside `[0, N)`
-  must never be counted or written.
+- `N` is the task's fixed key count; keys outside `[0, N)` must never be
+  counted or written (edge handling wherever `N` is not a multiple of the
+  chosen block size).
 
 ## Required logical stages
 
 1. **Working copy and scratch**: copy `input` into a run-allocated key
-   buffer (this copy is part of the timed work), allocate a second key
+   buffer (this copy is device work and is counted), allocate a second key
    buffer of the same size, and allocate whatever per-pass scratch the
    counting and scan stages need (for example a histogram of counts per
    (digit value, key block) and scan carry storage).
@@ -59,7 +60,8 @@ several (for example chunk totals, a scan of the totals, and a per-chunk
 scan with carry). The count of pass `p + 1` may be fused into the scatter of
 pass `p`. Each pass depends on the previous pass's scatter. All 32 bits must
 be processed regardless of the key distribution; skipping a pass because
-its digit happens to be constant is forbidden.
+its digit happens to be constant is forbidden, because it would make the
+number of passes depend on the data.
 
 ## Algorithm family and structure
 
@@ -84,11 +86,15 @@ bit-identical to the reference.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the working copy of
-`input`, all allocations, every pass and the buffer swaps. Nothing may be
-cached across calls (no reused histograms, no retained sorted copies, no
-prepacked keys), and no sorting or partial sorting may be done before
-`run()` is entered. An early return of a copy for `N <= 1` is permitted.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+The working copy of `input` and every pass (count, scan, stable scatter),
+including any device fill of zero-initialised scratch, are device work and
+are counted; the allocations and the Python-level buffer swaps are host
+work. Nothing may be cached across calls (no reused histograms, no retained
+sorted copies, no prepacked keys), and no sorting or partial sorting may be
+done before `run()` is entered. An early return of a copy for `N <= 1` is
+permitted.
 
 ## Permitted implementation mappings
 
@@ -105,6 +111,10 @@ prepacked keys), and no sorting or partial sorting may be done before
 - Tail handling by explicit masks, zero-padded loads whose padded lanes are
   excluded from counts and ranks, and out-of-range destinations for padded
   lanes that the store drops.
+- Specialising on the task's fixed `N` (for example as a compile-time
+  constant): edge handling is required wherever the fixed `N` is not a
+  multiple of the chosen block, and supporting lengths other than the
+  task's declared shape is not required.
 
 ## Forbidden substitutions
 
@@ -125,7 +135,8 @@ prepacked keys), and no sorting or partial sorting may be done before
   scratch that is fully overwritten before being read.
 - `torch.zeros` / `torch.zeros_like` only for scratch that the chosen
   counting scheme requires to be zero-initialised (for example an
-  atomically accumulated histogram); this is part of the timed work.
+  atomically accumulated histogram); this fill is device work and is
+  counted.
 - `input.clone()` (or an equivalent device copy kernel) for the working
   copy.
 - Python-level swapping of buffer references between passes.

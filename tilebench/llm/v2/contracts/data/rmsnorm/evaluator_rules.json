@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "rmsnorm",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh output of x's shape and dtype inside run(); never write into x."},
     {"id": "row_sum_squares", "description": "Per row, an fp32 sum of squares over the last dimension K (chunked loop or whole-row tile), divided by the true K, plus eps, then reciprocal square root, held privately by the program that owns the row."},
-    {"id": "normalise_scale", "description": "Per element, x * rstd * w evaluated in fp32 with one downcast to the output dtype at the store, in the same launch as the statistic."}
+    {"id": "normalise_scale", "description": "Per element, x * rstd * w evaluated in fp32 with one downcast to the output dtype at the store, using the statistic held privately by the program that owns the row (it never round-trips through global memory; the number of launches is otherwise a mapping choice)."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.nn\\.functional\\.rms_norm\\(|F\\.rms_norm\\(|torch\\.rms_norm\\(|nn\\.RMSNorm\\(", "message": "The whole operator is performed by a PyTorch normalisation routine.", "level": "confirmed", "scope": "host"},
@@ -34,6 +34,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (batch, M, K) tensor must be freshly allocated inside run() and must not share storage with x or rms_w"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the (batch*M, K) views, the output allocation and the single two-pass kernel. No cached state across calls, no untimed repack or cast of x or rms_w, no global scratch for the row statistic. eps is always the default 1e-6 in the benchmark."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted (the normalisation kernel launch(es)); host-side work (the (batch*M, K) views, the output allocation call, metadata reads) is not GPU time. No cached state across calls, no repack or cast of x or rms_w, no global scratch for the row statistic. eps is always the default 1e-6 in the benchmark."},
   "tolerance_source": "config.verify"
 }

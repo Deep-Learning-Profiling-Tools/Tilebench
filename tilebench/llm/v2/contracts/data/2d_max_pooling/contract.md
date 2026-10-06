@@ -26,7 +26,8 @@ have defaults and must not affect the computation).
 
 - `input`: flat `(N*C*H*W,)`, contiguous, dtype fp16, bf16 or fp32; NCHW
   order (plane `n*C + c` occupies `H*W` consecutive elements). Read-only.
-  The benchmark uses `W == H`; the implementation must not assume it.
+  The task's declared shape has `W == H`; supporting shapes other than the
+  declared one is not required.
 - `kernel_size`, `stride`, `padding`: ints; the same value applies to both
   spatial axes; padding is symmetric.
 - Output: flat `(N*C*H_out*W_out,)` in NCHW order, dtype of `input`,
@@ -38,26 +39,31 @@ have defaults and must not affect the computation).
 ## Required logical stages
 
 1. **Allocate** the flat output (uninitialised allocation suffices).
-2. **Direct windowed max**: one device pass in which every output element
+2. **Direct windowed max**: one logical pass in which every output element
    takes the maximum over its `kernel_size*kernel_size` window, reading the
    input in place with `-inf` for out-of-range taps, and is written exactly
    once.
 
-Stage 2 is the only device work and is a single launch. No pass may
-materialise a padded copy of the input or an unfolded window matrix, and the
-output must not be produced by a second pass over partial results.
+Stage 2 is the only device work. No pass may materialise a padded copy of
+the input or an unfolded window matrix, and the output must not be produced
+by a second pass over partial results, because each of these adds a
+global-memory intermediate and an extra logical pass that the direct stencil
+does not have. Spreading the output tiles over more than one launch, each
+reading the input directly and writing final values, is a mapping choice.
 
 ## Algorithm family and structure
 
-Direct stencil (sliding-window) reduction. Each program owns a tile of one
-or more output planes, initialises a running tile to `-inf`, folds the
-`kernel_size*kernel_size` taps in with an elementwise maximum, and stores
-the tile with bounds masking. The tap visiting order is free (the maximum is
-order-independent for non-NaN values). Taps whose input coordinate is
-negative or `>= H`/`>= W` must contribute `-inf` (masked loads with `-inf`
-fill, or an equivalent bounds-padded gather); this covers both the padding
-ring and windows overhanging the last row/column. NaN behaviour is
-unspecified; the benchmark inputs contain no NaN.
+Direct stencil (sliding-window) reduction. Each output tile keeps a running
+maximum that starts from `-inf` (the identity of the maximum), folds the
+`kernel_size*kernel_size` taps in with an elementwise maximum, and is stored
+with bounds masking wherever the tile overhangs the output; how many output
+rows, columns or planes one program covers is a mapping choice. The tap
+visiting order is free (the maximum is order-independent for non-NaN
+values). Taps whose input coordinate is negative or `>= H`/`>= W` must
+contribute `-inf` (masked loads with `-inf` fill, or an equivalent
+bounds-padded gather); this covers both the padding ring and windows
+overhanging the last row/column. NaN behaviour is unspecified; the benchmark
+inputs contain no NaN.
 
 ## Precision and accumulation
 
@@ -68,13 +74,15 @@ representable in all three dtypes.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed. It must not pad, unfold, cast or copy the
-input and must not cache anything across calls. It may compute `H_out`,
-`W_out` and the output size, allocate the output, take zero-copy views of
-the flat tensors (for example as `(N*C, H, W)` and `(N*C, H_out, W_out)`),
-and launch. The metric formulas count one read of the input and one write
-of the output, plus one comparison per tap per output; the cache re-reads of
-overlapping windows are expected and not counted.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+`run()` must not pad, unfold, cast or copy the input and must not cache
+anything across calls. It may compute `H_out`, `W_out` and the output size,
+allocate the output, take zero-copy views of the flat tensors (for example
+as `(N*C, H, W)` and `(N*C, H_out, W_out)`), and launch. The metric formulas
+count one read of the input and one write of the output, plus one comparison
+per tap per output; the cache re-reads of overlapping windows are expected
+and not counted.
 
 ## Permitted implementation mappings
 
@@ -85,6 +93,8 @@ overlapping windows are expected and not counted.
   and `padding` compile-time constants of the kernel.
 - Tail handling of partial edge tiles by explicit masks or by the DSL's
   bounds-clipped stores.
+- The number of launches over which the output tiles are spread, provided
+  each launch reads the input directly and writes final output values.
 
 ## Forbidden substitutions
 
@@ -92,9 +102,12 @@ overlapping windows are expected and not counted.
   `torch.nn.MaxPool2d`, `torch.amax` / `torch.max` over an unfolded window
   tensor, or any other library pooling.
 - `unfold` / im2col-style window materialisation, `torch.nn.functional.pad`
-  or any padded copy of the input.
-- A multi-pass scheme (for example a row-wise max followed by a
-  column-wise max written through scratch).
+  or any padded copy of the input (each materialises an intermediate in
+  global memory that the direct stencil does not have).
+- A multi-pass scheme that produces the output from partial results kept in
+  global memory (for example a row-wise max followed by a column-wise max
+  written through scratch), because it adds a global round trip and a second
+  logical pass over the data.
 - Any dtype conversion of the stored result; mutating `input`; returning a
   view of `input`.
 

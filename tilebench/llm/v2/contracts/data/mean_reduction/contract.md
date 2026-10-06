@@ -27,31 +27,37 @@ arguments are passed.
   every call. Returning a metadata-only view (for example a squeeze of a
   run-allocated `(M, 1)` buffer) is acceptable; the returned tensor must not
   share storage with `x`. Returned as a single tensor.
-- `N` need not be a multiple of any tile width; columns outside `[0, N)` must
+- Edge handling is required wherever the task's fixed `N` is not a multiple
+  of the chosen tile width; columns outside `[0, N)` must
   contribute exactly zero to the sum and the divisor must be the exact `N`.
 
 ## Required logical stages
 
 1. **Allocate** the float32 output.
-2. **Row-wise sum**: for each row, read every element exactly once, convert
-   it to float32 and accumulate it into a float32 partial sum; combine the
-   partial sums of the row into one float32 row total.
+2. **Row-wise sum**: for each row, traverse every element exactly once (one
+   logical traversal), convert it to float32 and accumulate it into a
+   float32 partial sum; combine the partial sums of the row into one
+   float32 row total.
 3. **Normalise and store**: divide the row total by `N` in float32 and write
    one float32 value per row.
 
-Stages 2 and 3 are expected to be fused into one launch; each row is
-independent of every other row. Splitting a row's reduction across several
-launches (for example a partial-sums pass followed by a combine pass through
-a global scratch buffer) is not required by the data and is not permitted:
-the operator is a single read of `x` with no global intermediates.
+Stages 2 and 3 are fused per row; each row is independent of every other
+row. Splitting a row's reduction into a partial-sums pass followed by a
+combine pass through a global scratch buffer is not required by the data
+and is not permitted, because the canonical algorithm keeps the partial
+sums on chip: the operator is a single logical traversal of `x` with no
+global intermediates. The traversal count is a property of the algorithm,
+not a guarantee about physical DRAM transactions, which caches, TMA and the
+compiler may change. The number of kernel launches is not otherwise fixed.
 
 ## Algorithm family and structure
 
-Single-pass row-wise reduction. Within a row the sum may be organised in any
-order: lane-wise partial sums over column chunks followed by a cross-lane
-tree, a direct tree, or a sequential loop. The result must be within the
-verification tolerance of the reference float32 mean, not bit-identical to
-it. No reduction across rows exists. No scan or sort is involved.
+Single-logical-pass row-wise reduction. Within a row the sum may be organised
+in any order: lane-wise partial sums over column chunks followed by a
+cross-lane tree, a direct tree, or a sequential loop. The result must be
+within the verification tolerance of the reference float32 mean, not
+bit-identical to it. No reduction across rows exists. No scan or sort is
+involved.
 
 ## Precision and accumulation
 
@@ -66,18 +72,21 @@ it. No reduction across rows exists. No scan or sort is involved.
 
 ## Preprocessing and timing boundary
 
-Everything happens inside `run()` and is timed: the output allocation and
-the reduction kernel. For the benchmark input (`x` 2-D and contiguous,
-`dim == 1`) no copy, cast, transpose or padding of `x` may be made before the
-kernel reads it, and nothing may be cached across calls. `x.contiguous()`
-may be called only as a no-op guard.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+For the benchmark input (`x` 2-D and contiguous, `dim == 1`) no copy, cast,
+transpose or padding of `x` may be made before the kernel reads it, and
+nothing may be cached across calls. `x.contiguous()` may be called only as a
+no-op guard.
 
 ## Permitted implementation mappings
 
 - Rows per program (one or several), column chunk width, number of lanes,
   pipelining depth, vector width and launch geometry are free.
 - Whether `N` is specialised as a compile-time constant or passed at runtime
-  is free.
+  is free; edge handling is required wherever the task's fixed `N` is not a
+  multiple of the chosen chunk width, and supporting shapes other than the
+  task's declared shape is not required.
 - The order in which float32 partial sums are combined is free.
 - Allocating the output as `(M,)` or `(M, 1)` float32 and returning a view of
   shape `(M,)` is free.
@@ -90,7 +99,8 @@ may be called only as a no-op guard.
   `x.sum`, `torch.sum`, `x.float().mean`, `torch.einsum`, matrix-vector
   products with a ones vector, and similar).
 - Accumulating in a dtype narrower than float32.
-- Reading `x` more than once or staging partial sums in global memory.
+- More than one logical traversal of `x` (a second pass over its
+  elements), or staging partial sums in global memory.
 - Casting or copying `x` on the host before the kernel.
 - Mutating `x`.
 

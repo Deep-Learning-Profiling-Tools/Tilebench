@@ -138,28 +138,72 @@ def _walk_states(campaign_dir: Path):
         yield p, TrajectoryState.load(p)
 
 
+def campaign_scoring(campaign_dir: Path, device: str | None = None) -> dict:
+    """The scoring binding a campaign pinned (campaign_*.json), its profile
+    (loaded and sha-verified) and the declaration. A campaign recorded before
+    bindings existed falls back to the current manifest entry, and says so."""
+    from tilebench.llm.v2.metrics import empirical
+    binding, source = None, "none"
+    for p in sorted(campaign_dir.glob("campaign_*.json")):
+        try:
+            rec = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        if rec.get("scoring_binding"):
+            binding, source = rec["scoring_binding"], f"campaign record {p.name}"
+            break
+        device = device or (rec.get("spec") or {}).get("device")
+    if binding is None and device:
+        binding, source = empirical.scoring_binding(device), "current calibration manifest (campaign recorded no binding)"
+    profile, reason = None, None
+    if binding and binding.get("profile"):
+        try:
+            profile = empirical.load_profile({"profile": binding["profile"], "sha256": binding.get("profile_sha256")})
+        except empirical.ProfileUnavailable as e:
+            reason = str(e)
+    elif binding:
+        reason = "no empirical profile registered for this device"
+    return {"binding": binding, "source": source, "profile": profile, "profile_unavailable": reason,
+            "modes_doc": empirical.load_modes(), "arithmetic_modes_sha256_now": empirical.modes_sha256()}
+
+
 def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> dict:
-    """E(B) curves of a campaign directory. Validation-run trajectories are
-    reported under their own key and labelled unscored."""
-    modes = ms.load_arithmetic_modes()
+    """E_emp(B) curves of a campaign directory against the campaign's pinned
+    empirical profile. Validation-run trajectories are reported under their
+    own key and labelled unscored."""
+    from tilebench.llm.v2.metrics import empirical
     groups: dict[tuple, dict] = {}
     budgets = budgets or [50_000, 100_000, 200_000, 400_000, 800_000]
+    scoring_by_device: dict[str, dict] = {}
     for path, st in _walk_states(campaign_dir):
         t = st.task
+        sc = scoring_by_device.setdefault(t["device"], campaign_scoring(campaign_dir, t["device"]))
+        if st.scoring_binding and sc["binding"] and sc["binding"].get("profile_sha256") != st.scoring_binding.get("profile_sha256"):
+            sc.setdefault("binding_mismatches", []).append(st.trajectory_id)
         cfg = load_operator_config(t["operator"])
-        sol = t_sol(t["device"], t["operator"], t["dtype"], t["params"], t.get("problem_size", 1),
-                    cfg.get("metrics", {}), modes)
+        rec = empirical.t_emp(t["device"], t["operator"], t["dtype"], t["params"], t.get("problem_size", 1),
+                              cfg.get("metrics", {}), sc["modes_doc"], sc["profile"])
         status = "incomplete" if st.status in ("in_progress", "incomplete", "review_required") else "eligible"
-        curve = eff.curve(sol.t_sol_ms, st.metric_rounds(), status="complete" if status == "eligible" else "incomplete")
+        curve = eff.curve(rec.t_emp_ms, st.metric_rounds(), status="complete" if status == "eligible" else "incomplete")
+        if rec.status != "ok":
+            curve.audit_flags.append(f"target {rec.status}: {rec.reason}")
         key = (t["device"], t["dsl"], st.model, st.condition, st.run_type)
-        g = groups.setdefault(key, {"curves": {}, "eligible": {}, "sol_status": {}})
+        g = groups.setdefault(key, {"curves": {}, "eligible": {}, "target_status": {}, "device": t["device"]})
         g["curves"][(t["operator"], t["dtype"])] = curve
         g["eligible"][(t["operator"], t["dtype"])] = status
-        g["sol_status"][f"{t['operator']}/{t['dtype']}"] = sol.status
+        g["target_status"][f"{t['operator']}/{t['dtype']}"] = {"status": rec.status, "mode": rec.mode, "t_emp_ms": rec.t_emp_ms,
+                                                              "provisional_t_emp_ms": rec.provisional_t_emp_ms}
     out = {}
     for key, g in groups.items():
+        sc = scoring_by_device[g["device"]]
         agg = eff.aggregate(g["curves"], budgets, g["eligible"])
-        agg["sol_status"] = g["sol_status"]
+        agg["ceiling_basis"] = "empirical"
+        agg["target_status"] = g["target_status"]
+        agg["scoring_binding"] = sc["binding"]
+        agg["scoring_binding_source"] = sc["source"]
+        agg["calibration_id"] = (sc["profile"] or {}).get("calibration_id")
+        agg["profile_unavailable"] = sc["profile_unavailable"]
+        agg["binding_mismatches"] = sc.get("binding_mismatches", [])
         agg["audit_flags"] = {f"{k[0]}/{k[1]}": c.audit_flags for k, c in g["curves"].items() if c.audit_flags}
         agg["run_type"] = key[4]
         if key[4] != "formal":

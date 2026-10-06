@@ -47,44 +47,57 @@ are positional. The entry point is called positionally with exactly the inputs l
   `NUM_D_BLOCKS` chunks with separate accumulators is a free mapping
   choice (the results differ only in summation order).
 - `EVEN_M`, `EVEN_N`: booleans stating whether `M` is a multiple of
-  `BLOCK_M` / `BLOCK_N`; they may be ignored (bounds must be masked
-  regardless).
+  `BLOCK_M` / `BLOCK_N`; they may be ignored (bounds masking is required
+  wherever the task's fixed `M` is not a multiple of the chosen block).
 - Output: `(B, H, M, D)`, dtype of `Q`, freshly allocated inside `run()` on
   every call, returned as a single tensor. It must not alias any input.
 
 ## Required logical stages
 
 1. **Allocate** the output (uninitialised allocation suffices).
-2. **Block-sparse online-softmax attention**: one device pass. The natural
-   mapping is one program per (query row block, batch, head). A program
-   loads its query block, reads the CSR row range of its row block for its
-   layout head, and visits the listed key blocks in stored order; for each
+2. **Block-sparse online-softmax attention**: one logical pass over the
+   listed key blocks. The natural mapping is one program per (query row
+   block, batch, head). A program loads its query block, reads the CSR row
+   range of its row block for its layout head, and visits each listed key
+   block once (stored order is natural; the order is free); for each
    visited block it forms the scaled scores, applies the causal and
    sequence-bound mask, performs the online-softmax update of the running
    row maximum and row sum, rescales the output accumulator, and
    accumulates `P . V`; after the last block it divides by the row sum and
    stores the output block.
 
-Stage 2 is the only device work and is a single launch. No pass may decode
-the CSR layout into a dense mask, materialise scores or probabilities in
-global memory, or split the key range across programs with a later
-combine. Other program-to-work mappings are permitted only if each query
-row still visits exactly the key blocks listed for its row block, once
-each.
+Stage 2 is the only device work. No pass may decode the CSR layout into a
+dense mask, materialise scores or probabilities in global memory, or split
+the key range across programs with a later combine, because each adds a
+global intermediate that the canonical algorithm keeps on chip or does not
+have. How the work is distributed over launches is not fixed. Other
+program-to-work mappings are permitted only if each query row still visits
+exactly the key blocks listed for its row block, once each, because
+visiting other blocks changes the executed work that defines block-sparse
+attention.
 
 ## Algorithm family and structure
 
 Flash-attention-style online softmax restricted to a CSR block layout:
 
-- Key blocks are visited in the order stored in the CSR column list.
+- Each key block listed in the CSR column list is visited once; the
+  visiting order (stored order is natural) is free.
 - Per visited block: `S = softmax_scale * (Q_blk . K_blk^T)` in fp32;
   entries with key index `> query index`, key index `>= total_seq_len` or
-  query index `>= total_seq_len` are set to `-inf`; the mask is applied to
-  every visited block including fully causal ones.
+  query index `>= total_seq_len` are set to `-inf` (the sequence-bound
+  terms matter only where the task's fixed `M` is not a multiple of the
+  block size); the mask may be applied to every visited block or only to
+  blocks that intersect the diagonal or the sequence end.
 - `m_new = max(m_old, rowmax(S))`; a guard (for example clamping the
   maximum at a large negative finite value) must prevent `exp(-inf - -inf)`
   on fully masked rows; `alpha = exp(m_old - m_new)`; `P = exp(S - m_new)`;
-  `l = l * alpha + rowsum(P)`; `acc = acc * alpha + P . V`.
+  `l = l * alpha + rowsum(P)`; `acc = acc * alpha + P . V`. Each block
+  subtracts the running maximum known at that point, with this rescaling;
+  only the final normalised result must equal the exact stable softmax
+  over `A`. If all listed key blocks of a row block are held on chip at
+  once, the maximum and sum may be evaluated over the held values, with no
+  streaming loop and no `-inf` initial state (the fully-masked-row guard
+  and the zero-sum rule below still apply).
 - Final: `out = acc / l` with `l` replaced by one where it is zero, so rows
   with no admissible key yield zeros rather than NaN.
 - The natural-exponential formulation with the scale applied to `S` is the
@@ -107,16 +120,18 @@ Flash-attention-style online softmax restricted to a CSR block layout:
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed. It must not decode the CSR arrays on the
-host, must not build a dense mask, must not copy, cast or transpose
-`Q`/`K`/`V`, and must not cache anything (layout-derived or otherwise)
-across calls. It may assert shape consistency, allocate the output, build
-host-side load descriptors or metadata, convert `softmax_scale` to a float,
-and launch. The metric formulas count one read of `Q`, `K` and `V` and one
-write of the output; re-reads of a key block by several query blocks and by
-the query heads sharing a kv head are expected and not counted. The flops
-figure assumes the benchmark's layout and counts every visited block in
-full, including the masked half of diagonal blocks.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+`run()` must not decode the CSR arrays on the host, must not build a dense
+mask, must not copy, cast or transpose `Q`/`K`/`V`, and must not cache
+anything (layout-derived or otherwise) across calls. Besides the launch, it
+may assert shape consistency, allocate the output, build host-side load
+descriptors or metadata and convert `softmax_scale` to a float. The metric
+formulas count one read of `Q`, `K` and `V` and one write of the output;
+re-reads of a key block by several query blocks and by the query heads
+sharing a kv head are expected and not counted. The flops figure assumes the
+benchmark's layout and counts every visited block in full, including the
+masked half of diagonal blocks.
 
 ## Permitted implementation mappings
 
@@ -127,6 +142,8 @@ full, including the masked half of diagonal blocks.
 - `exp` versus `exp2` formulation; where the scale is folded.
 - Specialising the mask for fully visible versus diagonal blocks, as long
   as the result is identical.
+- The order in which a row block's listed key blocks are visited, and
+  holding all of them on chip at once (see Algorithm family).
 - Passing the scalar inputs as runtime values or compile-time constants.
 
 ## Forbidden substitutions
@@ -138,10 +155,13 @@ full, including the masked half of diagonal blocks.
 - Dense attention over all keys followed by masking; decoding the CSR
   layout into a dense boolean mask; materialising `S` or `P` in global
   memory.
-- A two-pass softmax (separate max/sum pass then a normalisation pass),
-  split-key schemes with a combine pass, or atomic accumulation.
+- A two-pass softmax that traverses the listed key blocks twice (separate
+  max/sum pass then a normalisation pass), split-key schemes with a
+  combine pass, or atomic accumulation: each adds a second logical pass or
+  a global intermediate.
 - Softmax statistics or accumulators in less than fp32; omitting the
-  causal or sequence-bound mask; visiting unlisted blocks or the zero
+  causal mask, or the sequence-bound mask where the task's fixed `M` is
+  not a multiple of the block size; visiting unlisted blocks or the zero
   padding of the column list.
 - Writing any input; returning a view of any input.
 

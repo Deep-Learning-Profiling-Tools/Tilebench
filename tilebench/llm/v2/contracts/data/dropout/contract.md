@@ -29,7 +29,10 @@ fully deterministic. `p` is only used to form the rescale factor.
    the mask (multiply or select) and the factor 1/(1-p), round to x's dtype
    and store.
 
-A single launch; no reduction, no intermediate, no second pass.
+One logical pass; no reduction, no intermediate, no second pass, because the
+operator is a single streaming masked rescale and an intermediate or second
+pass would change its data movement. How the index range is split across
+programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 Memory-bound streaming map reading two arrays and writing one. No reduction,
@@ -48,18 +51,27 @@ the index range across programs is acceptable.
 - Tolerance: the framework's per-dtype defaults (no verify override).
 
 ## Preprocessing and timing boundary
-run() performs only: output allocation, host scalar arithmetic on p, and the
-launch. No casts, copies, transposes, packing or mask generation on the
-host; no state across calls; nothing precomputed outside run(). The mask is
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, run() may perform the output allocation and host scalar
+arithmetic on p. No casts, copies, transposes, packing or mask generation on
+the host; no state across calls; nothing precomputed outside run(). The mask is
 never generated, transformed, packed into bits or cached by run().
 
 ## Permitted implementation mappings
 - Elements per program, launch geometry, vector width, number of resident
   programs.
+- The number of launches is free: the index range may be covered by one
+  launch or partitioned across several, provided each element is still
+  processed once and nothing but the output is written
+  to global memory.
 - Mask as a multiplicative factor versus a boolean select.
 - Division by (1 - p) versus multiplication by the reciprocal.
 - Masked tail handling versus padded loads with clipped stores (padded lanes
-  must never be written).
+  must never be written). Edge handling is required wherever the task's fixed
+  n is not a multiple of the chosen tile; supporting shapes other than the
+  task's declared shape is not required.
 
 ## Forbidden substitutions
 - Any in-kernel or host-side random number generation (Philox/seed/offset
@@ -70,7 +82,9 @@ never generated, transformed, packed into bits or cached by run().
   torch.where on tensors).
 - Computing in fp16/bf16 with intermediate rounding, or changing the output
   dtype.
-- Any buffer other than the output (no mask repacking, no scratch).
+- Any buffer other than the output (no mask repacking, no scratch), because
+  the operator consumes the supplied mask as given and writes only the
+  output.
 - Autotuning, timing, benchmarking or configuration search inside the
   generated file.
 

@@ -35,9 +35,14 @@ the kernel_rows / kernel_cols / input_rows / input_cols it is given.
 2. Round the accumulator to the input dtype and store it at the same flat
    position.
 
-Both stages execute in ONE launch; there is no intermediate buffer, no
-separate padding pass and no second pass over the image. Each output element
-is produced by exactly one program.
+Both stages belong to one logical pass: there is no intermediate buffer, no
+separate padding pass and no second pass over the image, because each of
+these would add a global-memory round trip that the direct stencil does not
+have. The whole tap sum of an output element is accumulated within one
+program (no partial sums combined across programs), because the canonical
+algorithm keeps it in a single on-chip fp32 accumulator. Spreading the
+output tiles over more than one launch, each producing final values
+directly from the image, is a mapping choice.
 
 ## Algorithm family and structure
 Direct 2-D stencil / small-kernel cross-correlation: per logical output tile,
@@ -59,12 +64,16 @@ scan, no sort.
 - Tolerance: the operator config's verify section.
 
 ## Preprocessing and timing boundary
-run() performs only: the element-count guard, the output allocation,
-metadata-only 2-D views of the flat input/output, and the launch. No
-host-side padding of the image, no im2col/unfold buffer, no casts, copies
-or re-layouts of the image or the kernel, no state across calls, nothing
-precomputed outside run(). The kernel weights are read inside the launch
-(as scalars per tap or as a small tile), never pre-expanded on the host.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides launching the stencil, run() performs only host-side work: the
+element-count guard, the output allocation and metadata-only 2-D views of
+the flat input/output. No host-side padding of the image, no im2col/unfold
+buffer, no casts, copies or re-layouts of the image or the kernel, no state
+across calls, nothing precomputed outside run(). The kernel weights are read
+on the device by the stencil computation (as scalars per tap or as a small
+tile), never pre-expanded on the host.
 
 ## Permitted implementation mappings
 - Output tile shape, launch geometry, number of resident programs, vector
@@ -74,14 +83,20 @@ precomputed outside run(). The kernel weights are read inside the launch
 - Statically unrolled tap loops (kernel size as a compile-time constant)
   versus runtime loops.
 - Loading each tap weight when needed or all weights once per program.
+- The number of launches over which the output tiles are spread, as long as
+  each output element is produced in full by one program directly from the
+  image.
 
 ## Forbidden substitutions
 - Any library convolution or correlation (torch.nn.functional.conv2d,
-  conv1d, torch.conv2d, scipy/other filters) or FFT-based filtering.
-- im2col / unfold followed by a matrix product; separable (row/column)
+  conv1d, torch.conv2d, scipy/other filters) or FFT-based filtering (a
+  different algorithm family).
+- im2col / unfold followed by a matrix product (materialises the patch
+  matrix in global memory); separable (row/column)
   decomposition of the kernel (the kernel is not separable in general); a
   kernel flip (true convolution).
-- Host-side zero-padding of the image or any intermediate image buffer.
+- Host-side zero-padding of the image or any intermediate image buffer
+  (a global-memory round trip that the direct stencil does not have).
 - Non-zero padding modes (reflect, replicate, clamp).
 - Accumulating in fp16, or rounding the accumulator between taps.
 - Autotuning, timing, benchmarking or configuration search inside the

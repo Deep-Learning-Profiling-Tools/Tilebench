@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "rope",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "fresh_output", "description": "Obtain a non-aliasing output buffer of q's shape and dtype inside run(): an empty allocation (out-of-place) or a clone of q (in-place scheme)."},
     {"id": "table_fetch", "description": "Per (batch, position) row, read the cos and sin rows of the sequence position (row index modulo S), shared across heads."},
-    {"id": "pairwise_rotation", "description": "One elementwise launch: for every head and i < D/2 read (q[i], q[i+D/2]) and write q1*cos - q2*sin to the first half and q2*cos + q1*sin to the second half of the output."}
+    {"id": "pairwise_rotation", "description": "One logical elementwise stage (the number of launches is a mapping choice): for every head and i < D/2 read (q[i], q[i+D/2]) and write q1*cos - q2*sin to the first half and q2*cos + q1*sin to the second half of the output."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.cat\\(|torch\\.concat\\(|torch\\.concatenate\\(", "message": "Host-side concatenation of the two halves reproduces the reference formulation outside the kernel.", "level": "suspicious", "scope": "host"},
@@ -33,6 +33,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (B, S, H, D) tensor must be a buffer created inside run() (empty allocation or clone of q) and must not share storage with q, cos or sin"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed, including any clone of q used by an in-place scheme, the layout views, the output allocation and the rotation kernel. The tables are consumed as given; no cached state across calls, no table transformation or regeneration outside the kernel."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted, including any clone of q used by an in-place scheme and the rotation kernel launch(es); host-side work (layout views, the output allocation call, metadata reads) is not GPU time. The tables are consumed as given; no cached state across calls, no table transformation or regeneration outside the kernel."},
   "tolerance_source": "config.verify"
 }

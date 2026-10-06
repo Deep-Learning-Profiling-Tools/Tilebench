@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "kl_divergence",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "output_alloc", "description": "Allocate the (rows,) fp32 LOSS inside run()."},
     {"id": "row_map_reduce", "description": "Per row: fp32 term y*(guarded_log(y) - log_p) accumulated over all columns, one scalar written per row."}
@@ -20,6 +20,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (rows,) fp32 tensor allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Shape reads and the LOSS allocation are the only host work and are timed; no casts, copies or cross-call caches."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (the row map-reduce kernel(s), including any device fill of split-row scratch); shape reads and the LOSS allocation call are host work, not GPU time. No casts, copies or cross-call caches."},
   "tolerance_source": "config.verify"
 }

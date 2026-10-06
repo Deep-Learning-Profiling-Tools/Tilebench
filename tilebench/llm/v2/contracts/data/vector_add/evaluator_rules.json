@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "vector_add",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh output of x's shape and dtype inside run()."},
-    {"id": "elementwise_add", "description": "One kernel pass over exactly n elements: load x and y, add in the native dtype (or a wider type cast back once), masked store."}
+    {"id": "elementwise_add", "description": "One logical pass over exactly n elements (any split across programs or launches, no global intermediate): load x and y, add in the native dtype (or a wider type cast back once), store with edge handling wherever n is not a multiple of the chosen tile."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.add\\(|(?<!tl)(?<!ct)(?<!nl)\\.add\\(|\\.add_\\(|\\+=", "message": "A PyTorch add on the host (or in-place accumulation into an input) replaces the kernel.", "level": "suspicious", "scope": "host"},
@@ -15,8 +15,7 @@
   ],
   "required_evidence": [
     {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the add must be done by a kernel.", "level": "suspicious"},
-    {"any_of": ["tl\\.load", "ct\\.load", "load_offset", "get_raw_memory", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"},
-    {"any_of": ["mask", "padding_mode", "PaddingMode", "boundary", "n_elements", "numel"], "message": "No bounds-handling evidence for a last partial block.", "level": "suspicious"}
+    {"any_of": ["tl\\.load", "ct\\.load", "load_offset", "get_raw_memory", "T\\.copy", "nl\\.load", "nisa\\.dma_copy"], "message": "No kernel-level load found.", "level": "suspicious"}
   ],
   "allowed_torch_calls": [
     "torch.empty_like",
@@ -29,6 +28,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned tensor must be freshly allocated inside run() with x's shape and dtype and must not share storage with x or y"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation and the single elementwise kernel over n elements. No cached state, no copy or cast of the inputs, no second pass."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no copy or cast of the inputs, no second logical pass."},
   "tolerance_source": "config.verify"
 }

@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "dropout",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "s1", "description": "Single element-wise pass: read x and the INPUT mask x_keep, apply the mask (multiply or select) and the factor 1/(1-p) in fp32, round once to x's dtype, store into a freshly allocated output. No RNG, no intermediate."}
   ],
@@ -19,6 +19,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated tensor with x's shape and dtype on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains only the output allocation, the host scalar 1/(1-p) and one launch. The mask is a pre-generated input: no RNG, no mask transformation, no copies, no state across calls."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, the host scalar 1/(1-p), metadata reads, Python) is not GPU time. The mask is a pre-generated input: no RNG, no mask transformation, no copies, no state across calls."},
   "tolerance_source": "config.verify"
 }

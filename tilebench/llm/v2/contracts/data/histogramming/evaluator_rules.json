@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "histogramming",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
-    {"id": "s1", "description": "Global int32 scratch of P private partial histograms, shape (P, num_bins), allocated and zero-initialised inside run() on every call (device fill or in-kernel by the owning program); P bounded independently of N."},
-    {"id": "s2", "description": "Private counting: each program owns one scratch row and counts its share of the input (single pass over the input) into that row with exact int32 updates; out-of-range values skipped; no two programs write the same row."},
+    {"id": "s1", "description": "Global int32 scratch of P private partial histograms, shape (P, num_bins), allocated and zero-initialised inside run() on every call (device fill or in-kernel by the owning program); P is a configuration choice for the fixed input length."},
+    {"id": "s2", "description": "Private counting: each program owns one scratch row and counts its share of the input (single logical traversal of the input) into that row with exact int32 updates; out-of-range values skipped; no two programs write the same row."},
     {"id": "s3", "description": "Cross-partial reduction: per bin, exact int32 sum of the P rows into the freshly allocated (num_bins,) int32 output; starts only after all of s2 completes (separate launch unless a grid barrier is guaranteed)."}
   ],
   "forbidden_substitutions": [
@@ -24,6 +24,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.zeros", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated (num_bins,) int32 tensor on every call"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "The timed run() includes the scratch allocation and its zero fill (P * num_bins * 4 B), the counting launch with its atomic/additive updates, and the reduce launch; bytes_expr counts only the input read and output write (metric review item). No host-side sort/cast/copy of the input; no state across calls."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted: the scratch zero fill (P * num_bins * 4 B, device fill or in-kernel), the counting launch with its atomic/additive updates and the reduce launch; host-side work (allocation calls, P/chunk arithmetic, assertions, metadata reads) is not GPU time. bytes_expr counts only the input read and output write (metric review item). No host-side sort/cast/copy of the input; no state across calls."},
   "tolerance_source": "config.verify"
 }

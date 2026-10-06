@@ -38,7 +38,8 @@ numerator's reduction loop or computed once per row block. Permitted
 splits: each stage as its own launch with global scratch for PHI_Q, PHI_K,
 S and Z allocated inside the entry point. S and Z must be completely
 reduced over all M rows before stage 5 consumes them (no streaming or
-online approximation of the state).
+online approximation of the state), because every non-causal output row
+depends on the state summed over all rows.
 
 ## Algorithm family and structure
 Materialised- or fused-feature-map linear attention: two dense reductions
@@ -59,11 +60,14 @@ so that it never reaches a reduction.
 - The division is fp32; O is fp32.
 
 ## Preprocessing and timing boundary
-Everything inside the entry point is timed: allocation of O and of any
-scratch, any layout transform (for example a transposed copy of an operand
-or of an intermediate) and every launch. No cross-call cache of PHI_K, S,
-Z, a transposed V or any other derived buffer; no prepacked or
-pre-transposed inputs are provided or may be assumed.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Any layout transform (for example a transposed copy of an operand or of an
+intermediate) and every launch are device work inside the entry point and
+are counted; the allocation of O and of any scratch is host-side work. No
+cross-call cache of PHI_K, S, Z, a transposed V or any other derived buffer;
+no prepacked or pre-transposed inputs are provided or may be assumed.
 
 ## Permitted implementation mappings
 Logical tile shapes and launch parameters of the two GEMM-like stages;
@@ -71,7 +75,8 @@ materialised versus fused feature maps; separate versus fused normaliser;
 transposed loads, in-register transposes or in-run transposed copies for
 operands that are consumed along the reduction axis; runtime versus
 compile-time loop bounds; grid orders; eps as a runtime or compile-time
-scalar; the number of launches (anywhere from two to eight).
+scalar; the number of launches, provided S and Z are completely reduced
+over all M rows before stage 5 consumes them.
 
 ## Forbidden substitutions
 torch.matmul / torch.mm / torch.bmm / torch.einsum / the @ operator /

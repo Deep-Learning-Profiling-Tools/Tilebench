@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "1d_conv",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh (batch, out_channels, out_L) output of input's dtype inside run(); no zero-fill needed."},
-    {"id": "implicit_gemm_conv", "description": "One kernel launch: per group, output viewed as (batch*out_L) x Cout_g, reduction over the flattened (ic_local, kl) axis gathered on the fly with zero fill, tensor-core product into a local fp32 accumulator, cast and masked/clipped store."}
+    {"id": "implicit_gemm_conv", "description": "One logical pass with no global-memory intermediate (no im2col, padded copy or split-K partials; the output tiles may be spread over several launches): per group, output viewed as (batch*out_L) x Cout_g, reduction over the flattened (ic_local, kl) axis gathered on the fly with zero fill, tensor-core product into a local fp32 accumulator, cast and masked/clipped store."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.(nn\\.functional\\.)?conv[123]d\\(|\\bF\\.conv[123]d\\(|torch\\.nn\\.Conv[123]d", "message": "A library convolution replaces the whole computation.", "level": "confirmed", "scope": "host"},
@@ -29,6 +29,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (batch, out_channels, out_L) tensor must be freshly allocated inside run() and must not share storage with input or weight"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: scalar metadata, the output allocation, optional zero-copy views and the single implicit-GEMM kernel. No cast, transpose, pack, padded copy or im2col of the inputs; no cached state across calls."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (here only the implicit-GEMM kernel launch(es)); host-side scalar metadata, the output allocation call and zero-copy views are not GPU time. No cast, transpose, pack, padded copy or im2col of the inputs; no cached state across calls."},
   "tolerance_source": "config.verify"
 }

@@ -20,13 +20,17 @@ bit-exactly and the dtype is preserved (including the integer dtype).
 
 ## Required logical stages
 1. Output allocation: an uninitialised buffer of length 2N (inside the entry
-   point, therefore timed).
-2. Interleaved copy: read A and B exactly once each and write OUT exactly
-   once, placing A on even and B on odd positions.
+   point, on every call).
+2. Interleaved copy: in one logical traversal, read each element of A and B
+   once and write each element of OUT once, placing A on even and B on odd
+   positions.
 Stage 2 depends only on stage 1. There is no further stage, no reduction and
-no intermediate buffer. Stage 2 is a single logical pass and one launch
-suffices; it must not be split into separate passes over A and over B that
-each rewrite OUT.
+no intermediate buffer. Stage 2 is a single logical pass; how it is
+distributed over launches (for example one launch per input, each writing
+its stride-2 half of OUT) is a mapping choice, since that adds no
+intermediate and no second traversal of either input. Pass counts are
+logical traversals in the algorithm, not guarantees about physical DRAM
+transactions, which caches, TMA and the compiler may change.
 
 ## Algorithm family and structure
 Single-pass elementwise zip of two streams. For a logical block of
@@ -41,22 +45,25 @@ None. No cast of any kind is permitted; the same code path must serve the
 integer dtype.
 
 ## Preprocessing and timing boundary
-Everything the entry point does is timed: the output allocation and the
-launch. No cross-call caching of inputs, outputs or derived buffers; no
-prepacked or pre-interleaved inputs exist or may be assumed. Each call
-returns a new tensor.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+No cross-call caching of inputs, outputs or derived buffers; no prepacked or
+pre-interleaved inputs exist or may be assumed. Each call returns a new
+tensor.
 
 ## Permitted implementation mappings
-Block length per program, grid shape and ordering, launch parameters,
-vector width, whether N is passed to the kernel or inferred from the array
-bounds, in-register zip versus two strided stores, masked versus clipped
-tail handling.
+Block length per program, grid shape and ordering, launch parameters, number
+of launches (for example one per input), vector width, whether N is passed
+to the kernel or inferred from the array bounds, in-register zip versus two
+strided stores, masked versus clipped tail handling.
 
 ## Forbidden substitutions
 Strided slice assignment executed by PyTorch (OUT[0::2] = A, OUT[1::2] = B);
 torch.stack / torch.cat / torch.repeat_interleave or any reshape-based
 interleave computed by PyTorch; any PyTorch copy of A or B; more than one
-pass over the inputs; returning or reusing an output from a previous call.
+logical traversal of the inputs; returning or reusing an output from a
+previous call.
 
 ## Permitted PyTorch operations
 - torch.empty for OUT (dtype and device taken from A).

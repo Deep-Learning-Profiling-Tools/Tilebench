@@ -35,28 +35,34 @@ have defaults and must not affect the computation).
 
 1. **Allocate** the output and the declared fp32 scratch (uninitialised
    allocation suffices for all of them).
-2. **Partial statistics** (first read of `input`): each program owns a
-   contiguous block of rows and reduces it, per channel, to a partial sum
-   and a partial sum of squares (or an equivalent single-pass moment pair)
-   in fp32, written to the partial-statistics scratch.
+2. **Partial statistics** (first logical traversal of `input`): each program
+   owns a block of rows and reduces it, per channel, to a partial sum and a
+   partial sum of squares (or an equivalent single-pass moment pair) in
+   fp32, written to the partial-statistics scratch.
 3. **Per-channel combine**: for each channel, the partials are combined in
    fp32 into `mean` and `inv_std = rsqrt(max(var, 0) + eps)`, where
    `var = sumsq/N - mean^2` (or the equivalent merge of single-pass
    moments). Padded lanes must contribute zero.
-4. **Apply** (second read of `input`): `y = x * scale + shift` with
-   `scale = inv_std * gamma` and `shift = beta - mean * scale` (or the
-   unfolded `(x - mean) * inv_std * gamma + beta`), computed in fp32 and
-   stored in the input dtype.
+4. **Apply** (second logical traversal of `input`):
+   `y = x * scale + shift` with `scale = inv_std * gamma` and
+   `shift = beta - mean * scale` (or the unfolded
+   `(x - mean) * inv_std * gamma + beta`), computed in fp32 and stored in
+   the input dtype.
 
 Dependencies and fusion: stage 3 needs every partial of stage 2 (a global
 synchronisation); stage 4 needs stage 3. Stage 3 may be its own launch or
 may be folded into the prologue of stage 4 (each program of stage 4
-re-combines the partials for all channels). Stages 2 and 4 must be
-separate launches (or separated by an equivalent grid-wide synchronisation).
-Stages 2 and 3 must not be fused by atomically accumulating channel totals:
-the reduction must be the deterministic two-level form (per-block partials,
-then a per-channel combine in a fixed order). `input` is read exactly twice
-(once in stage 2, once in stage 4); no third pass is permitted.
+re-combines the partials for all channels). No program of stage 4 may start
+before every program of stage 2 has finished, because the statistics depend
+on all rows; separate launches or an equivalent grid-wide synchronisation
+both satisfy this. Stages 2 and 3 must not be fused by atomically
+accumulating channel totals: the reduction must be the deterministic
+two-level form (per-block partials, then a per-channel combine in a fixed
+order). The algorithm makes exactly two logical traversals of `input` (stage
+2 and stage 4); no third traversal is permitted, because the variance comes
+from the single-pass moments of stage 2. These are counts of logical passes
+in the algorithm, not guarantees about physical DRAM transactions, which
+caches, TMA and the compiler may change.
 
 ## Algorithm family and structure
 
@@ -66,8 +72,9 @@ per-channel fp32 vectors (tree or sequential order over sub-tiles). Level 2:
 per channel, the block partials are reduced in a fixed order. The variance
 is formed from single-pass moments (sum and sum of squares, or a Welford /
 Chan merge of per-block (count, mean, M2) triples), clamped at zero before
-the `rsqrt`; a centred second pass over `input` is not permitted. The apply
-stage is elementwise.
+the `rsqrt`; a centred second pass over `input` is not permitted, because it
+would add a third logical traversal of `input`. The apply stage is
+elementwise.
 
 ## Precision and accumulation
 
@@ -82,19 +89,21 @@ stage is elementwise.
 
 ## Preprocessing and timing boundary
 
-Everything `run()` does is timed, including the scratch allocations. It
-must not cast `gamma`/`beta`/`input` on the host (upcasts happen in-kernel),
-must not copy or transpose anything, and must not cache statistics or
-scratch across calls. The metric formulas count two reads of `input`, one
-write of the output and one read each of `gamma` and `beta`; the small fp32
-scratch traffic (partials written once and read once, plus the two `(C,)`
-vectors) is expected and not counted.
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+`run()` must not cast `gamma`/`beta`/`input` on the host (upcasts happen
+in-kernel), must not copy or transpose anything, and must not cache
+statistics or scratch across calls. The metric formulas count two reads of
+`input`, one write of the output and one read each of `gamma` and `beta`;
+the small fp32 scratch traffic (partials written once and read once, plus
+the two `(C,)` vectors) is expected and is not counted by the metric
+formulas, although it is device work inside the measured time.
 
 ## Permitted implementation mappings
 
-- Rows per partial block, sub-tile height, programs per launch, vector
-  width, pipelining, power-of-two padding of the channel axis for tile
-  loads.
+- Rows per partial block and whether a block is a contiguous or a strided
+  set of rows, sub-tile height, programs per launch, vector width,
+  pipelining, power-of-two padding of the channel axis for tile loads.
 - Whether stage 3 is a separate launch or folded into stage 4's prologue.
 - Tree versus sequential order inside level-1 and level-2 reductions.
 - Sum/sum-of-squares versus Welford-style single-pass moments.
@@ -107,8 +116,10 @@ vectors) is expected and not counted.
   `layer_norm`, `instance_norm`, `torch.var_mean`, `torch.var`,
   `torch.std`, `torch.mean`, `torch.sum` or any tensor-method reduction
   computing the statistics on the host.
-- A centred (two-pass) variance that reads `input` a third time.
-- Atomic accumulation of channel totals.
+- A centred (two-pass) variance that adds a third logical traversal of
+  `input`.
+- Atomic accumulation of channel totals (it replaces the deterministic,
+  fixed-order two-level reduction).
 - Computing statistics or the normalisation in less than fp32; host-side
   `.float()` copies of the inputs.
 - Mutating any input; returning a view of any input.

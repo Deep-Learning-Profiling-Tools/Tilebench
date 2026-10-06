@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "matmul_fp32_fp16_fp8",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "output_alloc", "description": "Allocate C (M, N) of A's dtype inside run()."},
     {"id": "tiled_gemm", "description": "Per logical output tile: loop over K, accumulate products in fp32 (TF32 operands permitted for fp32, native fp16/fp8 otherwise, no scaling), cast once to C.dtype, store."}
@@ -21,6 +21,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, N) tensor of A's dtype allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "A and B are consumed as delivered; any repack of B must be per call inside run() (timed) and never cached; output allocation timed; no prepacked inputs."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted; the output allocation call and descriptor/metadata construction are host-side work and not GPU time. A and B are consumed as delivered; any repack of B must be per call inside run() (its device time counted) and never cached; no prepacked inputs."},
   "tolerance_source": "config.verify"
 }

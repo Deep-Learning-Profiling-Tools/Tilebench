@@ -25,6 +25,7 @@ from tilebench.llm.v2.evaluation.adapters import AdapterNotReady, require_adapte
 from tilebench.llm.v2.evaluation.fingerprint import diff as fingerprint_diff, evaluator_fingerprint
 from tilebench.llm.v2.evaluation.job import EvaluationJob, build_evaluation_job
 from tilebench.llm.v2.manifests import schema as ms
+from tilebench.llm.v2.metrics import empirical
 from tilebench.llm.v2.orchestration.identity import LLM_V2_OUTPUT_ROOT, trajectory_dir, trajectory_id
 from tilebench.llm.v2.orchestration.state import SCHEMA as TRAJ_SCHEMA, TrajectoryState
 from tilebench.llm.v2.prompts.renderer import TaskContext, render_initial, render_system, templates_sha256
@@ -78,7 +79,8 @@ def build_task_context(e: Eligibility, study: dict, manifest: dict, condition: s
 def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition: str, config_hash: str,
                          contract_hash: str, template_hash: str, *, run_type: str = "formal",
                          campaign: str | None = None, generator: dict | None = None,
-                         evaluation_job: dict | None = None, evaluator_fp: dict | None = None) -> TrajectoryState:
+                         evaluation_job: dict | None = None, evaluator_fp: dict | None = None,
+                         scoring_binding: dict | None = None) -> TrajectoryState:
     task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
             "device": e.key.device, "dsl": e.key.dsl, "fold": e.fold, "fp8_format": e.fp8_format,
             "problem_size": e.problem_size, "case_index": e.case_index}
@@ -88,7 +90,8 @@ def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition
     return TrajectoryState(schema=TRAJ_SCHEMA, trajectory_id=trajectory_id(task, model, condition), task=task,
                            model=model, condition=condition, config_hash=config_hash, content_hashes=hashes,
                            output_file=ctx.output_file, run_type=run_type, campaign=campaign, generator=generator,
-                           evaluation_job=evaluation_job, evaluator_fingerprint=evaluator_fp)
+                           evaluation_job=evaluation_job, evaluator_fingerprint=evaluator_fp,
+                           scoring_binding=scoring_binding)
 
 
 def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict | None = None,
@@ -152,6 +155,11 @@ def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict 
         pf.blockers.extend(ms.blockers_models(models, accept_status=accept, names=models_selected))
         if condition == "enhanced":
             pf.blockers.extend(ms.blockers_folds(folds))
+    # scoring: declared arithmetic model (arithmetic_modes.yaml) + this device's empirical profile
+    sc = scoring_gate(device, dsl, study, folds, operators)
+    pf.facts["scoring"] = sc["facts"]
+    if live:
+        (pf.blockers if formal else pf.warnings).extend(sc["problems"])
     # device / timing adapter
     adapter = study["support_matrix"][device]["timing_adapter"]
     pf.facts["timing_adapter"] = adapter
@@ -262,10 +270,54 @@ def _git_head() -> dict:
     return out
 
 
+def scoring_gate(device: str, dsl: str, study: dict, folds: dict, operators: list[str] | None) -> dict:
+    """Readiness of the empirical scoring ceiling for every eligible task of
+    (device, dsl): the declaration must validate (and, for formal runs, be
+    approved), the device's profile must be registered, loadable and (formal)
+    frozen, and every task must have status ok (no pending decision, no
+    unavailable peak). Returns {"facts", "problems"}."""
+    problems: list[str] = []
+    facts: dict = {"binding": empirical.scoring_binding(device)}
+    try:
+        modes_doc = empirical.load_modes()
+        errs = empirical.validate_modes(modes_doc)
+        if errs:
+            problems.append(f"arithmetic_modes.yaml: {errs[:3]}")
+        facts["declaration_status"] = modes_doc.get("status")
+        if modes_doc.get("status") != "approved":
+            problems.append(f"arithmetic_modes.yaml revision {modes_doc.get('revision')} is {modes_doc.get('status')!r}; "
+                            "formal scoring needs the owner's approval (decision M1)")
+    except Exception as e:  # noqa: BLE001
+        problems.append(f"arithmetic_modes.yaml: {e}")
+        return {"facts": facts, "problems": problems}
+    entry = empirical.device_entry(device)
+    profile = None
+    try:
+        profile = empirical.load_profile(entry)
+        facts["calibration_id"] = profile.get("calibration_id")
+    except empirical.ProfileUnavailable as e:
+        problems.append(f"empirical profile for {device}: {e}")
+    if entry.get("status") != "frozen":
+        problems.append(f"empirical profile for {device} is {entry.get('status')!r}; a formal campaign needs a frozen "
+                        "profile (owner: `calibration-register --status frozen --by ...`)")
+    rows = [e.to_dict() for e in task_table(study, folds, operators) if e.key.device == device and e.key.dsl == dsl]
+    table = empirical.scoring_table(device, rows, modes_doc=modes_doc, profile=profile)
+    facts["status_counts"] = table["status_counts"]
+    facts["scoring_sha256"] = table["scoring_sha256"]
+    pending = sorted({d for r in table["rows"] for d in r.get("pending_decisions", [])})
+    facts["pending_decisions"] = pending
+    not_ok = {k: v for k, v in table["status_counts"].items() if k != "ok"}
+    if not_ok:
+        problems.append(f"scoring targets not ready for {sum(not_ok.values())} task(s): {not_ok}"
+                        + (f"; pending decisions {pending}" if pending else ""))
+    return {"facts": facts, "problems": problems}
+
+
 def campaign_record(spec: CampaignSpec, gen: GeneratorSpec, config_hash: str, isolation: dict,
-                    template_hash: str) -> dict:
+                    template_hash: str, scoring_binding: dict | None = None) -> dict:
     return {"schema": "tilebench-llm-v2-campaign/1", "spec": spec.record(), "generator": gen.record(),
             "config_hash": config_hash, "templates_sha256": template_hash, "host": socket.gethostname(),
+            "scoring_binding": scoring_binding,
             "git": _git_head(), "isolation": isolation, "pid": os.getpid(), "started": time.time(),
             "protocol_note": ("validation runs are unscored engineering acceptance of the execution chain; "
                               "they never enter E(B) curves or distillation" if spec.run_type == "validation"
@@ -278,7 +330,8 @@ class ResumeRefused(RuntimeError):
 
 def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: dict, run_type: str,
                   gen: GeneratorSpec, evaluator_fp: dict | None = None, allow_evaluator_change: bool = False,
-                  tdir: Path | None = None, executor: str = "runner", log=lambda s: None) -> None:
+                  tdir: Path | None = None, executor: str = "runner", log=lambda s: None,
+                  scoring_binding: dict | None = None) -> None:
     """A resume must run under the SAME evaluator as the trajectory so far:
     besides the study config hash, the injected prompt content and the
     generator settings, the evaluator fingerprint (job tolerance/rules/
@@ -297,6 +350,8 @@ def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: d
         raise ResumeRefused(f"{state.trajectory_id}: run type {state.run_type} != {run_type}")
     if state.generator and (state.generator.get("model_id") != gen.model_id or state.generator.get("settings") != gen.settings):
         raise ResumeRefused(f"{state.trajectory_id}: generator settings changed; refusing to resume")
+    if scoring_binding is not None:
+        _check_scoring_binding(state, scoring_binding, run_type)
     if evaluator_fp is None:
         return
     if state.evaluator_fingerprint is None:
@@ -323,6 +378,35 @@ def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: d
     if tdir is not None:
         append_jsonl(tdir / "evaluator_changes.jsonl", {**event, "new_fingerprint": evaluator_fp})
     log(msg + " (validation: accepted and recorded)")
+
+
+def _binding_key(b: dict | None) -> tuple:
+    b = b or {}
+    return (b.get("profile_sha256"), b.get("arithmetic_modes_sha256"), b.get("ceiling_basis"))
+
+
+def _check_scoring_binding(state: TrajectoryState, binding: dict, run_type: str) -> None:
+    """The scoring ceiling (this device's empirical profile + the declared
+    arithmetic model) is pinned at creation. Formal: a changed profile or
+    declaration refuses the resume (a legacy state without a binding cannot
+    verify it and refuses too). Validation: recorded, never refused. A
+    profile registered for ANOTHER device is not part of the binding."""
+    if state.scoring_binding is None:
+        msg = f"{state.trajectory_id}: no scoring binding was recorded when this trajectory started (legacy state)"
+        if run_type == "formal":
+            raise ResumeRefused(msg + "; a formal resume cannot verify the scoring ceiling")
+        state.notes.append(msg + "; binding recorded now on resume (validation)")
+        state.scoring_binding = binding
+        return
+    if _binding_key(state.scoring_binding) == _binding_key(binding):
+        return
+    diff = {k: (state.scoring_binding.get(k), binding.get(k)) for k in ("profile_sha256", "arithmetic_modes_sha256", "ceiling_basis")
+            if state.scoring_binding.get(k) != binding.get(k)}
+    msg = f"{state.trajectory_id}: scoring binding changed since the trajectory started: {diff}"
+    if run_type == "formal":
+        raise ResumeRefused(msg + "; formal resumes refuse a changed empirical profile or declaration")
+    state.notes.append(msg + " (validation: recorded)")
+    state.scoring_binding = binding
 
 
 def retry_incomplete(state: TrajectoryState) -> str | None:
@@ -414,7 +498,8 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
     if formal and evaluator.report.get("backend") != "bwrap":
         return {"refused": True, "preflight": pf.to_dict(),
                 "reason": f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"}
-    rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash)
+    binding = empirical.scoring_binding(spec.device)
+    rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash, binding)
     first = cdir / f"campaign_{spec.condition}_{spec.dsl}_{spec.model}.json"
     if not first.exists():
         first.write_text(json.dumps(rec, indent=1, sort_keys=True, default=str) + "\n")
@@ -430,7 +515,7 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
                        retry_backoff_s=float(transport.get("retry_backoff_s", 30)), feedback_limits=study["feedback"],
                        total_prompt_max_chars=study["context_limits"]["total_prompt"], executor=spec.executor)
     summary = {"campaign": spec.name, "run_type": spec.run_type, "generator": gen.record(), "config_hash": config_hash,
-               "isolation": evaluator.report, "trajectories": [], "skipped": []}
+               "scoring_binding": binding, "isolation": evaluator.report, "trajectories": [], "skipped": []}
     for e in tasks:
         if e.status != "eligible":
             summary["skipped"].append({"task": e.key.as_str(), "status": e.status, "reason": e.reason})
@@ -456,7 +541,8 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
             state = TrajectoryState.load(tpath)
             _check_resume(state, config_hash=config_hash, content_hashes=content_hashes, run_type=spec.run_type, gen=gen,
                           evaluator_fp=fp, allow_evaluator_change=spec.allow_evaluator_change, tdir=tdir,
-                          executor=spec.executor, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"))
+                          executor=spec.executor, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"),
+                          scoring_binding=binding)
             job.identity["trajectory_id"] = state.trajectory_id
             if spec.retry_incomplete:
                 note = retry_incomplete(state)
@@ -474,7 +560,7 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
         else:
             state = new_trajectory_state(e, ctx, spec.model, spec.condition, config_hash, contract.sha256, template_hash,
                                          run_type=spec.run_type, campaign=spec.name, generator=gen.record(),
-                                         evaluation_job=job.record(), evaluator_fp=fp)
+                                         evaluation_job=job.record(), evaluator_fp=fp, scoring_binding=binding)
             job.identity["trajectory_id"] = state.trajectory_id
             state.evaluation_job = job.record()
             log(f"[{e.key.as_str()}] new trajectory {state.trajectory_id} -> {tdir} (evaluator fingerprint {fp['fingerprint_sha256'][:12]})")

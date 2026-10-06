@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "l2_norm",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "view_and_alloc", "description": "View X as (batch*M, K) and allocate Y inside run()."},
     {"id": "row_stats", "description": "Per row: fp32 sum of squares over the full row, rstd = rsqrt(sumsq + eps)."},
@@ -21,6 +21,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh tensor with X's shape/dtype allocated inside run() (may be returned as a reshape view of a 2-D buffer)"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "The reshape (a view for contiguous X), the allocation and the launch(es) are all inside run() and timed; no cross-call cache of statistics."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted (the normalisation launch(es)); host-side work (the reshape view of the contiguous X, the allocation calls, metadata reads) is not GPU time. No cross-call cache of statistics."},
   "tolerance_source": "config.verify"
 }

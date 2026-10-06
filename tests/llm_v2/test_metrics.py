@@ -70,19 +70,24 @@ def test_operator_balanced_aggregation_with_zero_unsupported_incomplete():
         e.aggregate(curves, [10], {("op4", "fp16"): "incomplete"})
 
 
-def test_t_sol_uses_declared_mode_and_flags_missing_peak():
+def test_legacy_t_sol_uses_v2_declarations_without_aliases():
     modes = ms.load_arithmetic_modes()
     metrics = {"flops_expr": "2 * M * N * K", "bytes_expr": "(M*K + K*N + M*N) * dtype_size"}
     r = t_sol("X", "batched_matmul", "fp16", {"M": 1024, "N": 1024, "K": 1024}, 1, metrics, modes, PEAK)
-    assert r.status == "ok" and r.arithmetic_mode == "tc_fp16" and r.t_sol_ms == max(r.compute_term_ms, r.memory_term_ms)
-    r2 = t_sol("X", "relu", "fp32", {"n": 1 << 20}, 1 << 20, {"flops_expr": "n", "bytes_expr": "2*n*dtype_size"}, modes, PEAK)
-    assert r2.status == "peak_missing" and r2.arithmetic_mode == "fp32_vector" and r2.t_sol_ms is None
+    assert r.status == "ok" and r.arithmetic_mode == "mma_fp16_f32acc" and r.t_sol_ms == max(r.compute_term_ms, r.memory_term_ms)
+    r2 = t_sol("X", "softmax", "fp32", {"n_rows": 64, "n_cols": 64}, 1, {"flops_expr": "n_rows*n_cols", "bytes_expr": "2*n_rows*n_cols*dtype_size"}, modes, PEAK)
+    assert r2.status == "peak_missing" and r2.arithmetic_mode == "fp32_fma_vector" and r2.t_sol_ms is None
     r3 = t_sol("X", "batched_matmul", "fp32", {"M": 64, "N": 64, "K": 64}, 1, metrics, modes, PEAK)
-    assert r3.arithmetic_mode == "tf32" and r3.p_peak_tflops == 50.0      # B200-style table: fp32 entry is TF32
+    assert r3.arithmetic_mode == "mma_tf32_f32acc" and r3.status == "peak_missing"   # fp32 entry is never read as TF32
+    r4 = t_sol("X", "batched_matmul", "fp32", {"M": 64, "N": 64, "K": 64}, 1, metrics, modes, {**PEAK, "fp32_is_tf32": True})
+    assert r4.p_peak_tflops == 50.0                                                  # only an explicit declaration aliases
+    r5 = t_sol("X", "relu", "fp32", {"n": 1 << 20}, 1 << 20, {"flops_expr": "n", "bytes_expr": "2*n*dtype_size"}, modes, PEAK)
+    assert r5.status == "memory_only" and r5.t_sol_ms == r5.memory_term_ms
 
 
 def test_b200_peak_table_maps_fp32_to_tf32_only():
     from tilebench.core.metrics import load_peak_config
     from tilebench.llm.v2.metrics.sol import peak_for_mode
     peak = load_peak_config("B200")
-    assert peak_for_mode(peak, "tf32") == 1100 and peak_for_mode(peak, "fp32_vector") is None
+    assert peak_for_mode(peak, "mma_tf32_f32acc") == 1100 and peak_for_mode(peak, "fp32_fma_vector") is None
+    assert peak_for_mode({"peak_tflops": {"fp32": 50.0}}, "mma_tf32_f32acc") is None   # no implicit fp32->tf32

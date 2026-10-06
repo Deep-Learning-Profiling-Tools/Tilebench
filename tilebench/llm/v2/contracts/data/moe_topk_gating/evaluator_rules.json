@@ -1,13 +1,13 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "moe_topk_gating",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_outputs", "description": "Allocate weights (M, k) in logits.dtype and indices (M, k) int32 inside run()."},
-    {"id": "row_load_fp32", "description": "Read each row of logits once, upcast to float32, pad positions beyond E with -inf."},
+    {"id": "row_load_fp32", "description": "One logical traversal of each row of logits, upcast to float32 and kept on chip across the rounds; positions beyond E padded with -inf."},
     {"id": "iterative_argmax_selection", "description": "k sequential rounds of full-row max + argmax; record value and int32 index into slot i; exclude the chosen column with -inf; output order is descending."},
     {"id": "softmax_over_k", "description": "Numerically stable float32 softmax (max-subtract, exp, sum, divide) over only the k selected values; padded slots contribute 0."},
-    {"id": "store_outputs", "description": "Store weights cast to logits.dtype and int32 indices; fused with the previous stages in one launch."}
+    {"id": "store_outputs", "description": "Store weights cast to logits.dtype and int32 indices; fused with the previous stages, with nothing written to global memory between them."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.topk\\(|\\.topk\\(", "message": "torch.topk replaces the whole selection stage.", "level": "confirmed", "scope": "host"},
@@ -31,6 +31,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tuple", "count": 2, "aliasing": "none; (weights (M, k) in logits.dtype, indices (M, k) int32) both freshly allocated inside run() and not sharing storage with logits"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the two output allocations, host-side derivation of padded widths from E and k, and the single fused kernel. No cached state, no host-side cast, copy or partial selection of logits."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (the fused kernel); the two output allocation calls and the host-side derivation of padded widths from E and k are host work, not GPU time. No cached state, no host-side cast, copy or partial selection of logits."},
   "tolerance_source": "config.verify"
 }

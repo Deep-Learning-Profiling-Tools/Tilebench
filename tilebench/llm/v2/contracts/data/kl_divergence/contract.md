@@ -23,8 +23,9 @@ matters for exact zeros, but it must be present.)
 
 ## Required logical stages
 1. Output allocation of LOSS.
-2. Row map-reduce: for each row, stream the columns, form the elementwise
-   term in fp32, accumulate it over the full row and write one scalar.
+2. Row map-reduce: for each row, traverse the columns once, form the
+   elementwise term in fp32, accumulate it over the full row and write one
+   scalar.
 Stage 2 depends on stage 1. The elementwise map and the row reduction are
 one logical stage: the natural realisation is one program per row in a
 single launch. Splitting a row across several programs with a second-level
@@ -33,9 +34,11 @@ partial-sum scratch is allocated inside the entry point.
 
 ## Algorithm family and structure
 Fused elementwise map plus full-row sum reduction. Every input element is
-read exactly once. The accumulation order within a row is free (sequential
-column chunks into lane-wise partials followed by a tree, or any other
-order); the verification tolerance (config.verify) absorbs ordering
+consumed in exactly one logical traversal (a property of the algorithm, not
+a guarantee about physical DRAM transactions, which caches, TMA and the
+compiler may change). The accumulation order within a row is free
+(sequential column chunks into lane-wise partials followed by a tree, or any
+other order); the verification tolerance (config.verify) absorbs ordering
 differences. Columns beyond cols (masked or zero-padded tails) must
 contribute exactly 0.
 
@@ -47,9 +50,12 @@ must be applied before the multiplication so that no NaN or infinity is
 produced.
 
 ## Preprocessing and timing boundary
-Everything inside the entry point is timed: reading the shapes, allocating
-LOSS and launching. No host-side casts, copies or layout changes of the
-inputs; no cross-call caching of anything.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, the entry point reads the shapes and allocates LOSS. No
+host-side casts, copies or layout changes of the inputs; no cross-call
+caching of anything.
 
 ## Permitted implementation mappings
 Column chunk width, launch parameters, number of rows per program, runtime

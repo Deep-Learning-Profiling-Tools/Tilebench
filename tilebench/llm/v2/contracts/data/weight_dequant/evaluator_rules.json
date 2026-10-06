@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "weight_dequant",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh (M, N) output of X's dtype inside run()."},
-    {"id": "block_scaled_multiply", "description": "One kernel pass over all M*N elements: derive the block coordinates (i // T, j // T) of each element, fetch the scale from S (per-element gather or per-tile hoisted load), multiply X by it, masked store. No expanded scale map in global memory."}
+    {"id": "block_scaled_multiply", "description": "One logical pass over all M*N elements (the number of launches is a mapping choice): derive the block coordinates (i // T, j // T) of each element, fetch the scale from S (per-element gather or per-tile hoisted load), multiply X by it, store (masked wherever the fixed shape is not a multiple of the chosen tile). No expanded scale map in global memory."}
   ],
   "forbidden_substitutions": [
     {"pattern": "S\\[[^\\]]*\\[:,\\s*None\\][^\\]]*\\]|S\\[[^\\]]*None,\\s*:\\][^\\]]*\\]|torch\\.repeat_interleave\\(|\\.repeat_interleave\\(|torch\\.kron\\(|\\.expand\\(|torch\\.tile\\(|\\.repeat\\(", "message": "The expanded (M, N) scale map is materialised with PyTorch, reproducing the reference on the host.", "level": "confirmed", "scope": "host"},
@@ -30,6 +30,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (M, N) tensor must be freshly allocated inside run() with X's dtype and must not share storage with X or S"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation, any flat/2-D views and the single elementwise kernel. No cached state, no copy or cast of X or S, no materialised expanded scale map, no second pass."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted (the elementwise kernel launch(es)); host-side work (the output allocation call, flat/2-D views, metadata reads) is not GPU time. No cached state, no copy or cast of X or S, no materialised expanded scale map, no second pass."},
   "tolerance_source": "config.verify"
 }

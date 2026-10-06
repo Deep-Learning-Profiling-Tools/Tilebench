@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "matmul_int8",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "output_alloc", "description": "Allocate C (M, N) int32 inside run()."},
     {"id": "packed_decode", "description": "On the device, inside the GEMM pass: field i of each packed byte = ((byte >> 2i) & 3) - 1, paired with A columns i*K_b + r; no unpacked B in global memory."},
@@ -23,6 +23,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, N) int32 tensor allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "A and packed B are consumed as delivered; any repack of B must be per call inside run() (timed) and never cached; decode happens on the device; output allocation timed; no prepacked inputs."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted; the output allocation call and descriptor/metadata construction are host-side work and not GPU time. A and packed B are consumed as delivered; any repack of B must be per call inside run() (its device time counted) and never cached; decode happens on the device; no prepacked inputs."},
   "tolerance_source": "config.verify"
 }

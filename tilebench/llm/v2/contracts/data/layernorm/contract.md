@@ -52,9 +52,12 @@ variance is biased (divide by K) and eps is added inside the reciprocal
 square root. Output dtype equals input dtype.
 
 ## Preprocessing and timing boundary
-Everything inside the entry point is timed: the views, the allocation and
-the launch(es). WEIGHT and BIAS are read inside the timed region on every
-call. No cross-call caching of statistics, parameters or outputs.
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+The 2-D views are metadata only. WEIGHT and BIAS are consumed as given and
+are read by the device work on every call. No cross-call caching of
+statistics, parameters or outputs.
 
 ## Permitted implementation mappings
 Column chunk width, launch parameters, rows per program, compile-time

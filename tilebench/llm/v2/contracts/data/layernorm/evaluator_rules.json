@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "layernorm",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "view_and_alloc", "description": "2-D (batch*M, K) views of X and Y; allocate Y inside run()."},
     {"id": "row_stats", "description": "Per row: fp32 mean and biased variance over the full row, rstd = rsqrt(var + eps)."},
@@ -20,6 +20,6 @@
   "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh tensor with X's shape/dtype allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Views, allocation and launch(es) are all inside run() and timed; WEIGHT/BIAS are read per call; no cross-call cache of statistics or parameters."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted (the fused or split normalisation launches); host-side work (the 2-D views, the allocation calls, metadata reads) is not GPU time. WEIGHT/BIAS are read by device work on every call; no cross-call cache of statistics or parameters."},
   "tolerance_source": "config.verify"
 }

@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "batched_matmul",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh flat (BATCH*M*N,) (or (BATCH, M, N)) output of A's dtype inside run()."},
-    {"id": "batched_gemm", "description": "One kernel launch: each (batch, M-tile, N-tile) output tile accumulates the full K range sequentially into a local fp32 accumulator via a tensor-core product, with zero-filled edge loads and clipped/masked stores; cast to A's dtype at the store."}
+    {"id": "batched_gemm", "description": "One logical pass with no global-memory intermediate (no split-K partials, no repacked operand; the output tiles may be spread over several launches): each (batch, M-tile, N-tile) output tile accumulates the full K range sequentially into a local fp32 accumulator via a tensor-core product, with zero-filled edge loads and clipped/masked stores; cast to A's dtype at the store."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.(matmul|bmm|mm|einsum|baddbmm|addmm|addbmm)\\(|torch\\.linalg\\.matmul", "message": "A library GEMM replaces the whole computation.", "level": "confirmed", "scope": "host"},
@@ -28,6 +28,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned flat (BATCH*M*N,) tensor (or flat view of a fresh (BATCH, M, N) buffer) must be allocated inside run() and must not share storage with A or B"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: zero-copy views, host descriptor/metadata construction, the output allocation and the single GEMM kernel. Provisional rule (open review item): no transposed/packed copy of A or B and no cross-call cache of input-derived data; if a repack is ever permitted it must be inside the timed call."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (here only the GEMM launch(es)); zero-copy views, host descriptor/metadata construction and the output allocation call are host-side work and not GPU time. Provisional rule (open review item): no transposed/packed copy of A or B and no cross-call cache of input-derived data; if a repack is ever permitted it must be device work inside run() on every call, where its GPU time is counted."},
   "tolerance_source": "config.verify"
 }

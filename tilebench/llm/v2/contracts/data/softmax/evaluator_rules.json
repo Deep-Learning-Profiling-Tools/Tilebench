@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "softmax",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh (n_rows, n_cols) output of x's dtype inside run()."},
-    {"id": "online_row_statistics", "description": "Per row, one streaming sweep producing the exact fp32 row max m and the fp32 denominator l via the online rescaling recurrence (l = l*exp(m_old - m_new) + sum exp(chunk - m_new)), with -inf for out-of-range lanes, held privately by the program that owns the row."},
-    {"id": "normalise", "description": "Per element, exp(x - m) / l in fp32 with one downcast at the store, in the same launch as the statistics."}
+    {"id": "online_row_statistics", "description": "Per row, the exact fp32 row max m and fp32 denominator l: either via the online rescaling recurrence over chunks (the running max is subtracted inside the recurrence) or directly over a row held on chip; held privately by the program that owns the row, never passed through global memory."},
+    {"id": "normalise", "description": "Per element, exp(x - m) / l with the final row statistics, in fp32, with one downcast at the store."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.softmax\\(|torch\\.nn\\.functional\\.softmax\\(|F\\.softmax\\(|torch\\.log_softmax\\(|F\\.log_softmax\\(|nn\\.Softmax\\(|nn\\.LogSoftmax\\(|torch\\.special\\.softmax\\(", "message": "The whole operator is performed by a PyTorch softmax routine.", "level": "confirmed", "scope": "host"},
@@ -32,6 +32,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n_rows, n_cols) tensor must be freshly allocated inside run() and must not share storage with x"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation and the single two-sweep kernel. No cached state across calls, no copy/cast/transpose of x, no global scratch for m or l, at most two reads of each row from memory."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes on every call (every kernel, fill, copy, cast). Host-side allocation, metadata reads and Python are not GPU time. No cached state across calls, no copy/cast/transpose of x, no global scratch for m or l, at most two logical traversals of each row."},
   "tolerance_source": "config.verify"
 }

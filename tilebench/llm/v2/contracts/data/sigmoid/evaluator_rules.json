@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "sigmoid",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh output of X's shape and dtype inside run()."},
-    {"id": "elementwise_sigmoid", "description": "One kernel pass over exactly N elements: load, upcast to fp32, evaluate 1/(1+exp(-x)) (any equivalent formulation), downcast once, masked store."}
+    {"id": "elementwise_sigmoid", "description": "One logical pass over exactly N elements (any split across programs or launches, no global intermediate): load, upcast to fp32, evaluate 1/(1+exp(-x)) (any equivalent formulation), downcast once, store with edge handling wherever N is not a multiple of the chosen tile."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|\\.sigmoid_\\(", "message": "The whole operator is performed by a PyTorch sigmoid routine.", "level": "confirmed", "scope": "host"},
@@ -29,6 +29,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned tensor must be freshly allocated inside run() with X's shape and dtype and must not share storage with X"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation and the single elementwise kernel over N elements. No cached state, no copy or cast of X, no second pass."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no copy or cast of X, no second logical pass."},
   "tolerance_source": "config.verify"
 }

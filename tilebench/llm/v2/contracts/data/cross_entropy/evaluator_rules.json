@@ -1,11 +1,11 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "cross_entropy",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
-    {"id": "s1", "description": "Per-row max over the class axis and sum of exp(logit - max), fp32, from one read of the row (whole-row tile with -inf padding or chunked online update)."},
+    {"id": "s1", "description": "Per-row max over the class axis and sum of exp(logit - max), fp32, from one logical traversal of the row (whole-row tile with non-contributing padding, or chunked online update)."},
     {"id": "s2", "description": "Gather of the target logit logits[i, targets[i]] (re-read or selected from the loaded row)."},
-    {"id": "s3", "description": "loss[i] = -(target_logit - max - log(sum)) rounded once to logits.dtype and stored; all stages in one launch, no global intermediate."}
+    {"id": "s3", "description": "loss[i] = -(target_logit - max - log(sum)) rounded once to logits.dtype and stored; no global intermediate (statistics, shifted logits, probabilities stay on chip)."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.nn\\.functional\\.cross_entropy|F\\.cross_entropy|torch\\.nn\\.CrossEntropyLoss|torch\\.nn\\.NLLLoss|F\\.nll_loss", "message": "library cross-entropy replaces the whole computation", "level": "confirmed", "scope": "host"},
@@ -24,6 +24,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated (batch_size,) tensor in logits.dtype on every call"},
-  "timing_boundary": {"includes_preprocessing": false, "notes": "The timed run() contains only the output allocation, host scalar arithmetic and one launch. No casts, copies or transposes are permitted; a .contiguous() on logits must be a no-op. No state across calls."},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "Measured: GPU time of all device work run() causes (the loss kernel); the output allocation call and host scalar arithmetic are host work, not GPU time. No casts, copies or transposes are permitted; a .contiguous() on logits must be a no-op. No state across calls."},
   "tolerance_source": "config.verify"
 }

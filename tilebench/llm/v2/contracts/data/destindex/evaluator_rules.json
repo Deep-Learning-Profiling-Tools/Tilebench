@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "destindex",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "s1", "description": "Output initialisation: the output buffers contain o_nope / o_rope before the copy (device copy of o_* into the output; per-call or once-per-identity is the open review item)."},
-    {"id": "s2", "description": "Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once, written once, no atomics)."},
+    {"id": "s2", "description": "Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once and written once in the algorithm, no atomics)."},
     {"id": "s3", "description": "Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s2 and s3 independent, may be one or two launches; returns (out_nope, out_rope)."}
   ],
   "forbidden_substitutions": [
@@ -22,6 +22,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.clone", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tuple", "count": 2, "aliasing": "none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope; whether the same buffers may be returned across calls (rewritten in place) is the open review item"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "The output initialisation from o_* (read + write of both outputs) is inside run(); whether it is paid on every call or once per input identity is the open review item, and bytes_expr counts only the steady-state kv read + out write. Flattening views are metadata only."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The output initialisation from o_* (device copy: read + write of both outputs) is device work and is counted whenever run() launches it; whether it is paid on every call or once per input identity is the open review item, and bytes_expr counts only the steady-state kv read + out write. Host-side work (allocation calls, flattening views, metadata reads) is not GPU time."},
   "tolerance_source": "config.verify"
 }

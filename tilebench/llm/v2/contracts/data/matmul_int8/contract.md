@@ -26,37 +26,47 @@ with C of shape (M, N) in int32.
 ## Required logical stages
 1. Output allocation.
 2. Decode-and-multiply GEMM: for each logical output tile, loop over the
-   packed rows of B in chunks; for each chunk load the packed bytes once,
-   decode each of the four fields on the device (shift, mask, subtract 1),
-   pair field i with the A columns i * K_b + r of the same packed rows r,
-   and accumulate the int8 x int8 products in a local int32 accumulator;
-   store the int32 tile.
+   packed rows of B in chunks; for each chunk load the packed bytes once
+   (one logical load per chunk and output tile), decode each of the four
+   fields on the device (shift, mask, subtract 1), pair field i with the A
+   columns i * K_b + r of the same packed rows r, and accumulate the int8 x
+   int8 products in a local int32 accumulator; store the int32 tile.
 Stage 2 depends on stage 1. One launch suffices. The decode must happen on
 the device inside the multiplication pass; no unpacked copy of B may be
-materialised in global memory.
+materialised in global memory, because a separate decode pass would write
+and re-read a four times larger unpacked matrix that the canonical
+in-mainloop decode never materialises.
 
 ## Algorithm family and structure
-Blocked integer matrix multiplication with in-mainloop weight decoding.
-The visiting order of the logical K index is free (integer accumulation is
-exact, so the order cannot change the result). Each packed byte is read
-from global memory once per output tile and reused for all four fields.
-Tail handling: a zero-filled packed byte decodes to -1, not 0, so packed
-rows or columns beyond K_b or N must be masked (or paired only with zero A
-columns) so that they contribute nothing; stores are clipped to (M, N).
-Implementations must be correct for every benchmark shape (K a multiple of
-1024 with M = N fixed); see the open review item on general K.
+Blocked integer matrix multiplication with in-mainloop weight decoding. The
+visiting order of the logical K index is free (integer accumulation is
+exact, so the order cannot change the result). Each packed byte is loaded
+once per output tile in the algorithm's logical traversal of B and reused
+for all four fields; this counts logical loads, not physical DRAM
+transactions, which caches, hardware copy engines and the compiler may
+change. Tail handling, wherever the chosen tile does not divide K_b, N or M
+of the task's shape: a zero-filled packed byte decodes to -1, not 0, so
+packed rows or columns beyond K_b or N must be masked (or paired only with
+zero A columns) so that they contribute nothing; stores are clipped to
+(M, N). Implementations must be correct for the task's declared shape (K is
+a multiple of 1024 in every task of this operator); supporting shapes other
+than the declared one is not required; see the open review item on general
+K.
 
 ## Precision and accumulation
 Exact integer arithmetic: int8 x int8 products accumulated in int32. No
 floating-point evaluation, no TF32, no scaling. Output int32.
 
 ## Preprocessing and timing boundary
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
 The entry point must consume A and B exactly as delivered. Any layout
 transform of B (for example a K-major copy of the packed matrix) must be
-performed inside the entry point on every call and is timed. No cross-call
-cache keyed by tensor identity, address, shape or dtype may hold a
-transformed or decoded operand. The output allocation is timed. No
-prepacked inputs are provided or may be assumed.
+performed inside the entry point on every call and its device time is
+counted. No cross-call cache keyed by tensor identity, address, shape or
+dtype may hold a transformed or decoded operand. No prepacked inputs are
+provided or may be assumed.
 
 ## Permitted implementation mappings
 Logical tile shapes, launch parameters, grouped tile ordering, pipelining;

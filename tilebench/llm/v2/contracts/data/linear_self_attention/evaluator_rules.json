@@ -1,7 +1,7 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "linear_self_attention",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "phi_q", "description": "PHI_Q = where(Q > 0, Q + 1, exp(Q)) in fp32 (materialised or fused into the output stage)."},
     {"id": "phi_k", "description": "PHI_K = where(K > 0, K + 1, exp(K)) in fp32 (materialised or fused into the state/normaliser loads)."},
@@ -25,6 +25,6 @@
   "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, D) fp32 tensor allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "All allocations (O and scratch), any in-run transposed copies and every launch are inside run() and timed; no cross-call cache of PHI_K, S, Z or transposed operands; no prepacked inputs."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (every kernel launch and any in-run transposed copy); the allocation calls for O and scratch are host-side work and not GPU time. No cross-call cache of PHI_K, S, Z or transposed operands; no prepacked inputs."},
   "tolerance_source": "config.verify"
 }

@@ -27,28 +27,33 @@ out-of-range targets is unspecified and need not be handled.
 
 ## Required logical stages
 1. Row statistics: for each row, the maximum over the class axis and the sum
-   over classes of exp(logit - max), from a single read of the row.
+   over classes of exp(logit - max), from a single logical traversal of the
+   row (a property of the algorithm, not of physical DRAM transactions,
+   which caches, TMA and the compiler may change).
 2. Target gather: the logit at column targets[i] of the same row, obtained
    either by a second one-element read or by extraction from the row data
    already loaded.
 3. Loss: loss[i] = -(target_logit - max - log(sum)), rounded to the output
    dtype and stored as one scalar per row.
 
-Stage 3 depends on stages 1 and 2; stages 1 and 2 are independent. All three
-stages must execute in one launch (one row per program, or several rows per
-program). Splitting them across launches with a materialised intermediate
-(shifted logits, probabilities, row statistics) is not permitted.
+Stage 3 depends on stages 1 and 2; stages 1 and 2 are independent. Splitting
+the stages with a materialised intermediate (shifted logits, probabilities,
+row statistics) is not permitted, because the canonical algorithm keeps
+them on chip; how rows are assigned to programs and launches is otherwise
+free.
 
 ## Algorithm family and structure
 Row-wise fused log-sum-exp plus gather in the numerically stable form (the row
 maximum is subtracted before exponentiation). Two reductions per row over the
 class axis: a max, then a sum of shifted exponentials. The class axis may be
-held in one logical tile padded to a power of two, in which case padding
-lanes must hold -inf so they contribute exp(-inf) = 0 to the sum and never
-win the max; or it may be processed in chunks with an online update (running
-max with rescaling of the running sum). Either way the result is the stable
-log-sum-exp of the complete row. The reduction tree order inside a tile is
-free. No sort, no scan, no reduction across rows.
+held in one logical tile, in which case the max and sum are evaluated over the
+held values and any padding lanes beyond num_classes must not contribute (for
+example by holding -inf, so they contribute exp(-inf) = 0 to the sum and never
+win the max); or it may be processed in chunks with an online update (each
+chunk subtracts the running max, with rescaling of the running sum). Either
+way the final result is the stable log-sum-exp of the complete row. The
+reduction tree order inside a tile is free. No sort, no scan, no reduction
+across rows.
 
 ## Precision and accumulation
 - All arithmetic (max, subtraction, exp, sum, log, final negation) in fp32
@@ -61,16 +66,19 @@ free. No sort, no scan, no reduction across rows.
   verify override).
 
 ## Preprocessing and timing boundary
-run() performs only: reading shapes/strides, allocating the output, computing
-host scalars (e.g. a padded tile width), and launching. No casts, copies,
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, run() may read shapes and strides, allocate the output
+and compute host scalars (e.g. a padded tile width). No casts, copies,
 transposes, padding or packing of inputs on the host; no state cached across
 calls; nothing precomputed outside run(). A `.contiguous()` call on `logits`
 is permitted only as a no-op (the inputs are already contiguous).
 
 ## Permitted implementation mappings
 - Number of rows per program and the launch geometry.
-- Whole-row tile (power-of-two padded) versus chunked class axis with an
-  online update.
+- Whole-row tile (padded to any convenient width) versus chunked class
+  axis with an online update.
 - Re-reading the target logit from memory versus selecting it from the loaded
   row.
 - Honouring strides versus assuming contiguity; vector width; pipelining;

@@ -1,13 +1,14 @@
-"""Analytical SOL target.
+"""Legacy / datasheet-reference target (NOT the scoring ceiling).
 
-    T_SOL = max(F / P_peak, Q / BW_peak)
+    T_SOL = max(F / P_peak, Q / BW_peak)   with P_peak from the legacy peak
+    table tilebench/data/peak_performance/<device>.json
 
-F and Q come from the operator's frozen flops_expr / bytes_expr evaluated on
-the task's selected case (the same evaluation context as
-tilebench.core.metrics.compute_derived). P_peak is the device peak for the
-task's DECLARED arithmetic mode (manifests/arithmetic_modes.yaml); when the
-peak table has no value for that mode the result is `peak_missing` and no
-efficiency is computed. Nothing is substituted."""
+Scoring uses tilebench.llm.v2.metrics.empirical (ceiling_basis=empirical,
+measured profile). This module remains for the offline sensitivity
+reference against the datasheet table. The task's mode is the v2
+declaration (manifests/arithmetic_modes.yaml, per operator, no dtype-wide
+defaults); the legacy table is read by exact key only: no fp32->tf32 or
+any other alias unless the table itself declares `fp32_is_tf32: true`."""
 from __future__ import annotations
 
 import math
@@ -19,9 +20,12 @@ from tilebench.core.metrics import _eval_expr, load_peak_config
 # How the existing peak_performance/<device>.json keys map onto arithmetic modes.
 # B200.json declares that its "fp32" entry IS the TF32 tensor-core value, so it
 # is mapped to tf32 and NOT to fp32_vector.
-_PEAK_KEY_BY_MODE = {
-    "tc_fp16": "fp16", "tc_bf16": "bf16", "tc_fp8": "fp8_e4m3fn", "tc_int8": "int8",
-    "tf32": "tf32", "fp32_vector": "fp32_vector", "int_vector": "int_vector", "fp64": "fp64",
+CEILING_BASIS = "datasheet_reference"
+_PEAK_KEY_BY_MODE = {  # v2 mode name -> legacy table key (exact; a missing key is peak_missing)
+    "mma_fp16_f32acc": "fp16", "mma_bf16_f32acc": "bf16", "mma_tf32_f32acc": "tf32",
+    "mma_fp8_e4m3_f32acc": "fp8_e4m3fn", "mma_fp8_e5m2_f32acc": "fp8_e5m2", "mma_int8_i32acc": "int8",
+    "fp32_fma_vector": "fp32_vector", "fp16x2_fma_vector": "fp16_vector", "bf16x2_fma_vector": "bf16_vector",
+    "int32_vector": "int_vector", "gemm_fp32_ieee": "fp32_ieee",
 }
 
 
@@ -46,13 +50,14 @@ class SolRecord:
 
 
 def declared_mode(modes: dict, operator: str, dtype: str) -> tuple[str, list[str]]:
-    flags: list[str] = []
-    entry = modes.get("operators", {}).get(operator, {}) or {}
-    if entry.get("_audit"):
-        flags.append(str(entry["_audit"]))
-    mode = entry.get(dtype) or modes["default_by_dtype"].get(dtype)
+    """v2 declaration: operators.<op>.modes.<dtype>; no dtype-wide default."""
+    entry = modes.get("operators", {}).get(operator) or {}
+    mode = (entry.get("modes") or {}).get(dtype)
     if mode is None:
-        raise ValueError(f"no arithmetic mode for {operator}/{dtype}")
+        raise ValueError(f"no declared arithmetic mode for {operator}/{dtype}")
+    flags = [f"f_kind={entry.get('f_kind')}", f"q_kind={entry.get('q_kind')}", f"ceiling_basis={CEILING_BASIS}"]
+    if mode == "no_compute_term":
+        mode = "memory_only"
     return mode, flags
 
 
@@ -63,9 +68,14 @@ def eval_workload(metrics_cfg: dict, params: dict, dtype: str, problem_size: int
 
 
 def peak_for_mode(peak_cfg: dict, mode: str) -> float | None:
-    key = _PEAK_KEY_BY_MODE.get(mode, mode)
+    """Exact key lookup in the legacy table. The only alias is an explicit
+    `fp32_is_tf32: true` declared by the table itself (none of the tracked
+    tables declares it); nothing is inferred from a nearby dtype."""
+    key = _PEAK_KEY_BY_MODE.get(mode)
+    if key is None:
+        return None
     table = peak_cfg.get("peak_tflops") or {}
-    if mode == "tf32" and "tf32" not in table and peak_cfg.get("fp32_is_tf32", True) and "fp32" in table:
+    if key == "tf32" and "tf32" not in table and peak_cfg.get("fp32_is_tf32") is True and "fp32" in table:
         return float(table["fp32"])
     v = table.get(key)
     return float(v) if v is not None else None

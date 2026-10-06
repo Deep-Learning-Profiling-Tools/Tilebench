@@ -1,10 +1,10 @@
 {
   "schema": "tilebench-evaluator-rules/1",
   "operator": "quantize_global",
-  "contract_revision": 1,
+  "contract_revision": 2,
   "required_stages": [
     {"id": "allocate_output", "description": "Allocate a fresh (n,) float16 output inside run()."},
-    {"id": "elementwise_convert", "description": "One kernel pass that reads each float32 element once, converts it to float16 (round-to-nearest-even) and stores it once at the same position; no reduction, scale or clamp."}
+    {"id": "elementwise_convert", "description": "One logical pass (the number of launches is a mapping choice) that reads each float32 element once, converts it to float16 (round-to-nearest-even) and stores it once at the same position; no reduction, scale or clamp."}
   ],
   "forbidden_substitutions": [
     {"pattern": "\\.to\\(\\s*torch\\.float16\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float16\\s*\\)|\\.half\\(\\)|\\.type\\(\\s*torch\\.(float16|HalfTensor|cuda\\.HalfTensor)", "message": "The conversion must be performed by the kernel, not by a PyTorch cast.", "level": "confirmed", "scope": "host"},
@@ -26,6 +26,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n,) float16 tensor must be freshly allocated inside run() and must not share storage with x"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Everything inside run() is timed: the output allocation, an optional no-op contiguous() guard and the single conversion kernel. No absmax or scale pass exists; no cached state; no host-side cast or copy of x."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted (the conversion kernel launch(es)); host-side work (the output allocation call, the optional no-op contiguous() guard, metadata reads) is not GPU time. No absmax or scale pass exists; no cached state; no host-side cast or copy of x."},
   "tolerance_source": "config.verify"
 }
