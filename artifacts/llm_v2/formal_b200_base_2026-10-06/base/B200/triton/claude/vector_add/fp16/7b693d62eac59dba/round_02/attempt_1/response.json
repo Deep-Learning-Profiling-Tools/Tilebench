@@ -1,0 +1,125 @@
+{
+ "request_hash": "9e1a7a942bffa4a94e6e949824cf905651097323687cc1d0ce9074ee37cd4a82",
+ "result": {
+  "elapsed_s": 10.922152519226074,
+  "error": null,
+  "model_id": "claude-opus-5-5",
+  "provider": "anthropic",
+  "raw_response": {
+   "container": null,
+   "content": [
+    {
+     "signature": "CAQSmQsKEAgSGAI4AUIIdGhpbmtpbmcSDFypdoM3YFoLXPHJiBoM32S/LFmrpedshOY4IjBq5OcI6eXnMlbMur3iwBfuxyEbjJ78hfhpQtAzf0OgDtWNMEmddJTbnWDiKd/iWnIqtgpuPjQMTdfnD10+1S6ARl6pc4zvwOxSVmFaiKKbs1uyGzoF9vjjDJWykGQe8e9bQa/7SC/MD9RyZffaoCARSKUtY4uEttWlixlzfSVYGPtVP5/wBGbe3NKXVjCLUlrZ9TxoAdlYLSMwVRi5Pr16eyU2Z43RztiCjdXKzqt9Aso17QzZCpSWk1TM1qrikCLQ1BDY41+2n3aSb76gcGIHc4bDJXnsMLecP/IcBt0QCegsgqrRq/lEQrfnYGtJ+xYJc3fSCav2BjCyqAw5ZvclicNqUxETXZsGhQgddXhC2BaskA2gG/nyvrnkqrf0Y/0S10mmJ08I1Vh6v/XgIiqJM7iO6yhrFLXHkZWzqu4VUBtLOl/Gy/kdWFEnC2BoNBTXbv2vknF165kpFRdCQA709BWLwnVPCeHGOIzZq99Lm8PFDib3hvPR3Zthxa1Qqlp2Pap/ezm9V8mhFRoyTJG40yPcxg0RPZVgpPhMJMV/+vs32i0vvF88GgPaKUPKD9MJPgrg/vPZjAz695aQnaC93es875k3AVQIk/oQ/A6kts2G+ULaUFVARQEcgfsZhhMU4QOby9/Mjrj4ahMIITExCn1fNghs3bBxP3SVUHPNEhfVIFni3xQSGBRfhjbHlvjEtlc7qHsDoYrXBG6UE7P7WPUbpm5pdVhnc9gGm7vzaom/gtWT1fWEsiaz0IAxLhCF3W8dbPnYvEuVCQ32BevJUhp3D6Am/H6szFaEYCczP7oPkqEZ2WnWqsJwA3pb9kkMXqOxmcfBG6g8QziBaPCdJYnZk48mpE6yYNiiuwbnFx7dF6AVt5QaEtwBPZB2mquP55DZMjUl0GmKF8jtTzFF55F7E7+X4J2x7bvjJslYExmAD3yRo/CR0n2FhrbEgqUBOxd4Fa0o+bv4tzkVtve/f/cKdrvWJLdkJUcR8GrBY+jcphbTIOXUPwWUz9w7mUCWh0J9npkkBU2u53eXfoaMKVN+tARuKpHxYD72PANuJsD2gSJUhNzMUzgFMMQa/s8zDVpux4p8C8hAcWpTLjxKqSZl3DO1H/mFuKygB2CD5Uj724eVi5boCETmGRNabF0l0EjuIewsZNibzFEr/7oljnsRMsOMsNYe7R8LrdU0PP/DL+hmFrFZ+I7EX0Di3m6fSt3P96CgTTvqxP73Lr8w+bF67XWRs70zFOcMyz6kz6kXLQfiBqe/Y+u9CbdRHPYF/5dtdas7s4kqd4AtgDsO3RGKYW+6ndc7S2oSFQwIonTW9fgcUaThqASRkglu+TfddraLuUB4DznnWoy3zysTjX51L5SK0XAx0IFtsdBOqRlYZhUQ6JpzmCisXxD6yJtnGAZLmKsoXI/f9aD0QSRPVr4l7g16LElQfQaCxX6o4xE9jWg2wIpEeJL28aEcSBVuSkMPzxTNWz5+vMMwrJ61qsTDqkK23647V8R7Eg3o83s9/34mkfjYLfcuGb82JgqnJQ0jMtoF0l8cSspevtpIzHBc1JQlNs2fAmGSTl23m8KTZcrunJ6aqdlyQlamjOJRX2DJTpE4pIi+8XYWKco0c1ewntJuS0cXuwl1LCI+x40yJ0oogvyNyKm2/YA59cgNuXgAUnEgrHDvbuBDL1Wa2EH3ttC9zTumrG8FwTm/Dp2yJO6FQGkuvhFZ6M2YzLFIGyxNvqWl4FDo9YG03GuGdtlH3rer0OYz0zYwUHwBzCvcHlv3UgXUJcCGVSdzi+5hkchJTClCJcFlsJqj38vEj76esE4kTHVp7TI9YcmHLxozlbqJ+n5GkBgB",
+     "thinking": "",
+     "type": "thinking"
+    },
+    {
+     "citations": null,
+     "parsed_output": null,
+     "text": "```python title=\"impl_triton.py\"\nimport torch\nimport triton\nimport triton.language as tl\n\n# Fixed configuration literals\n_BLOCK = 8192\n_NUM_WARPS = 8\n_NUM_STAGES = 1\n\n_CONFIG = {\n    \"BLOCK\": _BLOCK,\n    \"num_warps\": _NUM_WARPS,\n    \"num_stages\": _NUM_STAGES,\n}\n\n\n@triton.jit\ndef _vector_add_kernel(x_ptr, y_ptr, out_ptr, n,\n                       BLOCK: tl.constexpr, EVEN: tl.constexpr):\n    pid = tl.program_id(0)\n    start = pid.to(tl.int64) * BLOCK\n    offs = start + tl.arange(0, BLOCK)\n    offs = tl.max_contiguous(tl.multiple_of(offs, BLOCK), BLOCK)\n    if EVEN:\n        x = tl.load(x_ptr + offs)\n        y = tl.load(y_ptr + offs)\n        tl.store(out_ptr + offs, x + y)\n    else:\n        mask = offs < n\n        x = tl.load(x_ptr + offs, mask=mask, other=0.0)\n        y = tl.load(y_ptr + offs, mask=mask, other=0.0)\n        tl.store(out_ptr + offs, x + y, mask=mask)\n\n\ndef run(x, y):\n    x = x.contiguous()\n    y = y.contiguous()\n    out = torch.empty_like(x)\n    n = x.numel()\n    if n == 0:\n        return out\n    grid = (triton.cdiv(n, _BLOCK),)\n    even = (n % _BLOCK) == 0\n    _vector_add_kernel[grid](\n        x, y, out, n,\n        BLOCK=_BLOCK, EVEN=even,\n        num_warps=_NUM_WARPS, num_stages=_NUM_STAGES,\n    )\n    return out\n\n\ndef get_last_config() -> dict:\n    return dict(_CONFIG)\n```",
+     "type": "text"
+    }
+   ],
+   "diagnostics": null,
+   "id": "msg_011CfkfFeVMSifmAYZQcmHMi",
+   "model": "claude-opus-5-5",
+   "role": "assistant",
+   "stop_details": null,
+   "stop_reason": "end_turn",
+   "stop_sequence": null,
+   "type": "message",
+   "usage": {
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "inference_geo": "global",
+    "input_tokens": 22483,
+    "output_tokens": 1069,
+    "server_tool_use": null,
+    "service_tier": "standard"
+   }
+  },
+  "request_settings_sent": {
+   "max_tokens": 128000,
+   "model": "claude-opus-5-5",
+   "output_config": {
+    "effort": "xhigh"
+   },
+   "thinking": {
+    "type": "adaptive"
+   }
+  },
+  "requested_model_id": "claude-opus-5-5",
+  "response_id": "msg_011CfkfFeVMSifmAYZQcmHMi",
+  "stream_events": 193,
+  "streamed": true,
+  "terminal_status": "end_turn",
+  "text": "```python title=\"impl_triton.py\"\nimport torch\nimport triton\nimport triton.language as tl\n\n# Fixed configuration literals\n_BLOCK = 8192\n_NUM_WARPS = 8\n_NUM_STAGES = 1\n\n_CONFIG = {\n    \"BLOCK\": _BLOCK,\n    \"num_warps\": _NUM_WARPS,\n    \"num_stages\": _NUM_STAGES,\n}\n\n\n@triton.jit\ndef _vector_add_kernel(x_ptr, y_ptr, out_ptr, n,\n                       BLOCK: tl.constexpr, EVEN: tl.constexpr):\n    pid = tl.program_id(0)\n    start = pid.to(tl.int64) * BLOCK\n    offs = start + tl.arange(0, BLOCK)\n    offs = tl.max_contiguous(tl.multiple_of(offs, BLOCK), BLOCK)\n    if EVEN:\n        x = tl.load(x_ptr + offs)\n        y = tl.load(y_ptr + offs)\n        tl.store(out_ptr + offs, x + y)\n    else:\n        mask = offs < n\n        x = tl.load(x_ptr + offs, mask=mask, other=0.0)\n        y = tl.load(y_ptr + offs, mask=mask, other=0.0)\n        tl.store(out_ptr + offs, x + y, mask=mask)\n\n\ndef run(x, y):\n    x = x.contiguous()\n    y = y.contiguous()\n    out = torch.empty_like(x)\n    n = x.numel()\n    if n == 0:\n        return out\n    grid = (triton.cdiv(n, _BLOCK),)\n    even = (n % _BLOCK) == 0\n    _vector_add_kernel[grid](\n        x, y, out, n,\n        BLOCK=_BLOCK, EVEN=even,\n        num_warps=_NUM_WARPS, num_stages=_NUM_STAGES,\n    )\n    return out\n\n\ndef get_last_config() -> dict:\n    return dict(_CONFIG)\n```",
+  "transport_attempts": 1,
+  "truncated": false,
+  "usage": {
+   "cache_creation_input": 0,
+   "cached_input": 0,
+   "checked_at": "2026-10-05",
+   "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+   "logical_input": 22483,
+   "logical_output": 1069,
+   "logical_total": 23552,
+   "notes": [
+    "reasoning tokens are not reported separately by this API"
+   ],
+   "provider": "anthropic",
+   "reasoning_output": null,
+   "schema": "anthropic_messages_v1",
+   "status": "ok"
+  },
+  "usage_raw": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 0,
+   "inference_geo": "global",
+   "input_tokens": 22483,
+   "output_tokens": 1069,
+   "server_tool_use": null,
+   "service_tier": "standard"
+  }
+ },
+ "transport": [
+  {
+   "attempt": 1,
+   "charged": "known",
+   "elapsed_s": 10.922309637069702,
+   "event": "succeeded",
+   "model_id": "claude-opus-5-5",
+   "outcome": "succeeded",
+   "response_archived": true,
+   "response_id": "msg_011CfkfFeVMSifmAYZQcmHMi",
+   "round": 2,
+   "t": 1791274967.032419,
+   "terminal_status": "end_turn",
+   "transport_attempt": 1,
+   "usage": {
+    "cache_creation_input": 0,
+    "cached_input": 0,
+    "checked_at": "2026-10-05",
+    "doc_source": "https://docs.anthropic.com/en/api/messages#response-usage",
+    "logical_input": 22483,
+    "logical_output": 1069,
+    "logical_total": 23552,
+    "notes": [
+     "reasoning tokens are not reported separately by this API"
+    ],
+    "provider": "anthropic",
+    "reasoning_output": null,
+    "schema": "anthropic_messages_v1",
+    "status": "ok"
+   }
+  }
+ ]
+}
