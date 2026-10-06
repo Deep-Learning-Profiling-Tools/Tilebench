@@ -40,6 +40,15 @@ _DEFAULT_CONFIG = SimpleNamespace(block_size=128)
 _SEARCH_SPACE = [SimpleNamespace(block_size=b) for b in (32, 64, 128)]
 _tuner = NkiAutotuner(scatter_rows_kernel) if nki is not None else None
 _last_autotune_config: dict = {}
+_out_cache = torch.utils.weak.WeakTensorKeyDictionary()
+
+
+def _cached_out(o: torch.Tensor, T: int, D: int) -> torch.Tensor:
+    buf = _out_cache.get(o)
+    if buf is None:
+        buf = o.reshape(T, D).clone()
+        _out_cache[o] = buf
+    return buf
 
 
 def run(kv_nope: torch.Tensor, kv_rope: torch.Tensor, dest_loc: torch.Tensor,
@@ -50,8 +59,8 @@ def run(kv_nope: torch.Tensor, kv_rope: torch.Tensor, dest_loc: torch.Tensor,
 
     kv_nope_2d = kv_nope.reshape(T, H_nope * D_nope)
     kv_rope_2d = kv_rope.reshape(T, H_rope * D_rope)
-    out_nope_2d = o_nope.reshape(T, H_nope * D_nope).clone()
-    out_rope_2d = o_rope.reshape(T, H_rope * D_rope).clone()
+    out_nope_2d = _cached_out(o_nope, T, H_nope * D_nope)
+    out_rope_2d = _cached_out(o_rope, T, H_rope * D_rope)
     dest = dest_loc.to(torch.int32)
 
     if autotune:
