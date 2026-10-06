@@ -87,6 +87,25 @@ def _choose_tiling(itemsize: int, n_ic_tiles: int, stride: int, kL: int,
     return PSUM_FMAX, 1
 
 
+def _prog_blocks(pid: int, n_prog: int, n_blocks: int, first_safe: int, last_safe: int,
+                 blocks_in_flight: int) -> tuple[int, int, int, int]:
+    per_prog = div_ceil(n_blocks, n_prog)
+    lo = min(n_blocks, pid * per_prog)
+    hi = min(n_blocks, lo + per_prog)
+    safe_lo = max(lo, first_safe)
+    n_safe = max(0, min(hi - 1, last_safe) - safe_lo + 1)
+    return lo, hi, safe_lo, n_safe // blocks_in_flight
+
+
+def _min_prog_groups(n_prog: int, n_blocks: int, first_safe: int, last_safe: int,
+                     blocks_in_flight: int) -> int:
+    n_groups = _prog_blocks(0, n_prog, n_blocks, first_safe, last_safe, blocks_in_flight)[3]
+    for p in range(1, n_prog):
+        n_groups = min(n_groups, _prog_blocks(p, n_prog, n_blocks, first_safe, last_safe,
+                                              blocks_in_flight)[3])
+    return n_groups
+
+
 if nki is not None:
 
     def _load_window(input_hbm, windows, buf, cfg, b, g, l_start, blk,
@@ -271,12 +290,16 @@ if nki is not None:
         if last_safe < first_safe:
             first_safe, last_safe = 0, -1
 
-        n_safe = last_safe - first_safe + 1
-        n_groups = n_safe // blocks_in_flight
+        n_prog = nl.num_programs()
+        n_groups = _min_prog_groups(n_prog, n_blocks, first_safe, last_safe, blocks_in_flight)
         use_dynamic = n_groups >= MIN_DYNAMIC_GROUPS
         n_dynamic = n_groups * blocks_in_flight if use_dynamic else 0
+        blk_lo, blk_hi, dyn_lo, _ = _prog_blocks(nl.program_id(0), n_prog, n_blocks,
+                                                 first_safe, last_safe, blocks_in_flight)
+        if not use_dynamic:
+            dyn_lo = blk_hi
 
-        for g in range(groups):
+        for g in range(groups if blk_hi > blk_lo else 0):
             weight_t = _prepare_weight(weight_hbm, cfg, g)
             windows = nl.ndarray(
                 (PMAX, blocks_in_flight, cfg["n_ic_tiles"], cfg["window_cols"]),
@@ -285,7 +308,7 @@ if nki is not None:
                                  dtype=input_hbm.dtype, buffer=nl.sbuf)
 
             for b in range(batch):
-                for i in range(0, first_safe):
+                for i in range(blk_lo, dyn_lo):
                     _process_l_block(input_hbm, output_hbm, weight_t, windows,
                                      out_sbs, cfg, b, g, i * l_block,
                                      min(l_block, out_L - i * l_block))
@@ -294,8 +317,8 @@ if nki is not None:
                     in_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
                     out_off_sb = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
                     nisa.memset(dst=in_off_sb,
-                                value=first_safe * l_block * stride - padding)
-                    nisa.memset(dst=out_off_sb, value=first_safe * l_block)
+                                value=dyn_lo * l_block * stride - padding)
+                    nisa.memset(dst=out_off_sb, value=dyn_lo * l_block)
 
                     for _ in nl.dynamic_range(n_groups):
                         for k in range(blocks_in_flight):
@@ -310,11 +333,7 @@ if nki is not None:
                         nisa.tensor_scalar(dst=out_off_sb, data=out_off_sb, op0=nl.add,
                                            operand0=blocks_in_flight * l_block)
 
-                for i in range(first_safe + n_dynamic, last_safe + 1):
-                    _process_l_block(input_hbm, output_hbm, weight_t, windows,
-                                     out_sbs, cfg, b, g, i * l_block, l_block)
-
-                for i in range(last_safe + 1, n_blocks):
+                for i in range(dyn_lo + n_dynamic, blk_hi):
                     _process_l_block(input_hbm, output_hbm, weight_t, windows,
                                      out_sbs, cfg, b, g, i * l_block,
                                      min(l_block, out_L - i * l_block))
