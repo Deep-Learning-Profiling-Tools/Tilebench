@@ -50,10 +50,8 @@ NEURON_DEFAULT_REPEAT = 3
 # Operators whose native PyTorch eager baseline is unresolved: the NKI side is still verified
 # and timed, but torch is not run and no speedup is formed.
 BASELINE_UNRESOLVED = {
-    "bitonic_sort": "native PyTorch eager baseline does not finish in reasonable time "
-                    "(data-dependent shapes recompile per bitonic stage)",
-    "radix_sort": "native PyTorch eager baseline (torch.sort) returns correct results but no "
-                  "device execution was observed by the profiler; execution location unconfirmed",
+    "radix_sort": "native PyTorch eager baseline (torch.sort) runs as a whole-op CPU fallback "
+                  "(aten::sort.values_stable, no device execution)",
     "block_sparse_attention": "the PyTorch baseline is flex_attention, which cannot run without "
                               "torch.compile (its eager path compiles too); no pure eager baseline",
     "flash_attention": "native PyTorch eager scaled_dot_product_attention (fp16) fails the operator's "
