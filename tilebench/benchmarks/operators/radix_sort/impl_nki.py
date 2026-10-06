@@ -28,6 +28,7 @@ _MAX_BLOCK = (SBUF_PARTITION_BYTES - DGE_SCRATCH_BYTES) // (PHASE3_ROWS * 4 * SA
 BLOCK = 1 << (_MAX_BLOCK.bit_length() - 1)
 
 CHUNK_TILE = 128
+SCATTER_TILES_PER_ITER = 16
 
 
 def _kernel_assert(cond, msg):
@@ -66,10 +67,16 @@ if nki is not None:
 
         hist_data = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
         hist_digit = nl.ndarray((PMAX, S), dtype=nl.int32, buffer=nl.sbuf)
-        for tile_idx in range(n_hist_tiles):
+        work_off = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
+        slot_off = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
+        nisa.memset(dst=work_off, value=0)
+        nisa.memset(dst=slot_off, value=0)
+
+        def _hist_tile(it):
             nisa.dma_copy(
                 dst=hist_data,
-                src=work.ap(pattern=[[S, PMAX], [1, S]], offset=tile_idx * PMAX * S),
+                src=work.ap(pattern=[[S, PMAX], [1, S]], offset=0,
+                            scalar_offset=work_off, indirect_dim=0),
             )
             nisa.tensor_scalar(dst=hist_digit, data=hist_data,
                                op0=nl.right_shift, operand0=sh,
@@ -80,9 +87,13 @@ if nki is not None:
                 nisa.tensor_reduce(dst=tile_counts[0:PMAX, d:d + 1],
                                    data=indicator, op=nl.add, axis=(1,))
             for d in range(RADIX):
-                row = d * NBLK + tile_idx * PMAX
-                nisa.dma_copy(dst=hist.ap(pattern=[[1, PMAX]], offset=row),
+                nisa.dma_copy(dst=hist.ap(pattern=[[1, PMAX]], offset=d * NBLK,
+                                          scalar_offset=slot_off, indirect_dim=0),
                               src=tile_counts[0:PMAX, d:d + 1])
+            nisa.tensor_scalar(dst=work_off, data=work_off, op0=nl.add, operand0=PMAX * S)
+            nisa.tensor_scalar(dst=slot_off, data=slot_off, op0=nl.add, operand0=PMAX)
+
+        nl.fori_loop(0, n_hist_tiles, _hist_tile)
 
         chunk = M // PMAX
         n_ctiles = _div_ceil(chunk, CHUNK_TILE)
@@ -179,43 +190,41 @@ if nki is not None:
         slot_offsets_1 = nl.ndarray((1, ROWS), dtype=nl.int32, buffer=nl.sbuf)
         slot_counts = (slot_counts_0, slot_counts_1)
         slot_offsets = (slot_offsets_0, slot_offsets_1)
-        step = 0
+        digit_sel = nl.ndarray((PMAX, 1), dtype=nl.float32, buffer=nl.sbuf)
 
-        for d in range(RADIX - 1, -1, -1):
-            for tile_rev in range(n_tiles):
-                tile_idx = n_tiles - 1 - tile_rev
+        def _scatter_tiles(it):
+            for t in range(SCATTER_TILES_PER_ITER):
+                half = t % 2
                 for load_row in range(ROWS):
                     load_part = load_row * GPSIMD_STRIDE
                     nisa.dma_copy(
                         dst=data[load_part:load_part + 1, 0:S],
-                        src=work.ap(pattern=[[S, 1], [1, S]],
-                                    offset=(tile_idx * ROWS + load_row) * S),
+                        src=work.ap(pattern=[[S, 1], [1, S]], offset=load_row * S,
+                                    scalar_offset=work_off, indirect_dim=0),
                     )
                 nisa.tensor_scalar(dst=digit, data=data[0:PMAX, 0:S],
                                    op0=nl.right_shift, operand0=sh,
                                    op1=nl.bitwise_and, operand1=RADIX - 1)
-                nisa.tensor_scalar(dst=digit, data=digit, op0=nl.equal, operand0=d)
+                nisa.tensor_scalar(dst=digit, data=digit, op0=nl.equal, operand0=digit_sel)
                 nisa.nonzero_with_count(dst=marks, src=digit,
                                         index_offset=0, padding_val=S)
-                gathered = gathers[tile_rev % 2]
+                gathered = gathers[half]
                 nisa.nc_n_gather(dst=gathered, data=data,
                                  indices=marks[0:PMAX, 0:S].view(nl.uint32))
-                cnt_row = slot_counts[tile_rev % 2]
-                off_row = slot_offsets[tile_rev % 2]
-                slot_base = d * NBLK + tile_idx * ROWS
+                cnt_row = slot_counts[half]
+                off_row = slot_offsets[half]
                 nisa.dma_copy(dst=cnt_row,
-                              src=hist.ap(pattern=[[ROWS, 1], [1, ROWS]],
-                                          offset=slot_base))
+                              src=hist.ap(pattern=[[ROWS, 1], [1, ROWS]], offset=0,
+                                          scalar_offset=slot_off, indirect_dim=0))
                 nisa.dma_copy(dst=off_row,
-                              src=base.ap(pattern=[[ROWS, 1], [1, ROWS]],
-                                          offset=slot_base))
+                              src=base.ap(pattern=[[ROWS, 1], [1, ROWS]], offset=0,
+                                          scalar_offset=slot_off, indirect_dim=0))
                 for row_rev in range(ROWS):
                     row = ROWS - 1 - row_rev
                     part = row * GPSIMD_STRIDE
-                    run = runs[step % 2]
-                    cur = stages[step % 4]
-                    prev = stages[(step - 1) % 4]
-                    step += 1
+                    run = runs[row_rev % 2]
+                    cur = stages[row_rev % 4]
+                    prev = stages[(row_rev - 1) % 4]
                     nisa.dma_copy(dst=run, src=gathered[part:part + 1, 0:S])
                     nisa.tensor_copy(dst=cur[0:1, 0:S], src=run,
                                      engine=nisa.engine.vector)
@@ -232,6 +241,14 @@ if nki is not None:
                                    indirect_dim=0),
                         src=cur[0:1, 0:S],
                     )
+                nisa.tensor_scalar(dst=work_off, data=work_off, op0=nl.add, operand0=-ROWS * S)
+                nisa.tensor_scalar(dst=slot_off, data=slot_off, op0=nl.add, operand0=-ROWS)
+
+        for d in range(RADIX - 1, -1, -1):
+            nisa.memset(dst=digit_sel, value=float(d))
+            nisa.memset(dst=work_off, value=(n_tiles - 1) * ROWS * S)
+            nisa.memset(dst=slot_off, value=d * NBLK + (n_tiles - 1) * ROWS)
+            nl.fori_loop(0, n_tiles // SCATTER_TILES_PER_ITER, _scatter_tiles)
         return out
 
 
