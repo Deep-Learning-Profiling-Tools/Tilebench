@@ -160,7 +160,16 @@ def _pick_tiles_in_block(dim: int, tile: int, preferred: int) -> int:
     return 1
 
 
-_tuner = NkiAutotuner(matmul_kernel) if nki is not None else None
+def _num_cores(M: int, block_m: int) -> int:
+    lnc = _lnc_degree()
+    return lnc if (M // block_m) % lnc == 0 else 1
+
+
+def _launch(lhs, rhs, tib_m, tib_n, tib_k, num_cores):
+    return matmul_kernel[num_cores](lhs, rhs, tib_m, tib_n, tib_k, num_cores)
+
+
+_tuner = NkiAutotuner(_launch, name=f"{__name__}.matmul_kernel") if nki is not None else None
 _last_autotune_config: dict = {}
 
 
@@ -201,7 +210,7 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
             shape_key=((M, N, K), str(a.dtype)),
             search_space=_space,
             args_fn=lambda cfg: (a, b, cfg.block_size_m // TILE_M, cfg.block_size_n // TILE_N,
-                                cfg.block_size_k // TILE_K, 1),
+                                cfg.block_size_k // TILE_K, _num_cores(M, cfg.block_size_m)),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
@@ -210,11 +219,7 @@ def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
     tib_m, tib_n, tib_k = (cfg.block_size_m // TILE_M, cfg.block_size_n // TILE_N,
                            cfg.block_size_k // TILE_K)
 
-    num_block_m = M // (TILE_M * tib_m)
-    lnc = _lnc_degree()
-    num_cores = lnc if num_block_m % lnc == 0 else 1
-
-    return matmul_kernel[num_cores](a, b, tib_m, tib_n, tib_k, num_cores)
+    return _launch(a, b, tib_m, tib_n, tib_k, _num_cores(M, TILE_M * tib_m))
 
 
 def get_last_config() -> dict | None:
