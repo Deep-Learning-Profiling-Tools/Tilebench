@@ -130,7 +130,11 @@ if nki is not None:
         return result
 
 
-_tuner = NkiAutotuner(batched_matmul_kernel) if nki is not None else None
+def _launch(lhs, rhs, tile_m, tile_k, tile_n, num_cores):
+    return batched_matmul_kernel[num_cores](lhs, rhs, tile_m, tile_k, tile_n, num_cores)
+
+
+_tuner = NkiAutotuner(_launch, name=f"{__name__}.batched_matmul_kernel") if nki is not None else None
 _last_autotune_config: dict = {}
 
 
@@ -147,6 +151,10 @@ def run(A: torch.Tensor, B: torch.Tensor,
     tile_k = min(MAX_TILE_K, K)
     tile_n = min(BLOCK_N, N)
     _default = SimpleNamespace(block_size_m=tile_m, block_size_k=tile_k, block_size_n=tile_n)
+
+    lnc = _lnc_degree()
+    num_cores = lnc if BATCH % lnc == 0 else 1
+
     if autotune:
         _space = [SimpleNamespace(block_size_m=bm, block_size_k=MAX_TILE_K, block_size_n=bn)
                   for bm in (32, 64, 128) for bn in (32, 64, 128, 256, 512)
@@ -156,7 +164,7 @@ def run(A: torch.Tensor, B: torch.Tensor,
         cfg = _tuner.tune_or_cached(
             shape_key=((BATCH, M, N, K), str(A.dtype)),
             search_space=_space,
-            args_fn=lambda cfg: (A3, B3, cfg.block_size_m, cfg.block_size_k, cfg.block_size_n, 1),
+            args_fn=lambda cfg: (A3, B3, cfg.block_size_m, cfg.block_size_k, cfg.block_size_n, num_cores),
         )
         _last_autotune_config.clear()
         _last_autotune_config.update(vars(cfg))
@@ -164,11 +172,7 @@ def run(A: torch.Tensor, B: torch.Tensor,
         cfg = _default
     tile_m, tile_k, tile_n = cfg.block_size_m, cfg.block_size_k, cfg.block_size_n
 
-    lnc = _lnc_degree()
-    num_cores = lnc if BATCH % lnc == 0 else 1
-
-    C = batched_matmul_kernel[num_cores](A3, B3, tile_m, tile_k, tile_n,
-                                         num_cores)
+    C = _launch(A3, B3, tile_m, tile_k, tile_n, num_cores)
     return C.reshape(-1)
 
 
