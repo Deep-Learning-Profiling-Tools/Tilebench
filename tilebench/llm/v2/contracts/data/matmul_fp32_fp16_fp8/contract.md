@@ -45,12 +45,17 @@ shapes other than the task's declared shape is not required.
 
 The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
 
-The entry point must consume A and B exactly as delivered. Any layout
-transform of B (for example forming a K-major copy so that both operands are
-read along K) must be performed inside the entry point on every call and its
-device time is counted. No cross-call cache keyed by tensor identity,
-address, shape or dtype may hold a transformed operand, a descriptor or an
-output. No prepacked inputs are provided or may be assumed.
+A and B are delivered row-major; no prepacked input is provided or may be
+assumed. The entry point may consume them exactly as delivered, or it may
+form a layout transform of B (for example a K-major copy so that both
+operands are read along K) in B's own dtype, provided the transform is
+performed by device work inside the entry point on every call: its device
+time is counted. No cross-call cache keyed by tensor identity, address,
+shape, dtype or values may hold a transformed operand, a descriptor or an
+output; every call rebuilds whatever it needs. Process-wide PyTorch
+precision and backend settings are evaluator state, not candidate state:
+the entry point must neither read nor change them (see Forbidden
+substitutions); the precision class above is achieved inside the kernel.
 
 ## Permitted implementation mappings
 Logical tile shapes, launch parameters, grouped or swizzled tile ordering,
@@ -62,23 +67,19 @@ cast is applied.
 ## Forbidden substitutions
 torch.matmul / torch.mm / torch.addmm / torch.bmm / torch.einsum /
 torch._scaled_mm / the @ operator; caching a transposed or repacked B (or
-anything derived from an input) across calls; down-casting fp32 operands
-below TF32 or fp16 operands to fp8; applying scale factors in the fp8
-case; changing torch.backends matmul precision flags.
+anything derived from an input's identity, address, shape or values)
+across calls, or assuming a prepacked B; down-casting fp32 operands below
+TF32 or fp16 operands to fp8; applying scale factors in the fp8 case;
+reading or changing process-wide PyTorch precision or backend settings
+(`torch.backends.*`, `torch.set_float32_matmul_precision`, `allow_tf32`):
+these are evaluator state, not candidate-controlled state.
 
 ## Permitted PyTorch operations
 - torch.empty for C and, only if the design uses them, for a per-call
   K-major copy of B or split-K scratch.
 - Tensor.t() / Tensor.contiguous() only to produce such a per-call, in-run
-  copy (timed, never cached).
+  copy (device work inside the entry point on every call, counted, never
+  cached).
 - Reads of shape / stride / dtype / device metadata.
 - torch.cuda.current_stream() to obtain the launch stream.
 Everything else is forbidden.
-
-## Open review items
-- Whether a K-major (transposed) repack of B belongs inside the timed
-  boundary of this operator, as this contract requires (per call, uncached),
-  or whether a prepacked K-major B may be assumed by every implementation.
-- Whether the comparison tolerance presumes TF32-class error on the fp32
-  verification side at run time, given that process-wide matmul precision
-  flags can be altered by other operators in the same process.

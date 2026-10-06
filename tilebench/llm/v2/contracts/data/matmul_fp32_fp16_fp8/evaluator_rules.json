@@ -9,8 +9,9 @@
   "forbidden_substitutions": [
     {"pattern": "torch\\.(matmul|mm|addmm|bmm|baddbmm|einsum|_scaled_mm)\\(", "message": "library GEMM computes the operator", "level": "confirmed", "scope": "host"},
     {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious", "scope": "host"},
-    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of B: permitted only per call inside run(), never cached across calls", "level": "suspicious", "scope": "host"},
-    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision", "message": "process-wide precision flag changed", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of B: permitted only per call inside run() as counted device work, never cached across calls", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|data_ptr\\(\\)\\s*(in|not in|==)|_cache\\b|\\bcache\\b", "message": "Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.backends\\.|set_float32_matmul_precision\\(|allow_tf32|fp32_precision", "message": "Candidate changes or reads process-wide precision/backend state; precision flags are evaluator state.", "level": "confirmed", "scope": "host"},
     {"pattern": "\\.to\\(\\s*torch\\.(float16|bfloat16|float8_e4m3fn|float8_e5m2)\\s*\\)|\\.half\\(\\)|\\.bfloat16\\(\\)", "message": "host-side down-cast of an operand below its delivered precision", "level": "suspicious", "scope": "host"},
     {"pattern": "scale_a|scale_b|torch\\.ones\\(", "message": "fp8 scale factors are not part of this operator", "level": "suspicious", "scope": "host"}
   ],
@@ -18,9 +19,9 @@
     {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "mma"], "message": "a device-side tiled matrix multiply", "level": "suspicious"},
     {"any_of": ["float32", "fp32", "f32"], "message": "an fp32 accumulator", "level": "suspicious"}
   ],
-  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream"],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream", "Tensor.t", "Tensor.contiguous"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, N) tensor of A's dtype allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted; the output allocation call and descriptor/metadata construction are host-side work and not GPU time. A and B are consumed as delivered; any repack of B must be per call inside run() (its device time counted) and never cached; no prepacked inputs."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() on every call is counted: the GEMM launch(es) and, if the design uses one, the per-call K-major copy of B. The output allocation call and descriptor/metadata construction are host-side work and not GPU time. Decided rule: A and B are delivered row-major and may be consumed as delivered or through a repack rebuilt by device work inside every run(); cross-call caches of a transformed operand, descriptor or output keyed on input identity, data pointer, shape or values are forbidden; no prepacked inputs may be assumed. Process-wide precision/backend flags (torch.backends.*, set_float32_matmul_precision, allow_tf32) are evaluator state that the candidate must neither read nor change. bytes_expr counts A, B and C once; repack traffic is diagnostic."},
   "tolerance_source": "config.verify"
 }

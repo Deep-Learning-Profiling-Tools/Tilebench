@@ -31,7 +31,8 @@ the kernel_rows / kernel_cols / input_rows / input_cols it is given.
 
 ## Required logical stages
 1. For each output element, accumulate the kernel_rows * kernel_cols tap
-   products from the zero-padded neighbourhood into an fp32 accumulator.
+   products from the zero-padded neighbourhood into an fp32 accumulator,
+   each product formed in fp32 from the fp32-converted pixel and weight.
 2. Round the accumulator to the input dtype and store it at the same flat
    position.
 
@@ -54,13 +55,11 @@ covers tile overhang at the image border. No reduction across programs, no
 scan, no sort.
 
 ## Precision and accumulation
-- The accumulator over taps is fp32 for both input dtypes.
+- For both input dtypes (fp16 and fp32), the pixel and the tap weight are
+  converted to fp32 before each multiply, and the products are accumulated
+  in fp32: no per-tap product is formed in a dtype narrower than fp32.
 - The accumulated fp32 value is rounded once, to the input dtype, at the
   store.
-- Whether the per-tap product itself must be formed in fp32 for fp16 inputs
-  (converting pixel and weight before multiplying) or may be formed in the
-  input dtype before being added to the fp32 accumulator is an open review
-  item; both are currently within the configured tolerance.
 - Tolerance: the operator config's verify section.
 
 ## Preprocessing and timing boundary
@@ -98,7 +97,9 @@ tile), never pre-expanded on the host.
 - Host-side zero-padding of the image or any intermediate image buffer
   (a global-memory round trip that the direct stencil does not have).
 - Non-zero padding modes (reflect, replicate, clamp).
-- Accumulating in fp16, or rounding the accumulator between taps.
+- Forming a per-tap product in a dtype narrower than fp32 (multiplying the
+  fp16 pixel and weight before converting them), accumulating in fp16, or
+  rounding the accumulator between taps.
 - Autotuning, timing, benchmarking or configuration search inside the
   generated file.
 
@@ -109,8 +110,3 @@ tile), never pre-expanded on the host.
 - Tensor metadata: `.shape`, `.numel()`, `.dtype`, `.device`.
 - `torch.cuda.current_stream()` to obtain the launch stream.
 Everything else is forbidden.
-
-## Open review items
-- Per-tap product precision for reduced-precision inputs: must pixel and
-  weight be converted to fp32 before each multiply, or may the product be
-  formed in the input dtype before fp32 accumulation?

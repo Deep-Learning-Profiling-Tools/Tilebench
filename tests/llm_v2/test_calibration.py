@@ -183,7 +183,10 @@ def test_t_emp_units_and_statuses(tmp_path):
     assert rec.status == "ok" and rec.mode == "mma_fp16_f32acc"
     assert rec.compute_term_ms == pytest.approx(F / P16 * 1e3) and rec.memory_term_ms == pytest.approx(Q / BW * 1e3)
     assert rec.t_emp_ms == pytest.approx(max(F / P16, Q / BW) * 1e3) and rec.ceiling_basis == "empirical"
-    pending = E.t_emp("B200", "matmul_fp32_fp16_fp8", "fp16", params, 1, MATMUL, E.load_modes(), prof)
+    pending_doc = json.loads(json.dumps(E.load_modes()))
+    pending_doc["status"] = "proposed"
+    pending_doc["decisions"]["M1_declaration_revision_2"]["status"] = "proposed"
+    pending = E.t_emp("B200", "matmul_fp32_fp16_fp8", "fp16", params, 1, MATMUL, pending_doc, prof)
     assert pending.status == "definition_pending" and pending.t_emp_ms is None and pending.provisional_t_emp_ms == rec.t_emp_ms
     assert "M1_declaration_revision_2" in pending.pending_decisions
     assert E.t_emp("B200", "matmul_fp32_fp16_fp8", "fp16", params, 1, MATMUL, approved_modes_doc(), None).status == "profile_missing"
@@ -236,7 +239,13 @@ def test_binding_is_per_device_and_pinned_for_formal_resume():
     _check_resume(_state(same_status), config_hash="h", content_hashes={}, run_type="formal", gen=gen, scoring_binding=b1)
 
 
-def test_formal_preflight_blocks_until_profile_frozen_and_declaration_approved(study):
+def test_formal_preflight_blocks_until_profile_frozen_and_declaration_approved(study, monkeypatch):
+    pending_doc = json.loads(json.dumps(E.load_modes()))
+    pending_doc["status"] = "proposed"
+    pending_doc["decisions"]["M1_declaration_revision_2"]["status"] = "proposed"
+    monkeypatch.setattr(E, "load_modes", lambda path=None: pending_doc)
+    real_entry = E.device_entry("B200")
+    monkeypatch.setattr(E, "device_entry", lambda device, manifest=None: {**real_entry, "status": "candidate"})
     pf = campaign.preflight("B200", "triton", "base", live=True, study=study, run_type="formal", operators=["softmax"])
     text = " ".join(pf.blockers)
     assert "frozen" in text and "decision M1" in text and "scoring targets not ready" in text

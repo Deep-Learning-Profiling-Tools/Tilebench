@@ -396,12 +396,22 @@ def cmd_review_resolve(a) -> int:
     if not a.decision:
         print("a --decision (or --recheck) is required", file=sys.stderr)
         return 2
+    if st.run_type == "formal" and not a.recheck and (not a.reviewer or a.reviewer == "human"):
+        print("formal trajectory: a designated human study reviewer must be named with --reviewer <name> "
+              "(no default identity, no LLM reviewer)", file=sys.stderr)
+        return 2
+    if st.run_type == "formal" and not a.recheck and not (a.note or "").strip():
+        print("formal trajectory: --note must record the evidence behind the decision", file=sys.stderr)
+        return 2
+    a.reviewer = a.reviewer or "human"
     sm.resolve_review(st, rec.round, a.decision, a.note, reviewer=a.reviewer)
     st.save(tpath)
     from tilebench.llm.v2.providers.ledger import append_jsonl
     append_jsonl(Path(a.trajectory_dir) / "reviews.jsonl", {"round": rec.round, "attempt": att.attempt, "decision": a.decision,
                                                              "note": a.note, "reviewer": a.reviewer, "evidence": evidence,
-                                                             "t": time.time()})
+                                                             "candidate_sha256": att.candidate_sha256,
+                                                             "checker": att.checker_fingerprint, "rules_sha256": att.rules_sha256,
+                                                             "run_type": st.run_type, "t": time.time()})
     _print({"trajectory_id": st.trajectory_id, "round": rec.round, "decision": a.decision, "status": st.status})
     return 0
 
@@ -439,9 +449,10 @@ def cmd_reevaluate(a) -> int:
                                     isolation=a.isolation, lock_root=LLM_V2_OUTPUT_ROOT)
     fp = evaluator_fingerprint(job, worker_timeout_s=a.worker_timeout, isolation_backend=evaluator.report.get("backend", "none"))
     adir = attempt_dir(tdir, rec.round, att.attempt)
+    from tilebench.llm.v2.orchestration.runner import next_revision_name
     existing = sorted(p.name for p in adir.glob("eval_*") if p.is_dir())
     legacy = (adir / "evaluation.json").exists() and not existing
-    rev = f"eval_{len(existing) + (2 if legacy else 1):04d}"
+    rev = next_revision_name(adir)
     rdir = adir / rev
     rdir.mkdir(parents=True, exist_ok=False)
     meta = {"revision": rev, "reason": a.reason, "supersedes": rec.evaluation_revision or ("evaluation.json (legacy revision 1)" if legacy else None),
@@ -724,7 +735,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("review-resolve", help="record a human compliance decision for a review_required trajectory")
     s.add_argument("--trajectory-dir", required=True)
     s.add_argument("--decision", choices=["compliant", "violation"])
-    s.add_argument("--note", default=""); s.add_argument("--reviewer", default="human")
+    s.add_argument("--note", default=""); s.add_argument("--reviewer", default=None, help="designated human reviewer (required for formal trajectories)")
     s.add_argument("--show", action="store_true", help="print the pending evidence without deciding")
     s.add_argument("--recheck", action="store_true",
                    help="re-run the current checker on the stored candidate; resolves only if the re-check is clear")

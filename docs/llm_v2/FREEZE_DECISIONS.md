@@ -46,7 +46,26 @@ freeze needs and separates them by who decides.
 Nothing in C was changed by code in this round. `approved_by` fields, fold
 status, grants and `S_llm` are set only by the owner.
 
-## D. Round of 2026-10-06 (empirical calibration; `NEXT_STEP_EMPIRICAL_CALIBRATION.md`)
+## E. Owner decisions of 2026-10-06 (`FINAL_FREEZE_AND_START_B200.md`) — applied
+
+| Item | Decision | Where applied |
+|---|---|---|
+| D2 | B200 profile `B200-20261006T063415Z-39b55bd3` frozen (raw points, telemetry, flags, seal unchanged; TF32 M4096 flag kept, M8192 reported as sensitivity) | `manifests/calibration.yaml` (frozen, frozen_by), `CALIBRATION.md` §5 |
+| M1 | revision-2 per-operator arithmetic declaration approved; no dtype-wide default | `arithmetic_modes.yaml` status approved |
+| M2 | `memory_only` for the 33 element/comparison/conversion/integer tasks: empirical compulsory-I/O lower bound, F diagnostic; reported as a subgroup | `arithmetic_modes.yaml` decision M2 |
+| M3 | causal flash_attention F override applied; dense count diagnostic | `arithmetic_modes.yaml` M3 (`overrides_applied` in the scoring table) |
+| M4 | radix_sort Q override `2*n*dtype_size` (compulsory_io); digit width free | `arithmetic_modes.yaml` M4 |
+| C1' | gaussian_blur fp32 per-tap product/accumulation, `fp32_fma_vector` | `arithmetic_modes.yaml`, contract |
+| C1 | eight needs-review contracts decided (batched_matmul / matmul / matmul_int8 / streamk per-call repack, no cross-call cache; destindex permutation domain; gaussian_blur fp32 taps; quantize_global plain cast; radix_sort stable LSD, free digit width); 14 flagged items repaired; 45 contracts approved after validation | `contracts/data/*`, `CONTRACT_REVISION_2.md` |
+| C3 | folds frozen 15/15/15 as proposed; formal Base requires frozen folds | `folds.yaml`, `campaign.preflight` |
+| C4 | distiller gpt-6.1-sol xhigh 128000 (map and reduce) registered, unused until a source-device Base completes | `models.yaml` |
+| C6 | formal capture failure = `timing_error` (round consumed); validation keeps eager fallback | `study.yaml timing.capture_failure_policy_formal`, worker |
+| C7 | worker wall-clock 1800 s frozen, identical across models/DSLs | `study.yaml evaluation.worker_timeout_s`, `run_campaign` |
+| C8 | formal `review_required`: designated human reviewer with recorded evidence, no LLM reviewer | `cli review-resolve` |
+| §2 | corrected B200 Device Context 2026-10-06 approved/sendable; Triton 3.6.0 and cuTile 1.5.0 references approved for the B200 campaign | `skills/manifest.json`, `study.yaml device_snapshots` |
+| §1 | formal Base requires frozen folds; BLAS-stack gate; process-wide precision guard; calibration scoring-only | code + `tests/llm_v2/test_final_freeze.py` |
+
+## D. Round of 2026-10-06 (empirical calibration; `NEXT_STEP_EMPIRICAL_CALIBRATION.md`) — superseded by §E
 
 | # | Item | State | Owner action |
 |---|---|---|---|

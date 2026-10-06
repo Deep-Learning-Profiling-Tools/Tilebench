@@ -29,8 +29,9 @@ def test_folds_partition_all_45_operators_and_keep_families_whole(folds):
     ms.validate_folds(folds, ops)
     sizes = [len(folds["folds"][f]["operators"]) for f in "ABC"]
     assert sizes == [15, 15, 15]
-    assert folds["status"] == "proposed" and folds["approved_by"] is None
-    assert ms.blockers_folds(folds)
+    assert folds["status"] == "frozen" and "FINAL_FREEZE_AND_START_B200.md" in folds["approved_by"]
+    assert ms.blockers_folds(folds) == []
+    assert ms.blockers_folds({**folds, "status": "proposed"}) and ms.blockers_folds({**folds, "approved_by": None})
 
 
 def test_folds_reject_split_family(folds):
@@ -54,7 +55,9 @@ def test_models_manifest_gates_by_status():
         cfg = models["roles"]["generator"][name]
         assert cfg["status"] == "approved" and "NEXT_STEP_CLAUDE.md" in cfg["approved_by"] and cfg["approved_evidence"]
     assert not ms.blockers_models(models, accept_status=("approved", "candidate"))
-    assert any("distiller" in b for b in ms.blockers_models(models, roles=("distiller",)))
+    assert ms.blockers_models(models, roles=("distiller",)) == []     # owner decision of 2026-10-06
+    unset = {**models, "roles": {**models["roles"], "distiller": {"provider": None, "model_id": None, "status": "unset"}}}
+    assert any("distiller" in b for b in ms.blockers_models(unset, roles=("distiller",)))
     for name, key_env in (("gpt", "OPENAI_API_KEY"), ("claude", "CLAUDE_API_KEY")):
         cfg = models["roles"]["generator"][name]
         assert cfg["api_key_env"] == key_env and cfg["max_output_tokens"] == 128000

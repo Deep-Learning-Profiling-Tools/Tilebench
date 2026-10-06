@@ -36,21 +36,27 @@ The entry point is called as `run(x, rms_w)`: `x` and `rms_w` positional;
 2. **Normalise and scale**: `y = x * rstd * w` for every element of the row,
    evaluated in fp32 and cast once to the output dtype at the store.
 
-Stage 2 depends on stage 1 for the same row only. The row statistic is a
-private value of the program that owns the row and never round-trips through
-global memory, because the canonical algorithm keeps it on chip between the
-two sweeps; splitting the two stages into separate launches with a global
-`rstd` buffer is therefore not permitted. Splitting one row across several
-programs (cross-program reduction, atomics) is not permitted either, because
-combining the partial sums would need a global-memory intermediate or
-atomics that the canonical algorithm does not have. Rows are independent;
-several rows per program, a chunked loop over a long row, or distributing
-the rows over more than one launch is free.
+Stage 2 depends on stage 1 for the same row only. The two stages are
+normally fused, with `rstd` held privately by the program that owns the row
+(re-reading the row for stage 2 or keeping it on chip are both permitted).
+Splitting them into two launches that pass `rstd` through a `(batch*M,)`
+fp32 statistics buffer allocated inside `run()` on every call is a mapping
+choice: the buffer's traffic is device work and is counted, and it must
+never be cached across calls. What is fixed is the logical traversal count:
+the row is read once for the statistic and at most once more for the
+normalisation; a split that re-reads the whole row from global memory a
+third time is not permitted. Splitting one row across several programs
+(cross-program reduction, atomics) is not permitted, because combining the
+partial sums would need a global-memory intermediate or atomics that the
+canonical algorithm does not have. Rows are independent; several rows per
+program, a chunked loop over a long row, or distributing the rows over more
+than one launch is free.
 
 ## Algorithm family and structure
 
-Two-pass row normalisation inside one program: a reduction sweep (sum of
-squares) followed by an elementwise sweep (normalise, scale). The reduction
+Two-pass row normalisation: a reduction sweep (sum of squares) followed by
+an elementwise sweep (normalise, scale), each row handled whole by one
+program in each sweep. The reduction
 is a plain fp32 sum over `K` elements; the grouping of partial sums
 (chunk-sequential, lane-wise accumulation, tree over lanes, or any other
 order) is free. There is no scan and no sort. Out-of-range lanes of a partial
@@ -75,15 +81,17 @@ The measured quantity is the GPU time of all device work that `run()` causes on 
 
 Viewing `x` as `(batch*M, K)` is metadata only. No input repacking, no cast
 copies, no state cached across calls, nothing precomputed outside `run()`.
-The weight is consumed as given, a contiguous `(K,)` vector, and may be
-re-read per row.
+In a split design the per-call statistics buffer is written and read by
+device work and is counted. The weight is consumed as given, a contiguous
+`(K,)` vector, and may be re-read per row.
 
 ## Permitted implementation mappings
 
 - Chunk width along `K`, rows per program, vectorisation, pipelining depth
   and other launch parameters.
-- Distributing the rows over one or several launches, provided each row's
-  statistic stays private to the program that owns the row.
+- Fused versus split launches: distributing the rows over one or several
+  launches, or computing `rstd` in one launch and applying it in another
+  through a per-call `(batch*M,)` fp32 statistics buffer.
 - Re-reading the row for the second sweep versus holding it on chip.
 - Internal order of the fp32 sum.
 - Fill values for out-of-range lanes of `x` (must act as zero in the sum) and
@@ -101,14 +109,16 @@ re-read per row.
 - Accumulating the sum of squares, or evaluating the normalise multiply, in
   fp16/bf16.
 - Dividing by a padded row length instead of `K`, or omitting `eps`.
-- Splitting one row's reduction across programs, or passing the row
-  statistic between launches through global memory (both add a global-memory
-  intermediate that the canonical algorithm keeps on chip).
+- Splitting one row's reduction across programs (combining the partial sums
+  would add a global-memory intermediate or atomics that the canonical
+  algorithm does not have); a split that re-reads the whole row from global
+  memory a third time; caching a statistics buffer across calls.
 - Writing the result into `x` in place, or returning a view of `x`.
 
 ## Permitted PyTorch operations
 
-- `torch.empty_like(x)` or `torch.empty(...)` for the output only.
+- `torch.empty_like(x)` or `torch.empty(...)` for the output and, only in a
+  split design, one fp32 `(batch*M,)` statistics buffer allocated per call.
 - `Tensor.reshape` / `Tensor.view` to the 2-D `(batch*M, K)` form,
   `Tensor.contiguous` as a no-op guard on the contiguous inputs,
   `Tensor.stride`, `Tensor.numel`, `.shape`, `.dtype`, `.device`.

@@ -26,11 +26,11 @@ with C of shape (M, N) in int32.
 ## Required logical stages
 1. Output allocation.
 2. Decode-and-multiply GEMM: for each logical output tile, loop over the
-   packed rows of B in chunks; for each chunk load the packed bytes once
-   (one logical load per chunk and output tile), decode each of the four
-   fields on the device (shift, mask, subtract 1), pair field i with the A
-   columns i * K_b + r of the same packed rows r, and accumulate the int8 x
-   int8 products in a local int32 accumulator; store the int32 tile.
+   packed rows of B in chunks; for each chunk load the packed bytes, decode
+   each of the four fields on the device (shift, mask, subtract 1), pair
+   field i with the A columns i * K_b + r of the same packed rows r, and
+   accumulate the int8 x int8 products in a local int32 accumulator; store
+   the int32 tile.
 Stage 2 depends on stage 1. One launch suffices. The decode must happen on
 the device inside the multiplication pass; no unpacked copy of B may be
 materialised in global memory, because a separate decode pass would write
@@ -40,18 +40,19 @@ in-mainloop decode never materialises.
 ## Algorithm family and structure
 Blocked integer matrix multiplication with in-mainloop weight decoding. The
 visiting order of the logical K index is free (integer accumulation is
-exact, so the order cannot change the result). Each packed byte is loaded
-once per output tile in the algorithm's logical traversal of B and reused
-for all four fields; this counts logical loads, not physical DRAM
-transactions, which caches, hardware copy engines and the compiler may
-change. Tail handling, wherever the chosen tile does not divide K_b, N or M
-of the task's shape: a zero-filled packed byte decodes to -1, not 0, so
-packed rows or columns beyond K_b or N must be masked (or paired only with
-zero A columns) so that they contribute nothing; stores are clipped to
-(M, N). Implementations must be correct for the task's declared shape (K is
-a multiple of 1024 in every task of this operator); supporting shapes other
-than the declared one is not required; see the open review item on general
-K.
+exact, so the order cannot change the result). Whether a loaded packed
+chunk is reused for all four fields (fields-inner) or the packed rows are
+revisited once per field (fields-outer) is an implementation choice, not
+part of the canonical algorithm; what is fixed is that the packed B is
+decoded correctly on the device inside the GEMM pass and that no unpacked
+(K, N) B is written to global memory. Tail handling, wherever the chosen
+tile does not divide K_b, N or M of the task's shape: a zero-filled packed
+byte decodes to -1, not 0, so packed rows or columns beyond K_b or N must
+be masked (or paired only with zero A columns) so that they contribute
+nothing; stores are clipped to (M, N). Implementations must be correct for
+the task's declared shape (K is a multiple of 1024 in every task of this
+operator); supporting shapes other than the declared one, including
+arbitrary K_b, is not required.
 
 ## Precision and accumulation
 Exact integer arithmetic: int8 x int8 products accumulated in int32. No
@@ -61,43 +62,42 @@ floating-point evaluation, no TF32, no scaling. Output int32.
 
 The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
 
-The entry point must consume A and B exactly as delivered. Any layout
-transform of B (for example a K-major copy of the packed matrix) must be
-performed inside the entry point on every call and its device time is
-counted. No cross-call cache keyed by tensor identity, address, shape or
-dtype may hold a transformed or decoded operand. No prepacked inputs are
-provided or may be assumed.
+A and the packed B are delivered row-major; no prepacked (K-major) input is
+provided or may be assumed. The entry point may consume them exactly as
+delivered, or it may form a layout transform of the packed B (for example a
+K-major copy of the packed matrix, still packed), provided the transform is
+performed by device work inside the entry point on every call: its device
+time is counted. Decoding remains inside the multiplication path: a fully
+materialised unpacked (K, N) B in global memory is forbidden whether or not
+it is rebuilt per call. No cross-call cache keyed by tensor identity,
+address, shape, dtype or values may hold a transformed or decoded operand,
+a descriptor or an output; every call rebuilds whatever it needs.
 
 ## Permitted implementation mappings
 Logical tile shapes, launch parameters, grouped tile ordering, pipelining;
-fields-inner versus fields-outer loop nesting; widening the packed tile to
-a wider integer type before masking versus narrower decode arithmetic;
-descriptor-based versus pointer loads; compile-time versus runtime K_b;
-reading B directly as (K_b, N) tiles versus through a per-call in-run
-K-major copy.
+fields-inner versus fields-outer loop nesting, and whether a loaded packed
+chunk is reused for all four fields or reloaded per field; widening the
+packed tile to a wider integer type before masking versus narrower decode
+arithmetic; descriptor-based versus pointer loads; compile-time versus
+runtime K_b; reading B directly as (K_b, N) tiles versus through a per-call
+in-run K-major copy of the packed matrix (device work, counted).
 
 ## Forbidden substitutions
 torch.matmul / torch.mm / torch._int_mm / torch.addmm / torch.einsum / the
-@ operator; host-side decoding of B with PyTorch bit operations into an
-unpacked (K, N) matrix; floating-point evaluation of the product; caching a
-transposed or decoded B across calls; changing torch.backends matmul flags.
+@ operator; materialising an unpacked (K, N) B in global memory, whether by
+host-side PyTorch bit operations or by a separate device decode pass;
+floating-point evaluation of the product; caching a transposed, repacked or
+decoded B (or anything derived from an input's identity, address, shape or
+values) across calls, or assuming a prepacked B; reading or changing
+process-wide PyTorch precision or backend settings (evaluator state, not
+candidate-controlled state).
 
 ## Permitted PyTorch operations
 - torch.empty for C and, only if the design uses it, for a per-call K-major
   copy of the packed B.
 - Tensor.t() / Tensor.contiguous() only to produce such a per-call, in-run
-  copy (timed, never cached).
+  copy of the packed B (device work inside the entry point on every call,
+  counted, never cached).
 - Reads of shape / stride / dtype / device metadata.
 - torch.cuda.current_stream() to obtain the launch stream.
 Everything else is forbidden.
-
-## Open review items
-- Whether a K-major repack of the packed B belongs inside the timed boundary
-  of this operator, as this contract requires (per call, uncached), or
-  whether a prepacked K-major B may be assumed by every implementation.
-- Whether implementations must support arbitrary K_b (tails that are not a
-  multiple of the packed-row chunk) or only the benchmark's shapes, given
-  that zero-filled packed bytes decode to -1.
-- Whether the verification harness must isolate process-wide matrix
-  multiplication precision flags so that the verification of other
-  operators in the same process is unaffected.

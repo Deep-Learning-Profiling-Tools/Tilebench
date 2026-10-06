@@ -44,15 +44,18 @@ separated by a global synchronisation (for example a launch boundary) unless
 every compare-exchange of a group of consecutive stages is confined to data
 owned by one program (an aligned power-of-two slice longer than every
 partner distance `j` in the group); such a group may be executed by that
-program locally. The pad pass may be fused into the first such group. At
-every global synchronisation point the entire array lives in `work`; the
-network is executed in place and no second buffer is permitted.
+program locally. The pad pass may be fused into the first such group. The
+network is in place by construction: every compare-exchange writes back only
+the two positions it read, so at every global synchronisation point the
+entire array lives in `work` and the algorithm has no second buffer (a
+ping-pong copy would add traffic the network does not have).
 
 ## Algorithm family and structure
 
 Bitonic sorting network over a `+inf`-padded power-of-two array: the
 standard `k`-ascending / `j`-descending schedule, partner by XOR, direction
-by `(i AND k) == 0`, strict comparisons. Padding values sink to `work[N:M]`
+by `(i AND k) == 0`, strict comparisons, executed in place in one working
+buffer. Padding values sink to `work[N:M]`
 and are dropped by the final slice. Stability is unobservable because only
 values are sorted. Any other sorting algorithm (radix, merge, odd-even,
 sample sort), any other comparator schedule, and non-strict comparisons are

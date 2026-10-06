@@ -164,6 +164,31 @@ legacy table `tilebench/data/peak_performance/<GPU>.json` is never written;
 instructions (GH200 / MI300X run the same command locally; Trn2 needs the
 native adapter from the NKI window).
 
+## Formal B200 Base (frozen configuration, 2026-10-06)
+
+Run from the `exp/llm-b200` worktree (cut from `S_llm`), with the campaign
+environment: `LD_LIBRARY_PATH` unset (the dgx003 default mixes the wheel
+cuBLAS with a system cuBLASLt; formal preflight fails closed on that),
+`OPENAI_API_KEY` / `CLAUDE_API_KEY` present (never printed).
+
+```
+env -u LD_LIBRARY_PATH python -m tilebench.llm.v2 preflight --devices B200 --live --run-type formal
+env -u LD_LIBRARY_PATH python -m tilebench.llm.v2 base --device B200 --dsl triton --model gpt    --campaign <id> --run-type formal --operators vector_add --dtypes fp16   # launch acceptance
+env -u LD_LIBRARY_PATH python -m tilebench.llm.v2 base --device B200 --dsl triton --model gpt    --campaign <id> --run-type formal --resume   # full task set, same identity
+```
+
+Formal gates (all must pass): frozen + approved folds (Base and Enhanced),
+45 approved contracts, approved Reference Skills and the pinned Device
+Context (`study.yaml device_snapshots`), approved arithmetic declaration
+with every task `ok`, frozen empirical profile (file sha + seal), scoring
+binding, consistent BLAS stack, bwrap probe, host arch, approved
+generators, worker timeout = `study.yaml evaluation.worker_timeout_s`
+(1800 s; any other value is refused for formal runs), capture failures are
+`timing_error` (consumed round). A formal `review_required` round pauses
+until `review-resolve --reviewer <designated human> --note <evidence>`
+records the decision (candidate sha256, checker and rules hashes are
+written to `reviews.jsonl`).
+
 ## Clean-tree publication check
 
 ```

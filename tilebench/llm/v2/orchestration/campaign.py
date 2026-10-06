@@ -153,8 +153,15 @@ def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict 
     if live:
         accept = ("approved",) if formal else ("approved", "candidate")
         pf.blockers.extend(ms.blockers_models(models, accept_status=accept, names=models_selected))
-        if condition == "enhanced":
-            pf.blockers.extend(ms.blockers_folds(folds))
+        fold_problems = ms.blockers_folds(folds)
+        if formal:
+            # Base trajectories are the source data of cross-fitted skill distillation: the A/B/C split must be
+            # frozen before the first formal Base result exists, not only before Enhanced.
+            pf.blockers.extend(f"{b} (formal Base and Enhanced both require frozen, approved folds)" for b in fold_problems)
+        elif condition == "enhanced":
+            pf.blockers.extend(fold_problems)
+        elif fold_problems:
+            pf.warnings.append("validation run with unfrozen folds (unscored; never a distillation source)")
     # scoring: declared arithmetic model (arithmetic_modes.yaml) + this device's empirical profile
     sc = scoring_gate(device, dsl, study, folds, operators)
     pf.facts["scoring"] = sc["facts"]
@@ -189,6 +196,16 @@ def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict 
         vendor = {"blackwell": "nvidia", "hopper": "nvidia", "cdna3": "amd", "trainium2": "neuron"}.get(expected)
         if vendor and nodes.get(vendor, {}).get("verified") == "pending":
             pf.warnings.append(f"{vendor} device-node binding inside the sandbox is pending verification on this device class")
+        if vendor in ("nvidia", "amd"):
+            # the evaluator inherits this process's environment: a mixed BLAS stack (wheel cuBLAS + a system cuBLASLt)
+            # breaks _int_mm/_scaled_mm references; formal runs fail closed on the same check the calibration uses
+            from tilebench.llm.v2.calibration.environment import blas_stack_check
+            blas = blas_stack_check()
+            pf.facts["blas_stack"] = {k: blas.get(k) for k in ("ok", "error", "libraries", "blas_dirs", "checks", "LD_LIBRARY_PATH")}
+            if not blas.get("ok"):
+                (pf.blockers if formal else pf.warnings).append(
+                    f"BLAS stack: {blas.get('error')} (LD_LIBRARY_PATH={blas.get('LD_LIBRARY_PATH')}); formal runs require a "
+                    "consistent cuBLAS/cuBLASLt (hipBLAS/hipBLASLt) stack in the campaign environment")
     pf.ok = not pf.blockers
     return pf
 
@@ -314,10 +331,10 @@ def scoring_gate(device: str, dsl: str, study: dict, folds: dict, operators: lis
 
 
 def campaign_record(spec: CampaignSpec, gen: GeneratorSpec, config_hash: str, isolation: dict,
-                    template_hash: str, scoring_binding: dict | None = None) -> dict:
+                    template_hash: str, scoring_binding: dict | None = None, preflight_facts: dict | None = None) -> dict:
     return {"schema": "tilebench-llm-v2-campaign/1", "spec": spec.record(), "generator": gen.record(),
             "config_hash": config_hash, "templates_sha256": template_hash, "host": socket.gethostname(),
-            "scoring_binding": scoring_binding,
+            "scoring_binding": scoring_binding, "preflight_facts": preflight_facts,
             "git": _git_head(), "isolation": isolation, "pid": os.getpid(), "started": time.time(),
             "protocol_note": ("validation runs are unscored engineering acceptance of the execution chain; "
                               "they never enter E(B) curves or distillation" if spec.run_type == "validation"
@@ -485,6 +502,11 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
                    models_selected=(spec.model,), provider=gen.provider, operators=spec.operators)
     if not pf.ok:
         return {"refused": True, "preflight": pf.to_dict()}
+    frozen_timeout = int((study.get("evaluation") or {}).get("worker_timeout_s", spec.worker_timeout_s))
+    if formal and spec.worker_timeout_s != frozen_timeout:
+        return {"refused": True, "preflight": pf.to_dict(),
+                "reason": f"formal runs use the frozen per-candidate wall-clock limit {frozen_timeout} s "
+                          f"(study.yaml evaluation.worker_timeout_s), identical for every model and DSL; got {spec.worker_timeout_s}"}
     config_hash = ms.study_config_hash(study, models, folds, modes)
     template_hash = templates_sha256()
     manifest = load_manifest()
@@ -499,7 +521,9 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
         return {"refused": True, "preflight": pf.to_dict(),
                 "reason": f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"}
     binding = empirical.scoring_binding(spec.device)
-    rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash, binding)
+    rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash, binding,
+                          preflight_facts={k: pf.facts.get(k) for k in ("blas_stack", "scoring", "contracts", "component_status",
+                                                                        "components", "isolation_probe", "detected_arch")})
     first = cdir / f"campaign_{spec.condition}_{spec.dsl}_{spec.model}.json"
     if not first.exists():
         first.write_text(json.dumps(rec, indent=1, sort_keys=True, default=str) + "\n")

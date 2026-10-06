@@ -7,10 +7,10 @@ Given a 1-D float32 tensor `x` of length `n`, produce a new float16 tensor
 is the standard IEEE narrowing with round-to-nearest-even. This is the
 reference `x.to(torch.float16)`.
 
-Despite the operator's name, no scale factor, no global absolute maximum, no
-clamping and no integer quantisation is part of this operator at this
-revision: the whole computation is one elementwise dtype conversion. An
-implementation must not add any of those steps.
+The operator name is historical: no scale factor, no global absolute
+maximum, no clamping and no integer quantisation is part of this operator;
+the whole computation is one elementwise dtype conversion. An implementation
+must not add any of those steps.
 
 The entry point is called as `run(x)`; `n` is `x.numel()`. No keyword
 arguments are passed.
@@ -97,10 +97,3 @@ no-op guard on the already-contiguous input.
   current stream.
 
 Everything else in `torch` is forbidden inside `run()`.
-
-## Open review items
-
-- The operator name suggests scaled integer quantisation, but the reference
-  semantics at this revision are a plain float32 to float16 conversion with
-  no scale factor; confirmation that this conversion is the intended task is
-  pending. Until then, implement exactly the conversion described above.

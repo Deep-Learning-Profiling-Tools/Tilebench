@@ -85,6 +85,10 @@ _DELEGATION_CALLS = {
 _EVALUATOR_TAMPERING = ("torch.cuda.synchronize", "torch.cuda.Event", "torch.cuda.graph", "torch.cuda.CUDAGraph",
                         "torch.cuda.Stream", "time.perf_counter", "time.time")
 _DYNAMIC_CALLS = ("setattr", "eval", "exec", "compile", "open", "__import__", "getattr", "globals", "vars")
+# process-wide numerical state: changing it alters the reference and later candidates (evaluator state)
+_PRECISION_STATE_CALLS = ("torch.set_float32_matmul_precision", "torch.use_deterministic_algorithms", "torch.set_default_dtype",
+                          "torch.set_default_device", "torch.backends.cudnn.flags", "torch.backends.cuda.matmul.flags",
+                          "torch.set_flush_denormal")
 
 
 @dataclass
@@ -300,6 +304,16 @@ def analyze(source: str, dsl: str, *, allowed_torch_calls: tuple[str, ...] = ())
                 rep.evidence.append(Evidence(SUSPICIOUS, "io", f"dynamic/IO call {name}", node.lineno, scope))
             if name.startswith("torch.") and name.split(".")[-1] in ("manual_seed", "seed"):
                 rep.evidence.append(Evidence(SUSPICIOUS, "tampering", "re-seeding torch RNG", node.lineno, scope))
+            if name in _PRECISION_STATE_CALLS or (name.startswith("torch.backends.") and name.endswith((".flags", "set_flags"))):
+                rep.evidence.append(Evidence(CONFIRMED, "tampering", f"call changing process-wide precision/backend state {name}",
+                                             node.lineno, scope))
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for t in targets:
+                tname = canonical(_dotted(t), aliases) if isinstance(t, ast.Attribute) else None
+                if tname and tname.startswith("torch.backends."):
+                    rep.evidence.append(Evidence(CONFIRMED, "tampering", f"assignment to process-wide backend/precision state {tname}",
+                                                 node.lineno, rep.scope_of(node.lineno)))
 
     # module-level mutable caches keyed by tensors (output caching evidence);
     # empty containers whose name says "config" are the mutable-dict config

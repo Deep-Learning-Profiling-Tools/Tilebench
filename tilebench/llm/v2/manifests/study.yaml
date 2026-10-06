@@ -37,12 +37,26 @@ timing:
   # hash. (The worker reads the normalized keys produced by
   # evaluation.job.timing_settings; these names are the study's, not the
   # worker's.)
-  capture_failure_policy: time_eagerly_and_flag
+  capture_failure_policy: time_eagerly_and_flag          # validation runs
+  # Formal runs (owner, FINAL_FREEZE_AND_START_B200.md §5, 2026-10-06): on a device whose adapter replays a
+  # CUDA graph, a failed capture is a timing_error that consumes the round; the candidate is never timed
+  # eagerly as a valid formal sample.
+  capture_failure_policy_formal: timing_error
   measured_quantity: >
     GPU time of every kernel launched inside run() (Proton device time,
     summed per launch). Host-side work inside run() (allocation calls,
     metadata, Python) is not GPU time and is not counted; any extra kernel,
     copy, fill or cast launched by run() is.
+
+# Per-candidate evaluation wall-clock limit (worker timeout), frozen for the
+# formal campaigns (owner, 2026-10-06): identical for every model and DSL;
+# formal runs refuse any other value; part of the evaluator fingerprint.
+evaluation:
+  worker_timeout_s: 1800
+
+# Device Context snapshot a campaign injects per device (manifest version key).
+device_snapshots:
+  B200: "2026-10-06"
 
 # Run types. Both use the identical execution chain; only gating and the
 # downstream use of the results differ.
@@ -92,8 +106,8 @@ context_limits:            # characters of injected text; exceeding is an error
 
 feedback:
   performance_fields: [latency_ms_mean, latency_ms_samples]
-  forbidden_fields: [t_sol, sol_efficiency, roofline, stop_score, speedup, human_ms,
-                     torch_ms, pct_peak, profiler_counters, score]
+  forbidden_fields: [t_sol, t_emp, p_emp, bw_emp, calibration_id, ceiling_basis, sol_efficiency, roofline,
+                     stop_score, speedup, human_ms, torch_ms, pct_peak, profiler_counters, score]
   max_diagnostic_lines: 60
   max_diagnostic_chars: 6000
 

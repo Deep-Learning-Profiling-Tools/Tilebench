@@ -3,32 +3,86 @@
   "operator": "rope",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "draft",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/rope/impl_triton.py",
       "functions": [
-        {"name": "rope_embedding", "lines": [10, 48]},
-        {"name": "_rope_embedding_autotuned", "lines": [51, 62]},
-        {"name": "run", "lines": [65, 103]},
-        {"name": "get_last_config", "lines": [106, 114]}
+        {
+          "name": "rope_embedding",
+          "lines": [
+            10,
+            48
+          ]
+        },
+        {
+          "name": "_rope_embedding_autotuned",
+          "lines": [
+            51,
+            62
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            65,
+            103
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            106,
+            114
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/rope/impl_cutile.py",
       "functions": [
-        {"name": "rope_embedding", "lines": [21, 53]},
-        {"name": "run", "lines": [59, 109]},
-        {"name": "get_last_config", "lines": [112, 113]}
+        {
+          "name": "rope_embedding",
+          "lines": [
+            21,
+            53
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            59,
+            109
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            112,
+            113
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/rope/impl_torch.py",
       "functions": [
-        {"name": "rotate_half", "lines": [3, 6]},
-        {"name": "run", "lines": [8, 21]}
+        {
+          "name": "rotate_half",
+          "lines": [
+            3,
+            6
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            8,
+            21
+          ]
+        }
       ]
     }
   },
@@ -98,5 +152,6 @@
   "review_items": [
     "Both references clone q inside the timed run() and rotate the clone in place, moving ~2x the bytes_expr model; the contract requires a non-aliasing fresh output but permits an out-of-place mapping that meets the 2n model. Decide whether bytes_expr stays as the minimal 2n bound (generated out-of-place kernels may then outperform the references for non-algorithmic reasons) or whether the references should be re-measured out-of-place. Non-blocking for the contract text."
   ],
-  "contract_sha256": null
+  "contract_sha256": "934d8d0a38a86e12dfc3e65c447431b64dad0d6178d9167fd8497138e5fcc588",
+  "previous_status_before_approval": "draft"
 }

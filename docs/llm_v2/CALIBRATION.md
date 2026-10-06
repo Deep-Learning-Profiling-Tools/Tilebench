@@ -123,8 +123,19 @@ is `definition_pending` with a `provisional_t_emp_ms` for review.
 
 Single whole device (no MIG), `CUDA_VISIBLE_DEVICES=0`, torch 2.10.0+cu130
 / CUDA 13.0 / triton 3.6.0 / cuBLAS 13.1.0.3, driver per
-`environment.json`. Status: registered **candidate**; freezing is the
-owner's decision.
+`environment.json`. Status: **frozen** on 2026-10-06 by the study owner
+(FINAL_FREEZE_AND_START_B200.md §4 D2; `manifests/calibration.yaml`,
+profile FILE sha256 `96a55a67…`, embedded seal `430660af…`); raw points,
+telemetry, flags and seal are unchanged.
+
+Sensitivity note (methodology): the selected `mma_tf32_f32acc` point
+(M=4096, 664.5 TFLOP/s) carries the `points_batch_spread_flagged` audit flag
+(batch spread 0.054 > 0.03). The next point, M=8192 (659.1 TFLOP/s, spread
+0.007), is within 0.8 %; M=12288 / 16384 give 650.6 / 638.8. The frozen
+value is kept as selected (max over valid points, never rewritten post
+hoc); papers report the M=8192 value as a sensitivity check. The
+`gemm_fp32_ieee` control carries `saturation_not_demonstrated`; it is not a
+scoring mode.
 
 | mode | measured | selected point | legacy 2026-04-08 | datasheet (B200.json) |
 |---|---|---|---|---|

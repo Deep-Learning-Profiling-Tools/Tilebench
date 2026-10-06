@@ -3,39 +3,135 @@
   "operator": "radix_sort",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "needs-review",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/radix_sort/impl_triton.py",
       "functions": [
-        {"name": "radix_histogram_kernel", "lines": [13, 31]},
-        {"name": "radix_sum_chunks_kernel", "lines": [34, 41]},
-        {"name": "radix_scan_chunk_sums_kernel", "lines": [44, 51]},
-        {"name": "radix_scan_chunks_kernel", "lines": [54, 62]},
-        {"name": "radix_scatter_kernel", "lines": [65, 84]},
-        {"name": "_radix_scatter_kernel_autotuned", "lines": [87, 95]},
-        {"name": "run", "lines": [98, 138]},
-        {"name": "get_last_config", "lines": [141, 145]}
+        {
+          "name": "radix_histogram_kernel",
+          "lines": [
+            13,
+            31
+          ]
+        },
+        {
+          "name": "radix_sum_chunks_kernel",
+          "lines": [
+            34,
+            41
+          ]
+        },
+        {
+          "name": "radix_scan_chunk_sums_kernel",
+          "lines": [
+            44,
+            51
+          ]
+        },
+        {
+          "name": "radix_scan_chunks_kernel",
+          "lines": [
+            54,
+            62
+          ]
+        },
+        {
+          "name": "radix_scatter_kernel",
+          "lines": [
+            65,
+            84
+          ]
+        },
+        {
+          "name": "_radix_scatter_kernel_autotuned",
+          "lines": [
+            87,
+            95
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            98,
+            138
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            141,
+            145
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/radix_sort/impl_cutile.py",
       "functions": [
-        {"name": "radix_histogram_kernel", "lines": [21, 41]},
-        {"name": "radix_sum_chunks_kernel", "lines": [44, 49]},
-        {"name": "radix_scan_chunk_sums_kernel", "lines": [52, 58]},
-        {"name": "radix_scan_chunks_kernel", "lines": [61, 68]},
-        {"name": "radix_scatter_kernel", "lines": [71, 92]},
-        {"name": "run", "lines": [105, 163]},
-        {"name": "get_last_config", "lines": [166, 167]}
+        {
+          "name": "radix_histogram_kernel",
+          "lines": [
+            21,
+            41
+          ]
+        },
+        {
+          "name": "radix_sum_chunks_kernel",
+          "lines": [
+            44,
+            49
+          ]
+        },
+        {
+          "name": "radix_scan_chunk_sums_kernel",
+          "lines": [
+            52,
+            58
+          ]
+        },
+        {
+          "name": "radix_scan_chunks_kernel",
+          "lines": [
+            61,
+            68
+          ]
+        },
+        {
+          "name": "radix_scatter_kernel",
+          "lines": [
+            71,
+            92
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            105,
+            163
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            166,
+            167
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/radix_sort/impl_torch.py",
       "functions": [
-        {"name": "run", "lines": [4, 5]}
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
       ]
     }
   },
@@ -99,12 +195,13 @@
     "bytes_expr": "16 * 3 * n * dtype_size",
     "flops_expr": "n",
     "consistent": "false",
-    "note": "bytes_expr models 16 passes x (one key read for counting + one key read and one key write for scattering) and nothing else (config.yaml 19). Two mismatches with the timed boundary on both sides: (1) the in-run input clone (one read and one write of n keys, about 4 percent of the modelled traffic) and the histogram/scan scratch traffic are not counted; (2) the pass count 16 is a property of the 2-bit digit mapping chosen by both implementations, not of the operator. Because the contract leaves the digit width free (correctness does not depend on it), an implementation with wider digits would be credited 16-pass traffic while moving less, so the bandwidth figure would not be comparable across implementations. flops_expr = n is nominal."
+    "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the scoring Q is the compulsory-I/O override 2 * n * dtype_size (one read of the N int32 keys plus one write of the sorted result), approved by the owner; config.yaml's bytes_expr 16 * 3 * n * dtype_size (the fixed-16-pass model of the 2-bit-digit mapping, config.yaml 19) is NOT the formal denominator any more, which is why consistent stays false with respect to that expression. Per-pass key traffic (16 x 3 x n x dtype_size for the manual 2-bit mapping), the in-run working-copy clone (about 4 percent of the 16-pass model) and the histogram/scan scratch traffic are diagnostic quantities only. Because the contract leaves digit width and pass count free, Q is independent of the mapping and bandwidth figures are comparable across implementations. flops_expr = n is nominal."
   },
   "human_reference_comparable": true,
   "review_items": [
-    "BLOCKING (metric vs contract): bytes_expr hard-codes 16 passes (the 2-bit-digit mapping) while the contract leaves digit width and pass count free; decide either to pin the pass count in the contract (making the formula a faithful traffic model but constraining the mapping) or to keep the freedom and re-express or annotate the metric (for example report bytes per actual pass, or treat the formula as a fixed nominal '16-pass-equivalent' figure that is only comparable between implementations with the same pass count).",
-    "Non-blocking: the working-copy clone inside run() (2 * n * dtype_size bytes) and the histogram/scan scratch traffic are not counted by bytes_expr; decide whether to add the clone term, which every faithful implementation performs."
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the algorithm invariant is a stable LSD radix sort covering all 32 bits of the int32 keys (order by the full key; stability required); digit width and pass count are implementation choices, so no fixed 2-bit / 16-pass requirement appears in the stages, family or forbidden list. The family-defining prohibitions stay: no comparison sort, no library sort, no MSD-only or partial-key sort, no data-dependent pass skipping.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the old fixed-16-pass Q model is not the formal denominator; the scoring Q is the compulsory-I/O override 2 * n * dtype_size approved by the owner. Pass traffic, the working-copy clone and scratch traffic are diagnostic; the model-visible contract does not describe traffic accounting."
   ],
-  "contract_sha256": null
+  "contract_sha256": "cde13fbe58ad77fbcf7c68bc32e9f318434645fc8485453a48816ba2bf8d1d87",
+  "previous_status_before_approval": "needs-review"
 }

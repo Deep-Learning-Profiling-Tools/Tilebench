@@ -41,20 +41,25 @@ arguments are passed.
 3. **Normalise and store**: divide the row total by `N` in float32 and write
    one float32 value per row.
 
-Stages 2 and 3 are fused per row; each row is independent of every other
-row. Splitting a row's reduction into a partial-sums pass followed by a
-combine pass through a global scratch buffer is not required by the data
-and is not permitted, because the canonical algorithm keeps the partial
-sums on chip: the operator is a single logical traversal of `x` with no
-global intermediates. The traversal count is a property of the algorithm,
-not a guarantee about physical DRAM transactions, which caches, TMA and the
-compiler may change. The number of kernel launches is not otherwise fixed.
+Each row is independent of every other row. The natural realisation is one
+program per row with stages 2 and 3 fused. Splitting a row across several
+programs, each producing a float32 partial sum, followed by a combine that
+sums the partials and applies stage 3, is a mapping choice for this pure
+sum reduction, provided `out[r]` is still written exactly once, the
+partial-sum buffer is allocated inside `run()` on every call (its traffic
+is device work and is counted) and the combine reads only the partials: the
+operator is a single logical traversal of `x`, and the combine must not add
+a further traversal of `x`. The traversal count is a property of the
+algorithm, not a guarantee about physical DRAM transactions, which caches,
+TMA and the compiler may change. The number of kernel launches is not
+otherwise fixed.
 
 ## Algorithm family and structure
 
 Single-logical-pass row-wise reduction. Within a row the sum may be organised
 in any order: lane-wise partial sums over column chunks followed by a
-cross-lane tree, a direct tree, or a sequential loop. The result must be
+cross-lane tree, a direct tree, a sequential loop, or per-program partials
+combined in a second step. The result must be
 within the verification tolerance of the reference float32 mean, not
 bit-identical to it. No reduction across rows exists. No scan or sort is
 involved.
@@ -83,6 +88,8 @@ no-op guard.
 
 - Rows per program (one or several), column chunk width, number of lanes,
   pipelining depth, vector width and launch geometry are free.
+- One program per row, or a row split across several programs with a combine
+  of their float32 partial sums (see the stages).
 - Whether `N` is specialised as a compile-time constant or passed at runtime
   is free; edge handling is required wherever the task's fixed `N` is not a
   multiple of the chosen chunk width, and supporting shapes other than the
@@ -99,15 +106,16 @@ no-op guard.
   `x.sum`, `torch.sum`, `x.float().mean`, `torch.einsum`, matrix-vector
   products with a ones vector, and similar).
 - Accumulating in a dtype narrower than float32.
-- More than one logical traversal of `x` (a second pass over its
-  elements), or staging partial sums in global memory.
+- More than one logical traversal of `x` (a second pass over its elements,
+  including a combine that re-reads `x` instead of the partial sums).
 - Casting or copying `x` on the host before the kernel.
 - Mutating `x`.
 
 ## Permitted PyTorch operations
 
 - `torch.empty(M, dtype=torch.float32, device=x.device)` or
-  `torch.empty((M, 1), ...)` for the output.
+  `torch.empty((M, 1), ...)` for the output and, only in a split-row design,
+  one float32 partial-sum buffer allocated per call.
 - `.squeeze(1)`, `.view(M)` or `.reshape(M)` on the run-allocated output
   (metadata only).
 - `x.contiguous()` only as a no-op guard on the already-contiguous input.

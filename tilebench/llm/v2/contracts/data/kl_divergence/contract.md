@@ -29,8 +29,10 @@ matters for exact zeros, but it must be present.)
 Stage 2 depends on stage 1. The elementwise map and the row reduction are
 one logical stage: the natural realisation is one program per row in a
 single launch. Splitting a row across several programs with a second-level
-combine is permitted provided LOSS[r] is still written exactly once and any
-partial-sum scratch is allocated inside the entry point.
+combine is permitted provided LOSS[r] is still written exactly once, any
+partial-sum scratch is allocated inside the entry point on every call (its
+traffic is device work and is counted) and the combine reads only the
+partials, adding no further traversal of the inputs.
 
 ## Algorithm family and structure
 Fused elementwise map plus full-row sum reduction. Every input element is
@@ -44,8 +46,9 @@ contribute exactly 0.
 
 ## Precision and accumulation
 The elementwise term and the accumulator are fp32; LOSS is fp32. The
-logarithm is the natural log evaluated at fp32 precision (an approximate
-intrinsic within the tolerance is acceptable). The guard for non-positive Y
+logarithm is the natural log evaluated at fp32 precision. An approximate
+logarithm intrinsic whose error stays within the verification tolerance is
+acceptable. The guard for non-positive Y
 must be applied before the multiplication so that no NaN or infinity is
 produced.
 

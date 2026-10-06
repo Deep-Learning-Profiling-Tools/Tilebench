@@ -3,37 +3,121 @@
   "operator": "bitonic_sort",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "draft",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/bitonic_sort/impl_triton.py",
       "functions": [
-        {"name": "_PAD_BLOCK", "lines": [7, 9]},
-        {"name": "pad_kernel", "lines": [12, 16]},
-        {"name": "bitonic_step_kernel", "lines": [19, 33]},
-        {"name": "_bitonic_step_kernel_autotuned", "lines": [36, 45]},
-        {"name": "run", "lines": [48, 85]},
-        {"name": "get_last_config", "lines": [88, 95]}
+        {
+          "name": "_PAD_BLOCK",
+          "lines": [
+            7,
+            9
+          ]
+        },
+        {
+          "name": "pad_kernel",
+          "lines": [
+            12,
+            16
+          ]
+        },
+        {
+          "name": "bitonic_step_kernel",
+          "lines": [
+            19,
+            33
+          ]
+        },
+        {
+          "name": "_bitonic_step_kernel_autotuned",
+          "lines": [
+            36,
+            45
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            48,
+            85
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            88,
+            95
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/bitonic_sort/impl_cutile.py",
       "functions": [
-        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [10, 16]},
-        {"name": "_next_pow2", "lines": [19, 20]},
-        {"name": "pad_kernel", "lines": [23, 31]},
-        {"name": "bitonic_step_kernel", "lines": [34, 57]},
-        {"name": "_tuner", "lines": [60, 60]},
-        {"name": "run", "lines": [63, 109]},
-        {"name": "get_last_config", "lines": [112, 113]}
+        {
+          "name": "_DEFAULT_CONFIG/_SEARCH_SPACE",
+          "lines": [
+            10,
+            16
+          ]
+        },
+        {
+          "name": "_next_pow2",
+          "lines": [
+            19,
+            20
+          ]
+        },
+        {
+          "name": "pad_kernel",
+          "lines": [
+            23,
+            31
+          ]
+        },
+        {
+          "name": "bitonic_step_kernel",
+          "lines": [
+            34,
+            57
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            60,
+            60
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            63,
+            109
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            112,
+            113
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/bitonic_sort/impl_torch.py",
       "functions": [
-        {"name": "run", "lines": [4, 40]}
+        {
+          "name": "run",
+          "lines": [
+            4,
+            40
+          ]
+        }
       ]
     }
   },
@@ -104,5 +188,6 @@
     "Confirm that bytes_expr = 2 * n * dtype_size (compulsory traffic) is the intended figure of merit for a multi-pass in-place sort whose timed work is the pad pass plus L(L+1)/2 passes over M = next_power_of_2(n) elements (impl_triton.py 58-83, impl_cutile.py 74-107); the formula is identical for both manual implementations, so it does not affect their comparison, but it understates executed traffic by a factor that grows with log^2 n.",
     "Both manual implementations launch one kernel per (k, j) stage with every exchange in global memory; the contract follows the guide's dependency-based rule and permits consecutive stages whose partner distances fit inside one program's slice to be fused into one launch (a register/shared-memory local phase). Decide whether that fusion freedom is acceptable or whether, for parity with the manual implementations, the contract should require one global synchronisation per stage."
   ],
-  "contract_sha256": null
+  "contract_sha256": "efd637a4fc9272602a9c1896d34645bb81553f68a78cb9f2456235baf530d89d",
+  "previous_status_before_approval": "draft"
 }

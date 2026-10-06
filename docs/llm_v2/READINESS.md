@@ -9,22 +9,24 @@ denominators, distillation/Enhanced boundaries, bounded isolation).
 `S_llm` is **not** frozen; `docs/llm_v2/FREEZE_DECISIONS.md` lists what a
 freeze still needs and who decides.
 
-## 0. Round of 2026-10-06 — empirical calibration (`NEXT_STEP_EMPIRICAL_CALIBRATION.md`)
+## 0. State after FINAL_FREEZE_AND_START_B200.md (2026-10-06)
 
-- Scoring ceiling: `ceiling_basis = empirical` (`tilebench/llm/v2/metrics/empirical.py`); the legacy datasheet
-  table is a reference only. B200 calibrated on dgx003 under protocol
-  `tilebench-empirical-roofline/2` (`artifacts/llm_v2/calibration/B200/B200-20261006T063415Z-39b55bd3/`,
-  10 modes, registered `candidate`; freezing is the owner's). `docs/llm_v2/CALIBRATION.md` has the values,
-  the protocol and the per-device commands.
-- Declarations: `arithmetic_modes.yaml` revision 2 (`proposed`), per operator; scoring table of all 110 B200
-  (operator, dtype) tasks in `artifacts/llm_v2/scoring/B200/`: every target computable, all `definition_pending`
-  until M1 (and M2–M4, C1') are decided.
-- Contracts: revision 2 of all 45 (wording classes 1–5, `docs/llm_v2/CONTRACT_REVISION_2.md`); prompt
-  snapshots regenerated.
-- Campaign binding: each campaign pins its device's profile sha + declaration sha; formal resume refuses a
-  change; other devices' profiles do not affect it. Formal preflight adds the scoring gate.
-- Formal B200 Base: **not started** (blocked by owner decisions: profile freeze, M1/M2/M3/M4/C1', C1 contract
-  approval, skill approvals D4). GH200 / MI300X / Trn2: no profile yet.
+- Blocking fixes: formal Base and Enhanced require frozen, approved folds; formal preflight fails closed on a mixed
+  BLAS stack (loaded cuBLAS/cuBLASLt paths recorded in campaign provenance); the worker snapshots/restores/verifies
+  process-wide PyTorch precision state around every candidate and reference call and static checks flag
+  `torch.backends.*` / precision-API changes as confirmed violations; the empirical profile is scoring-only (feedback
+  scrub + study forbidden fields + snapshot test); revision numbering of appended evaluations fixed.
+- Frozen: B200 empirical profile `B200-20261006T063415Z-39b55bd3` (file sha `96a55a67…`, seal `430660af…`);
+  arithmetic declaration revision 2 approved (M1–M4, C1'); scoring table of the 110 B200 tasks all `ok`
+  (`scoring_sha256 99f190c5…`); folds frozen 15/15/15; distiller gpt-6.1-sol xhigh/128000 registered; formal capture
+  failure = `timing_error`; worker wall-clock 1800 s; human review authority; 45 contracts approved; Triton 3.6.0 /
+  cuTile 1.5.0 references and the corrected B200 Device Context 2026-10-06 approved and sendable to both providers.
+  All hashes: `tilebench/llm/v2/manifests/frozen/B200_base_2026-10-06.json`.
+- Acceptance under the campaign environment (`LD_LIBRARY_PATH` unset): BLAS stack consistent; Triton and cuTile
+  archived candidates re-evaluated with the frozen worker (`eval_0003`, valid, graph timing, precision guard active).
+- Formal preflight B200 triton/base and cutile/base: ok (no blockers). Enhanced blocked (no Optimization Skill yet);
+  TileLang blocked (reference draft, no grant); NKI blocked (adapter, grant).
+- S_llm: see `docs/llm_v2/S_LLM.md` (tag `S_llm-B200-2026-10-06`); `exp/llm-b200` is cut from it for the formal campaign.
 
 ## 1. Three states
 

@@ -2,6 +2,7 @@
 import pytest
 
 from tilebench.llm.v2.contracts import loader as cl
+from tilebench.llm.v2.manifests import schema as ms
 from tilebench.llm.v2.orchestration import campaign
 from tilebench.llm.v2.prompts.renderer import render_initial
 from tilebench.llm.v2.tasks.support import eligibility
@@ -34,9 +35,19 @@ def test_campaign_context_uses_manifest_components_and_contract(contract_env, sk
     assert st.task["fold"] == "C" and st.task["case_id"] == e.key.case_id
 
 
+def _draft(bundle):
+    import dataclasses
+    return dataclasses.replace(bundle, status="draft")
+
+
 def test_preflight_blocks_live_without_models_and_nki(monkeypatch, study):
     from tilebench.llm.v2.skills import loader
     monkeypatch.setattr(loader, "MANIFEST_PATH", loader.REPO_ROOT / "does-not-exist.json")
+    proposed = {**ms.load_folds(), "status": "proposed", "approved_by": None}
+    monkeypatch.setattr(ms, "load_folds", lambda: proposed)
+    from tilebench.llm.v2.contracts import loader as cl
+    real_load = cl.load_contract
+    monkeypatch.setattr(campaign, "load_contract", lambda op, require_approved=True: _draft(real_load(op, require_approved=False)))
     pf = campaign.preflight("B200", "triton", "enhanced", live=True, study=study)
     # formal gate: skills/contracts/folds still block; generator models are owner-approved (models.yaml approved_by)
     assert not pf.ok and any("manifest missing" in b for b in pf.blockers) and any("contracts" in b for b in pf.blockers)

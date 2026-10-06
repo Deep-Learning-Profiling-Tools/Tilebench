@@ -75,7 +75,7 @@ the input; no scratch or partial result cached across calls; nothing
 precomputed outside run().
 
 ## Permitted implementation mappings
-- The partial cap P and the chunk size; grid-stride versus contiguous
+- The number of partials P and the chunk size; grid-stride versus contiguous
   partitioning of the input across programs.
 - How a program updates its private row: atomic increments per element
   directly into the row (masked, or adding 0 for invalid lanes), or on-chip

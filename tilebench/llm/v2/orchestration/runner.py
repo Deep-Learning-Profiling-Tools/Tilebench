@@ -176,6 +176,20 @@ def durable_transport(tdir: Path, round_index: int, attempt: int, *, archived_tr
 # runner
 # --------------------------------------------------------------------------
 
+def next_revision_name(adir: Path) -> str:
+    """Append-only revision numbering of an attempt directory: a legacy
+    `evaluation.json` is revision 1, every `eval_NNNN/` keeps its number, the
+    next revision is one above the highest existing one (never a re-used
+    number, whatever the state file lists)."""
+    nums = []
+    for p in adir.glob("eval_*"):
+        if p.is_dir() and p.name[5:].isdigit():
+            nums.append(int(p.name[5:]))
+    if (adir / "evaluation.json").exists():
+        nums.append(1)
+    return f"eval_{max(nums, default=0) + 1:04d}"
+
+
 class TrajectoryRunner:
     def __init__(self, *, state: TrajectoryState, tdir: Path, ctx: TaskContext, provider, evaluator: Evaluator,
                  job: EvaluationJob, cfg: RunnerConfig, sleep: Callable[[float], None] = time.sleep,
@@ -418,8 +432,7 @@ class TrajectoryRunner:
 
     # -- evaluation revisions (append-only) ---------------------------------
     def _next_revision(self, adir: Path) -> str:
-        existing = sorted(p.name for p in adir.glob("eval_*") if p.is_dir())
-        return f"eval_{len(existing) + 1:04d}"
+        return next_revision_name(adir)
 
     # -- main loop ---------------------------------------------------------
     def step(self) -> sm.Action:

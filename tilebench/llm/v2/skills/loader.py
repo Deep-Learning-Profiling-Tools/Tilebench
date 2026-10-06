@@ -289,8 +289,8 @@ def compose_context(manifest: dict, study: dict, *, dsl: str, device: str, fold:
     comps = [
         load_component(manifest, "reference", dsl, reference_version or study["dsls"][dsl]["reference_version"],
                        require_status=statuses, max_chars=limits["reference_skill"], **common),
-        load_component(manifest, "device", device, device_snapshot, require_status=statuses,
-                       max_chars=limits["device_context_skill"], **common),
+        load_component(manifest, "device", device, device_snapshot or (study.get("device_snapshots") or {}).get(device),
+                       require_status=statuses, max_chars=limits["device_context_skill"], **common),
     ]
     if condition == "enhanced":
         if device not in study["skill_transfer"][dsl]:

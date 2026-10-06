@@ -21,8 +21,9 @@
 # under `decisions` and are applied only when their status is `approved`.
 schema: tilebench-arithmetic-modes/2
 revision: 2
-status: proposed              # owner approval of this whole declaration (decision M1)
-approved_by: null
+status: approved              # decision M1 (owner, FINAL_FREEZE_AND_START_B200.md §4, 2026-10-06)
+approved_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): per-operator declaration approved; no dtype-wide default"
+approved_on: "2026-10-06"
 
 f_kinds:
   flop_count: {unit: FLOP, meaning: floating-point operations of the algorithm as configured (2 per multiply-add)}
@@ -37,10 +38,12 @@ q_kinds:
 
 decisions:
   M1_declaration_revision_2:
-    status: proposed
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06)"
     question: approve this per-operator declaration (modes, f_kind, q_kind)
   M2_memory_only_for_operation_counts:
-    status: proposed
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): the formal target of these tasks is an empirical compulsory-I/O lower bound T_emp = Q / BW_emp; F stays diagnostic; the paper must not describe them as a complete compute+memory Roofline and reports the memory-only subgroup beside the overall aggregate"
     question: >
       For operators whose F counts elements, comparisons, conversions or
       integer operations with no calibrated arithmetic-unit model
@@ -49,7 +52,8 @@ decisions:
       diagnostic. Alternative: register and calibrate integer/compare/convert
       vector probes whose operation definition matches each F.
   M3_flash_attention_causal_F:
-    status: proposed
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): causal F override applied; the dense count stays a diagnostic"
     question: >
       flash_attention fixes causal=true, but the frozen F = 4*B*H*S^2*D is the
       dense count. Proposed override F_causal = 2*B*H*D*S*(S+1) (unmasked
@@ -57,19 +61,21 @@ decisions:
       diagnostic. Not applied until approved.
     override: {operator: flash_attention, F: "2 * batch_size * n_heads * head_dim * seq_len * (seq_len + 1)", f_kind: flop_count}
   M4_radix_sort_Q:
-    status: proposed
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §3/§4 (2026-10-06): digit width and pass count are implementation choices, so the fixed-16-pass Q is not the formal denominator; Q override = 2 * n * dtype_size (input read + final output write, compulsory_io); pass/scratch traffic is diagnostic"
     question: >
       The frozen Q = 16 passes * 3 * n * 4 bytes is the 2-bit-digit LSD
-      algorithm of the human kernels. It is a valid algorithm-specific model
-      only if the contract fixes the digit width (C1 radix_sort open item).
-      If the contract allows other digit widths, Q must become a task-level
-      model (e.g. compulsory I/O 2*n*4 bytes); decide together with C1.
+      algorithm of the human kernels. The contract (revision 2, owner
+      decision) leaves digit width and pass count free, so the scoring Q is
+      the task-level compulsory-I/O lower bound below; the frozen expression
+      stays a diagnostic.
+    override: {operator: radix_sort, Q: "2 * n * dtype_size", q_kind: compulsory_io}
   C1_gaussian_blur_tap_precision:
-    status: open
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §3/§4 (2026-10-06): pixel and weight converted to fp32 before each multiply, fp32 accumulation, one cast at the output, for fp16 and fp32; mode fp32_fma_vector"
     question: >
       fp16 per-tap products in fp16 (fp16x2_fma_vector) or in fp32
-      (fp32_fma_vector, recommended in FREEZE_DECISIONS C1); the declaration
-      below uses fp32 and stays pending until C1 is decided.
+      (fp32_fma_vector); decided: fp32 for both dtypes.
 
 operators:
   # ---- matrix (tensor-core) operators
@@ -117,7 +123,8 @@ operators:
   top_k_selection:       {f_kind: element_count, q_kind: compulsory_io, modes: {fp32: memory_only}}
   quantize_global:       {f_kind: element_count, q_kind: compulsory_io, modes: {fp32: memory_only}}
   histogramming:         {f_kind: element_count, q_kind: compulsory_io, modes: {int32: memory_only}}
-  radix_sort:            {f_kind: element_count, q_kind: algorithm_specific, modes: {int32: memory_only}, decisions: [M4_radix_sort_Q]}
+  radix_sort:            {f_kind: element_count, q_kind: algorithm_specific, modes: {int32: memory_only}, decisions: [M4_radix_sort_Q],
+                          note: "frozen config Q (16 passes) is diagnostic; the approved M4 override Q = 2*n*dtype_size (compulsory_io) is the scoring Q"}
   matrix_copy:           {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
   reverse_array:         {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
   interleave:            {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}

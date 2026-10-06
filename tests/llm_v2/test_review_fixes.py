@@ -95,9 +95,10 @@ def test_config_record_dict_is_not_a_cache_but_data_ptr_keys_are():
 
 # ---------------------------------------------------------------- R2 / R9: job schema, timing normalization
 def test_timing_settings_normalize_study_keys(study):
-    t = timing_settings(study)
+    t = timing_settings(study, run_type="validation")
     assert t == {"warmup": 1, "repeat": 3, "use_cuda_graph": True, "flush": True,
                  "capture_failure_policy": "time_eagerly_and_flag", "record_prep_runs": True}
+    assert timing_settings(study)["capture_failure_policy"] == "timing_error"          # formal (frozen 2026-10-06)
 
 
 def test_evaluation_job_carries_tolerance_rules_and_timing(study):

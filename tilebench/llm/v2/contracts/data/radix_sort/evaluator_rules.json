@@ -7,7 +7,7 @@
     {"id": "pass_count", "description": "Per digit pass: per-block exact counts of keys per digit value written to a histogram."},
     {"id": "pass_scan", "description": "Per digit pass: exclusive prefix sum over the histogram yielding the global write base for each (digit value, block), completed before any scatter of that pass."},
     {"id": "pass_stable_scatter", "description": "Per digit pass: each key written to base[digit, block] + its rank among same-digit keys preceding it in the block, into the other key buffer (stable partition)."},
-    {"id": "lsd_pass_loop", "description": "Passes run least-significant digit first and together cover all 32 key bits, swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned."}
+    {"id": "lsd_pass_loop", "description": "Passes run least-significant digit first and together cover all 32 key bits (digit width and pass count are implementation choices: no fixed 2-bit / 16-pass requirement), swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned."}
   ],
   "forbidden_substitutions": [
     {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.msort\\(|torch\\.topk\\(|torch\\.unique\\(", "message": "A PyTorch sort replaces the whole computation.", "level": "confirmed", "scope": "host"},
@@ -37,6 +37,6 @@
   ],
   "mutation": {"inputs_mutated": [], "restore_required": false},
   "outputs": {"structure": "tensor", "count": 1, "aliasing": "none with respect to input; the returned (N,) int32 tensor is one of the key buffers allocated inside run()"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes: the working copy (clone) of input, any zero-fill of scratch and every digit pass (count, scan, stable scatter); the allocation calls (two key buffers plus histogram/scan scratch) and the Python buffer swaps are host work, not GPU time. No cached state across calls, no untimed presort or prepacking. bytes_expr in config.yaml assumes a fixed pass count and omits the clone; see audit review items."},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes: the working copy (clone) of input, any zero-fill of scratch and every digit pass (count, scan, stable scatter); the allocation calls (two key buffers plus histogram/scan scratch) and the Python buffer swaps are host work, not GPU time. No cached state across calls, no untimed presort or prepacking. Scoring Q (decided 2026-10-06) is the compulsory-I/O override 2 * n * dtype_size (one read of the keys plus one write of the sorted result); config.yaml's 16-pass bytes_expr is not the formal denominator, and per-pass key traffic, the working copy and the histogram/scan scratch traffic are diagnostic only."},
   "tolerance_source": "config.verify"
 }

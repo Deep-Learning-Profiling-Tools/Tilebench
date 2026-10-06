@@ -44,8 +44,9 @@ def skill_env(tmp_path, monkeypatch, study):
     rel = _write(root, "skills/reference/nki/beta5/SKILL.md", "# nki private\n")
     loader.register_asset(m, "reference", "nki", "beta5", rel, permission="private", status="draft", source="test")
     for dev in ("B200", "GH200", "MI300X", "Trn2"):
-        rel = _write(root, f"skills/device/{dev}/2026-10-05/SKILL.md", f"# {dev} facts\nunknown: yes\n")
-        loader.register_asset(m, "device", dev, "2026-10-05", rel, permission="public", status="approved", source="test")
+        snap = (ms.load_study().get("device_snapshots") or {}).get(dev, "2026-10-05")
+        rel = _write(root, f"skills/device/{dev}/{snap}/SKILL.md", f"# {dev} facts\nunknown: yes\n")
+        loader.register_asset(m, "device", dev, snap, rel, permission="public", status="approved", source="test")
     for fold, status, body in (("A", "frozen", "# triton skill A\nrule.\n"), ("C", "frozen", "# triton skill C\nrule.\n"),
                                ("B", "draft", "# triton skill B (draft)\n")):
         rel = _write(root, f"skills/optimization/triton/source-B200/fold-{fold}/SKILL.md", body)

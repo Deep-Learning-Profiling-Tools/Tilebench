@@ -28,10 +28,11 @@ The entry point is called as `run(A, N)`. `N` is the side length and equals
    once and writes it unchanged to the corresponding position of `B` once.
 
 Stage 2 is a single logical stage with no inter-element dependencies.
-Nothing may be fused with host-side work, and no additional passes over the
-data are allowed, because a staged or repeated copy adds a full extra read
-and write of the matrix and so changes the algorithm rather than its
-mapping. These are logical traversal counts, not a guarantee about physical
+No device work other than the copy itself may be launched by `run()`, and
+no additional passes over the data are allowed, because a staged or
+repeated copy adds a full extra read and write of the matrix and so changes
+the algorithm rather than its mapping. These are logical traversal counts,
+not a guarantee about physical
 DRAM transactions, which caches, bulk copies and the compiler may change.
 How the copy is split across programs or launches is a mapping choice.
 

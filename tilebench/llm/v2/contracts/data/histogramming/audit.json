@@ -3,37 +3,121 @@
   "operator": "histogramming",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "draft",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/histogramming/impl_triton.py",
       "functions": [
-        {"name": "_DEFAULT_CONFIG (includes NUM_PARTIAL)", "lines": [6, 14]},
-        {"name": "histogram_partial_kernel", "lines": [17, 42]},
-        {"name": "histogram_reduce_kernel", "lines": [45, 70]},
-        {"name": "_histogram_partial_kernel_autotuned", "lines": [73, 86]},
-        {"name": "_histogram_reduce_kernel_autotuned", "lines": [89, 106]},
-        {"name": "run", "lines": [109, 157]},
-        {"name": "get_last_config", "lines": [160, 179]}
+        {
+          "name": "_DEFAULT_CONFIG (includes NUM_PARTIAL)",
+          "lines": [
+            6,
+            14
+          ]
+        },
+        {
+          "name": "histogram_partial_kernel",
+          "lines": [
+            17,
+            42
+          ]
+        },
+        {
+          "name": "histogram_reduce_kernel",
+          "lines": [
+            45,
+            70
+          ]
+        },
+        {
+          "name": "_histogram_partial_kernel_autotuned",
+          "lines": [
+            73,
+            86
+          ]
+        },
+        {
+          "name": "_histogram_reduce_kernel_autotuned",
+          "lines": [
+            89,
+            106
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            109,
+            157
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            160,
+            179
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/histogramming/impl_cutile.py",
       "functions": [
-        {"name": "_NUM_PARTIAL", "lines": [17, 17]},
-        {"name": "histogram_partial_kernel", "lines": [34, 64]},
-        {"name": "histogram_reduce_kernel", "lines": [67, 90]},
-        {"name": "_partial_tuner / _reduce_tuner", "lines": [93, 94]},
-        {"name": "run", "lines": [97, 185]},
-        {"name": "get_last_config", "lines": [188, 189]}
+        {
+          "name": "_NUM_PARTIAL",
+          "lines": [
+            17,
+            17
+          ]
+        },
+        {
+          "name": "histogram_partial_kernel",
+          "lines": [
+            34,
+            64
+          ]
+        },
+        {
+          "name": "histogram_reduce_kernel",
+          "lines": [
+            67,
+            90
+          ]
+        },
+        {
+          "name": "_partial_tuner / _reduce_tuner",
+          "lines": [
+            93,
+            94
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            97,
+            185
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            188,
+            189
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/histogramming/impl_torch.py",
       "functions": [
-        {"name": "run", "lines": [4, 9]}
+        {
+          "name": "run",
+          "lines": [
+            4,
+            9
+          ]
+        }
       ]
     }
   },
@@ -104,5 +188,6 @@
     "(non-blocking, metric) bytes_expr omits the per-call scratch zero-fill (num_partials * num_bins * 4 B memset inside run()), the N atomic read-modify-writes into the scratch and the reduce pass's full scratch read, all of which are inside the timed window on both sides: decide whether to keep the compulsory-traffic convention (input read + output write) or to add the scratch traffic so that bandwidth/SOL figures are not understated in the small-N / large-num_bins corner.",
     "(non-blocking, scope) Both implementations count with global-memory atomic adds into a private row of a zero-filled global scratch; the contract requires the two-level structure (private partial histograms, then a cross-partial sum) and a scratch initialised inside run(), but leaves the private-row update mechanism (per-element atomics versus on-chip pre-aggregation such as a register/shared-memory histogram primitive followed by additive updates of the row) as a permitted mapping. Confirm that this freedom is intended, since on-chip pre-aggregation can cut the scratch traffic the manual kernels pay."
   ],
-  "contract_sha256": null
+  "contract_sha256": "76a137fc9c2a9a7272523945165002a078ae53ba169aec724057e3d8bd3dcff7",
+  "previous_status_before_approval": "draft"
 }

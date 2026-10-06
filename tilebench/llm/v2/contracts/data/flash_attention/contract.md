@@ -38,8 +38,9 @@ case; the flag must be honoured, with `causal=False` meaning full attention.
    least one unmasked key for this query block, each visited once (tiles
    lying entirely above the diagonal are not visited when causal, because
    visiting them would roughly double the executed work). The visiting
-   order is free; an order in which a row can meet a fully masked tile
-   before any unmasked key needs a guard against exp(-inf - (-inf)).
+   order is a mapping choice and no particular order is required; note only
+   that an order in which a row can meet a fully masked tile before any
+   unmasked key needs a guard against exp(-inf - (-inf)).
    Per key tile:
    a. scores S = Q . K^T accumulated in fp32, with the scale 1/sqrt(head_dim)
       applied either to the query operand beforehand or to the scores;

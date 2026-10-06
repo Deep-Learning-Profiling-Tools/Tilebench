@@ -3,34 +3,100 @@
   "operator": "matmul_int8",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "needs-review",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/matmul_int8/impl_triton.py",
       "functions": [
-        {"name": "_bt_cache / _b_transposed", "lines": [16, 24]},
-        {"name": "_tma_set_block_size_hook", "lines": [27, 33]},
-        {"name": "matmul_kernel", "lines": [36, 79]},
-        {"name": "matmul_kernel_autotuned", "lines": [82, 108]},
-        {"name": "_descriptors", "lines": [111, 115]},
-        {"name": "run", "lines": [118, 153]},
-        {"name": "get_last_config", "lines": [156, 167]}
+        {
+          "name": "_bt_cache / _b_transposed",
+          "lines": [
+            16,
+            24
+          ]
+        },
+        {
+          "name": "_tma_set_block_size_hook",
+          "lines": [
+            27,
+            33
+          ]
+        },
+        {
+          "name": "matmul_kernel",
+          "lines": [
+            36,
+            79
+          ]
+        },
+        {
+          "name": "matmul_kernel_autotuned",
+          "lines": [
+            82,
+            108
+          ]
+        },
+        {
+          "name": "_descriptors",
+          "lines": [
+            111,
+            115
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            118,
+            153
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            156,
+            167
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/matmul_int8/impl_cutile.py",
       "functions": [
-        {"name": "matmul_kernel", "lines": [25, 68]},
-        {"name": "run", "lines": [74, 120]},
-        {"name": "get_last_config", "lines": [123, 124]}
+        {
+          "name": "matmul_kernel",
+          "lines": [
+            25,
+            68
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            74,
+            120
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            123,
+            124
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/matmul_int8/impl_torch.py",
       "functions": [
-        {"name": "run", "lines": [4, 19]}
+        {
+          "name": "run",
+          "lines": [
+            4,
+            19
+          ]
+        }
       ]
     }
   },
@@ -66,16 +132,16 @@
       "note": "Exact integer arithmetic on both sides; config.verify 0.1/0.1 is effectively exact for int32 outputs."
     },
     "preprocessing": {
-      "status": "needs-review",
+      "status": "mapping-only",
       "triton": "bt = b.t().contiguous() (N, K_b) cached in a module-level WeakTensorKeyDictionary keyed by the B tensor object (impl_triton.py:16-24), looked up on every run (128): the transpose copy executes once per live B (warmup) and is untimed thereafter.",
       "cutile": "packed B consumed row-major as (TK, TN) tiles directly (impl_cutile.py:51-54); no cache, no transpose.",
-      "note": "Genuine F/Q boundary divergence (same shape as matmul_fp32_fp16_fp8, but without the stale-address hazard because the key is weak). The contract requires any repack to be per call and uncached and lists the question as open."
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the packed B is delivered row-major and no prepacked input may be assumed; consuming it directly (cuTile side) or through a K-major copy of the still-packed B rebuilt by device work inside every run() is a mapping choice, so the layout divergence is mapping-only. Any cross-call cache of a transformed operand is forbidden, so the manual Triton kernel's steady-state cached bt (impl_triton.py:16-24, 128) does not conform to the decided rule and its column is recorded as not comparable (human_reference_comparable = false); this is a reference-measurement caveat, not a contract ambiguity. Decoding stays inside the GEMM pass on both sides, as the contract requires."
     },
     "intermediate_storage": {
-      "status": "needs-review",
+      "status": "mapping-only",
       "triton": "bt (N, K_b) uint8 retained for the lifetime of each B tensor (impl_triton.py:16-24).",
       "cutile": "none; widened B tile and decoded operand tiles are register resident (impl_cutile.py:55-65).",
-      "note": "Cross-call persistent operand copy vs none; same root cause as the preprocessing divergence."
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): a per-call K-major copy of the packed B is a permitted, counted mapping-level intermediate; a copy that outlives the call via a cross-call cache is forbidden, and a globally materialised unpacked (K, N) B is forbidden outright. The Triton side's persistent bt is the non-conforming case covered by human_reference_comparable = false."
     },
     "mutation": {
       "status": "aligned",
@@ -87,20 +153,22 @@
       "status": "aligned",
       "triton": "no dispatch branches; K is a constexpr with static_assert K % (4*BLOCK_K) == 0 (impl_triton.py:40,46-49).",
       "cutile": "no dispatch branches; K_b is ConstInt (impl_cutile.py:29); slab index k_a = i*num_tiles_kb + j is only exact when K_b is a multiple of the K tile (57).",
-      "note": "Both sides are specialised per K and rely on tile-aligned K_b for the swept shapes (K = 1024*i); the contract records general-K support as an open question. Descriptor-based vs tile loads are mapping details."
+      "note": "Both sides are specialised per K and rely on tile-aligned K_b for the swept shapes (K = 1024*i); decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3) that only the declared shape is required and arbitrary K_b support is not. Descriptor-based vs tile loads are mapping details."
     }
   },
   "fq_boundary": {
     "bytes_expr": "M * K + K * N // 4 + 4 * M * N",
     "flops_expr": "2 * M * N * K",
     "consistent": "false",
-    "note": "The formula counts A once (int8), the packed B once (K*N/4 bytes) and C once (int32), with element sizes hard-coded. The cuTile path matches it by reading the packed B directly and decoding in registers. The Triton path matches it in steady state only because the K-major copy of the packed B (read + write of K*N/4 bytes plus one copy launch) runs once per live B and is cached in a WeakTensorKeyDictionary (impl_triton.py:16-24,128), so it is never timed after warmup: the formula implicitly credits a free prepacked B on that side. A generated implementation transposing per call carries 2*K*N/4 bytes of uncounted timed traffic. The reference's host unpack and fp32 GEMM are reference-side work, not an F/Q issue."
+    "note": "The formula counts A once (int8), the packed B once (K*N/4 bytes) and C once (int32), with element sizes hard-coded. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): it stays the declared lower-bound / compulsory-I/O model for scoring; the 2*K*N/4 bytes that a per-call K-major copy of the packed B adds are counted in the measured time but are diagnostic, not part of Q. Packed-byte reuse across fields is an optimisation and not modelled. The cuTile path matches the formula by reading the packed B directly and decoding in registers. The Triton path matches it in steady state only because the K-major copy runs once per live B and is cached in a WeakTensorKeyDictionary (impl_triton.py:16-24,128), never timed after warmup, which the decided rule forbids; the Triton column is therefore not comparable to contract-conforming implementations. The reference's host unpack and fp32 GEMM are reference-side work, not an F/Q issue."
   },
   "human_reference_comparable": false,
   "review_items": [
-    "Decide whether the K-major repack of the packed B is inside the timed algorithm: the contract requires any repack to be per call and uncached, but the manual Triton timing excludes it (bt cached in a WeakTensorKeyDictionary, impl_triton.py:16-24,128); either re-measure the Triton reference with a per-call transpose or direct (K_b, N) consumption, or mark its numbers as not comparable to contract-conforming implementations.",
-    "Decide whether the contract must require correctness for arbitrary K_b: the manual Triton kernel enforces K % (4*BLOCK_K) == 0 by static_assert (impl_triton.py:46-49) and the manual cuTile slab index k_a = i*num_tiles_kb + j (impl_cutile.py:57) is only exact when K_b is a multiple of its K tile, while a zero-padded packed byte decodes to -1; the contract currently requires correctness for the swept shapes and masking of any tail.",
-    "impl_torch.py:17 sets torch.backends.cuda.matmul.allow_tf32 = False process-wide inside run() and never restores it; decide whether the harness isolates this, since it changes the fp32 reference of matmul_fp32_fp16_fp8 (which sets the flag True at import) when both run in one process."
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the K-major repack of the packed B, if an implementation uses one, is inside the timed algorithm: per call, uncached, rebuilt by device work inside every run(); no prepacked-input assumption. Decoding remains inside the multiplication path and a fully globally materialised unpacked (K, N) B is forbidden. The manual Triton timing excludes the repack (bt cached in a WeakTensorKeyDictionary, impl_triton.py:16-24,128), so the Triton column stays human_reference_not_comparable (human_reference_comparable = false); the cuTile column (direct (K_b, N) consumption, impl_cutile.py:51-54) is comparable. The open review item is removed from the contract (revision 2 retained).",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): only the benchmark's declared fixed shape is required (K a multiple of 1024 in every task); arbitrary K_b support is not required. The manual kernels' tile-aligned assumptions (static_assert K % (4*BLOCK_K) == 0, impl_triton.py:46-49; slab index k_a = i*num_tiles_kb + j, impl_cutile.py:57) are therefore within contract. The contract's requirement that any tail of the declared shape be masked (a zero-filled packed byte decodes to -1) is retained.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the contract's earlier requirement that each packed byte be logically loaded exactly once per output tile is removed as contradictory with the free fields-inner / fields-outer loop order; packed-byte reuse is an implementation optimisation, not the canonical algorithm. Loop order is free so long as the packed B is decoded correctly inside the GEMM and no forbidden unpacked global intermediate is introduced.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3, applied by extension from the matmul_fp32_fp16_fp8 decision): process-wide precision/backend flags are evaluator state, not candidate-controlled state; the evaluator owns their isolation at verification time (impl_torch.py:17 sets torch.backends.cuda.matmul.allow_tf32 = False inside run() without restoring it, which the harness must contain). A candidate reading or changing them is flagged by evaluator_rules (suspicious here, since this operator's integer path has no precision class to alter)."
   ],
-  "contract_sha256": null
+  "contract_sha256": "96ce4b6ca165fcdf9450f51c1fb5855cd8be8ad64d8ce840935f71171ea0b95c",
+  "previous_status_before_approval": "needs-review"
 }

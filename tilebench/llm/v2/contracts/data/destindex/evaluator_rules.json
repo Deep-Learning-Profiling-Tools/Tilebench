@@ -3,25 +3,24 @@
   "operator": "destindex",
   "contract_revision": 2,
   "required_stages": [
-    {"id": "s1", "description": "Output initialisation: the output buffers contain o_nope / o_rope before the copy (device copy of o_* into the output; per-call or once-per-identity is the open review item)."},
-    {"id": "s2", "description": "Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once and written once in the algorithm, no atomics)."},
-    {"id": "s3", "description": "Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s2 and s3 independent, may be one or two launches; returns (out_nope, out_rope)."}
+    {"id": "s1", "description": "Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once and written once in the algorithm, no atomics). The output buffers must not alias any input and need not be initialised from o_*: dest_loc is a permutation, so every row is overwritten; a device copy of o_* into the output is a permitted mapping (counted when performed), not a required stage."},
+    {"id": "s2", "description": "Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s1 and s2 independent, may be one or two launches; returns (out_nope, out_rope) correct for the current call, with no result value carried over from an earlier call (an allocation may be reused only if the call fully overwrites every result element)."}
   ],
   "forbidden_substitutions": [
     {"pattern": "\\.index_copy_?\\(", "message": "index_copy replaces the whole scatter-copy", "level": "confirmed", "scope": "host"},
     {"pattern": "(o_nope|o_rope)\\.(index_copy_|copy_|scatter_|index_put_|fill_|zero_)\\(|(o_nope|o_rope)\\s*\\[[^\\]]*\\]\\s*=[^=]", "message": "writes into o_nope / o_rope mutate an input", "level": "confirmed", "scope": "host"},
     {"pattern": "\\.index_put_?\\(|torch\\.index_put|\\.scatter_\\(|torch\\.scatter\\(|torch\\.index_select|\\[\\s*dest_loc\\s*\\]\\s*=[^=]", "message": "host-side indexed copy replaces the scatter kernel", "level": "suspicious", "scope": "host"},
     {"pattern": "torch\\.(argsort|sort)\\(|dest_loc\\.(argsort|sort)\\(|torch\\.empty\\([^)]*dest_loc", "message": "preprocessing of dest_loc (sort / inverse permutation) is forbidden", "level": "suspicious", "scope": "host"},
-    {"pattern": "WeakTensorKeyDictionary|_out_cache|_cache\\b|lru_cache|data_ptr\\(\\)", "message": "persistent output buffers keyed by input identity: open review item (policy b)", "level": "suspicious", "scope": "host"}
+    {"pattern": "WeakTensorKeyDictionary|_out_cache|_cache\\b|lru_cache|data_ptr\\(\\)", "message": "possible cross-call result reuse: cached outputs or result values carried over from an earlier call are forbidden; an output allocation may be reused only if the call fully overwrites every result element (review the hit)", "level": "suspicious", "scope": "host"}
   ],
   "required_evidence": [
     {"any_of": ["dest_loc", "dest"], "message": "destination index lookup", "level": "suspicious"},
     {"any_of": ["tl\\.store", "ct\\.scatter", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy", "store"], "message": "store/scatter at the computed destination", "level": "suspicious"},
-    {"any_of": ["clone\\(", "copy_\\(", "empty_like", "torch\\.empty"], "message": "output buffer initialised from o_*", "level": "suspicious"}
+    {"any_of": ["clone\\(", "copy_\\(", "empty_like", "torch\\.empty"], "message": "output buffers obtained inside run() (allocation, or a copy of o_*)", "level": "suspicious"}
   ],
   "allowed_torch_calls": ["torch.empty", "torch.empty_like", "torch.clone", "torch.cuda.current_stream"],
   "mutation": {"inputs_mutated": [], "restore_required": false},
-  "outputs": {"structure": "tuple", "count": 2, "aliasing": "none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope; whether the same buffers may be returned across calls (rewritten in place) is the open review item"},
-  "timing_boundary": {"includes_preprocessing": true, "notes": "The output initialisation from o_* (device copy: read + write of both outputs) is device work and is counted whenever run() launches it; whether it is paid on every call or once per input identity is the open review item, and bytes_expr counts only the steady-state kv read + out write. Host-side work (allocation calls, flattening views, metadata reads) is not GPU time."},
+  "outputs": {"structure": "tuple", "count": 2, "aliasing": "none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope and are correct for the current call; an output allocation may be reused across calls only if the call fully overwrites every result element (no cached result values)"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted: the scatter launches and, if the implementation performs it, the device copy of o_* into the output buffers (a permitted mapping, not a required stage: dest_loc is a permutation, so every row is overwritten). bytes_expr is the compulsory source-read + result-write lower bound (n * dtype_size * 2); the dest_loc index reads are lower-order and omitted, and no candidate-specific initialisation term is added. Host-side work (allocation calls, flattening views, metadata reads) is not GPU time."},
   "tolerance_source": "config.verify"
 }

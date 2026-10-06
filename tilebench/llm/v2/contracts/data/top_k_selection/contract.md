@@ -24,7 +24,10 @@ no keyword arguments are passed.
 ## Required logical stages
 
 Let `K'` be the smallest power of two that is `>= k`, and let `B` be the
-block width, with `B >= 2 * K'` (it need not be a power of two).
+block width, with `B >= 2 * K'` (it need not be a power of two). `K'` is
+part of the algorithm, not a tuning choice: it fixes the per-block candidate
+width and with it the candidate traffic between levels (a width below `k`
+would break exactness; any other width changes that traffic).
 
 1. **Level 0, block selection**: the input is cut into `ceil(N / B)` blocks
    of at most `B` elements (contiguous blocks in address order are the
@@ -104,8 +107,9 @@ precomputation outside `run()`.
   single-program sequential selection; each replaces the hierarchical
   block tournament, and with it the passes and the work decomposition
   that define this operator.
-- A per-block candidate width smaller than `k`, or a fan-in below 2 (a
-  level that does not shrink the candidate set).
+- A per-block candidate width other than `K'` (a width below `k` breaks
+  exactness; any other width changes the inter-level candidate traffic), or
+  a fan-in below 2 (a level that does not shrink the candidate set).
 - Returning more or fewer than `k` values, unsorted or ascending output, or
   an output that aliases `input`.
 - Mutating `input`.

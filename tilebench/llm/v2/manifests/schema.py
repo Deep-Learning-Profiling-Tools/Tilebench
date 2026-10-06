@@ -22,7 +22,7 @@ DEVICES = ("B200", "GH200", "MI300X", "Trn2")
 # (study.yaml:timing.capture_failure_policy). Only one policy is defined:
 # the candidate is timed eagerly, the record says so, and every consumer
 # (metrics, publication) flags the round as measured in a different mode.
-CAPTURE_FAILURE_POLICIES = ("time_eagerly_and_flag",)
+CAPTURE_FAILURE_POLICIES = ("time_eagerly_and_flag", "timing_error")
 # formal: scored Base/Enhanced campaigns (approved assets, approved models,
 # frozen folds for Enhanced). validation: engineering acceptance of the
 # execution chain; identical mechanics, unscored, never a distillation source.
@@ -96,6 +96,14 @@ def validate_study(study: dict) -> None:
         raise ManifestError("study.yaml: timing.cuda_graph_requested must be a boolean")
     if timing.get("capture_failure_policy") not in CAPTURE_FAILURE_POLICIES:
         raise ManifestError(f"study.yaml: timing.capture_failure_policy must be one of {CAPTURE_FAILURE_POLICIES}")
+    if timing.get("capture_failure_policy_formal") is not None and timing["capture_failure_policy_formal"] not in CAPTURE_FAILURE_POLICIES:
+        raise ManifestError(f"study.yaml: timing.capture_failure_policy_formal must be one of {CAPTURE_FAILURE_POLICIES}")
+    ev = study.get("evaluation") or {}
+    if ev and (not isinstance(ev.get("worker_timeout_s"), int) or isinstance(ev.get("worker_timeout_s"), bool) or ev["worker_timeout_s"] <= 0):
+        raise ManifestError("study.yaml: evaluation.worker_timeout_s must be a positive integer (frozen per-candidate wall-clock limit)")
+    snaps = study.get("device_snapshots") or {}
+    if set(snaps) - set(DEVICES):
+        raise ManifestError(f"study.yaml: device_snapshots names unknown devices {sorted(set(snaps) - set(DEVICES))}")
     if study.get("run_types") is None or set(study["run_types"]) != set(RUN_TYPES):
         raise ManifestError(f"study.yaml: run_types must define exactly {RUN_TYPES}")
     conds = study.get("conditions", {})
@@ -197,7 +205,11 @@ def blockers_models(models: dict, roles: tuple[str, ...] = ("generator",), *,
 
 
 def blockers_folds(folds: dict) -> list[str]:
-    return [] if folds.get("status") == "frozen" else ["folds.yaml: fold assignment is not frozen"]
+    if folds.get("status") != "frozen":
+        return ["folds.yaml: fold assignment is not frozen"]
+    if not folds.get("approved_by"):
+        return ["folds.yaml: fold assignment is frozen without approved_by"]
+    return []
 
 
 def study_config_hash(study: dict, models: dict, folds: dict, modes: dict) -> str:

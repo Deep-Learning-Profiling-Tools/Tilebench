@@ -149,6 +149,122 @@ def _progress(job: dict, phase: str) -> None:
         pass
 
 
+class PrecisionTampered(RuntimeError):
+    def __init__(self, where: str, diffs: dict):
+        super().__init__(f"process-wide precision/backend state changed {where}: {diffs}")
+        self.where, self.diffs = where, diffs
+
+
+def precision_state() -> dict:
+    """The process-wide PyTorch numerical settings a candidate must leave
+    alone: they decide how the reference and later candidates compute. The
+    legacy matmul getter is read first; after a candidate switches to the
+    fp32_precision API, reading it raises, which is itself evidence."""
+    import torch
+    m = torch.backends.cuda.matmul
+    st: dict = {}
+
+    def get(name, fn):
+        try:
+            v = fn()
+            st[name] = v if isinstance(v, (bool, int, float, str, type(None))) else str(v)
+        except Exception as e:  # noqa: BLE001
+            st[name] = f"<unreadable: {type(e).__name__}>"
+    get("cuda.matmul.allow_tf32", lambda: m.allow_tf32)
+    get("cuda.matmul.fp32_precision", lambda: getattr(m, "fp32_precision", None))
+    get("cuda.matmul.allow_fp16_reduced_precision_reduction", lambda: m.allow_fp16_reduced_precision_reduction)
+    get("cuda.matmul.allow_bf16_reduced_precision_reduction", lambda: m.allow_bf16_reduced_precision_reduction)
+    get("cudnn.allow_tf32", lambda: torch.backends.cudnn.allow_tf32)
+    get("cudnn.fp32_precision", lambda: getattr(torch.backends.cudnn, "fp32_precision", None))
+    get("cudnn.benchmark", lambda: torch.backends.cudnn.benchmark)
+    get("cudnn.deterministic", lambda: torch.backends.cudnn.deterministic)
+    get("float32_matmul_precision", torch.get_float32_matmul_precision)
+    get("default_dtype", lambda: str(torch.get_default_dtype()))
+    get("deterministic_algorithms", torch.are_deterministic_algorithms_enabled)
+    return st
+
+
+def precision_diff(baseline: dict, now: dict) -> dict:
+    return {k: (baseline.get(k), now.get(k)) for k in baseline if baseline.get(k) != now.get(k)}
+
+
+_RESTORE = {
+    "cuda.matmul.allow_tf32": lambda t, v: setattr(t.backends.cuda.matmul, "allow_tf32", v),
+    "cuda.matmul.allow_fp16_reduced_precision_reduction": lambda t, v: setattr(t.backends.cuda.matmul, "allow_fp16_reduced_precision_reduction", v),
+    "cuda.matmul.allow_bf16_reduced_precision_reduction": lambda t, v: setattr(t.backends.cuda.matmul, "allow_bf16_reduced_precision_reduction", v),
+    "cudnn.allow_tf32": lambda t, v: setattr(t.backends.cudnn, "allow_tf32", v),
+    "cudnn.benchmark": lambda t, v: setattr(t.backends.cudnn, "benchmark", v),
+    "cudnn.deterministic": lambda t, v: setattr(t.backends.cudnn, "deterministic", v),
+    "deterministic_algorithms": lambda t, v: t.use_deterministic_algorithms(bool(v)),
+}
+
+
+def restore_precision(baseline: dict) -> dict:
+    """Set every restorable field back to the baseline where it differs;
+    returns the fields that were restored."""
+    import torch
+    now = precision_state()
+    restored: dict = {}
+    for k, v in baseline.items():
+        if now.get(k) != v and k in _RESTORE and not (isinstance(v, str) and v.startswith("<unreadable")):
+            try:
+                _RESTORE[k](torch, v)
+                restored[k] = (now.get(k), v)
+            except Exception as e:  # noqa: BLE001
+                restored[k] = (now.get(k), f"<restore failed: {type(e).__name__}>")
+    return restored
+
+
+class PrecisionGuard:
+    """Snapshot before the candidate is loaded; restore before every reference
+    call and before every candidate call; verify after every candidate call
+    (and after the module import). A difference after the candidate ran is a
+    contract violation: the candidate changed evaluator state."""
+
+    def __init__(self):
+        self.baseline = precision_state()
+        self.restores: list[dict] = []
+        self.verifications = 0
+
+    def restore(self, where: str) -> None:
+        r = restore_precision(self.baseline)
+        if r:
+            self.restores.append({"where": where, "restored": r})
+
+    def verify(self, where: str) -> None:
+        self.verifications += 1
+        diffs = precision_diff(self.baseline, precision_state())
+        if diffs:
+            raise PrecisionTampered(where, diffs)
+
+    def guard_candidate(self, fn):
+        def run(*a, **k):
+            self.restore("before candidate call")
+            out = fn(*a, **k)
+            self.verify("after candidate call")
+            return out
+        return run
+
+    def guard_reference(self, fn):
+        def run(*a, **k):
+            self.restore("before reference call")
+            return fn(*a, **k)
+        return run
+
+    def record(self) -> dict:
+        return {"baseline": self.baseline, "verifications": self.verifications, "restores": self.restores}
+
+
+def capture_failure_status(policy: str | None, expected_mode: str | None, capture_succeeded) -> str | None:
+    """Policy timing_error (formal, frozen 2026-10-06): a failed CUDA-graph
+    capture on a device whose adapter replays graphs makes the round a
+    timing_error (consumed; the eager sample is never accepted).
+    time_eagerly_and_flag: the eager sample stands and is flagged."""
+    if policy == "timing_error" and expected_mode == "graph" and capture_succeeded is False:
+        return "timing_error"
+    return None
+
+
 def run_job(job: dict) -> dict:
     t0 = time.time()
     result: dict = {"schema": "tilebench-llm-v2-eval/2", "status": "infrastructure_incomplete",
@@ -195,17 +311,27 @@ def run_job(job: dict) -> dict:
     except Exception:  # noqa: BLE001
         result["diagnostic"] = "reference import failure:\n" + traceback.format_exc()
         return result
+    guard = PrecisionGuard()                   # process-wide precision flags are evaluator state
+    result["precision_guard"] = guard.record()
+    ref_run = guard.guard_reference(ref_mod.run)
 
     # 1. import / compile (first execution on fresh inputs)
     stage = {"started": time.time()}
     _progress(job, "candidate_loaded")        # from here on, a hang is the candidate's
     try:
         cand = _load_module(Path(job["source_path"]))
+        guard.verify("after importing the candidate module")
+    except PrecisionTampered as e:
+        result["status"] = "contract_violation"
+        result["diagnostic"] = f"contract_violation: {e}"
+        result["precision_guard"] = guard.record()
+        return result
     except Exception:  # noqa: BLE001
         result["status"] = "compile_error"
         result["diagnostic"] = traceback.format_exc()[-8000:]
         result["stages"]["import_compile"] = {**stage, "ok": False, "phase": "import"}
         return result
+    cand_run = guard.guard_candidate(cand.run)
     # interface: required exports
     if not callable(getattr(cand, "run", None)):
         result["status"] = "interface_error"
@@ -226,10 +352,15 @@ def run_job(job: dict) -> dict:
         return result
     try:
         inputs = make_inputs()
-        cand.run(*inputs)
+        cand_run(*inputs)
         sync()
         stage["ok"] = True
         stage["executions"] = 1
+    except PrecisionTampered as e:
+        result["status"] = "contract_violation"
+        result["diagnostic"] = f"contract_violation: {e}"
+        result["precision_guard"] = guard.record()
+        return result
     except Exception:  # noqa: BLE001
         tb = traceback.format_exc()
         result["status"] = "compile_error" if ("compil" in tb.lower() or "CompilationError" in tb) else "runtime_error"
@@ -250,8 +381,13 @@ def run_job(job: dict) -> dict:
 
     # 2. numerical checks on fresh inputs / same-address refill / repeat
     try:
-        checks = run_numerical_checks(cand.run, ref_mod.run, make_inputs, atol=job["atol"], rtol=job["rtol"],
+        checks = run_numerical_checks(cand_run, ref_run, make_inputs, atol=job["atol"], rtol=job["rtol"],
                                       mutable_indices=mutable, sync=sync, aliasing_allowed=aliasing_allowed(rules))
+    except PrecisionTampered as e:
+        result["status"] = "contract_violation"
+        result["diagnostic"] = f"contract_violation: {e}"
+        result["precision_guard"] = guard.record()
+        return result
     except Exception:  # noqa: BLE001
         result["status"] = "runtime_error"
         result["diagnostic"] = traceback.format_exc()[-8000:]
@@ -290,7 +426,7 @@ def run_job(job: dict) -> dict:
                     x.copy_(snap[i])
 
         t = job.get("timing", {})
-        rec = measure(lambda: cand.run(*timed_inputs), warmup=int(t.get("warmup", 1)), repeat=int(t.get("repeat", 3)),
+        rec = measure(lambda: cand_run(*timed_inputs), warmup=int(t.get("warmup", 1)), repeat=int(t.get("repeat", 3)),
                       use_cuda_graph=bool(t.get("use_cuda_graph", True)), flush=bool(t.get("flush", True)),
                       before_launch=before_launch if mutable else None,
                       proton_output_dir=job.get("sandbox_dir"), keep_profile=True)
@@ -298,6 +434,13 @@ def run_job(job: dict) -> dict:
         result["stages"]["timing"] = {"warmup": rec.warmup_runs, "graph_prep": rec.graph_prep_runs, "timed": rec.timed_runs}
         expected = job.get("expected_timing_mode")
         result["timing_mode_differs"] = bool(expected) and rec.timing_execution_mode != expected
+        cf = capture_failure_status(t.get("capture_failure_policy"), expected, rec.capture_succeeded)
+        if cf:
+            result["status"] = cf
+            result["diagnostic"] = ("timing_error: CUDA-graph capture failed and the campaign's capture_failure_policy is "
+                                    f"'timing_error' (round consumed; no eager sample is accepted): {rec.capture_error}")
+            result["precision_guard"] = guard.record()
+            return result
         if rec.mean_ms is None:
             result["status"] = "timing_error"
             result["diagnostic"] = rec.note or "timing produced no positive sample"
@@ -314,9 +457,13 @@ def run_job(job: dict) -> dict:
         result["latency_ms_mean"] = rec.mean_ms
         result["latency_ms_samples"] = rec.samples_ms
         result["status"] = "valid"
+    except PrecisionTampered as e:
+        result["status"] = "contract_violation"
+        result["diagnostic"] = f"contract_violation: {e}"
     except Exception:  # noqa: BLE001
         result["status"] = "timing_error"
         result["diagnostic"] = traceback.format_exc()[-8000:]
+    result["precision_guard"] = guard.record()
     _progress(job, "timing_done")
     result["elapsed_s"] = time.time() - t0
     return result

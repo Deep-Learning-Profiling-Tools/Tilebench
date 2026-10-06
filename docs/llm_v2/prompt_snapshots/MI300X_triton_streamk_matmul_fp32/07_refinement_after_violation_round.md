@@ -908,11 +908,15 @@ of `Cacc` (a device fill of `M*N` fp32 values), the Stream-K and
 data-parallel launch or launches, and the final cast for half dtypes. The
 device SM-count query, the output allocation and any descriptor or metadata
 construction are host-side work inside `run()` and are not GPU time. `A` and
-`B` are delivered row-major as `(M, K)` and `(K, N)`. Any layout
-transformation of an operand that an implementation chooses to perform (for
-example a transposed copy of `B`) must be done inside `run()` on every call
-and its device time is counted; no state keyed on input identity or contents
-may be cached across calls (see open review items).
+`B` are delivered row-major as `(M, K)` and `(K, N)`; no prepacked or
+transposed copy is provided or may be assumed. An implementation may
+consume them as delivered, or it may perform a layout transformation of an
+operand (for example a transposed copy of `B`) in the operand's own dtype,
+provided the transformation is done by device work inside `run()` on every
+call: its device time is counted. No state derived from an input's
+identity, data pointer, shape or contents (a transformed operand, a
+descriptor, an output) may be cached across calls; every call rebuilds
+whatever it needs.
 
 ## Permitted implementation mappings
 
@@ -928,6 +932,8 @@ may be cached across calls (see open review items).
   split.
 - Host-side or device-side evaluation of the partition arithmetic.
 - Using the output as `Cacc` for fp32 versus a separate fp32 buffer.
+- Consuming `B` in its delivered `(K, N)` layout versus through a transposed
+  copy rebuilt by device work inside every `run()` call (its time counted).
 
 ## Forbidden substitutions
 
@@ -944,8 +950,9 @@ may be cached across calls (see open review items).
 - Accumulating in fp16/bf16, or rounding half-dtype partials before the
   final combination; skipping TF32 rounding for fp32 operands is a
   different numeric mode and is not the canonical behaviour.
-- Caching a transposed or repacked operand across calls; skipping the
-  per-call zero-fill.
+- Caching a transposed or repacked operand (or anything derived from an
+  input's identity, data pointer, shape or contents) across calls, or
+  assuming a prepacked operand; skipping the per-call zero-fill.
 - Mutating `a` or `b`; returning a view of an input.
 
 ## Permitted PyTorch operations
@@ -958,20 +965,10 @@ may be cached across calls (see open review items).
   count; the current CUDA stream for launching.
 - `.shape`, `.dtype`, `.device`, `Tensor.stride`, `Tensor.is_contiguous`,
   `Tensor.contiguous` as a no-op guard; `Tensor.t` / `Tensor.contiguous`
-  only for an in-run, uncached operand re-layout as described above.
+  only for an in-run, uncached operand re-layout as described above
+  (device work inside `run()` on every call, counted).
 
 Everything else in `torch` is forbidden inside `run()`.
-
-## Open review items
-
-- Whether an operand layout transformation (a transposed copy of `B`) may
-  be prepared once and reused across calls, outside the timed region, or
-  must be performed inside `run()` on every call. Until resolved, this
-  contract requires the in-run, uncached behaviour.
-- Whether the bytes model should count the per-call zero-fill of `Cacc`,
-  the atomic read-modify-write traffic of the Stream-K region and, for half
-  dtypes, the fp32 round trip of the final cast, or remain the minimal
-  one-read-one-write GEMM bound.
 
 # Task (unchanged)
 

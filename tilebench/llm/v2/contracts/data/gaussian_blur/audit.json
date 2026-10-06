@@ -3,32 +3,86 @@
   "operator": "gaussian_blur",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "needs-review",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/gaussian_blur/impl_triton.py",
       "functions": [
-        {"name": "gaussian_blur_kernel", "lines": [8, 41]},
-        {"name": "_gaussian_blur_kernel_autotuned", "lines": [44, 54]},
-        {"name": "run", "lines": [57, 93]},
-        {"name": "get_last_config", "lines": [96, 104]}
+        {
+          "name": "gaussian_blur_kernel",
+          "lines": [
+            8,
+            41
+          ]
+        },
+        {
+          "name": "_gaussian_blur_kernel_autotuned",
+          "lines": [
+            44,
+            54
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            57,
+            93
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            96,
+            104
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/gaussian_blur/impl_cutile.py",
       "functions": [
-        {"name": "gaussian_blur_kernel", "lines": [20, 49]},
-        {"name": "_tuner", "lines": [52, 52]},
-        {"name": "run", "lines": [55, 102]},
-        {"name": "get_last_config", "lines": [105, 106]}
+        {
+          "name": "gaussian_blur_kernel",
+          "lines": [
+            20,
+            49
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            52,
+            52
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            55,
+            102
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            105,
+            106
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/gaussian_blur/impl_torch.py",
       "functions": [
-        {"name": "run", "lines": [5, 11]}
+        {
+          "name": "run",
+          "lines": [
+            5,
+            11
+          ]
+        }
       ]
     }
   },
@@ -58,10 +112,10 @@
       "note": "No cross-lane reduction; tap order free in the contract (fp32 sum of at most 49 terms)."
     },
     "precision": {
-      "status": "needs-review",
+      "status": "aligned",
       "triton": "fp32 accumulator (L26) but the per-tap product x * w is formed in the INPUT dtype: the shifted tile (L34-35) and the scalar weight (L36) are loaded without a cast, so for fp16 inputs each product is rounded to fp16 before being added to the fp32 accumulator (L37); the fp32 result is cast at the store (L40).",
       "cutile": "fp32 accumulator (L36) and BOTH the gathered pixel and the weight are cast to fp32 before the multiply-add (L46-47), so the per-tap product is exact in fp32; cast to the output dtype at the store (L49).",
-      "note": "Genuine precision-path divergence for fp16 inputs: fp16 products (one extra rounding per tap, relative error about 2^-11 each) versus fp32 products. Both pass the loose verify tolerance (atol 0.1, rtol 1e-2) and both are identical for fp32 inputs. The contract must not pick a side: the human has to decide whether per-tap products must be formed in fp32."
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): for both fp16 and fp32 tasks the pixel and the weight are converted to fp32 before each multiply and accumulated in fp32, cast once at the output; scoring uses the fp32_fma_vector peak. The cuTile reference (impl_cutile.py L46-47) follows this rule; the Triton reference forms fp16 products for fp16 inputs (impl_triton.py L34-37), a recorded deviation from the now-fixed rule that stays within the verify tolerance (atol 0.1, rtol 1e-2) and does not change the memory-bound timing; both sides are identical for fp32 inputs."
     },
     "preprocessing": {
       "status": "aligned",
@@ -92,12 +146,13 @@
     "bytes_expr": "input_rows * input_rows * dtype_size + kernel_rows * kernel_cols * dtype_size + input_rows * input_rows * dtype_size",
     "flops_expr": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
     "consistent": "true",
-    "note": "Both expressions are YAML folded scalars in config.yaml (L22-28); the strings here are their space-joined values. One image read, one weight read and one output write are the compulsory traffic of the single kernel on both sides; the kr*kc-fold re-reads of shifted neighbourhoods are cache traffic and are not counted (usual stencil convention). FLOPs = 2 per tap per output. The formulas use input_rows squared, i.e. assume square images, which the generator guarantees (input_cols defaults to input_rows); run() performs no preprocessing and nothing is prepacked."
+    "note": "Both expressions are YAML folded scalars in config.yaml (L22-28); the strings here are their space-joined values. One image read, one weight read and one output write are the compulsory traffic of the single kernel on both sides; the kr*kc-fold re-reads of shifted neighbourhoods are cache traffic and are not counted (usual stencil convention). FLOPs = 2 per tap per output. The formulas use input_rows squared, i.e. assume square images, which the generator guarantees (input_cols defaults to input_rows); run() performs no preprocessing and nothing is prepacked. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the compute-side scoring uses the fp32_fma_vector peak, consistent with the fp32-product rule; the task has one fixed, square shape, so the input_rows-squared form of the expressions is exact for it."
   },
   "human_reference_comparable": true,
   "review_items": [
-    "Per-tap product precision for fp16 inputs: one implementation multiplies pixel and weight in the input dtype (fp16 rounding per tap) before fp32 accumulation, the other converts both to fp32 first. Decide whether the contract requires fp32 products (stricter, matches the fp32 reference path more closely) or permits input-dtype products (both currently pass the atol 0.1 / rtol 1e-2 tolerance); the contract text leaves it open.",
-    "(non-blocking, metric) bytes_expr/flops_expr assume square images (input_rows squared); correct for the config sweep but wrong if input_cols != input_rows is ever swept."
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): per-tap product precision. For both fp16 and fp32 tasks, pixel and weight are converted to fp32 before each multiply and accumulated in fp32, with a single cast at the output; forming the product in fp16 is forbidden. Scoring uses fp32_fma_vector (not stated in the model-visible contract). The Triton manual reference's fp16 products (impl_triton.py L34-37) are a recorded deviation within tolerance; the cuTile reference (impl_cutile.py L46-47) conforms.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the task has one fixed, square shape, so bytes_expr/flops_expr written with input_rows squared are exact for the task; no contract change."
   ],
-  "contract_sha256": null
+  "contract_sha256": "7db42a38f2b458c24d5d298b30f2bca1faf968c9232218b07b5cd87a32dd767b",
+  "previous_status_before_approval": "needs-review"
 }

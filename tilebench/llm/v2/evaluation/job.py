@@ -29,9 +29,14 @@ from tilebench.llm.v2.tasks.fields import effective_tolerance
 JOB_SCHEMA = "tilebench-llm-v2-evaljob/1"
 
 
-def timing_settings(study: dict) -> dict:
+def timing_settings(study: dict, run_type: str = "formal") -> dict:
+    """Formal runs use timing.capture_failure_policy_formal when the study
+    declares one (frozen 2026-10-06: timing_error); validation runs use
+    timing.capture_failure_policy (time_eagerly_and_flag)."""
     t = study["timing"]
     policy = t.get("capture_failure_policy")
+    if run_type == "formal" and t.get("capture_failure_policy_formal") is not None:
+        policy = t["capture_failure_policy_formal"]
     if policy not in CAPTURE_FAILURE_POLICIES:
         raise ValueError(f"study.yaml: capture_failure_policy {policy!r} is not defined")
     return {
@@ -113,7 +118,8 @@ def build_evaluation_job(*, operator: str, dtype: str, params: dict, dsl: str, d
     require_adapter(adapter)
     return EvaluationJob(operator=operator, dtype=dtype, params=dict(params), dsl=dsl, device=device, arch=arch,
                          atol=tol["atol"], rtol=tol["rtol"], tolerance_source=tol["source"], rules=rules,
-                         timing=timing_settings(study), expected_timing_mode=expected_timing_mode(study, device),
+                         timing=timing_settings(study, run_type=str((identity or {}).get("run_type", "formal"))),
+                         expected_timing_mode=expected_timing_mode(study, device),
                          timing_adapter=adapter, identity=dict(identity or {}))
 
 

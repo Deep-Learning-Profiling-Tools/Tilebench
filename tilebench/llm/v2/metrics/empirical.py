@@ -242,6 +242,7 @@ def t_emp(device: str, operator: str, dtype: str, params: dict, problem_size: in
             rec.f_kind = ov.get("f_kind", rec.f_kind)
         if "Q" in ov:
             Q = _eval_expr(ov["Q"], ctx)
+            rec.q_kind = ov.get("q_kind", rec.q_kind)
         rec.overrides_applied.append(ov["decision"])
     rec.F, rec.Q = F, Q
     if Q is None or (F is None and decl["mode"] not in NON_CALIBRATED):

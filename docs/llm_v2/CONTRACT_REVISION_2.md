@@ -90,3 +90,30 @@ and the human kernels at S_main, each logging every change (scratch logs merged 
 
 The eight `needs-review` operators keep their *Open review items* and provisional rules unchanged (C1).
 Full per-change log (before/after quotes, reasons): `docs/llm_v2/contract_revision_2_changes.json`.
+
+## Owner decisions applied on 2026-10-06 (FINAL_FREEZE_AND_START_B200.md §3) and approval
+
+The general rule of revision 2 was approved: semantic/algorithmic structure is frozen; tiling, launch count, work
+distribution, layouts and scheduling are free unless they change the algorithm, add a forbidden global intermediate,
+alter precision or change the declared timing/input boundary. Applied by three reviewers with per-change logs
+(`docs/llm_v2/contract_final_decisions_2026-10-06.json`: 57 + 40 decision
+changes, 29 flagged-item repairs) and validated by the integrator before approval:
+
+| operator | decision applied |
+|---|---|
+| batched_matmul | `B` delivered row-major; per-call, in-run, counted repack allowed; no cross-call identity/data-pointer/value cache; no split-K; Triton human line stays `human_reference_not_comparable` |
+| matmul_fp32_fp16_fp8 | same repack rule; no prepacked assumption; precision class kept (TF32-class fp32 products, fp32 accumulation; native fp16/fp8 products); process-wide precision flags are evaluator state (confirmed-level rule) |
+| matmul_int8 | same rule for the packed B; decode inside the multiplication path; no globally materialised unpacked `(K,N)` B; only the declared shape; the "each packed byte loaded once per tile" requirement removed (fields-inner/outer free) |
+| streamk_matmul | Stream-K decomposition / global accumulation preserved; per-call timed repack; Q stays the declared compulsory-I/O model (scratch/atomics diagnostic) |
+| destindex | `dest_loc` is a permutation (tensors.py@S_main L151): the `o_*` copy is no longer a mandatory stage; outputs correct per call, no aliasing, no cross-call result reuse; Q = source read + result write |
+| gaussian_blur | fp32 pixel and weight before each multiply, fp32 accumulation, one cast (both dtypes); the Triton human kernel's fp16 products are recorded as a deviation within tolerance |
+| quantize_global | plain fp32 → fp16 conversion approved (historical name) |
+| radix_sort | stable LSD over all 32 bits; digit width and pass count free; scoring Q = `2*n*dtype_size` (M4) |
+| 14 flagged items | repaired (bitonic_sort, flash_attention, histogramming, interleave, kl_divergence, matrix_copy, matrix_transpose, mean_reduction, rmsnorm, top_k_selection); layernorm / l2_norm / flash_decode / argmax unchanged (already consistent) |
+
+Approval (`audit.json`: `status: approved`, `approved_by`, `approved_on: 2026-10-06`, `contract_sha256` of the approved text,
+`previous_status_before_approval`) was written for all 45 by a script that first checked, per operator: heading set and order,
+no `Open review items`, the device-work timing paragraph, no DSL names, operator/revision agreement across the three files,
+regex compilation, rules and audit schema, no remaining `needs-review` aspect, resolved review items, and the loader's leak
+check; then `load_contract(op, require_approved=True)` for every operator. Gaussian_blur fp16: the Triton human column is
+recorded as deviating (fp16 products) in its audit note.

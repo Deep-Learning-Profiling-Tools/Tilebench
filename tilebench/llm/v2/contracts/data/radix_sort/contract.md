@@ -36,7 +36,9 @@ keyword arguments are passed.
    counting and scan stages need (for example a histogram of counts per
    (digit value, key block) and scan carry storage).
 2. **Digit passes**, least-significant digit first, until the digit
-   positions together cover all 32 bits of the key. Each pass consists of:
+   positions together cover all 32 bits of the key (the digit width, and
+   hence the number of passes, is an implementation choice). Each pass
+   consists of:
    a. **Count**: partition the current key buffer into blocks; for every
       block, count how many keys fall into each digit value of the current
       digit, and write the counts into the histogram.
@@ -144,12 +146,3 @@ permitted.
 - Reading `numel`, `dtype`, `device`, and obtaining the current stream.
 
 Everything else in `torch` is forbidden inside `run()`.
-
-## Open review items
-
-- The traffic model used for figure-of-merit reporting assumes a fixed
-  number of passes over the keys, while this contract leaves the digit width
-  and pass count free; whether the pass count becomes a fixed requirement or
-  the model is adjusted is under review. Until then, any stable
-  least-significant-digit-first radix sort covering all 32 bits is
-  acceptable.

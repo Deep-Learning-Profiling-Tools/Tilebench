@@ -21,7 +21,9 @@ have defaults and must not affect the computation).
 - `A`: flat `(BATCH*M*K,)`, contiguous, logically row-major `(BATCH, M, K)`
   with `K` innermost; dtype fp16, bf16 or fp32. Read-only.
 - `B`: flat `(BATCH*K*N,)`, contiguous, logically row-major `(BATCH, K, N)`
-  with `N` innermost; same dtype as `A`. Read-only.
+  with `N` innermost; same dtype as `A`. Read-only. `B` is delivered in
+  this layout; no transposed, column-major or otherwise repacked copy is
+  provided.
 - Output: flat `(BATCH*M*N,)`, logically row-major `(BATCH, M, N)`, dtype of
   `A`, freshly allocated inside `run()` on every call and returned as a
   single tensor (a flat view of a freshly allocated 3-D buffer is fine). It
@@ -37,11 +39,14 @@ have defaults and must not affect the computation).
    N-tile)` output tile is accumulated over the full `K` range into a local
    fp32 accumulator and stored, cast, exactly once.
 
-Stage 2 is the only device work. There is no split-K pass followed by a
-reduction pass (partial sums would round-trip through global memory instead
-of staying in one on-chip accumulator), and no separate repacking pass over
-`A` or `B` (see the open review item). Spreading the output tiles over more
-than one launch (for example one launch per batch slice) without any
+Stage 2 is the only required device work. There is no split-K pass followed
+by a reduction pass (partial sums would round-trip through global memory
+instead of staying in one on-chip accumulator). An implementation may
+additionally repack or transpose `A` or `B` into another layout, but only as
+device work performed inside every `run()` call (see "Preprocessing and
+timing boundary"); such a copy is an optional, counted layout step, not a
+change of algorithm. Spreading the output tiles over more than one launch
+(for example one launch per batch slice) without any partial-sum
 intermediate is a mapping choice.
 
 ## Algorithm family and structure
@@ -74,12 +79,19 @@ required.
 
 The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
 
-The provisional rule, pending the open review item below, is: consume `A`
-and `B` in their given row-major layouts through zero-copy views; do not
-transpose, pack, cast or copy either operand; do not cache anything derived
-from input values or input identity across calls. Host-side descriptor or
-metadata construction is permitted. The metric formulas count one read of
-`A`, one read of `B` and one write of the output.
+`A` and `B` are delivered in the row-major layouts declared above. An
+implementation may consume them directly through zero-copy views, or it may
+materialise a repacked or transposed representation of an operand (for
+example `B` as `(BATCH, N, K)`) in the operand's own dtype, provided that
+copy is produced by device work inside every `run()` call: its device time
+is part of the measured quantity, exactly like the GEMM launch. Nothing
+derived from an input's values, identity, data pointer or shape may be kept
+across calls: no cross-call cache of a transformed operand, descriptor or
+output, and no assumption that an input arrives prepacked. Every call
+rebuilds whatever it needs. Host-side descriptor or metadata construction
+is permitted. The metric formulas count one read of `A`, one read of `B`
+and one write of the output; the traffic of a per-call repack is not
+credited by them.
 
 ## Permitted implementation mappings
 
@@ -90,9 +102,12 @@ metadata construction is permitted. The metric formulas count one read of
   to suit the matrix-multiply primitive's operand layout.
 - Whether the batch index is a grid axis or folded into a linear tile
   index.
+- Consuming `A` and `B` in their delivered row-major layouts versus through
+  a repacked or transposed copy of an operand rebuilt by device work inside
+  every `run()` call (its time counted).
 - The number of launches over which the output tiles are spread (for
-  example one launch per batch slice), provided no intermediate is written
-  to global memory.
+  example one launch per batch slice), provided no partial-sum intermediate
+  is written to global memory.
 
 ## Forbidden substitutions
 
@@ -103,9 +118,11 @@ metadata construction is permitted. The metric formulas count one read of
   staying in one on-chip accumulator).
 - Accumulating in less than fp32, or casting fp32 operands below TF32
   precision.
-- Materialised transposed or packed copies of `A` or `B` (provisional, see
-  the open review item), and any cache keyed on input tensors that survives
-  across calls.
+- Any cache that survives across calls and is keyed on an input's identity,
+  data pointer, shape or values (a transposed or repacked operand, a
+  descriptor or an output prepared once and reused), and any assumption
+  that an operand arrives prepacked. A repacked or transposed copy of `A`
+  or `B` is permitted only as device work inside every `run()` call.
 - Writing `A` or `B`; returning a view of `A` or `B`.
 
 ## Permitted PyTorch operations
@@ -115,16 +132,11 @@ metadata construction is permitted. The metric formulas count one read of
 - `.view(...)` / `.reshape(...)` on the contiguous tensors (`A` as
   `(BATCH, M, K)`, `B` as `(BATCH, K, N)`, the output between 3-D and flat)
   as metadata-only operations.
+- `.transpose(...)` / `.permute(...)` / `.t()` followed by `.contiguous()`,
+  or `torch.empty` plus a device copy, only to produce a per-call, in-run
+  repacked copy of an operand in its own dtype (device work, counted, never
+  cached).
 - Reading dtype, shape, stride and device metadata, and obtaining the
   current stream.
 
 Everything else in `torch` is forbidden inside `run()`.
-
-## Open review items
-
-- Whether `B` may be consumed through a layout other than the given
-  row-major `(BATCH, K, N)`: that is, whether a transposed or repacked copy
-  of an operand is permitted at all, and if so whether it must be produced
-  inside every timed call or may be prepared once and reused across calls.
-  Until decided, the provisional rule above (no repack, no cross-call
-  cache) applies.

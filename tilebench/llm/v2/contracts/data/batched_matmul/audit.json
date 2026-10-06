@@ -3,40 +3,142 @@
   "operator": "batched_matmul",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
   "contract_revision": 2,
-  "status": "needs-review",
-  "approved_by": null,
-  "approved_on": null,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
   "sources": {
     "triton": {
       "file": "tilebench/benchmarks/operators/batched_matmul/impl_triton.py",
       "functions": [
-        {"name": "_CDNA3_DEFAULT_CONFIG/_BUILTIN_DEFAULT_CONFIG", "lines": [17, 24]},
-        {"name": "_default_config", "lines": [27, 35]},
-        {"name": "_bt_cache", "lines": [41, 41]},
-        {"name": "_b_transposed", "lines": [44, 51]},
-        {"name": "_tma_set_block_size_hook", "lines": [54, 60]},
-        {"name": "bmm_kernel", "lines": [63, 97]},
-        {"name": "_bmm_kernel_autotuned", "lines": [100, 120]},
-        {"name": "_descriptors", "lines": [123, 127]},
-        {"name": "run", "lines": [130, 164]},
-        {"name": "get_last_config", "lines": [167, 178]}
+        {
+          "name": "_CDNA3_DEFAULT_CONFIG/_BUILTIN_DEFAULT_CONFIG",
+          "lines": [
+            17,
+            24
+          ]
+        },
+        {
+          "name": "_default_config",
+          "lines": [
+            27,
+            35
+          ]
+        },
+        {
+          "name": "_bt_cache",
+          "lines": [
+            41,
+            41
+          ]
+        },
+        {
+          "name": "_b_transposed",
+          "lines": [
+            44,
+            51
+          ]
+        },
+        {
+          "name": "_tma_set_block_size_hook",
+          "lines": [
+            54,
+            60
+          ]
+        },
+        {
+          "name": "bmm_kernel",
+          "lines": [
+            63,
+            97
+          ]
+        },
+        {
+          "name": "_bmm_kernel_autotuned",
+          "lines": [
+            100,
+            120
+          ]
+        },
+        {
+          "name": "_descriptors",
+          "lines": [
+            123,
+            127
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            130,
+            164
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            167,
+            178
+          ]
+        }
       ]
     },
     "cutile": {
       "file": "tilebench/benchmarks/operators/batched_matmul/impl_cutile.py",
       "functions": [
-        {"name": "_DEFAULT_CONFIG/_SEARCH_SPACE", "lines": [10, 22]},
-        {"name": "bmm_kernel", "lines": [25, 72]},
-        {"name": "_tuner", "lines": [75, 75]},
-        {"name": "run", "lines": [78, 130]},
-        {"name": "get_last_config", "lines": [133, 134]}
+        {
+          "name": "_DEFAULT_CONFIG/_SEARCH_SPACE",
+          "lines": [
+            10,
+            22
+          ]
+        },
+        {
+          "name": "bmm_kernel",
+          "lines": [
+            25,
+            72
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            75,
+            75
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            78,
+            130
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            133,
+            134
+          ]
+        }
       ]
     },
     "torch": {
       "file": "tilebench/benchmarks/operators/batched_matmul/impl_torch.py",
       "functions": [
-        {"name": "allow_tf32 (module level)", "lines": [4, 4]},
-        {"name": "run", "lines": [7, 12]}
+        {
+          "name": "allow_tf32 (module level)",
+          "lines": [
+            4,
+            4
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            7,
+            12
+          ]
+        }
       ]
     }
   },
@@ -72,16 +174,16 @@
       "note": "Same precision class, matching the reference's allow_tf32 = True (impl_torch.py 4); config.yaml verify atol 1.0 / rtol 1e-2."
     },
     "preprocessing": {
-      "status": "needs-review",
+      "status": "mapping-only",
       "triton": "_b_transposed (44-51) materialises B^T = B.view(BATCH, K, N).transpose(1, 2).contiguous() on the first call for a given B tensor object and memoises it in a WeakTensorKeyDictionary (41); run() calls it every time (136), so warmup and timed repeats consume a prepacked (BATCH, N, K) operand without paying the transpose.",
       "cutile": "A.contiguous().view / B.contiguous().view (82-83) are zero-copy for the contiguous generator tensors; B is consumed in its given (BATCH, K, N) layout by the kernel (58-62).",
-      "note": "Genuine F-Q boundary divergence: one side benefits from an untimed, cached pre-transpose that the reference (torch.matmul on row-major views, impl_torch.py 9-11) does not need, while the other side and the reference consume B as given. The contract cannot pick either; the question is stated in review_items and the contract carries a provisional no-repack rule."
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): B is delivered row-major; consuming it directly (cuTile side) or through a repacked/transposed copy rebuilt by device work inside every run() is a mapping choice, so the layout divergence is mapping-only. Any cross-call input-identity / data-pointer / value cache of a transformed operand is forbidden; the manual Triton kernel's steady-state cached B^T (impl_triton.py 41-51, 136) therefore does not conform to the decided rule and its column is recorded as not comparable (human_reference_comparable = false), which is a reference-measurement caveat rather than a contract ambiguity."
     },
     "intermediate_storage": {
-      "status": "needs-review",
+      "status": "mapping-only",
       "triton": "A (BATCH, N, K) B^T buffer in the input dtype, allocated by _b_transposed and kept alive by the identity-keyed cache for as long as the caller's B exists (impl_triton.py 41-51); plus the output.",
       "cutile": "None beyond the output (impl_cutile.py 84).",
-      "note": "A persistent input-derived buffer that outlives the call exists on one side only; it is the storage side of the preprocessing divergence."
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): a per-call repacked operand buffer is a permitted, counted mapping-level intermediate (not a forbidden global partial-sum intermediate); a buffer that outlives the call via a cross-call cache is forbidden. The Triton side's persistent B^T buffer is the non-conforming case covered by human_reference_comparable = false."
     },
     "mutation": {
       "status": "aligned",
@@ -100,13 +202,14 @@
     "bytes_expr": "3 * BATCH * M * M * dtype_size",
     "flops_expr": "2 * BATCH * M * M * M",
     "consistent": "false",
-    "note": "config.yaml 21-22; assumes square N = K = M as the generator guarantees (tensors.py 88-91). It counts one read of A, one read of B and one write of C. The cuTile boundary matches. The Triton boundary does not: the B -> B^T transpose (an extra read and write of B, impl_triton.py 49) is performed inside run() only on the first call per B object and then served from a cache, so the steady-state timed region consumes a prepacked operand whose preparation is neither timed nor counted and which the reference never performs."
+    "note": "config.yaml 21-22; assumes square N = K = M as the generator guarantees (tensors.py 88-91). It counts one read of A, one read of B and one write of C. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): this formula stays the declared lower-bound / compulsory-I/O model for scoring; the device traffic of a per-call operand repack (an extra read and write of B) is counted in the measured time but is diagnostic, not part of Q. The cuTile boundary matches the formula. The Triton boundary does not: the B -> B^T transpose (impl_triton.py 49) is performed inside run() only on the first call per B object and then served from a cross-call cache, so its steady-state timed region consumes a prepacked operand whose preparation is neither timed nor permitted under the decided rule; the Triton column is therefore not comparable to contract-conforming implementations."
   },
   "human_reference_comparable": false,
   "review_items": [
-    "Decide whether run() may consume B through a pre-transposed/packed layout and, if so, whether that repack must be performed inside every timed call or may be prepared once and cached: the Triton path memoises B^T per tensor identity (impl_triton.py 41-51, 136) so its steady-state latency excludes a transpose the reference never performs, while the cuTile path reads row-major B directly (impl_cutile.py 58-62, 83); the contract currently carries a provisional no-repack, no-cache rule.",
-    "Confirm that bytes_expr = 3 * BATCH * M * M * dtype_size (one read of A and B, one write of C) is the intended boundary; the untimed cached B^T materialisation is uncounted, so the Triton column is not comparable to a contract-conforming generated implementation (human_reference_comparable = false) until the first item is resolved or the Triton implementation is changed.",
-    "Decide whether the identity-keyed B^T cache (impl_triton.py 41-51), which would silently return stale results if B were mutated in place between calls, should be fixed before that implementation serves as a timing reference."
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): B is delivered in the declared row-major layout; an implementation may consume it directly or materialise a repacked/transposed representation inside every run() call, and any such device copy/repack is timed (counted by the measured quantity). No cross-call input-identity / data-pointer / value cache of a transformed operand is permitted. No split-K global partial-sum algorithm; local full-K accumulation remains canonical. The provisional no-repack rule and the open review item are replaced by this rule in the contract (revision 2 retained).",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): bytes_expr = 3 * BATCH * M * M * dtype_size (one read of A and B, one write of C) remains the lower-bound / compulsory-I/O model; per-call repack traffic is diagnostic. The manual Triton column relied on a steady-state cached transpose (impl_triton.py 41-51, 136) that the decided rule forbids, so it stays human_reference_not_comparable (human_reference_comparable = false); the cuTile column, which reads row-major B directly (impl_cutile.py 58-62, 83), is comparable.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the identity-keyed B^T cache (impl_triton.py 41-51) is a property of the manual reference, not of the contract; it is not fixed here and is the reason the Triton column is marked not comparable. Candidates are forbidden from reproducing it."
   ],
-  "contract_sha256": null
+  "contract_sha256": "5e56f06f0748ead724e39bbddb7718d2366f59c40bbcdd52c1dc6751ab59734a",
+  "previous_status_before_approval": "needs-review"
 }

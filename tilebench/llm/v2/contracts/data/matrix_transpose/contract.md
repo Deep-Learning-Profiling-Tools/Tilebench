@@ -39,9 +39,11 @@ How the tiles are split across programs or launches is a mapping choice.
 
 ## Algorithm family and structure
 
-Out-of-place tiled transpose: the matrix is partitioned into rectangular
-logical tiles; each tile is read with the input's row-major addressing and
-written with the output's row-major addressing at swapped coordinates. No
+Out-of-place tiled transpose: the matrix is partitioned into logical tiles
+of any dimensions (square, rectangular, or a single row or column; the tile shape
+is a mapping choice, not part of the algorithm); each tile is read with the
+input's row-major addressing and written with the output's row-major
+addressing at swapped coordinates. No
 reduction, scan or sort is involved. The on-chip re-layout between a
 coalesced read and a coalesced write (through registers, local memory, or a
 DSL transpose primitive) is a mapping choice. Grid orientation (which input
@@ -65,8 +67,9 @@ before the kernel reads it. Nothing may be cached across calls.
 
 ## Permitted implementation mappings
 
-- Tile shape (square or rectangular), elements per program, grid shape and
-  traversal order, pipelining depth and vector width are free.
+- Tile shape (square, rectangular, or a single row or column), elements per
+  program, grid shape and traversal order, pipelining depth and vector width
+  are free.
 - The number of launches is free: the tiles may be covered by one launch or
   split across several, provided each element is still moved once and
   nothing but `out` is written to global memory.

@@ -24,7 +24,7 @@ STATUS_TEXT = {
 }
 
 # Words whose presence in a diagnostic line would leak evaluator scoring.
-_SCRUB = re.compile(r"(roofline|t_sol|sol[_ -]?efficiency|speedup|stop_score|pct_peak|human|torch_ms|baseline_ms|score)",
+_SCRUB = re.compile(r"(roofline|t_sol|t_emp|p_emp|bw_emp|calibration|empirical|ceiling|sol[_ -]?efficiency|speedup|stop_score|pct_peak|human|torch_ms|baseline_ms|score)",
                     re.I)
 
 
@@ -75,8 +75,8 @@ def runtime_history(rounds: list[dict]) -> str:
     return "\n".join(lines)
 
 
-FORBIDDEN_FEEDBACK_KEYS = ("t_sol", "sol_efficiency", "efficiency", "roofline", "stop_score", "speedup",
-                           "human_ms", "torch_ms", "pct_peak", "profiler", "score", "tflops", "bandwidth")
+FORBIDDEN_FEEDBACK_KEYS = ("t_sol", "t_emp", "p_emp", "bw_emp", "calibration", "sol_efficiency", "efficiency", "roofline",
+                           "stop_score", "speedup", "human_ms", "torch_ms", "pct_peak", "profiler", "score", "tflops", "bandwidth")
 
 
 def assert_feedback_clean(text: str) -> None:

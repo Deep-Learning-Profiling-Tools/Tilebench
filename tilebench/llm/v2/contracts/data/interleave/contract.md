@@ -33,12 +33,14 @@ logical traversals in the algorithm, not guarantees about physical DRAM
 transactions, which caches, TMA and the compiler may change.
 
 ## Algorithm family and structure
-Single-pass elementwise zip of two streams. For a logical block of
-consecutive input indices the corresponding output block is contiguous and
-twice as long; whether the zip is formed in registers (stack the two input
-blocks and flatten) followed by one contiguous store, or written as two
-stride-2 stores, is an implementation choice. Lanes beyond N (the last
-block) must never be stored and padded input values must never reach OUT.
+Elementwise zip of two streams in one logical traversal (how that traversal
+is distributed over launches is a mapping choice, see the stages). For a
+logical block of consecutive input indices the corresponding output block is
+contiguous and twice as long; whether the zip is formed in registers (stack
+the two input blocks and flatten) followed by one contiguous store, or
+written as two stride-2 stores, is an implementation choice. Lanes beyond N
+(the last block) must never be stored and padded input values must never
+reach OUT.
 
 ## Precision and accumulation
 None. No cast of any kind is permitted; the same code path must serve the
