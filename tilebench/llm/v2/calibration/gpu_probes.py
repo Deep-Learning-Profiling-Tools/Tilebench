@@ -106,13 +106,20 @@ def trace_check(fn, n: int) -> dict:
             "device_us_per_launch": busy / n, "names": names, "probe_names": sorted(probe_names)}
 
 
-def _device_explains_event(ratio: float | None, proto: dict) -> bool:
-    """The event-timed time per launch must be explained by device activity:
-    (device time per launch from the untimed trace) / (event time per launch)
-    >= device_share_min. A lower ratio means the timed interval contained
-    idle device time (launch/dispatch gaps), so the point measures dispatch,
-    not the probe's device work."""
-    return ratio is not None and ratio >= proto["device_share_min"]
+def _device_bound(tr: dict, ratio: float | None, proto: dict) -> bool:
+    """The point measures device work, not dispatch: either the profiled
+    back-to-back window shows no idle device time (busy_fraction >=
+    device_share_min), or the device time per launch from that window
+    explains the event-timed time per launch (ratio >= device_share_min).
+    A dispatch-bound point fails both. Both tests are needed because the
+    profiler slows host enqueue (short probes show profiler-induced gaps) and
+    the device clock drifts under sustained load (long probes show a ratio
+    away from 1 between the timed and the profiled pass)."""
+    if not tr.get("available"):
+        return False
+    busy = tr.get("busy_fraction")
+    return bool((busy is not None and busy >= proto["device_share_min"])
+                or (ratio is not None and ratio >= proto["device_share_min"]))
 
 
 # --------------------------------------------------------------------------- precision control
@@ -239,7 +246,7 @@ def probe_gemm(mode: str, proto: dict, dev) -> dict:
             t_s = stats.point_time(meas["batches_ms"]) / 1e3
             work = 2.0 * m * m * m
             dev_vs_event = (tr["device_us_per_launch"] / 1e6) / t_s if tr.get("available") else None
-            valid = bool(check["ok"] and _device_explains_event(dev_vs_event, proto))
+            valid = bool(check["ok"] and _device_bound(tr, dev_vs_event, proto))
             points.append({"id": pid, "M": m, "N": m, "K": m, "work": work,
                            "work_unit": "OP" if api == "torch._int_mm" else "FLOP",
                            "inner": meas["inner"], "batches_ms": meas["batches_ms"],
@@ -313,7 +320,7 @@ def probe_stream(probe: str, size_mib: int, proto: dict, dev, llc_bytes: int | N
     t_s = stats.point_time(meas["batches_ms"]) / 1e3
     dev_vs_event = (tr["device_us_per_launch"] / 1e6) / t_s if tr.get("available") else None
     eligible = stats.hbm_eligible(ws, llc_bytes, proto["hbm"]["min_working_set_over_llc"])
-    valid = bool(ok and _device_explains_event(dev_vs_event, proto))
+    valid = bool(ok and _device_bound(tr, dev_vs_event, proto))
     out = {"id": pid, "probe": probe, "size_mib": size_mib, "logical_bytes": work, "working_set_bytes": ws,
            "primary": probe in proto["hbm"]["primary_probes"], "hbm_eligible": eligible,
            "role": "hbm" if eligible else "cache_scale_diagnostic",
@@ -428,7 +435,7 @@ def probe_fma(mode: str, proto: dict, dev, sm_count: int, backend: str) -> dict:
         tr = trace_check(fn, max(5, min(meas["inner"], 20)))
         dev_vs_event = (tr["device_us_per_launch"] / 1e6) / t1 if tr.get("available") else None
         work = 2.0 * n * FMA_CHAINS * iters
-        valid = bool(ok and instr_ok and scaling_ok and _device_explains_event(dev_vs_event, proto))
+        valid = bool(ok and instr_ok and scaling_ok and _device_bound(tr, dev_vs_event, proto))
         points.append({"id": pid, "programs": programs, "programs_per_sm": pps, "block": block, "num_warps": warps,
                        "chains": FMA_CHAINS, "iters": iters, "work": work, "work_unit": "FLOP",
                        "inner": meas["inner"], "batches_ms": meas["batches_ms"],

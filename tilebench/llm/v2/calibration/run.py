@@ -123,14 +123,16 @@ def _mode_entry(name: str, result: dict, proto: dict) -> dict:
         return {**base, "status": result["status"], "value": None, "reason": result.get("reason")}
     pts = result.get("points", [])
     sel = stats.select_mode_value(pts, bandwidth=(name == "hbm_stream_bw"),
-                                  plateau_tolerance=proto["hbm"]["plateau_tolerance"])
+                                  plateau_tolerance=proto["hbm"]["plateau_tolerance"],
+                                  saturation_tolerance=proto.get("saturation_tolerance", 0.02))
     flagged = [p["id"] for p in pts if p.get("batch_spread") is not None and p["batch_spread"] > proto["batch_spread_flag"]]
     entry = {**base, "status": sel["status"], "value": sel["value"], "selected_point": sel.get("selected"),
              "reason": sel.get("reason"), "probe": {k: v for k, v in result.items() if k != "points"},
              "points": [{k: p.get(k) for k in ("id", "valid", "throughput", "point_time_s", "batch_spread", "hbm_eligible",
                                                "primary", "role", "check", "device_vs_event_time", "error")}
                         | {"busy_fraction": (p.get("trace") or {}).get("busy_fraction")} for p in pts],
-             "points_batch_spread_flagged": flagged}
+             "points_batch_spread_flagged": flagged, "flags": sel.get("flags", []),
+             "telemetry_summary": (result.get("telemetry") or {}).get("summary")}
     if "plateau" in sel:
         entry["plateau"] = sel["plateau"]
     if name == "gemm_fp32_ieee":
@@ -218,6 +220,8 @@ def run_calibration(device: str, out: Path | None = None, *, modes: list[str] | 
             log(f"[calibrate] {name} ...")
             before = environment.device_sample(backend, index)
             t0 = time.time()
+            tele = environment.Telemetry(backend, index, proto.get("telemetry_interval_ms", 250))
+            tele.start()
             try:
                 if name == "hbm_stream_bw":
                     pts = []
@@ -235,6 +239,7 @@ def run_calibration(device: str, out: Path | None = None, *, modes: list[str] | 
                     res = {"status": "not_measured", "reason": "no probe registered for this mode"}
             except Exception as e:  # noqa: BLE001  (recorded; the mode fails, others continue)
                 res = {"status": "failed", "points": [], "error": f"{type(e).__name__}: {e}"}
+            res["telemetry"] = tele.stop()
             res["device_before"] = before
             res["device_after"] = environment.device_sample(backend, index)
             res["wall_s"] = time.time() - t0

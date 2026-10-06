@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from tilebench.llm.v2.calibration.schema import sha256_json
 
-PROTOCOL_ID = "tilebench-empirical-roofline/1"
+PROTOCOL_ID = "tilebench-empirical-roofline/2"
 
 DEFAULT = {
     "protocol": PROTOCOL_ID,
@@ -15,7 +15,9 @@ DEFAULT = {
     "target_sample_ms": 2.0,          # inner launches per timed sample are calibrated to reach this
     "statistic": "per point: median of samples within each batch, then median of the batch medians; "
                  "mode value: maximum robust throughput over the registered valid points",
-    "device_share_min": 0.95,         # (device time per launch, untimed trace) / (event time per launch) must reach this
+    "device_share_min": 0.95,         # device-bound test: profiled busy share OR device/event time ratio must reach this
+    "saturation_tolerance": 0.02,     # best point > this above the runner-up at the edge of the range -> flagged
+    "telemetry_interval_ms": 250,     # clock/power/temperature sampling during every mode (nvidia-smi -lms)
     "batch_spread_flag": 0.03,        # flagged (not invalid) above this relative spread of batch medians
     "gemm": {"sizes": [4096, 8192, 12288, 16384],
              "check_block": 128},
@@ -25,7 +27,7 @@ DEFAULT = {
             "min_working_set_over_llc": 4.0,
             "plateau_tolerance": 0.05},
     "vector": {"chains": 8, "block": 1024, "num_warps": 4,
-               "programs_per_sm": [4, 8, 16],
+               "programs_per_sm": [4, 8, 16, 32],
                "iters": 16384,            # the point is timed at `iters`; 2*iters is the scaling check
                "scaling_tolerance": 0.10,
                "a": 0.999, "b": 0.001},

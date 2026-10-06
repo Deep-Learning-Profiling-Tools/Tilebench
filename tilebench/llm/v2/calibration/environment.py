@@ -68,6 +68,53 @@ def device_sample(backend: str, index: int) -> dict:
     return {"at": t, "note": UNAVAILABLE}
 
 
+class Telemetry:
+    """Background clock/power/temperature sampling during one mode
+    (nvidia-smi -lms). Unavailable backends record that fact."""
+    FIELDS = ("timestamp", "clocks.sm", "clocks.mem", "power.draw", "temperature.gpu", "clocks_event_reasons.active",
+              "utilization.gpu")
+
+    def __init__(self, backend: str, index: int, interval_ms: int):
+        self.backend, self.index, self.interval_ms, self.proc = backend, index, interval_ms, None
+
+    def start(self) -> None:
+        if self.backend == "cuda" and shutil.which("nvidia-smi"):
+            self.proc = subprocess.Popen(["nvidia-smi", "-i", str(self.index), f"--query-gpu={','.join(self.FIELDS)}",
+                                          "--format=csv,noheader,nounits", "-lms", str(self.interval_ms)],
+                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+    def stop(self) -> dict:
+        if self.proc is None:
+            return {"available": False, "reason": UNAVAILABLE}
+        self.proc.terminate()
+        try:
+            out, _ = self.proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            out, _ = self.proc.communicate()
+        samples = []
+        for line in out.splitlines():
+            parts = [x.strip() for x in line.split(",")]
+            if len(parts) == len(self.FIELDS):
+                samples.append(dict(zip(self.FIELDS, parts)))
+
+        def nums(key):
+            vals = []
+            for smp in samples:
+                try:
+                    vals.append(float(smp[key]))
+                except (TypeError, ValueError):
+                    pass
+            return vals
+        summ = {"samples": len(samples), "interval_ms": self.interval_ms}
+        for key in ("clocks.sm", "clocks.mem", "power.draw", "temperature.gpu"):
+            v = sorted(nums(key))
+            if v:
+                summ[key] = {"min": v[0], "median": v[len(v) // 2], "max": v[-1]}
+        summ["clocks_event_reasons_seen"] = sorted({smp["clocks_event_reasons.active"] for smp in samples})
+        return {"available": True, "summary": summ, "samples": samples}
+
+
 def precision_flags() -> dict:
     """Default precision controls. When torch has the fp32_precision API the
     legacy getters are NOT read (torch refuses matmuls after a mix of the two

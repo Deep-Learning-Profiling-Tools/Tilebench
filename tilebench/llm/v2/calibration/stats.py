@@ -42,7 +42,8 @@ def hbm_eligible(working_set_bytes: int, llc_bytes: int | None, factor: float) -
     return working_set_bytes >= factor * llc_bytes
 
 
-def select_mode_value(points: list[dict], *, bandwidth: bool = False, plateau_tolerance: float = 0.05) -> dict:
+def select_mode_value(points: list[dict], *, bandwidth: bool = False, plateau_tolerance: float = 0.05,
+                      saturation_tolerance: float = 0.02) -> dict:
     """points: dicts with `throughput`, `valid` (bool) and, for bandwidth,
     `hbm_eligible` (bool) and `probe`/`primary` (bool). Returns
     {status, value, selected, reason, plateau}."""
@@ -53,7 +54,15 @@ def select_mode_value(points: list[dict], *, bandwidth: bool = False, plateau_to
         return {"status": "failed", "value": None, "selected": None,
                 "reason": "no valid point" + (" with an HBM-scale working set" if bandwidth else "")}
     best = max(cand, key=lambda p: p["throughput"])
-    out = {"status": "calibrated", "value": best["throughput"], "selected": best.get("id"), "reason": None}
+    out = {"status": "calibrated", "value": best["throughput"], "selected": best.get("id"), "reason": None, "flags": []}
+    if not bandwidth and len(cand) > 1:
+        # registration order = increasing size/occupancy; a best point at the edge of the registered range that
+        # still exceeds the runner-up by more than the tolerance does not demonstrate saturation
+        ordered = [p for p in points if p.get("valid")]
+        runner_up = max(p["throughput"] for p in cand if p is not best)
+        if ordered and ordered[-1] is best and best["throughput"] > runner_up * (1 + saturation_tolerance):
+            out["flags"].append(f"saturation_not_demonstrated: best point is the last registered one and exceeds the "
+                                f"runner-up by {best['throughput'] / runner_up - 1:.1%}")
     if bandwidth:
         by_probe: dict[str, list[float]] = {}
         for p in cand:
