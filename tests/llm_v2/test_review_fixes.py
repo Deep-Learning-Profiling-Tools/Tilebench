@@ -191,21 +191,22 @@ def test_provider_kwargs_carry_the_configured_settings():
     from tilebench.llm.v2.providers import anthropic_messages as am, openai_responses as oa
     from tilebench.llm.v2.providers.factory import generator_spec
     models = ms.load_models()
-    g = generator_spec(models, "gpt", accept_status=("candidate",))
+    g = generator_spec(models, "gpt", accept_status=("approved", "candidate"))
     kw = oa.build_kwargs(GenerationRequest(system="s", user="u", model_id=g.model_id, provider="openai", settings=g.settings))
     assert kw["model"] == "gpt-6.1-sol" and kw["reasoning"] == {"effort": "xhigh"} and kw["max_output_tokens"] == 128000
-    c = generator_spec(models, "claude", accept_status=("candidate",))
+    c = generator_spec(models, "claude", accept_status=("approved", "candidate"))
     kw2 = am.build_kwargs(GenerationRequest(system="s", user="u", model_id=c.model_id, provider="anthropic", settings=c.settings))
     assert kw2["model"] == "claude-opus-5-5" and kw2["max_tokens"] == 128000
     assert kw2["thinking"] == {"type": "adaptive"} and kw2["output_config"] == {"effort": "xhigh"}
     assert c.api_key_env == "CLAUDE_API_KEY" and g.api_key_env == "OPENAI_API_KEY"
+    assert generator_spec(models, "gpt").status == "approved"      # owner-approved: formal runs accept it
     with pytest.raises(ms.ManifestError):
-        generator_spec(models, "gpt")          # formal runs need approved
+        generator_spec(models, "gpt", accept_status=("candidate",))
 
 
 def test_factory_refuses_without_key_env(monkeypatch):
     from tilebench.llm.v2.providers.factory import build_provider, generator_spec
-    spec = generator_spec(ms.load_models(), "claude", accept_status=("candidate",))
+    spec = generator_spec(ms.load_models(), "claude")
     monkeypatch.delenv("CLAUDE_API_KEY", raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "not-used")
     with pytest.raises(RuntimeError, match="CLAUDE_API_KEY"):

@@ -22,12 +22,14 @@ from tilebench.paths import REPO_ROOT, list_operators
 
 from tilebench.llm.v2.contracts.loader import ContractBundle, ContractError, load_contract
 from tilebench.llm.v2.evaluation.adapters import AdapterNotReady, require_adapter
+from tilebench.llm.v2.evaluation.fingerprint import diff as fingerprint_diff, evaluator_fingerprint
 from tilebench.llm.v2.evaluation.job import EvaluationJob, build_evaluation_job
 from tilebench.llm.v2.manifests import schema as ms
 from tilebench.llm.v2.orchestration.identity import LLM_V2_OUTPUT_ROOT, trajectory_dir, trajectory_id
 from tilebench.llm.v2.orchestration.state import SCHEMA as TRAJ_SCHEMA, TrajectoryState
 from tilebench.llm.v2.prompts.renderer import TaskContext, render_initial, render_system, templates_sha256
 from tilebench.llm.v2.providers.factory import GeneratorSpec, build_provider, generator_spec
+from tilebench.llm.v2.providers.ledger import append_jsonl
 from tilebench.llm.v2.skills.loader import SkillError, compose_context, hash_record, load_manifest
 from tilebench.llm.v2.tasks.case_selection import load_operator_config
 from tilebench.llm.v2.tasks.fields import task_fields
@@ -76,7 +78,7 @@ def build_task_context(e: Eligibility, study: dict, manifest: dict, condition: s
 def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition: str, config_hash: str,
                          contract_hash: str, template_hash: str, *, run_type: str = "formal",
                          campaign: str | None = None, generator: dict | None = None,
-                         evaluation_job: dict | None = None) -> TrajectoryState:
+                         evaluation_job: dict | None = None, evaluator_fp: dict | None = None) -> TrajectoryState:
     task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
             "device": e.key.device, "dsl": e.key.dsl, "fold": e.fold, "fp8_format": e.fp8_format,
             "problem_size": e.problem_size, "case_index": e.case_index}
@@ -86,7 +88,7 @@ def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition
     return TrajectoryState(schema=TRAJ_SCHEMA, trajectory_id=trajectory_id(task, model, condition), task=task,
                            model=model, condition=condition, config_hash=config_hash, content_hashes=hashes,
                            output_file=ctx.output_file, run_type=run_type, campaign=campaign, generator=generator,
-                           evaluation_job=evaluation_job)
+                           evaluation_job=evaluation_job, evaluator_fingerprint=evaluator_fp)
 
 
 def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict | None = None,
@@ -162,6 +164,23 @@ def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict 
     expected = study["support_matrix"][device]["arch"]
     if live and arch != expected:
         pf.blockers.append(f"this host detects arch {arch!r}, campaign device {device} expects {expected!r}")
+    if live:
+        from tilebench.llm.v2.evaluation.launcher import detect_isolation, isolation_probe
+        iso = detect_isolation("auto")
+        pf.facts["isolation_backend"] = iso["backend"]
+        if iso["backend"] == "bwrap":
+            probe = isolation_probe()
+            pf.facts["isolation_probe"] = {"ok": probe["ok"], "results": probe["results"], "device_nodes": probe["device_nodes"]}
+            if formal and not probe["ok"]:
+                pf.blockers.append("isolation probe failed: a restricted path is readable or a required one is not (see facts.isolation_probe)")
+        elif formal:
+            pf.blockers.append(f"formal runs require the bwrap sandbox; detected backend {iso['backend']!r} ({iso.get('probe_error')})")
+        else:
+            pf.warnings.append(f"isolation backend {iso['backend']!r}: validation run proceeds without the sandbox guarantees")
+        nodes = iso["device_nodes"]
+        vendor = {"blackwell": "nvidia", "hopper": "nvidia", "cdna3": "amd", "trainium2": "neuron"}.get(expected)
+        if vendor and nodes.get(vendor, {}).get("verified") == "pending":
+            pf.warnings.append(f"{vendor} device-node binding inside the sandbox is pending verification on this device class")
     pf.ok = not pf.blockers
     return pf
 
@@ -211,6 +230,10 @@ class CampaignSpec:
     worker_timeout_s: int = 1800
     max_trajectories: int | None = None
     retry_incomplete: bool = False    # re-open a round closed by an evaluation-side infrastructure failure
+    resume_transport: bool = False    # re-open an attempt closed by exhausted transport retries / a provider refusal
+    resume_reason: str | None = None  # required with resume_transport (recorded as a durable `reopened` event)
+    allow_evaluator_change: bool = False   # validation only: continue although the evaluator fingerprint changed (recorded)
+    executor: str = "runner"          # who runs this process (recorded in META / compliance / reopen events)
 
     def record(self) -> dict:
         d = asdict(self)
@@ -249,18 +272,57 @@ def campaign_record(spec: CampaignSpec, gen: GeneratorSpec, config_hash: str, is
                               else "formal campaign")}
 
 
+class ResumeRefused(RuntimeError):
+    pass
+
+
 def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: dict, run_type: str,
-                  gen: GeneratorSpec) -> None:
+                  gen: GeneratorSpec, evaluator_fp: dict | None = None, allow_evaluator_change: bool = False,
+                  tdir: Path | None = None, executor: str = "runner", log=lambda s: None) -> None:
+    """A resume must run under the SAME evaluator as the trajectory so far:
+    besides the study config hash, the injected prompt content and the
+    generator settings, the evaluator fingerprint (job tolerance/rules/
+    timing/capture policy, checker and evaluation sources, worker timeout,
+    isolation backend, environment) must match. Formal: any difference
+    refuses. Validation: a difference is accepted only with
+    `allow_evaluator_change`, and is then recorded durably (state and
+    evaluator_changes.jsonl) with the differing keys."""
     if state.config_hash != config_hash:
-        raise RuntimeError(f"{state.trajectory_id}: config hash changed ({state.config_hash[:12]} -> {config_hash[:12]}); refusing to resume")
+        raise ResumeRefused(f"{state.trajectory_id}: config hash changed ({state.config_hash[:12]} -> {config_hash[:12]}); refusing to resume")
     if state.content_hashes != content_hashes:
         diff = {k: (state.content_hashes.get(k), content_hashes.get(k)) for k in set(state.content_hashes) | set(content_hashes)
                 if state.content_hashes.get(k) != content_hashes.get(k)}
-        raise RuntimeError(f"{state.trajectory_id}: injected content changed since the trajectory started: {diff}; refusing to resume")
+        raise ResumeRefused(f"{state.trajectory_id}: injected content changed since the trajectory started: {diff}; refusing to resume")
     if state.run_type != run_type:
-        raise RuntimeError(f"{state.trajectory_id}: run type {state.run_type} != {run_type}")
+        raise ResumeRefused(f"{state.trajectory_id}: run type {state.run_type} != {run_type}")
     if state.generator and (state.generator.get("model_id") != gen.model_id or state.generator.get("settings") != gen.settings):
-        raise RuntimeError(f"{state.trajectory_id}: generator settings changed; refusing to resume")
+        raise ResumeRefused(f"{state.trajectory_id}: generator settings changed; refusing to resume")
+    if evaluator_fp is None:
+        return
+    if state.evaluator_fingerprint is None:
+        msg = f"{state.trajectory_id}: no evaluator fingerprint was recorded when this trajectory started (legacy state)"
+        if run_type == "formal":
+            raise ResumeRefused(msg + "; a formal resume cannot verify the evaluator")
+        state.notes.append(msg + "; fingerprint recorded now on resume (validation)")
+        state.evaluator_fingerprint = evaluator_fp
+        return
+    keys = fingerprint_diff(state.evaluator_fingerprint, evaluator_fp)
+    if not keys:
+        return
+    msg = f"{state.trajectory_id}: evaluator changed since the trajectory started: {keys}"
+    if run_type == "formal" or not allow_evaluator_change:
+        raise ResumeRefused(msg + ("; formal resumes refuse evaluator changes" if run_type == "formal"
+                                   else "; pass allow_evaluator_change to continue a validation run (the change is recorded)"))
+    event = {"at": time.time(), "executor": executor, "keys": keys,
+             "old_fingerprint_sha256": state.evaluator_fingerprint.get("fingerprint_sha256"),
+             "new_fingerprint_sha256": evaluator_fp.get("fingerprint_sha256"),
+             "rounds_closed": sum(1 for r in state.rounds if r.status != "pending")}
+    state.evaluator_changes.append(event)
+    state.evaluator_fingerprint = evaluator_fp
+    state.notes.append(f"evaluator change accepted on resume (validation): {keys}")
+    if tdir is not None:
+        append_jsonl(tdir / "evaluator_changes.jsonl", {**event, "new_fingerprint": evaluator_fp})
+    log(msg + " (validation: accepted and recorded)")
 
 
 def retry_incomplete(state: TrajectoryState) -> str | None:
@@ -276,9 +338,52 @@ def retry_incomplete(state: TrajectoryState) -> str | None:
         return None
     note = (f"round {rec.round}: infrastructure_incomplete ({(rec.diagnostic or '')[:120]!r}) re-opened for "
             f"re-evaluation on {time.strftime('%Y-%m-%d %H:%M:%S')}; no new request")
+    rec.evaluation_reason = f"retry_incomplete: {(rec.diagnostic or '')[:160]}"
     rec.status, rec.diagnostic, rec.evaluation = "pending", None, None
     rec.latency_ms_mean = rec.latency_ms_samples = None
     state.status, state.stop_reason = "in_progress", None
+    state.notes.append(note)
+    return note
+
+
+def reopen_transport_attempt(state: TrajectoryState, tdir: Path, *, reason: str, executor: str,
+                             settings_hash_before: str | None = None, settings_hash_after: str | None = None) -> str | None:
+    """Explicit, recorded request-side resume: re-open the last round's
+    attempt that was closed by exhausted transport retries or by a provider
+    refusal. The attempt record is moved to `reopened_attempts` (nothing is
+    deleted), a durable `reopened` event is appended to transport.jsonl, and
+    the next generation of the SAME round/attempt rebuilds its transport
+    history from every durable event, so earlier unknown charges keep
+    propagating. A provider refusal (configuration / authentication error)
+    is re-opened only with a reason; the generator settings hash before and
+    after are recorded so a corrected configuration is a visible new
+    version, never a silent repeat. No optimization round or candidate is
+    added by this operation."""
+    if state.status != "incomplete" or not state.rounds:
+        return None
+    rec = state.rounds[-1]
+    if rec.status != "infrastructure_incomplete" or not rec.attempts:
+        return None
+    last = rec.attempts[-1]
+    if last.verdict not in ("transport_failed", "provider_refused"):
+        return None
+    if not reason or not reason.strip():
+        raise ResumeRefused("resume_transport needs a reason")
+    if last.verdict == "provider_refused" and settings_hash_before == settings_hash_after:
+        state.notes.append(f"round {rec.round} attempt {last.attempt}: provider refusal re-opened with unchanged settings "
+                           f"(reason: {reason.strip()}); the provider's rejection may repeat")
+    removed = rec.attempts.pop()
+    rec.reopened_attempts.append({"attempt": removed.attempt, "verdict": removed.verdict, "cost": removed.cost,
+                                  "cost_status": removed.cost_status, "transport": removed.transport, "error": removed.error,
+                                  "reopened_at": time.time(), "reason": reason, "executor": executor})
+    event = {"round": rec.round, "attempt": removed.attempt, "event": "reopened", "previous_verdict": removed.verdict,
+             "previous_cost_status": removed.cost_status, "reason": reason, "executor": executor,
+             "settings_hash_before": settings_hash_before, "settings_hash_after": settings_hash_after, "t": time.time()}
+    append_jsonl(tdir / "transport.jsonl", event)
+    rec.status, rec.diagnostic = "pending", None
+    state.status, state.stop_reason = "in_progress", None
+    note = (f"round {rec.round} attempt {removed.attempt}: {removed.verdict} re-opened by {executor} ({reason.strip()}); "
+            "prior transport charges are rebuilt from transport.jsonl")
     state.notes.append(note)
     return note
 
@@ -306,6 +411,9 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
     provider = build_provider(gen, timeout_s=float(models.get("transport", {}).get("timeout_s", 3600)))
     evaluator = SubprocessEvaluator(device=spec.device, timeout_s=spec.worker_timeout_s,
                                     sandbox_root=cdir / "_sandbox", isolation=spec.isolation, lock_root=out_root)
+    if formal and evaluator.report.get("backend") != "bwrap":
+        return {"refused": True, "preflight": pf.to_dict(),
+                "reason": f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"}
     rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash)
     first = cdir / f"campaign_{spec.condition}_{spec.dsl}_{spec.model}.json"
     if not first.exists():
@@ -320,7 +428,7 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
                        rounds=study["trajectory"]["rounds"], max_generations=study["trajectory"]["max_generations_per_round"],
                        max_transport_retries=int(transport.get("max_transport_retries", 3)),
                        retry_backoff_s=float(transport.get("retry_backoff_s", 30)), feedback_limits=study["feedback"],
-                       total_prompt_max_chars=study["context_limits"]["total_prompt"])
+                       total_prompt_max_chars=study["context_limits"]["total_prompt"], executor=spec.executor)
     summary = {"campaign": spec.name, "run_type": spec.run_type, "generator": gen.record(), "config_hash": config_hash,
                "isolation": evaluator.report, "trajectories": [], "skipped": []}
     for e in tasks:
@@ -341,14 +449,24 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
         tdir = trajectory_dir(spec.name, task, spec.model, spec.condition, root=out_root)
         tpath = tdir / "trajectory.json"
         content_hashes = {**hash_record(ctx.components), "contract": contract.sha256, "templates": template_hash}
+        fp = evaluator_fingerprint(job, worker_timeout_s=spec.worker_timeout_s, isolation_backend=evaluator.report.get("backend", "none"))
         if tpath.exists():
             if not spec.resume:
                 raise RuntimeError(f"{tdir} already holds a trajectory; pass resume=True to continue it")
             state = TrajectoryState.load(tpath)
-            _check_resume(state, config_hash=config_hash, content_hashes=content_hashes, run_type=spec.run_type, gen=gen)
+            _check_resume(state, config_hash=config_hash, content_hashes=content_hashes, run_type=spec.run_type, gen=gen,
+                          evaluator_fp=fp, allow_evaluator_change=spec.allow_evaluator_change, tdir=tdir,
+                          executor=spec.executor, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"))
             job.identity["trajectory_id"] = state.trajectory_id
             if spec.retry_incomplete:
                 note = retry_incomplete(state)
+                if note:
+                    log(f"[{e.key.as_str()}] {note}")
+            if spec.resume_transport:
+                shash = ms.sha256_text(ms.canonical_json(gen.settings))
+                prev = ms.sha256_text(ms.canonical_json((state.generator or {}).get("settings"))) if state.generator else None
+                note = reopen_transport_attempt(state, tdir, reason=spec.resume_reason or "", executor=spec.executor,
+                                                settings_hash_before=prev, settings_hash_after=shash)
                 if note:
                     log(f"[{e.key.as_str()}] {note}")
             log(f"[{e.key.as_str()}] resuming {state.trajectory_id}: status {state.status}, "
@@ -356,10 +474,10 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
         else:
             state = new_trajectory_state(e, ctx, spec.model, spec.condition, config_hash, contract.sha256, template_hash,
                                          run_type=spec.run_type, campaign=spec.name, generator=gen.record(),
-                                         evaluation_job=job.record())
+                                         evaluation_job=job.record(), evaluator_fp=fp)
             job.identity["trajectory_id"] = state.trajectory_id
             state.evaluation_job = job.record()
-            log(f"[{e.key.as_str()}] new trajectory {state.trajectory_id} -> {tdir}")
+            log(f"[{e.key.as_str()}] new trajectory {state.trajectory_id} -> {tdir} (evaluator fingerprint {fp['fingerprint_sha256'][:12]})")
         runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=provider, evaluator=evaluator, job=job,
                                   cfg=cfg, sleep=sleep, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"))
         status = runner.run(stop_after_rounds=spec.stop_after_rounds)

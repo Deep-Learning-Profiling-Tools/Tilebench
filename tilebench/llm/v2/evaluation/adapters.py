@@ -17,10 +17,15 @@ class AdapterNotReady(RuntimeError):
 
 
 ADAPTERS = {
-    "proton_cuda_graph": {"ready": True, "module": "tilebench.llm.v2.evaluation.timing"},
-    "proton_rocm_eager": {"ready": True, "module": "tilebench.llm.v2.evaluation.timing"},
+    "proton_cuda_graph": {"ready": True, "module": "tilebench.llm.v2.evaluation.timing",
+                          "device_nodes": ["/dev/nvidia*"], "runtime": "CUDA driver + CUPTI (Proton)",
+                          "isolation_verified_on": ["B200 (validation campaign 2026-10-05)"]},
+    "proton_rocm_eager": {"ready": True, "module": "tilebench.llm.v2.evaluation.timing",
+                          "device_nodes": ["/dev/kfd", "/dev/dri"], "runtime": "ROCm + roctracer (Proton)",
+                          "isolation_verified_on": [], "pending": "sandbox device binding and roctracer inside bwrap not exercised on MI300X"},
     "neuron_runtime_trace": {"ready": False, "module": "tilebench.core.nki_orchestrator",
-                             "handoff": "docs/llm_v2/NKI_HANDOFF.md"},
+                             "device_nodes": ["/dev/neuron*"], "runtime": "Neuron runtime + neuron-profile",
+                             "isolation_verified_on": [], "handoff": "docs/llm_v2/NKI_HANDOFF.md"},
 }
 
 

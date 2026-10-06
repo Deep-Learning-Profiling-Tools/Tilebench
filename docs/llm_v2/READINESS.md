@@ -1,91 +1,90 @@
-# READINESS — TileBench++ LLM protocol v2 (state after the review-fix round, 2026-10-05)
+# READINESS — TileBench++ LLM protocol v2 (state after the freeze-preparation round, 2026-10-05)
 
 Branch `exp/llm` (worktree `../llm_wt`), cut from `S_main = ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe`.
-The shared framework (89140bb3) was reviewed (REVIEW_89140bb3.md, findings
-R1–R12); this round fixed every finding, wired the live execution chain into
-the shared CLI, and ran a real ten-round validation campaign on B200 with
-GPT and Claude. It does **not** run a formal Base campaign, distill a real
-Optimization Skill, approve contracts or skills, create device branches, or
-declare `S_llm` frozen.
+Rounds so far: shared framework (89140bb3) → review fixes R1–R12 + live
+chain + real ten-round validation campaign (4a1f4591) → freeze preparation
+(this round: REVIEW_4a1f4591.md counterexamples R1–R10, publication
+integrity, evaluator binding, append-only evidence, transport recovery,
+denominators, distillation/Enhanced boundaries, bounded isolation).
+`S_llm` is **not** frozen; `docs/llm_v2/FREEZE_DECISIONS.md` lists what a
+freeze still needs and who decides.
 
 ## 1. Three states
 
-### Implemented (code, tests, docs)
+### Implemented and evidenced (code + regression tests)
 
-| Finding | Fix | Where | Regression |
+| Area | What holds now | Where | Test |
 |---|---|---|---|
-| R1 gate-only CLI | `base`/`enhanced` run manifests → task context → provider factory → `TrajectoryRunner` → `SubprocessEvaluator` → state/ledger/artifacts; `distill` runs the real map/reduce with trusted index and persistence | `orchestration/campaign.py::run_campaign`, `cli.py` | real campaign (§2) |
-| R2 missing atol/rtol | evaluator-only `EvaluationJob` (effective tolerance with arch override, rules, normalized timing, identity); the campaign asserts prompt tolerance == evaluator tolerance | `evaluation/job.py` | `test_review_fixes.py::test_evaluation_job_*`, `test_prompt_and_evaluator_tolerance_agree` |
-| R3 regex false positives / alias miss | import-alias resolution, kernel-vs-host scope, regex on comment/string-stripped code, confirmed only with AST corroboration, rule `scope` on all 250 rules | `validation/static_checks.py`, `contract_checks.py`, `contracts/data/*/evaluator_rules.json` | `test_kernel_arithmetic_is_not_host_delegation`, `test_import_alias_autotune_is_confirmed`, `test_regex_rules_ignore_comments_strings_and_kernel_scope` |
-| R4 interface not enforced | worker requires callable `run`/`get_last_config` (dict, JSON, identical across three reads), scans for autotuner objects, `interface_error` status; prompt text fixed (literals vs derived quantities) | `evaluation/worker.py`, `prompts/templates/system_interface.md` | `test_worker_requires_exports_and_fixed_config`, `test_worker_detects_autotuner_object_and_output_aliasing` |
-| R5 providers | streaming, `api_key_env` (`CLAUDE_API_KEY`), `ProviderConfigError` never retried, transport failures classified `charged: no/unknown`, terminal status/truncation, factory from models.yaml | `providers/*.py` | `test_provider_kwargs_carry_the_configured_settings`, `test_sdk_exceptions_are_classified`, `test_factory_refuses_without_key_env`, live probes (§2) |
-| R6 ledger gaps | per-transport-attempt charge accounting, attempt cost unknown when any charge is unknown, prompt_too_long = 0/not_sent, reconciliation of the response→ledger crash window, orphaned `sending` events | `orchestration/runner.py`, `state.py` | `test_unknown_transport_charge_propagates_to_the_attempt`, `test_prompt_too_long_*`, `test_crash_between_response_and_ledger_is_reconciled_on_resume`, `test_orphaned_sending_event_*` |
-| R7 unknown → 0 | `efficiency_at` None for unknown cost / no SOL / incomplete; aggregate `mean` None with a labelled `lower_bound_mean`; finite-sample checks; coverage-checked pairing | `metrics/efficiency.py`, `state_machine.py` | `test_unknown_cost_and_missing_sol_are_not_zero`, `test_non_finite_latency_*`, `test_valid_round_needs_consistent_finite_samples` |
-| R8 distillation binding | trusted index with file hashes, root containment, symlink refusal, state identity re-verification, validation runs refused, persisted/resumable observations, template-content hash | `distillation/access.py`, `orchestrator.py` | `test_distillation_refuses_identity_mismatch_escape_and_validation_runs`, `test_distillation_persists_and_reuses_observations` |
-| R9 internal ≠ sendable | `sendable_to` per provider and `publishable` per asset, independent of status; TileLang/NKI carry no grant | `skills/loader.py`, `skills/manifest.json` | `test_provider_grants_are_separate_from_status`, `test_real_manifest_grants_match_permissions` |
-| R10 timing names / text | `timing_settings()` normalization, versioned `capture_failure_policy`, `timing_mode_differs` flag, restore hook before capture-prep launches, prompt describes the real check/timing protocol and GPU-time measurement | `evaluation/job.py`, `timing.py`, `study.yaml` | `test_timing_settings_normalize_study_keys`, `test_evaluation.py` |
-| R11 oracle alias | reference and candidate outputs frozen before restore; mutation judged per declared index; output aliasing detected | `evaluation/anticache.py` | `test_reference_returning_mutated_input_is_frozen_before_restore` |
-| R12 isolation / publication | bubblewrap sandbox (home hidden, no network, read-only host, private tmp) with an honest fallback report; sandbox evidence archived before deletion; `export-publication` + ARTIFACT_POLICY | `evaluation/launcher.py`, `orchestration/publication.py`, `docs/llm_v2/ARTIFACT_POLICY.md` | `test_isolation_report_and_bwrap_argv`, `test_publication_withholds_non_publishable_context`, live sandbox probe |
-| item 11 (violation fallback) | a round closed by three violations is shown by outcome only; the last compliant implementation is the base | `runner._round_view`, `renderer._prev_block` | `test_execution_confirmed_violation_triggers_repair_and_violation_round_hides_code` |
+| Publication integrity | the 112 archived Proton profiles are tracked (precise `.gitignore` exception, commit 7af863a7); INDEX.json of the published campaign verifies in a clean `git archive HEAD` (1,614 → 1,634 entries after the appended re-evaluations) | `.gitignore`, `artifacts/llm_v2/validation_b200_2026-10-05` | `test_published_index_verifies_in_a_clean_git_archive` |
+| Evaluator binding on resume (R6) | fingerprint (job tolerance/rules/timing/capture policy/adapter, checker + evaluation + core timer/verifier sources, worker timeout, isolation backend, environment) recorded at creation; formal resume refuses any difference; validation accepts only `--allow-evaluator-change`, recorded in state and `evaluator_changes.jsonl` | `evaluation/fingerprint.py`, `orchestration/campaign.py::_check_resume` | `test_r6_resume_is_bound_to_the_evaluator_fingerprint` |
+| Append-only evidence | first `compliance.json` with candidate sha256 / checker fingerprint / rules sha256, reused on replay, never rewritten; rechecks `compliance_recheck_NNNN.json`; evaluations `eval_NNNN/` with META (reason, supersedes, executor, fingerprint); `re-evaluate` appends to archived candidates; `retry_incomplete` produces a new revision | `orchestration/runner.py`, `cli.py::cmd_reevaluate` | `test_evaluation_revisions_are_append_only_*`, `test_review_recheck_files_are_numbered_*` |
+| Transport recovery (R3/R4/R5) | attempt transport rebuilt from every durable event with monotonic ids; orphaned persisted once and reused; lost responses keep their known charge and are re-requested; unknown charges propagate; explicit `--resume-transport --reason` with a durable `reopened` event; refusal reopen records settings hashes; no round/candidate added | `orchestration/runner.py::durable_transport`, `campaign.py::reopen_transport_attempt` | `test_r3_*`, `test_r4_*`, `test_lost_response_*`, `test_r5_*` |
+| Config snapshots (R2) | canonical JSON copies per read, compared by value, three reads recorded | `evaluation/worker.py::read_config` | `test_r2_config_snapshot_*` |
+| Denominators (R1) | pre-declared eligibility separated from execution state; `mean` None when any eligible task is incomplete/missing/unknown; `lower_bound_mean` over the full denominator; `completed_only_mean` named separately | `metrics/efficiency.py::aggregate` | `test_r1_*` |
+| Distillation sources (R7) | folds recomputed from the frozen manifest, state labels cross-checked, validation/incomplete/other-schema refused, coverage against the pre-declared task set (`--allow-partial-coverage` recorded) | `distillation/access.py`, `orchestrator.py::verify_state_identity`, `cli.py::cmd_distill` | `test_r7_*` |
+| Synthesis (R8) | idempotent by input identity; truncated/interrupted responses are partial records with cost, never observations/skills; full request/raw response archives; per-attempt sources, diagnostics, diffs, raw samples and offline SOL input (versioned material rules) | `distillation/orchestrator.py` | `test_r8_*` |
+| Enhanced boundary (R9/R10) | optimization-skill provenance manifest validated before injection; component hash over the complete injected text incl. attachments | `skills/loader.py` | `test_r9_*`, `test_r10_*` |
+| Isolation | bounded allowlist bubblewrap sandbox (system dirs, runtime prefix, repository with masks over benchmarks/results/artifacts/outputs/skills/docs/tests/contracts/.git; only the task's `impl_torch.py` re-bound); sentinel probe; formal preflight requires bwrap + passing probe; NVIDIA nodes verified, AMD/Neuron described and pending | `evaluation/launcher.py` | `test_restricted_paths_are_unreadable_inside_the_sandbox`, `test_formal_preflight_requires_the_sandbox` |
 
-Test evidence (dgx003, `tilebench_env`, final code state): `python -m pytest tests/llm_v2 -q` → 128 passed;
-`python -m pytest tests -q` → 605 passed, 2 skipped (pre-existing skips); `python -m compileall -q tilebench scripts tests` → ok
-(logs under `outputs/llm_v2/test_logs/`, copied into the handoff).
+Tests (dgx003, `tilebench_env`, this code state): `python -m pytest tests/llm_v2 -q` → 146 passed;
+`python -m pytest tests -q` → see `outputs/llm_v2/test_logs_freeze/pytest_full_suite.log`
+(copied into the handoff); `python -m compileall -q tilebench scripts tests` → ok.
 
-### Executed (real models, real device)
+### Executed on hardware in this round (B200; no new model requests)
 
-See `docs/llm_v2/VALIDATION_2026-10-05.md` for the per-trajectory table
-(request ids, usage, three timing samples, reviews, artifact paths).
-Campaign `validation_b200_2026-10-05`, run type `validation` (unscored),
-condition Base, B200, DSLs Triton and cuTile, models `gpt-6.1-sol`
-(reasoning.effort xhigh, max_output_tokens 128000) and `claude-opus-5-5`
-(output_config.effort xhigh, adaptive thinking, max_tokens 128000), tasks
-vector_add/fp16 (single pass), softmax/fp16 (row reduction),
-histogramming/int32 (multi-kernel: scratch fill + private counting +
-reduce), representative cases from the operators' real configs. Twelve
-trajectories, ten rounds each, isolated evaluation (bwrap), 1 warmup + 3
-timed launches with graph replay. Resume was exercised twice on the same
-trajectory: a pause/resume at round boundaries and a `kill -9` after a
-response was archived but before its evaluation (the archived response was
-reused without a new request; the usage ledger kept one row per response).
+- Isolation probe inside the allowlist sandbox: manual DSL implementations,
+  other operators' references, results, artifacts, skills, contracts, the
+  sentinel under `outputs/`, the real home, `.git`, a sibling checkout and
+  the network are unreachable; the task reference and the runtime are
+  readable; no secret-named environment variable is present.
+- Two archived validation candidates re-evaluated as append-only revisions
+  (`eval_0002`, not adopted): vector_add/triton/gpt round 1 → valid, graph,
+  0.023008 / 0.021823 / 0.022016 ms (original 0.022048 / 0.021888 / 0.022527);
+  vector_add/cutile/gpt round 1 → valid, graph, 0.021984 / 0.021856 / 0.021984
+  ms (original 0.021728 / 0.021952 / 0.021729). Both compiled and ran inside
+  the allowlist sandbox; original records untouched.
 
-### Still blocked (owner decisions; nothing was decided by the framework)
+The twelve real ten-round trajectories of 2026-10-05 were not re-run
+(their archives were confirmed consistent by the reviewer); they remain
+validation data, never Base or distillation input.
 
-1. Contracts: 0/45 approved (37 draft, 8 needs-review); `DECISIONS_REQUIRED.md §A`.
-2. Models: `candidate` status only; formal runs need `approved` (§C1); distiller unset.
-3. Folds and arithmetic modes `proposed`; peak table gaps (§B).
-4. Skills `draft`; grants set for public assets, none for TileLang/NKI (§D).
-5. Remote devices: GH200 / MI300X / Trn2 have run nothing of v2; the same
-   `base` command runs there once the branch is checked out (RUNBOOK).
-6. NKI adapter not validated (NKI_HANDOFF).
-7. Protocol readings E6–E11 (interface_error, execution-confirmed
-   violations, capture-failure policy, run types, regex corroboration,
-   review authority).
+### Conditional capabilities pending hardware verification
+
+- GH200 / MI300X / Trn2: nothing of v2 has run there. The same commands
+  apply; the sandbox device binding for AMD (`/dev/kfd`, `/dev/dri`) and
+  Neuron (`/dev/neuron*`) is described in `evaluation/adapters.py` and
+  marked `pending` in every isolation report until exercised.
+- The NKI timing adapter is not ready (NKI_HANDOFF).
+- ROCm inside bubblewrap (roctracer/Proton) has not been exercised.
+
+### Owner rulings still required (FREEZE_DECISIONS §C)
+
+C1 eight needs-review contracts + 37 draft audits; C2 F/Q formulas and
+per-device peaks/modes; C3 fold freeze; C4 distiller role; C5 TileLang/NKI
+grants and repository licence; C6 formal capture-failure policy; C7 fixed
+evaluation wall-clock limit; C8 review authority. Nothing in C was changed
+by code; `approved_by`, fold status, grants and `S_llm` are the owner's.
 
 ## 2. Readiness per device / DSL
 
-| Device / DSL | Reference | Device ctx | Contracts | Timing adapter | Provider grant | Live chain | Formal gate |
-|---|---|---|---|---|---|---|---|
-| B200 triton / cutile | draft, public, granted | draft, verified on device | draft/needs-review | `proton_cuda_graph`, exercised in the validation campaign | openai + anthropic | **executed** (validation) | blocked (approvals) |
-| B200 tilelang | draft, internal, **no grant** | same | same | same | none | blocked by grant | blocked |
-| GH200 triton / cutile / tilelang | same texts | draft, not verified | same | same adapter, not run there | as above | not run | blocked |
-| MI300X triton | same | draft, not verified | same | `proton_rocm_eager`, not run there | as above | not run | blocked |
-| Trn2 nki | private, metadata only | draft, vendor docs | n/a | `neuron_runtime_trace` **not ready** | none | blocked | blocked |
+| Device / DSL | Reference | Device ctx | Contracts | Timing adapter | Sandbox | Provider grant | Live chain | Formal gate |
+|---|---|---|---|---|---|---|---|---|
+| B200 triton / cutile | draft, public, granted | draft, verified on device | draft/needs-review | `proton_cuda_graph`, exercised | allowlist bwrap, probe passing | openai + anthropic | **executed** (validation + appended re-evaluations) | blocked (C1–C3, C6–C8) |
+| B200 tilelang | draft, internal, **no grant** | same | same | same | same | none | blocked by grant | blocked |
+| GH200 triton / cutile / tilelang | same texts | draft, not verified | same | same adapter, not run there | not exercised there | as above | not run | blocked |
+| MI300X triton | same | draft, not verified | same | `proton_rocm_eager`, not run there | AMD binding pending | as above | not run | blocked |
+| Trn2 nki | private, metadata only | draft, vendor docs | n/a | `neuron_runtime_trace` **not ready** | Neuron binding pending | none | blocked | blocked |
 
 ## 3. Protocol deviations introduced by this round
 
-None intended. Readings the owner must confirm are listed in
-`DECISIONS_REQUIRED.md §E` (E6–E11). Two evaluator-rule revisions were made
-during the validation campaign and are recorded there and in the campaign
-report: cuTile raw-memory `load_offset`/`store_offset` added to the
-kernel-level load/store evidence (13 rule files), and the softmax
-"-inf literal" required-evidence entry removed (the contract permits
-whole-row-on-chip evaluation without partial chunks). Both are
-evaluator-only draft rules; no contract text, no Skill text and no prompt
-template was changed in response to a candidate's performance.
+None intended. Readings added for confirmation: `DECISIONS_REQUIRED.md`
+E13 (one evaluator fingerprint per formal campaign; append-only
+revisions) and E14 (transport reopen semantics). The generator decision is
+recorded as the owner's (models.yaml `approved_by`), not as a framework
+choice.
 
 ## 4. S_llm
 
-Not proposed. Conditions unchanged: contracts approved (or needs-review
-resolved), folds and arithmetic modes frozen, skills approved, model ids
-approved, remote preflights returned with evidence.
+Not proposed. Required before a candidate can be named: C1–C8 above
+resolved, assets approved with grants, remote preflights returned with
+evidence.

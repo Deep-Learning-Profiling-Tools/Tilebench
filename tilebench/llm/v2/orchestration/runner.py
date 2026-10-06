@@ -2,28 +2,41 @@
 evaluate, persisting every stage, resumable without re-requesting completed
 attempts or re-charging their cost.
 
-Persistence per attempt (`round_NN/attempt_M/`):
-    request.json      the exact prompt, model id and settings (hash = request_hash)
-    response.json     the archived provider result (written only after a
-                      complete response; reused on resume, never re-requested)
-    impl_<dsl>.py     the parsed candidate
-    compliance.json   static + contract evidence
-    evaluation.json   worker result; evaluation/ holds the archived sandbox evidence
+Persistence per attempt (`round_NN/attempt_M/`, append-only):
+    request.json          the exact prompt, model id and settings (hash = request_hash)
+    response.json         the archived provider result (written only after a
+                          complete response; reused on resume, never re-requested)
+    impl_<dsl>.py         the parsed candidate
+    compliance.json       the FIRST compliance check: verdict, evidence, the
+                          candidate's sha256, the checker fingerprint and the
+                          rules sha256 in force; never rewritten (rechecks go
+                          to compliance_recheck_NNNN.json)
+    eval_NNNN/            one directory per evaluation revision: META.json
+                          (reason, supersedes, executor, evaluator fingerprint,
+                          candidate sha256), evaluation.json, evaluation/ (the
+                          archived sandbox evidence); earlier revisions are
+                          never overwritten
 Per trajectory:
-    trajectory.json   state (atomic replace)
-    usage.jsonl       one row per archived response (append-only; reconciled on
-                      resume if the process died between response.json and the
-                      ledger row)
-    transport.jsonl   one row per transport event: sending / succeeded / failed
-                      / refused / orphaned (a `sending` without a terminal row
-                      means the process died mid-request: charge unknown)
+    trajectory.json       state (atomic replace)
+    usage.jsonl           one row per archived response (append-only; reconciled on
+                          resume if the process died between response.json and the
+                          ledger row)
+    transport.jsonl       one row per transport event, the single durable source of
+                          an attempt's transport history: sending / succeeded /
+                          failed / refused / orphaned / reopened
 
-Cost of an attempt = sum of the known charges of all its transport attempts;
-unknown as soon as any transport attempt may have been billed an unknown
-amount (timeout after sending, interrupted stream). A prompt that exceeds
-the context limit is never sent: cost 0, cost_status not_sent."""
+Transport accounting on (re)start: the attempt's transport list is REBUILT
+from every durable event of that (round, attempt), grouped by the monotonic
+transport_attempt id: a `sending` without a terminal event becomes a
+durable `orphaned` (charge unknown); a `succeeded` whose response was never
+archived is a lost response (known charge, counted; a new request follows);
+`failed`/`orphaned` with charged=unknown keep propagating. Cost of an
+attempt = sum of the known charges; unknown as soon as any charge is
+unknown. A prompt that exceeds the context limit is never sent: cost 0,
+cost_status not_sent."""
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -39,6 +52,8 @@ from tilebench.llm.v2.providers.base import GenerationRequest, GenerationResult,
 from tilebench.llm.v2.providers.ledger import append_jsonl, archive_response, read_jsonl
 from tilebench.llm.v2.validation.contract_checks import check_compliance
 from tilebench.llm.v2.validation.parser import FormatError, parse_single_file
+
+TERMINAL_EVENTS = ("succeeded", "failed", "refused", "orphaned")
 
 
 class Evaluator(Protocol):
@@ -61,6 +76,11 @@ class RunnerConfig:
     retry_backoff_s: float = 0.0
     feedback_limits: dict | None = None
     total_prompt_max_chars: int = 260000
+    executor: str = "runner"            # recorded in evaluation META / compliance records
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _read_config_from_source(source: str) -> dict | None:
@@ -81,23 +101,80 @@ def _read_config_from_source(source: str) -> dict | None:
     return None
 
 
-def attempt_cost(transport: list[dict], usage: dict | None) -> tuple[int | None, str]:
-    """(cost, cost_status) from the transport events of one attempt and the
-    normalized usage of its successful response (None when none)."""
-    if not transport:
+# --------------------------------------------------------------------------
+# transport accounting
+# --------------------------------------------------------------------------
+
+def attempt_cost(transport: list[dict], usage: dict | None = None) -> tuple[int | None, str]:
+    """(cost, cost_status) from the transport records of one attempt.
+    `usage` is the normalized usage of the archived final response for
+    transport records that carry no usage of their own (legacy archives)."""
+    if not transport and usage is None:
         return 0, "not_sent"
     unknown = False
+    total = 0
+    counted_success = False
     for t in transport:
-        if t.get("outcome") == "succeeded":
-            continue
-        if t.get("charged") == "unknown":
+        oc = t.get("outcome") or t.get("event")
+        if oc == "succeeded":
+            if "usage" in t and t["usage"] is not None:
+                lt = (t["usage"] or {}).get("logical_total")
+                if lt is None:
+                    unknown = True
+                else:
+                    total += int(lt)
+                    counted_success = True
+            elif "usage" in t and t["usage"] is None:
+                unknown = True
+        elif t.get("charged") == "unknown":
             unknown = True
-    if usage is not None:
-        if usage.get("logical_total") is None:
+    if usage is not None and not counted_success:
+        lt = usage.get("logical_total")
+        if lt is None:
             unknown = True
-    total = int(usage.get("logical_total") or 0) if usage and usage.get("logical_total") is not None else 0
+        else:
+            total += int(lt)
     return (None, "unknown") if unknown else (total, "known")
 
+
+def durable_transport(tdir: Path, round_index: int, attempt: int, *, archived_transport_id: int | None = None) -> list[dict]:
+    """Rebuild the transport records of (round, attempt) from transport.jsonl.
+    One record per transport_attempt id (monotonic, unique): the last
+    terminal event wins; a `sending` without a terminal event is turned
+    into a durable `orphaned` event now. `response_archived` marks the
+    succeeded record whose response is archived; any other succeeded
+    record is a lost response (charge known and counted)."""
+    rows = [r for r in read_jsonl(tdir / "transport.jsonl")
+            if r.get("round") == round_index and r.get("attempt") == attempt and r.get("transport_attempt") is not None]
+    by_id: dict[int, list[dict]] = {}
+    for r in rows:
+        by_id.setdefault(int(r["transport_attempt"]), []).append(r)
+    out: list[dict] = []
+    for tid in sorted(by_id):
+        evs = by_id[tid]
+        terminal = [e for e in evs if e.get("event") in TERMINAL_EVENTS]
+        if terminal:
+            last = terminal[-1]
+            rec = {k: last.get(k) for k in ("round", "attempt", "transport_attempt", "event", "charged", "error", "usage",
+                                            "usage_partial", "response_id", "model_id", "terminal_status", "elapsed_s", "t",
+                                            "stream_events", "partial_text_chars", "status_code", "kind")}
+            rec["outcome"] = last.get("outcome") or last["event"]
+        else:
+            rec = {"round": round_index, "attempt": attempt, "transport_attempt": tid, "event": "orphaned", "outcome": "orphaned",
+                   "charged": "unknown", "error": "process ended between sending and a terminal event; charge unknown",
+                   "t": time.time()}
+            append_jsonl(tdir / "transport.jsonl", rec)
+        if rec["outcome"] == "succeeded":
+            rec["response_archived"] = (archived_transport_id is not None and tid == archived_transport_id)
+            if not rec["response_archived"]:
+                rec["response_lost"] = True
+        out.append(rec)
+    return out
+
+
+# --------------------------------------------------------------------------
+# runner
+# --------------------------------------------------------------------------
 
 class TrajectoryRunner:
     def __init__(self, *, state: TrajectoryState, tdir: Path, ctx: TaskContext, provider, evaluator: Evaluator,
@@ -188,21 +265,26 @@ class TrajectoryRunner:
                "terminal_status": result.terminal_status if result else None, "t": time.time()}
         append_jsonl(self.tdir / "usage.jsonl", row)
 
-    def _orphaned_transports(self, round_index: int, attempt: int) -> list[dict]:
-        """`sending` rows of this attempt without a terminal row: the process
-        died mid-request; the provider may have billed an unknown amount."""
-        rows = [r for r in read_jsonl(self.tdir / "transport.jsonl")
-                if r.get("round") == round_index and r.get("attempt") == attempt]
-        sent = {r["transport_attempt"] for r in rows if r.get("event") == "sending"}
-        closed = {r["transport_attempt"] for r in rows if r.get("event") in ("succeeded", "failed", "refused", "orphaned")}
-        out = []
-        for n in sorted(sent - closed):
-            entry = {"round": round_index, "attempt": attempt, "transport_attempt": n, "event": "orphaned",
-                     "outcome": "orphaned", "charged": "unknown",
-                     "error": "process ended between sending and a terminal event; charge unknown", "t": time.time()}
-            append_jsonl(self.tdir / "transport.jsonl", entry)
-            out.append(entry)
-        return out
+    # -- compliance (first check recorded once; later rechecks are separate files) -----
+    def _compliance(self, adir: Path, source: str) -> dict:
+        cpath = adir / "compliance.json"
+        cand_sha = _sha256_text(source)
+        if cpath.exists():
+            stored = json.loads(cpath.read_text())
+            if stored.get("candidate_sha256") in (None, cand_sha):
+                return stored                              # resume: the first verdict stands; no silent re-check
+            raise ConfigMismatch(f"{cpath} belongs to a different candidate ({stored.get('candidate_sha256')} != {cand_sha})")
+        from tilebench.llm.v2.evaluation.fingerprint import checker_fingerprint
+        comp = check_compliance(source, self.ctx.dsl, self.rules)
+        comp_d = comp.to_dict()
+        comp_d["diagnostics"] = comp.diagnostics()
+        comp_d["candidate_sha256"] = cand_sha
+        comp_d["checker"] = checker_fingerprint()
+        comp_d["rules_sha256"] = self.job.rules_sha256()
+        comp_d["checked_at"] = time.time()
+        comp_d["executor"] = self.cfg.executor
+        cpath.write_text(json.dumps(comp_d, indent=1) + "\n")
+        return comp_d
 
     # -- one generation attempt --------------------------------------------
     def _generate(self, action: sm.Action) -> AttemptRecord:
@@ -221,29 +303,38 @@ class TrajectoryRunner:
             return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                  transport_attempts=0, verdict="format_error", cost=0, cost_status="not_sent",
                                  diagnostic=f"prompt_too_long: {prompt_chars} chars > {self.cfg.total_prompt_max_chars}; not sent")
-        # resume: an archived response for this exact request is reused, never re-requested
         resp_path = adir / "response.json"
-        transport: list[dict] = []
         if resp_path.exists():
+            # resume: an archived response for this exact request is reused, never re-requested
             archived = json.loads(resp_path.read_text())
             if archived.get("request_hash") != rh:
                 raise ConfigMismatch(f"archived response in {adir} was produced by a different request")
             result = GenerationResult.from_dict(archived["result"])
-            transport = archived.get("transport") or []
+            arch_tid = None
+            for t in (archived.get("transport") or []):
+                if (t.get("outcome") or t.get("event")) == "succeeded":
+                    arch_tid = t.get("transport_attempt")
+            transport = durable_transport(self.tdir, action.round, action.attempt, archived_transport_id=arch_tid)
+            if not transport:
+                transport = list(archived.get("transport") or [])      # legacy archives without durable rows
             if not self._ledger_has(rh, action.round, action.attempt):
                 self._ledger_row(action, kind, rh, result, transport=transport, reconciled=True)
                 self.state.notes.append(f"round {action.round} attempt {action.attempt}: usage ledger row reconciled from the archived response")
             self.log(f"round {action.round} attempt {action.attempt}: archived response reused (no request)")
         else:
-            transport = self._orphaned_transports(action.round, action.attempt)
+            transport = durable_transport(self.tdir, action.round, action.attempt)
+            lost = [t for t in transport if t.get("response_lost")]
+            if lost:
+                self.state.notes.append(f"round {action.round} attempt {action.attempt}: {len(lost)} succeeded response(s) were never archived; "
+                                        "their known charge is kept and a new request follows")
             result, refused = self._request_with_retries(system, user, action, transport)
             if refused is not None:
+                cost, cstat = attempt_cost(transport)
                 return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                      transport_attempts=len(transport), verdict="provider_refused", transport=transport,
-                                     cost=attempt_cost(transport, None)[0], cost_status=attempt_cost(transport, None)[1],
-                                     error=f"provider refused: {refused}")
+                                     cost=cost, cost_status=cstat, error=f"provider refused: {refused}")
             if result is None:
-                cost, cstat = attempt_cost(transport, None)
+                cost, cstat = attempt_cost(transport)
                 return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                      transport_attempts=len(transport), verdict="transport_failed", transport=transport,
                                      cost=cost, cost_status=cstat,
@@ -264,25 +355,28 @@ class TrajectoryRunner:
         except FormatError as e:
             return AttemptRecord(verdict="format_error", diagnostic=f"format error: {e}", **base)
         src_path = adir / self.ctx.output_file
-        src_path.write_text(parsed.source)
-        comp = check_compliance(parsed.source, self.ctx.dsl, self.rules)
-        comp_d = comp.to_dict()
-        comp_d["diagnostics"] = comp.diagnostics()
-        (adir / "compliance.json").write_text(json.dumps(comp_d, indent=1) + "\n")
+        if not src_path.exists():
+            src_path.write_text(parsed.source)
+        comp_d = self._compliance(adir, parsed.source)
         verdict = {"clear": "clear", "confirmed_violation": "confirmed_violation",
-                   "review_required": "review_required"}[comp.verdict]
-        diag = "; ".join(comp.diagnostics()) or ("; ".join(comp.review_items()) if verdict == "review_required" else None)
+                   "review_required": "review_required"}[comp_d["verdict"]]
+        diag = "; ".join(comp_d.get("diagnostics") or []) or \
+            ("; ".join(comp_d.get("review_items") or []) if verdict == "review_required" else None)
         return AttemptRecord(verdict=verdict, source_path=str(src_path), config=_read_config_from_source(parsed.source),
-                             compliance=comp_d, diagnostic=diag or None, **base)
+                             compliance=comp_d, diagnostic=diag or None, candidate_sha256=comp_d.get("candidate_sha256"),
+                             checker_fingerprint=comp_d.get("checker"), rules_sha256=comp_d.get("rules_sha256"), **base)
 
     def _request_with_retries(self, system: str, user: str, action: sm.Action,
                               transport: list[dict]) -> tuple[GenerationResult | None, str | None]:
         """Returns (result, None) on success, (None, None) when transport retries
-        are exhausted, (None, message) when the provider refused the request."""
+        are exhausted in this session, (None, message) when the provider
+        refused the request. Transport ids continue from the largest durable
+        id of this attempt; the retry budget counts this session's attempts."""
         req = GenerationRequest(system=system, user=user, model_id=self.cfg.model_id, provider=self.cfg.provider_name,
                                 settings=self.cfg.settings,
                                 metadata={"trajectory": self.state.trajectory_id, "round": action.round, "attempt": action.attempt})
-        n = len(transport)
+        n = max([int(t["transport_attempt"]) for t in transport if t.get("transport_attempt") is not None], default=0)
+        session_start = n
         while True:
             n += 1
             sending = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "sending",
@@ -307,20 +401,25 @@ class TrajectoryRunner:
                 append_jsonl(self.tdir / "transport.jsonl", entry)
                 transport.append(entry)
                 self.log(f"round {action.round} attempt {action.attempt}: transport failure ({e.charged} charge): {e}")
-                if n - len([t for t in transport if t.get("outcome") == "orphaned"]) > self.cfg.max_transport_retries:
+                if n - session_start > self.cfg.max_transport_retries:
                     return None, None
-                self.sleep(self.cfg.retry_backoff_s * n)
+                self.sleep(self.cfg.retry_backoff_s * (n - session_start))
                 continue
             entry = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "succeeded",
                      "outcome": "succeeded", "charged": "known" if result.usage.logical_total is not None else "unknown",
                      "response_id": result.response_id, "model_id": result.model_id,
                      "terminal_status": result.terminal_status, "usage": result.usage.to_dict(),
-                     "elapsed_s": time.time() - t0, "t": time.time()}
+                     "elapsed_s": time.time() - t0, "t": time.time(), "response_archived": True}
             append_jsonl(self.tdir / "transport.jsonl", entry)
             transport.append(entry)
             self.log(f"round {action.round} attempt {action.attempt}: response {result.response_id} "
                      f"({result.terminal_status}, {result.usage.logical_total} logical tokens, {entry['elapsed_s']:.0f}s)")
             return result, None
+
+    # -- evaluation revisions (append-only) ---------------------------------
+    def _next_revision(self, adir: Path) -> str:
+        existing = sorted(p.name for p in adir.glob("eval_*") if p.is_dir())
+        return f"eval_{len(existing) + 1:04d}"
 
     # -- main loop ---------------------------------------------------------
     def step(self) -> sm.Action:
@@ -336,11 +435,23 @@ class TrajectoryRunner:
             rec = next(r for r in self.state.rounds if r.round == action.round)
             src = Path(rec.attempts[-1].source_path)
             adir = attempt_dir(self.tdir, action.round, action.attempt)
-            result = self.evaluator.evaluate(src, self.job, action.round, action.attempt, archive_dir=adir / "evaluation")
-            (adir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
-            (self.tdir / f"round_{action.round:02d}" / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
+            rev = self._next_revision(adir)
+            rdir = adir / rev
+            rdir.mkdir(parents=True, exist_ok=True)
+            fp = self.state.evaluator_fingerprint or {}
+            meta = {"revision": rev, "reason": rec.evaluation_reason or "initial", "supersedes": rec.evaluation_revision,
+                    "executor": self.cfg.executor, "evaluator_fingerprint_sha256": fp.get("fingerprint_sha256"),
+                    "candidate_sha256": _sha256_text(src.read_text()), "worker_timeout_s": getattr(self.evaluator, "timeout_s", None),
+                    "isolation_backend": (getattr(self.evaluator, "report", None) or {}).get("backend"), "created": time.time()}
+            (rdir / "META.json").write_text(json.dumps(meta, indent=1) + "\n")
+            result = self.evaluator.evaluate(src, self.job, action.round, action.attempt, archive_dir=rdir / "evaluation")
+            result["evaluation_revision"] = rev
+            (rdir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
             sm.apply_evaluation(self.state, action.round, result, max_generations=self.cfg.max_generations)
-            self.log(f"round {action.round}: evaluation {result.get('status')}"
+            rec.evaluation_revisions.append(rev)
+            rec.evaluation_revision = rev
+            rec.evaluation_reason = None
+            self.log(f"round {action.round}: evaluation {result.get('status')} [{rev}]"
                      + (f" {result.get('latency_ms_mean'):.4f} ms {result.get('latency_ms_samples')}" if result.get("status") == "valid" else
                         f" ({str(result.get('diagnostic'))[:160]})"))
             if self.state.best_valid and self.state.best_valid["round"] == action.round and rec.status == "valid":

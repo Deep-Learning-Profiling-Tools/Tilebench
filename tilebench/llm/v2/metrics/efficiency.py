@@ -169,53 +169,66 @@ def step_curve(curve_: TrajectoryCurve) -> list[tuple[int, float]]:
     return pts
 
 
+PREDECLARED_STATUSES = ("eligible", "unsupported")
+
+
 def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budgets: Iterable[int],
               eligible: dict[tuple[str, str], str]) -> dict:
-    """Operator-balanced E_bar(B).
+    """Operator-balanced E_bar(B) over the FROZEN pre-declared task set.
 
-    task_curves: {(operator, dtype): curve or None}; eligible: {(op, dtype): status}
-    where status in {eligible, unsupported, incomplete}.
+    task_curves: {(operator, dtype): curve or None}; eligible: {(op, dtype):
+    status} is the pre-declared eligibility (`eligible` | `unsupported`), fixed
+    before generation. Execution state is never part of `eligible`: it is
+    read from the curves (`complete` | `incomplete`) or from their absence.
 
-    - unsupported tasks are excluded and listed;
-    - incomplete tasks are listed, excluded from the exact mean (partial);
-    - eligible tasks without a curve are `missing`, eligible tasks whose
-      curve is `sol_unavailable` are `sol_unavailable`: both make the exact
-      mean undetermined (None) for every budget and are counted as 0 only in
-      `lower_bound_mean`;
-    - a task whose E(B) is undetermined at some budget makes `mean` None at
-      that budget and is listed in `undetermined`.
-    Only an eligible, complete trajectory with no valid round under B
-    contributes a real 0."""
+    - `unsupported` tasks are excluded from the denominator and listed;
+    - every `eligible` task stays in the denominator (`tasks_included`),
+      whatever happened to it;
+    - an eligible task without a curve (`missing`), with an `incomplete`
+      trajectory, without T_SOL (`sol_unavailable`) or with an undetermined
+      E(B) at a budget (unknown cost) makes the exact `mean` None at that
+      budget; such tasks count as 0 only in `lower_bound_mean`;
+    - only a complete trajectory with no valid round under B contributes a
+      real 0 to the exact mean.
+    `completed_only_mean` (coverage listed in `completed_only_tasks`) is the
+    mean over complete tasks only: a differently named quantity, not E_bar(B)
+    and not a substitute for the paired Base/Enhanced comparison."""
     budgets = list(budgets)
+    for key, status in eligible.items():
+        if status not in PREDECLARED_STATUSES:
+            raise ValueError(f"eligibility of {key} must be pre-declared as one of {PREDECLARED_STATUSES}, got {status!r} "
+                             "(execution state belongs to the curve, not to the eligibility table)")
     by_op: dict[str, dict[str, TrajectoryCurve | None]] = {}
     unsupported, incomplete, missing, sol_unavailable, undetermined = [], [], [], [], []
     for (op, dt), status in eligible.items():
         if status == "unsupported":
             unsupported.append((op, dt))
             continue
-        if status == "incomplete":
-            incomplete.append((op, dt))
-            continue
         c = task_curves.get((op, dt))
         if c is None:
             missing.append((op, dt))
-        elif c.status == "sol_unavailable":
-            sol_unavailable.append((op, dt))
         elif c.status == "incomplete":
             incomplete.append((op, dt))
+        elif c.status == "sol_unavailable":
+            sol_unavailable.append((op, dt))
         by_op.setdefault(op, {})[dt] = c
     tasks_included = sorted((op, dt) for op, dts in by_op.items() for dt in dts)
-    result = {"budgets": budgets, "mean": [], "lower_bound_mean": [], "per_operator": {},
-              "per_operator_lower_bound": {}, "unsupported": unsupported, "incomplete": incomplete,
-              "missing": missing, "sol_unavailable": sol_unavailable, "n_operators": len(by_op),
-              "tasks_included": tasks_included,
+    completed_only_tasks = sorted((op, dt) for op, dts in by_op.items() for dt, c in dts.items()
+                                  if c is not None and c.status == "complete")
+    result = {"budgets": budgets, "mean": [], "lower_bound_mean": [], "completed_only_mean": [],
+              "per_operator": {}, "per_operator_lower_bound": {}, "unsupported": unsupported,
+              "incomplete": incomplete, "missing": missing, "sol_unavailable": sol_unavailable,
+              "n_operators": len(by_op), "tasks_included": tasks_included,
+              "completed_only_tasks": completed_only_tasks,
               "partial": bool(incomplete or missing or sol_unavailable)}
     for B in budgets:
         op_means: list[float | None] = []
         op_lower: list[float] = []
+        op_completed: list[float] = []
         for op, dts in by_op.items():
             vals: list[float | None] = []
             lower: list[float] = []
+            completed: list[float] = []
             for dt, c in dts.items():
                 if c is None or c.status in ("sol_unavailable", "incomplete"):
                     vals.append(None)
@@ -229,18 +242,24 @@ def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budget
                 else:
                     vals.append(e)
                     lower.append(e)
+                    completed.append(e)
             m = None if any(v is None for v in vals) else sum(vals) / len(vals)  # type: ignore[arg-type]
             op_means.append(m)
             op_lower.append(sum(lower) / len(lower))
+            if completed:
+                op_completed.append(sum(completed) / len(completed))
             result["per_operator"].setdefault(op, []).append(m)
             result["per_operator_lower_bound"].setdefault(op, []).append(op_lower[-1])
         exact = None if (not op_means or any(m is None for m in op_means)) else sum(op_means) / len(op_means)  # type: ignore[arg-type]
         result["mean"].append(exact)
         result["lower_bound_mean"].append(sum(op_lower) / len(op_lower) if op_lower else None)
+        result["completed_only_mean"].append(sum(op_completed) / len(op_completed) if op_completed else None)
     result["undetermined"] = undetermined
     result["partial"] = result["partial"] or bool(undetermined)
     result["lower_bound_note"] = ("lower_bound_mean counts undetermined, missing, sol_unavailable and incomplete "
-                                  "tasks as 0; it is a conservative bound, not E_bar(B)")
+                                  "tasks as 0 over the full pre-declared denominator; it is a conservative bound, not E_bar(B)")
+    result["completed_only_note"] = ("completed_only_mean averages complete trajectories only (coverage in completed_only_tasks); "
+                                     "it is not E_bar(B) and must not replace the paired comparison")
     return result
 
 

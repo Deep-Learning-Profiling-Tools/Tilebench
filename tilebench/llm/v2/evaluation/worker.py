@@ -55,6 +55,10 @@ def _load_module(path: Path):
 
 
 def read_config(mod) -> tuple[dict | None, str | None]:
+    """An independent canonical snapshot of get_last_config(): the returned
+    object is round-tripped through JSON (sorted keys), so a later in-place
+    mutation of the module's dict (nested levels included) cannot change an
+    earlier read, and the three reads are compared value by value."""
     fn = getattr(mod, "get_last_config", None)
     if not callable(fn):
         return None, "get_last_config() is not defined"
@@ -65,10 +69,14 @@ def read_config(mod) -> tuple[dict | None, str | None]:
     if not isinstance(value, dict):
         return None, f"get_last_config() returned {type(value).__name__}, not a dict"
     try:
-        json.dumps(value)
+        snapshot = json.loads(json.dumps(value, sort_keys=True, allow_nan=False))
     except (TypeError, ValueError) as e:
         return None, f"get_last_config() returned a dict that is not JSON-serializable: {e}"
-    return value, None
+    return snapshot, None
+
+
+def config_snapshots_equal(a: dict | None, b: dict | None) -> bool:
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
 
 
 def autotuner_instances(mod, dsl: str) -> list[str]:
@@ -238,6 +246,7 @@ def run_job(job: dict) -> dict:
         return result
     result["stages"]["interface"] = {"run": True, "get_last_config": True}
     result["config"] = cfg1
+    result["config_reads"] = [{"after": "first_execution", "config": cfg1}]
 
     # 2. numerical checks on fresh inputs / same-address refill / repeat
     try:
@@ -260,7 +269,8 @@ def run_job(job: dict) -> dict:
             result["diagnostic"] = "\n".join(f"{c.name}: {c.message}" for c in failed)[-8000:]
         return result
     cfg2, cfg_err = read_config(cand)
-    if cfg_err or cfg2 != cfg1:
+    result["config_reads"].append({"after": "numerical_checks", "config": cfg2, "error": cfg_err})
+    if cfg_err or not config_snapshots_equal(cfg2, cfg1):
         result["status"] = "interface_error"
         result["diagnostic"] = ("interface_error: " + cfg_err) if cfg_err else \
             f"interface_error: get_last_config() changed between calls on the same task: first {json.dumps(cfg1)}, later {json.dumps(cfg2)}; the configuration must be fixed"
@@ -293,7 +303,8 @@ def run_job(job: dict) -> dict:
             result["diagnostic"] = rec.note or "timing produced no positive sample"
             return result
         cfg3, cfg_err = read_config(cand)
-        if cfg_err or cfg3 != cfg1:
+        result["config_reads"].append({"after": "timing", "config": cfg3, "error": cfg_err})
+        if cfg_err or not config_snapshots_equal(cfg3, cfg1):
             result["status"] = "interface_error"
             result["diagnostic"] = ("interface_error: " + cfg_err) if cfg_err else \
                 f"interface_error: get_last_config() changed after timing: first {json.dumps(cfg1)}, later {json.dumps(cfg3)}; the configuration must be fixed"

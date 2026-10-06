@@ -193,7 +193,8 @@ def _campaign_spec(a, condition: str):
                         out_root=Path(a.out_root) if a.out_root else None, resume=a.resume,
                         stop_after_rounds=a.stop_after_rounds, isolation=a.isolation,
                         worker_timeout_s=a.worker_timeout, max_trajectories=a.max_trajectories,
-                        retry_incomplete=a.retry_incomplete)
+                        retry_incomplete=a.retry_incomplete, resume_transport=a.resume_transport,
+                        resume_reason=a.reason, allow_evaluator_change=a.allow_evaluator_change, executor=a.executor)
 
 
 def _run_live(a, condition: str) -> int:
@@ -258,21 +259,30 @@ def cmd_distill(a) -> int:
     Formal mode needs an approved distiller, frozen folds and formal Base
     data; test-only mode accepts a candidate distiller and writes a
     test-only skill that is never registered."""
-    from tilebench.llm.v2.distillation.access import build_index, evaluation_scope, release_scope
-    from tilebench.llm.v2.distillation.orchestrator import DistillerConfig, extract_observations, synthesize, write_skill
+    from tilebench.llm.v2.distillation.access import build_index, coverage_report, evaluation_scope, release_scope
+    from tilebench.llm.v2.distillation.orchestrator import (DistillationIncomplete, DistillerConfig, extract_observations,
+                                                            synthesize, write_skill)
     from tilebench.llm.v2.providers.factory import build_provider, distiller_spec
-    study, models, folds = ms.load_study(), ms.load_models(), ms.load_folds()
+    study, models, folds, modes = ms.load_study(), ms.load_models(), ms.load_folds(), ms.load_arithmetic_modes()
     formal = a.run_type == "formal"
     blockers = []
     if formal:
         blockers += ms.blockers_models(models, roles=("distiller",)) + ms.blockers_folds(folds)
     root = Path(a.campaign_dir)
-    index = build_index(root)
-    scope = release_scope(index, dsl=a.dsl, study=study, root=root) if a.mode == "release" else \
-        evaluation_scope(index, dsl=a.dsl, held_out_fold=a.fold, study=study, root=root)
+    index = build_index(root, folds=folds)                      # folds recomputed from the frozen manifest
+    scope = release_scope(index, dsl=a.dsl, study=study, root=root, folds=folds) if a.mode == "release" else \
+        evaluation_scope(index, dsl=a.dsl, held_out_fold=a.fold, study=study, root=root, folds=folds)
     if not scope.selected:
-        blockers.append("no eligible source trajectories in the index (formal, base, source device, training folds)")
-    report = {"scope": scope.manifest(), "blockers": blockers, "run_type": a.run_type, "index_size": len(index)}
+        blockers.append("no eligible source trajectories in the index (formal, complete, base, source device, training folds)")
+    # models of the source campaign(s): from their campaign records, never from the states alone
+    campaign_models = sorted({json.loads(p.read_text())["spec"]["model"] for p in root.glob("campaign_base_*.json")})
+    coverage = coverage_report(scope, study=study, folds=folds, models=campaign_models) if scope.selected else None
+    if coverage and not coverage["complete"]:
+        msg = f"source coverage incomplete: {len(coverage['missing'])} expected (operator, dtype, model) missing, {len(coverage['extra'])} extra"
+        if formal and not a.allow_partial_coverage:
+            blockers.append(msg + " (pass --allow-partial-coverage to record and proceed)")
+    report = {"scope": scope.manifest(), "coverage": coverage, "blockers": blockers, "run_type": a.run_type,
+              "index_size": len(index), "campaign_models": campaign_models}
     if blockers:
         _print(report)
         print("REFUSED: " + "; ".join(blockers), file=sys.stderr)
@@ -289,10 +299,27 @@ def cmd_distill(a) -> int:
                           dsl_version=study["dsls"][a.dsl]["reference_version"])
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "scope.json").write_text(json.dumps({**report, "scope_sha256": scope.sha256(), "distiller": dspec.record()},
+    (out / "scope.json").write_text(json.dumps({**report, "scope_sha256": scope.sha256(), "distiller": dspec.record(),
+                                                "partial_coverage_allowed": bool(a.allow_partial_coverage)},
                                                indent=1, sort_keys=True) + "\n")
-    obs = extract_observations(scope, provider, cfg, read_state=lambda p: json.loads(p.read_text()), out_dir=out, log=_log)
-    res = synthesize(scope, obs, provider, cfg, models=sorted({r.model for r in scope.selected}), out_dir=out)
+    # offline SOL records per selected trajectory (never shown to generators; input of the distiller only)
+    from tilebench.llm.v2.metrics.sol import t_sol
+    from tilebench.llm.v2.tasks.case_selection import load_operator_config
+    sol_info = {}
+    for ref in scope.selected:
+        st = json.loads(Path(ref.path).read_text()); tk = st["task"]
+        rec = t_sol(tk["device"], tk["operator"], tk["dtype"], tk["params"], tk.get("problem_size", 1),
+                    load_operator_config(tk["operator"]).get("metrics", {}), modes)
+        sol_info[ref.trajectory_id] = rec.to_dict()
+    (out / "sol_info.json").write_text(json.dumps(sol_info, indent=1, sort_keys=True) + "\n")
+    try:
+        obs = extract_observations(scope, provider, cfg, read_state=lambda p: json.loads(p.read_text()), out_dir=out,
+                                   sol_info=sol_info, folds=folds, log=_log)
+        res = synthesize(scope, obs, provider, cfg, models=campaign_models, out_dir=out, log=_log)
+    except DistillationIncomplete as e:
+        _print({"out": str(out), "incomplete": str(e), "registered": False})
+        print(f"INCOMPLETE: {e}", file=sys.stderr)
+        return 3
     write_skill(out / "skill", res, test_only=not formal)
     _print({"out": str(out), "observations": len(obs), "content_sha256": res["manifest"]["content_sha256"],
             "status": "draft" if formal else "test-only", "registered": False})
@@ -319,17 +346,24 @@ def cmd_review_resolve(a) -> int:
         from tilebench.llm.v2.validation.contract_checks import CHECKER_VERSION, check_compliance
         rules = load_contract(st.task["operator"], require_approved=False).rules
         res = check_compliance(Path(att.source_path).read_text(), st.task["dsl"], rules)
+        from tilebench.llm.v2.evaluation.fingerprint import checker_fingerprint
         rc = res.to_dict(); rc["diagnostics"] = res.diagnostics(); rc["checker_version"] = CHECKER_VERSION
-        (Path(a.trajectory_dir) / f"round_{rec.round:02d}" / f"attempt_{att.attempt}" / "compliance_recheck.json").write_text(
-            json.dumps(rc, indent=1) + "\n")
+        rc["checker"] = checker_fingerprint(); rc["executor"] = a.reviewer; rc["checked_at"] = time.time()
+        rc["candidate_sha256"] = __import__("hashlib").sha256(Path(att.source_path).read_bytes()).hexdigest()
+        adir = Path(a.trajectory_dir) / f"round_{rec.round:02d}" / f"attempt_{att.attempt}"
+        n = len(list(adir.glob("compliance_recheck_*.json"))) + 1
+        rc_path = adir / f"compliance_recheck_{n:04d}.json"        # append-only; the first compliance.json is never rewritten
+        rc["supersedes"] = att.compliance_revisions[-1] if att.compliance_revisions else "compliance.json"
+        rc_path.write_text(json.dumps(rc, indent=1) + "\n")
+        att.compliance_revisions.append(rc_path.name)
         if res.verdict != "clear":
             _print({"trajectory_id": st.trajectory_id, "round": rec.round, "recheck_verdict": res.verdict,
                     "review_items": res.review_items(), "resolved": False})
             return 1
         a.decision = "compliant"
-        a.note = (a.note or "") + f" [recheck under {CHECKER_VERSION}: clear; previous items: {evidence}]"
+        a.note = (a.note or "") + f" [recheck under {CHECKER_VERSION} ({rc_path.name}): clear; previous items: {evidence}]"
         a.reviewer = f"recheck:{CHECKER_VERSION}"
-        att.compliance = rc
+        att.compliance = {**(att.compliance or {}), "superseded_by": rc_path.name}
     if not a.decision:
         print("a --decision (or --recheck) is required", file=sys.stderr)
         return 2
@@ -341,6 +375,75 @@ def cmd_review_resolve(a) -> int:
                                                              "t": time.time()})
     _print({"trajectory_id": st.trajectory_id, "round": rec.round, "decision": a.decision, "status": st.status})
     return 0
+
+
+def cmd_reevaluate(a) -> int:
+    """Independent, append-only re-evaluation of an ARCHIVED candidate of an
+    existing trajectory (no request is made): a new eval_NNNN revision with
+    META (reason, supersedes, executor, evaluator fingerprint) is written
+    beside the earlier evidence, which is never touched. The round's recorded
+    status is left as it is unless --adopt is given."""
+    import hashlib
+    from tilebench import hardware
+    from tilebench.llm.v2.contracts.loader import load_contract
+    from tilebench.llm.v2.evaluation.fingerprint import evaluator_fingerprint
+    from tilebench.llm.v2.evaluation.job import build_evaluation_job
+    from tilebench.llm.v2.evaluation.launcher import SubprocessEvaluator
+    from tilebench.llm.v2.orchestration import state_machine as sm
+    from tilebench.llm.v2.orchestration.identity import LLM_V2_OUTPUT_ROOT, attempt_dir
+    from tilebench.llm.v2.orchestration.state import TrajectoryState
+    tdir = Path(a.trajectory_dir)
+    st = TrajectoryState.load(tdir / "trajectory.json")
+    rec = next(r for r in st.rounds if r.round == a.round)
+    att = rec.attempts[(a.attempt - 1) if a.attempt else -1]
+    if not att.source_path:
+        print("that attempt has no parsable candidate", file=sys.stderr)
+        return 2
+    src = Path(att.source_path)
+    study = ms.load_study()
+    contract = load_contract(st.task["operator"], require_approved=False)
+    identity = {"campaign": st.campaign, "run_type": st.run_type, "model": st.model, "condition": st.condition,
+                "trajectory_id": st.trajectory_id, "reevaluation": True}
+    job = build_evaluation_job(operator=st.task["operator"], dtype=st.task["dtype"], params=st.task["params"], dsl=st.task["dsl"],
+                               device=st.task["device"], arch=hardware.detect_arch(), rules=contract.rules, study=study, identity=identity)
+    evaluator = SubprocessEvaluator(device=st.task["device"], timeout_s=a.worker_timeout, sandbox_root=tdir.parent / "_reeval_sandbox",
+                                    isolation=a.isolation, lock_root=LLM_V2_OUTPUT_ROOT)
+    fp = evaluator_fingerprint(job, worker_timeout_s=a.worker_timeout, isolation_backend=evaluator.report.get("backend", "none"))
+    adir = attempt_dir(tdir, rec.round, att.attempt)
+    existing = sorted(p.name for p in adir.glob("eval_*") if p.is_dir())
+    legacy = (adir / "evaluation.json").exists() and not existing
+    rev = f"eval_{len(existing) + (2 if legacy else 1):04d}"
+    rdir = adir / rev
+    rdir.mkdir(parents=True, exist_ok=False)
+    meta = {"revision": rev, "reason": a.reason, "supersedes": rec.evaluation_revision or ("evaluation.json (legacy revision 1)" if legacy else None),
+            "executor": a.executor, "evaluator_fingerprint_sha256": fp["fingerprint_sha256"], "evaluator_fingerprint": fp,
+            "candidate_sha256": hashlib.sha256(src.read_bytes()).hexdigest(), "worker_timeout_s": a.worker_timeout,
+            "isolation_backend": evaluator.report.get("backend"), "adopted_into_state": bool(a.adopt), "created": time.time(),
+            "original_evaluator_fingerprint_sha256": (st.evaluator_fingerprint or {}).get("fingerprint_sha256")}
+    (rdir / "META.json").write_text(json.dumps(meta, indent=1, default=str) + "\n")
+    _log(f"re-evaluating {st.trajectory_id} round {rec.round} attempt {att.attempt} -> {rev} ({a.reason})")
+    result = evaluator.evaluate(src, job, rec.round, att.attempt, archive_dir=rdir / "evaluation")
+    result["evaluation_revision"] = rev
+    (rdir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
+    rec.evaluation_revisions.append(rev)
+    note = (f"round {rec.round} attempt {att.attempt}: independent re-evaluation {rev} by {a.executor} ({a.reason}): "
+            f"{result.get('status')} {result.get('latency_ms_samples')}; recorded status {rec.status} "
+            + ("replaced (adopted)" if a.adopt else "kept (not adopted)"))
+    if a.adopt:
+        prior = {"status": rec.status, "latency_ms_mean": rec.latency_ms_mean, "latency_ms_samples": rec.latency_ms_samples,
+                 "evaluation_revision": rec.evaluation_revision}
+        rec.status = "pending"
+        sm.apply_evaluation(st, rec.round, result)
+        rec.evaluation_revision = rev
+        note += f"; prior {prior}"
+    st.notes.append(note)
+    st.save(tdir / "trajectory.json")
+    _print({"trajectory_id": st.trajectory_id, "round": rec.round, "attempt": att.attempt, "revision": rev,
+            "status": result.get("status"), "latency_ms_mean": result.get("latency_ms_mean"),
+            "latency_ms_samples": result.get("latency_ms_samples"),
+            "timing_execution_mode": (result.get("timing") or {}).get("timing_execution_mode"),
+            "isolation": result.get("isolation", {}).get("backend"), "adopted": bool(a.adopt), "dir": str(rdir)})
+    return 0 if result.get("status") == "valid" else 1
 
 
 def cmd_run_mock(a) -> int:
@@ -447,6 +550,13 @@ def _add_live_args(s: argparse.ArgumentParser) -> None:
     s.add_argument("--retry-incomplete", action="store_true",
                    help="with --resume: re-evaluate the last round of a trajectory marked incomplete by an evaluation-side "
                         "infrastructure failure (no new request)")
+    s.add_argument("--resume-transport", action="store_true",
+                   help="with --resume and --reason: re-open an attempt closed by exhausted transport retries or a provider "
+                        "refusal; prior charges are rebuilt from transport.jsonl, a `reopened` event is recorded")
+    s.add_argument("--reason", help="reason recorded with --resume-transport")
+    s.add_argument("--allow-evaluator-change", action="store_true",
+                   help="validation runs only: continue a trajectory although the evaluator fingerprint changed (recorded)")
+    s.add_argument("--executor", default="runner", help="who runs this process (recorded in META/compliance/reopen events)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -492,6 +602,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--dsl", required=True); s.add_argument("--fold", choices=["A", "B", "C"])
     s.add_argument("--mode", default="evaluation", choices=["evaluation", "release"])
     s.add_argument("--run-type", default="formal", choices=["formal", "test-only"])
+    s.add_argument("--allow-partial-coverage", action="store_true",
+                   help="formal: proceed although expected (operator, dtype, model) sources are missing; recorded in scope.json")
     s.add_argument("--out", required=True); s.set_defaults(fn=cmd_distill)
 
     s = sub.add_parser("review-resolve", help="record a human compliance decision for a review_required trajectory")
@@ -502,6 +614,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--recheck", action="store_true",
                    help="re-run the current checker on the stored candidate; resolves only if the re-check is clear")
     s.set_defaults(fn=cmd_review_resolve)
+
+    s = sub.add_parser("re-evaluate", help="append-only independent re-evaluation of an archived candidate (no request; eval_NNNN revision)")
+    s.add_argument("--trajectory-dir", required=True); s.add_argument("--round", type=int, required=True)
+    s.add_argument("--attempt", type=int); s.add_argument("--reason", required=True); s.add_argument("--executor", default="operator")
+    s.add_argument("--worker-timeout", type=int, default=1800); s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
+    s.add_argument("--adopt", action="store_true", help="also make the new result the round's recorded status (default: record only)")
+    s.set_defaults(fn=cmd_reevaluate)
 
     s = sub.add_parser("run-mock", help="ten-round mock trajectory with persistence and resume")
     s.add_argument("--out", required=True)

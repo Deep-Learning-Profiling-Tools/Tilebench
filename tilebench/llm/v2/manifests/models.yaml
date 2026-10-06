@@ -2,8 +2,11 @@
 #   unset      nothing chosen; every live run type is blocked
 #   candidate  set by an explicit instruction for engineering validation runs
 #              (run_type=validation, unscored); formal Base/Enhanced runs stay
-#              blocked until the study owner sets `approved`
-#   approved   study-owner approval for formal campaigns
+#              blocked until `approved`
+#   approved   study-owner decision; `approved_by` cites the instruction and
+#              `approved_evidence` the live responses that confirmed the settings.
+#              The generator settings were decided by the owner (xhigh for both
+#              models, 128000 cap) and are not re-opened as a question.
 # Keys are never written here: `api_key_env` names the environment variable
 # the adapter reads on the server at request time.
 providers:
@@ -31,7 +34,9 @@ roles:
       max_output_tokens: 128000      # standard streaming endpoint cap; the model may finish earlier
       temperature: null              # Responses API with reasoning ignores it; recorded as given
       api_key_env: OPENAI_API_KEY
-      status: candidate
+      status: approved
+      approved_by: "study owner, NEXT_STEP_CLAUDE.md 2026-10-05 §一 and the freeze-round instruction (gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000)"
+      approved_evidence: "artifacts/llm_v2/validation_b200_2026-10-05/evidence/probes/gpt_probe.json; 60 responses of the validation campaign echo gpt-6.1-sol with these settings"
       set_by: "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000"
     claude:
       provider: anthropic
@@ -40,7 +45,9 @@ roles:
       output_effort: xhigh           # fixed by the owner's latest correction: xhigh, not max
       max_output_tokens: 128000      # Messages API streaming cap (300K is the Batches beta path, not used)
       api_key_env: CLAUDE_API_KEY
-      status: candidate
+      status: approved
+      approved_by: "study owner, NEXT_STEP_CLAUDE.md 2026-10-05 §一 and the freeze-round instruction (claude-opus-5-5, output_config.effort=xhigh NOT max, adaptive thinking, max_tokens=128000)"
+      approved_evidence: "artifacts/llm_v2/validation_b200_2026-10-05/evidence/probes/claude_probe.json; 60 responses of the validation campaign echo claude-opus-5-5 with these settings"
       set_by: "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): claude-opus-5-5, output_config.effort=xhigh, adaptive thinking, max_tokens=128000"
   distiller:
     provider: null

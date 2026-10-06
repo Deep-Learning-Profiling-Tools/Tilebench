@@ -49,8 +49,10 @@ def test_training_folds():
 
 def test_models_manifest_gates_by_status():
     models = ms.load_models()
-    formal = ms.blockers_models(models)
-    assert any("status is 'candidate'" in b for b in formal)          # formal runs need owner approval
+    assert ms.blockers_models(models) == []                           # generators: owner-approved (provenance recorded)
+    for name in ("gpt", "claude"):
+        cfg = models["roles"]["generator"][name]
+        assert cfg["status"] == "approved" and "NEXT_STEP_CLAUDE.md" in cfg["approved_by"] and cfg["approved_evidence"]
     assert not ms.blockers_models(models, accept_status=("approved", "candidate"))
     assert any("distiller" in b for b in ms.blockers_models(models, roles=("distiller",)))
     for name, key_env in (("gpt", "OPENAI_API_KEY"), ("claude", "CLAUDE_API_KEY")):

@@ -107,3 +107,31 @@ any candidate's performance.
 - No formal E(B) numbers: contracts are unapproved, assets are drafts, models are `candidate`.
 - No cross-device claim: B200 only.
 - No distillation: validation runs are refused as sources by code (`distill` on this campaign returns REFUSED; `outputs/llm_v2/evidence_2026-10-05/distill_refusal_*.stderr`).
+
+## 8. Appended after the freeze-preparation round (no new requests)
+
+The worker/isolation path changed after this campaign (bounded-allowlist
+bubblewrap sandbox, canonical `get_last_config` snapshots, phase markers,
+phase-aware timeout classification). Two archived candidates were therefore
+re-evaluated on B200 with `python -m tilebench.llm.v2 re-evaluate` as
+independent, append-only revisions (`eval_0002`, `supersedes: evaluation.json
+(legacy revision 1)`, executor `operator:claude-fable-5.1-session`, not
+adopted into the recorded round status):
+
+| trajectory | round | original samples (ms) | eval_0002 samples (ms) | mode | isolation |
+|---|---|---|---|---|---|
+| vector_add / triton / gpt `cd2b56f00ad1738f27a2` | 1 | 0.022048, 0.021888, 0.022527 | 0.023008, 0.021823, 0.022016 | graph | bwrap (allowlist) |
+| vector_add / cutile / gpt `2008a876fb2926a55f1d` | 1 | 0.021728, 0.021952, 0.021729 | 0.021984, 0.021856, 0.021984 | graph | bwrap (allowlist) |
+
+Both candidates compiled and ran inside the allowlist sandbox (Triton and
+cuTile compilers), passed the three numerical checks and the
+config-stability reads, and were timed in graph mode with 1 warmup + 3
+timed launches. The original `evaluation.json` / `evaluation/` records are
+untouched; the publication export added 20 entries (the two revisions) to
+INDEX.json; the only earlier entries whose hash changed are the two
+`trajectory.json` state files, which gained `evaluation_revisions` and one
+note each (verified additive against the committed version). Everything else in this document describes the
+campaign as it ran; its historical limitations (first checker version not
+recorded, first worker results of the two timed-out rounds overwritten,
+1800→600 s re-evaluation, lock wait inside early `worker_wall_s`) stand and
+are not back-filled.

@@ -41,6 +41,10 @@ class AttemptRecord:
     terminal_status: str | None = None
     truncated: bool = False
     execution: dict | None = None         # execution-side evidence when the worker confirmed a violation
+    candidate_sha256: str | None = None   # of the parsed candidate file
+    checker_fingerprint: dict | None = None   # checker version + sources sha at the FIRST compliance check
+    rules_sha256: str | None = None       # evaluator rules applied at the first compliance check
+    compliance_revisions: list[str] = field(default_factory=list)   # append-only recheck files
 
 
 @dataclass
@@ -56,6 +60,10 @@ class RoundRecord:
     diagnostic: str | None = None
     timing_execution_mode: str | None = None
     timing_mode_differs: bool | None = None
+    evaluation_revision: str | None = None    # eval_NNNN directory of the evaluation the round status comes from
+    evaluation_revisions: list[str] = field(default_factory=list)   # every evaluation revision ever produced (append-only)
+    evaluation_reason: str | None = None      # why the next evaluation runs (None = initial; set by retry_incomplete)
+    reopened_attempts: list[dict] = field(default_factory=list)     # attempt records removed by an explicit transport reopen
 
     @property
     def valid(self) -> bool:
@@ -82,6 +90,8 @@ class TrajectoryState:
     generator: dict | None = None         # GeneratorSpec.record() (no secrets)
     evaluation_job: dict | None = None    # EvaluationJob.record()
     stop_reason: str | None = None        # why status is incomplete (provider refusal, transport exhaustion, ...)
+    evaluator_fingerprint: dict | None = None   # evaluation.fingerprint record at trajectory creation
+    evaluator_changes: list[dict] = field(default_factory=list)   # recorded (validation-only) evaluator changes on resume
 
     # -- persistence -------------------------------------------------------
     def to_dict(self) -> dict:

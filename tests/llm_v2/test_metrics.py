@@ -56,13 +56,18 @@ def test_operator_balanced_aggregation_with_zero_unsupported_incomplete():
               ("op1", "fp32"): e.curve(1.0, rounds(([10], False, None))),
               ("op2", "fp16"): e.curve(1.0, rounds(([10], True, 2.0))),
               ("op3", "fp16"): None,
-              ("op4", "fp16"): e.curve(1.0, rounds(([10], True, 1.0)))}
+              ("op4", "fp16"): e.curve(1.0, rounds(([10], True, 1.0)), status="incomplete")}
     elig = {("op1", "fp16"): "eligible", ("op1", "fp32"): "eligible", ("op2", "fp16"): "eligible",
-            ("op3", "fp16"): "unsupported", ("op4", "fp16"): "incomplete"}
+            ("op3", "fp16"): "unsupported", ("op4", "fp16"): "eligible"}        # execution state is NOT eligibility
     agg = e.aggregate(curves, [10], elig)
-    # op1 mean = (1.0 + 0)/2 = 0.5 ; op2 = 0.5 ; op3 excluded ; op4 incomplete excluded
-    assert agg["mean"] == [0.5] and agg["n_operators"] == 2
-    assert agg["unsupported"] == [("op3", "fp16")] and agg["incomplete"] == [("op4", "fp16")] and agg["partial"]
+    # op1 = (1.0 + real 0)/2 = 0.5 ; op2 = 0.5 ; op3 unsupported (out of the denominator) ; op4 incomplete -> exact mean unknown
+    assert agg["mean"] == [None] and agg["n_operators"] == 3 and agg["partial"]
+    assert agg["lower_bound_mean"] == [(0.5 + 0.5 + 0.0) / 3] and agg["completed_only_mean"] == [0.5]
+    assert agg["unsupported"] == [("op3", "fp16")] and agg["incomplete"] == [("op4", "fp16")]
+    assert agg["tasks_included"] == [("op1", "fp16"), ("op1", "fp32"), ("op2", "fp16"), ("op4", "fp16")]
+    assert agg["completed_only_tasks"] == [("op1", "fp16"), ("op1", "fp32"), ("op2", "fp16")]
+    with pytest.raises(ValueError, match="pre-declared"):
+        e.aggregate(curves, [10], {("op4", "fp16"): "incomplete"})
 
 
 def test_t_sol_uses_declared_mode_and_flags_missing_peak():

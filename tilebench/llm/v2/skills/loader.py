@@ -81,6 +81,8 @@ class SkillComponent:
     attachments: list[dict]
     sendable_to: list[str]
     publishable: bool
+    sha256_composed: str = ""          # sha256 of the COMPLETE injected text (main body + ordered attachments)
+    provenance: dict | None = None     # validated optimization-skill manifest (kind == optimization)
 
     def record(self) -> dict:
         d = asdict(self)
@@ -195,17 +197,86 @@ def load_component(manifest: dict, kind: str, key: str, version: str | None = No
         text += "\n" + a_text
     if max_chars is not None and len(text) > max_chars:
         raise SkillTooLongError(f"{kind}/{key}@{version}: {len(text)} chars exceed the limit {max_chars}")
-    return SkillComponent(kind=kind, key=key, version=version, path=entry["path"], sha256_raw=h_raw,
+    comp = SkillComponent(kind=kind, key=key, version=version, path=entry["path"], sha256_raw=h_raw,
                           sha256_injected=h_inj, permission=permission, status=status, text=text,
                           chars=len(text), attachments=[{k: v for k, v in a.items() if k != "text"} for a in attachments],
-                          sendable_to=grants, publishable=is_publishable(entry))
+                          sendable_to=grants, publishable=is_publishable(entry),
+                          sha256_composed=sha256_bytes(text.encode("utf-8")))
+    if kind == "optimization":
+        comp.provenance = read_optimization_manifest(entry["path"])
+    return comp
+
+
+# --------------------------------------------------------------------------
+# Optimization-skill provenance (independent manifest beside SKILL.md)
+# --------------------------------------------------------------------------
+
+OPTIMIZATION_MANIFEST_SCHEMAS = ("tilebench-optimization-skill/1", "tilebench-optimization-skill/2")
+
+
+def read_optimization_manifest(rel_path: str) -> dict:
+    mpath = (REPO_ROOT / rel_path).parent / "manifest.json"
+    if not mpath.exists():
+        raise SkillError(f"optimization skill {rel_path}: no manifest.json beside it (provenance unknown)")
+    try:
+        m = json.loads(mpath.read_text())
+    except ValueError as e:
+        raise SkillError(f"optimization skill {rel_path}: manifest.json is not valid JSON: {e}")
+    if m.get("schema") not in OPTIMIZATION_MANIFEST_SCHEMAS:
+        raise SkillError(f"optimization skill {rel_path}: manifest schema {m.get('schema')!r} not in {OPTIMIZATION_MANIFEST_SCHEMAS}")
+    return m
+
+
+def validate_optimization_provenance(comp: SkillComponent, study: dict, *, dsl: str, fold: str,
+                                     mode: str = "evaluation", require_status: tuple[str, ...] = ("frozen",)) -> None:
+    """The Enhanced condition may inject a skill only when its own manifest
+    says it was distilled for exactly this use: same DSL and compatible
+    reference version, the DSL's source device, the requested mode
+    (`evaluation` with THIS fold held out and the other two as training
+    folds; `release` only when release is requested), non-empty source
+    trajectory ids, a content hash matching the injected body, and a status
+    in `require_status`. A manifest field is never inferred from the manifest
+    key (`<dsl>/<fold>`): the key only selects the entry."""
+    from tilebench.llm.v2.manifests.schema import training_folds
+    m = comp.provenance or {}
+    where = f"optimization/{comp.key}@{comp.version}"
+    problems = []
+    if m.get("dsl") != dsl:
+        problems.append(f"dsl {m.get('dsl')!r} != {dsl!r}")
+    ref_version = study["dsls"][dsl]["reference_version"]
+    if ref_version not in (m.get("compatible_versions") or []):
+        problems.append(f"compatible_versions {m.get('compatible_versions')!r} does not include the study reference version {ref_version!r}")
+    src = study["dsls"][dsl]["source_device"]
+    if m.get("source_device") != src:
+        problems.append(f"source_device {m.get('source_device')!r} != {src!r}")
+    got_mode = m.get("evaluation_or_release") or m.get("mode")
+    if got_mode != mode:
+        problems.append(f"mode {got_mode!r} != requested {mode!r}")
+    if mode == "evaluation":
+        if m.get("held_out_fold") != fold:
+            problems.append(f"held_out_fold {m.get('held_out_fold')!r} != {fold!r}")
+        if sorted(m.get("training_folds") or []) != sorted(training_folds(fold)):
+            problems.append(f"training_folds {m.get('training_folds')!r} != {sorted(training_folds(fold))}")
+    if not m.get("source_trajectory_ids"):
+        problems.append("source_trajectory_ids empty")
+    body_hash = sha256_bytes(comp.text.encode("utf-8"))
+    raw_hash = sha256_bytes((REPO_ROOT / comp.path).read_bytes())
+    raw_text_hash = sha256_bytes((REPO_ROOT / comp.path).read_text().encode("utf-8"))
+    if m.get("content_sha256") not in (body_hash, raw_hash, raw_text_hash):
+        problems.append("content_sha256 does not match the skill body")
+    if m.get("status") not in require_status:
+        problems.append(f"manifest status {m.get('status')!r} not in {require_status}")
+    if comp.status not in require_status:
+        problems.append(f"registry status {comp.status!r} not in {require_status}")
+    if problems:
+        raise SkillPermissionError(f"{where}: provenance rejected: " + "; ".join(problems))
 
 
 def compose_context(manifest: dict, study: dict, *, dsl: str, device: str, fold: str,
                     condition: str, require_approved: bool = True,
                     reference_version: str | None = None, device_snapshot: str | None = None,
                     optimization_version: str | None = None, provider: str | None = None,
-                    provider_sendable: bool = True) -> list[SkillComponent]:
+                    provider_sendable: bool = True, optimization_mode: str = "evaluation") -> list[SkillComponent]:
     """The ordered skill components of one condition. Base never includes an
     Optimization Skill; Enhanced refuses to start without the frozen one for
     (dsl, fold), and refuses a device outside the DSL's transfer list. With
@@ -224,15 +295,25 @@ def compose_context(manifest: dict, study: dict, *, dsl: str, device: str, fold:
     if condition == "enhanced":
         if device not in study["skill_transfer"][dsl]:
             raise SkillError(f"{device} is not a transfer target of {dsl} Optimization Skills")
+        statuses_opt = ("frozen",) if require_approved else ("frozen", "test-only")
         opt = load_component(manifest, "optimization", f"{dsl}/{fold}", optimization_version,
-                             require_status=("frozen",) if require_approved else ("frozen", "test-only"),
-                             max_chars=limits["optimization_skill"], **common)
+                             require_status=statuses_opt, max_chars=limits["optimization_skill"], **common)
+        validate_optimization_provenance(opt, study, dsl=dsl, fold=fold, mode=optimization_mode, require_status=statuses_opt)
         comps.append(opt)
     return comps
 
 
 def hash_record(components: list[SkillComponent]) -> dict:
-    return {f"{c.kind}:{c.key}@{c.version}": c.sha256_injected for c in components}
+    """Component key -> sha256 of the COMPLETE injected text (main body plus
+    ordered attachments). For an asset without attachments this equals the
+    manifest's sha256_injected; with attachments it differs from it."""
+    return {f"{c.kind}:{c.key}@{c.version}": (c.sha256_composed or c.sha256_injected) for c in components}
+
+
+def hash_record_detailed(components: list[SkillComponent]) -> dict:
+    return {f"{c.kind}:{c.key}@{c.version}": {"sha256_composed": c.sha256_composed, "sha256_injected_main": c.sha256_injected,
+                                             "sha256_raw_main": c.sha256_raw, "attachments": c.attachments}
+            for c in components}
 
 
 def register_asset(manifest: dict, kind: str, key: str, version: str, rel_path: str, *,

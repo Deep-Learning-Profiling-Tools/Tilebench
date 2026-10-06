@@ -8,13 +8,20 @@ Isolation layers, reported in every result under `isolation` (never
 claimed when not applied):
 
 bwrap (user namespaces; probed once per process)
-  - the whole host filesystem is bound READ-ONLY; only the sandbox
-    directory is writable
-  - /home is replaced by an empty tmpfs: the user's dotfiles (shell rc files
-    that export API keys) are not visible to generated code
+  - bounded allowlist, nothing else is bound: system directories
+    (/usr, /lib, /lib64, /bin, /sbin, /etc, /opt, /sys) read-only, the python
+    runtime prefix read-only, the repository root read-only with empty tmpfs
+    masks over tilebench/benchmarks (then only the task's impl_torch.py is
+    re-bound), results, artifacts, outputs, skills, docs, tests, problems,
+    contracts/data, .git; the sandbox directory is the only writable path
+  - /home and /root are empty tmpfs; the user's real home is not bound
+    wherever it lives (the probe checks the resolved home path too)
   - /tmp and /var/tmp are private tmpfs
   - no network namespace membership (--unshare-net), new pid namespace
-  - GPU device nodes (/dev/nvidia*) are bound in; the worker needs them
+  - GPU device nodes are bound in per vendor (NVIDIA /dev/nvidia* verified on
+    B200; AMD /dev/kfd,/dev/dri and Neuron /dev/neuron* described, pending)
+  - `isolation_probe()` verifies the restricted paths inside a fresh sandbox
+    with a non-sensitive sentinel; formal preflight requires it to pass
 environment (always)
   - every variable whose name contains KEY / TOKEN / SECRET / PASSWORD /
     HUGGING_FACE / HF_ is dropped before the worker starts
@@ -66,15 +73,133 @@ def scrubbed_env(sandbox: Path) -> dict:
     return env
 
 
-def _bwrap_base(sandbox: Path | None) -> list[str]:
-    cmd = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev"]
-    for p in sorted(glob.glob("/dev/nvidia*")):
-        cmd += ["--dev-bind", p, p]
-    cmd += ["--proc", "/proc", "--tmpfs", "/home", "--tmpfs", "/tmp", "--tmpfs", "/var/tmp"]
+# What the sandboxed worker may see. Nothing outside this list is bound: not
+# the user's home (wherever it is), not other checkouts, results, artifacts,
+# skills, docs, contracts or the manual DSL implementations of any operator.
+SYSTEM_RO = ("/usr", "/lib", "/lib64", "/bin", "/sbin", "/etc", "/opt", "/sys")
+# Repository paths masked with an empty tmpfs after the read-only bind of the
+# repository root; the task's own impl_torch.py is re-bound afterwards.
+REPO_MASKS = ("tilebench/benchmarks", "results", "artifacts", "outputs", "skills", "docs", "tests",
+              "tilebench/problems", "tilebench/llm/v2/contracts/data", ".git", ".claude", "archive")
+GPU_DEVICE_GLOBS = {"nvidia": ("/dev/nvidia*",), "amd": ("/dev/kfd", "/dev/dri"), "neuron": ("/dev/neuron*",)}
+
+
+def runtime_prefix() -> str:
+    return sys.prefix
+
+
+def device_nodes() -> dict:
+    """GPU device nodes bound into the sandbox, per vendor, with what is
+    actually present on this host. Only the NVIDIA pattern has been
+    exercised (B200); AMD (/dev/kfd, /dev/dri) and Neuron (/dev/neuron*)
+    are described but remain `pending` until a run on such a host."""
+    out = {}
+    for vendor, globs in GPU_DEVICE_GLOBS.items():
+        found = []
+        for g in globs:
+            found += sorted(glob.glob(g))
+        out[vendor] = {"globs": list(globs), "present": found,
+                       "verified": "B200 validation campaign 2026-10-05" if vendor == "nvidia" and found else "pending"}
+    return out
+
+
+def _bwrap_base(sandbox: Path | None, *, operator_dir: Path | None = None, repo_root: Path | None = None) -> list[str]:
+    repo = Path(repo_root or REPO_ROOT).resolve()
+    cmd = ["bwrap"]
+    for d in SYSTEM_RO:
+        if os.path.isdir(d):
+            cmd += ["--ro-bind", d, d]
+    cmd += ["--dev", "/dev"]
+    for vendor in device_nodes().values():
+        for p in vendor["present"]:
+            cmd += ["--dev-bind", p, p]
+    cmd += ["--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/var/tmp", "--tmpfs", "/home", "--tmpfs", "/root"]
+    prefix = runtime_prefix()
+    cmd += ["--ro-bind", prefix, prefix]
+    cmd += ["--ro-bind", str(repo), str(repo)]
+    for m in REPO_MASKS:
+        target = repo / m
+        if target.is_dir():
+            cmd += ["--tmpfs", str(target)]             # empty directory in place of the data
+        elif target.exists():
+            cmd += ["--ro-bind", "/dev/null", str(target)]   # a file (e.g. a worktree's .git pointer) masked by /dev/null
+    if operator_dir is not None:
+        ref = Path(operator_dir) / "impl_torch.py"
+        if ref.exists():
+            cmd += ["--ro-bind", str(ref), str(ref)]
     if sandbox is not None:
         cmd += ["--bind", str(sandbox), str(sandbox), "--chdir", str(sandbox)]
     cmd += ["--unshare-net", "--unshare-pid", "--die-with-parent", "--new-session", "--"]
     return cmd
+
+
+_PROBE = r"""
+import json, os, socket, sys
+checks = json.loads(sys.argv[1])
+out = {}
+for name, path in checks["unreadable"].items():
+    try:
+        if os.path.isdir(path):
+            out[name] = {"readable": bool(os.listdir(path)), "path": path}
+        else:
+            open(path, "rb").read(1); out[name] = {"readable": True, "path": path}
+    except Exception as e:
+        out[name] = {"readable": False, "path": path, "error": type(e).__name__}
+for name, path in checks["readable"].items():
+    try:
+        open(path, "rb").read(1); out[name] = {"readable": True, "path": path}
+    except Exception as e:
+        out[name] = {"readable": False, "path": path, "error": type(e).__name__}
+try:
+    socket.create_connection(("1.1.1.1", 53), timeout=2); out["network"] = {"reachable": True}
+except Exception as e:
+    out["network"] = {"reachable": False, "error": type(e).__name__}
+out["secret_env_names"] = [k for k in os.environ if any(m in k.upper() for m in ("KEY", "TOKEN", "SECRET", "PASSWORD"))]
+print(json.dumps(out))
+"""
+
+
+def isolation_probe(operator: str = "vector_add", *, repo_root: Path | None = None, sandbox_root: Path | None = None) -> dict:
+    """Runs a small python inside a fresh sandbox (no GPU use) and reports
+    what the candidate could read. Uses a sentinel file with non-sensitive
+    text; never reads or prints a real key. `ok` is True only when every
+    restricted path is unreadable, the task reference is readable and the
+    network is unreachable."""
+    from tilebench.paths import operator_dir
+    repo = Path(repo_root or REPO_ROOT).resolve()
+    root = sandbox_root or (repo / "outputs" / "llm_v2" / "_isolation_probe")
+    root.mkdir(parents=True, exist_ok=True)
+    sandbox = Path(tempfile.mkdtemp(prefix="probe_", dir=root)).resolve()
+    sentinel = root / f"sentinel_{os.getpid()}.txt"
+    sentinel.write_text("isolation sentinel: non-sensitive marker\n")
+    home = Path(os.path.expanduser("~"))
+    opdir = Path(operator_dir(operator))
+    checks = {"unreadable": {
+                  "manual_dsl_impl": str(opdir / "impl_triton.py"),
+                  "another_operator_reference": str(opdir.parent / ("softmax" if operator != "softmax" else "vector_add") / "impl_torch.py"),
+                  "results_dir": str(repo / "results"), "artifacts_dir": str(repo / "artifacts"), "skills_dir": str(repo / "skills"),
+                  "contracts_dir": str(repo / "tilebench/llm/v2/contracts/data"), "sentinel_in_outputs": str(sentinel),
+                  "real_home_dir": str(home), "home_bashrc": str(home / ".bashrc"), "git_dir": str(repo / ".git"),
+                  "sibling_checkout": next((str(d) for d in sorted(repo.parent.iterdir()) if d.is_dir() and d.resolve() != repo), str(repo.parent / "__none__"))},
+              "readable": {"task_reference": str(opdir / "impl_torch.py"), "runtime_python": sys.executable}}
+    argv = _bwrap_base(sandbox, operator_dir=opdir, repo_root=repo) + [sys.executable, "-c", _PROBE, json.dumps(checks)]
+    try:
+        proc = subprocess.run(argv, cwd=str(sandbox), env=scrubbed_env(sandbox), capture_output=True, text=True, timeout=120)
+        rep = json.loads(proc.stdout.strip().splitlines()[-1]) if proc.stdout.strip() else {"error": proc.stderr[-2000:]}
+    except Exception as e:  # noqa: BLE001
+        rep = {"error": f"{type(e).__name__}: {e}"}
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+        try:
+            sentinel.unlink()
+        except OSError:
+            pass
+    ok = "error" not in rep and not rep.get("network", {}).get("reachable", True) and not rep.get("secret_env_names") \
+        and all(not rep[k]["readable"] for k in checks["unreadable"]) and all(rep[k]["readable"] for k in checks["readable"])
+    return {"ok": ok, "backend": "bwrap", "operator": operator, "results": rep,
+            "allowlist": {"system_ro": list(SYSTEM_RO), "runtime_prefix": runtime_prefix(), "repo_root": str(repo),
+                          "repo_masks": list(REPO_MASKS), "task_reference": str(opdir / "impl_torch.py")},
+            "device_nodes": device_nodes()}
 
 
 def detect_isolation(mode: str = "auto") -> dict:
@@ -83,7 +208,7 @@ def detect_isolation(mode: str = "auto") -> dict:
         return dict(_ISOLATION_CACHE[mode])
     report = {"backend": "none", "home_hidden": False, "network": "host", "pid_namespace": False,
               "filesystem": "host (read-write as the user)", "tmp_private": False, "probe_error": None,
-              "env_secrets_scrubbed": True}
+              "env_secrets_scrubbed": True, "allowlist": None, "device_nodes": device_nodes()}
     if mode == "none":
         _ISOLATION_CACHE[mode] = report
         return dict(report)
@@ -93,8 +218,10 @@ def detect_isolation(mode: str = "auto") -> dict:
         try:
             subprocess.run(_bwrap_base(None) + ["/bin/true"], capture_output=True, timeout=60, check=True)
             report.update({"backend": "bwrap", "home_hidden": True, "network": "unshared", "pid_namespace": True,
-                           "filesystem": "host read-only; sandbox read-write; /home,/tmp,/var/tmp private tmpfs",
-                           "tmp_private": True})
+                           "filesystem": "allowlist: system dirs, runtime prefix and repository read-only with data masks; "
+                                         "sandbox read-write; /home,/root,/tmp,/var/tmp private tmpfs",
+                           "tmp_private": True, "allowlist": {"system_ro": list(SYSTEM_RO), "runtime_prefix": runtime_prefix(),
+                                                              "repo_masks": list(REPO_MASKS)}})
         except Exception as e:  # noqa: BLE001
             err = getattr(e, "stderr", b"")
             report["probe_error"] = f"{type(e).__name__}: {e} {err.decode(errors='replace') if isinstance(err, bytes) else err}".strip()
@@ -182,7 +309,8 @@ class SubprocessEvaluator:
             argv = [sys.executable, "-m", "tilebench.llm.v2.evaluation.worker", "--job", str(sandbox / "job.json"),
                     "--out", str(out)]
             if self.report["backend"] == "bwrap":
-                argv = _bwrap_base(sandbox) + argv
+                from tilebench.paths import operator_dir
+                argv = _bwrap_base(sandbox, operator_dir=Path(operator_dir(job.operator))) + argv
             env = scrubbed_env(sandbox)
             t_lock = time.time()
             with device_lock(self.device, root=self.lock_root):

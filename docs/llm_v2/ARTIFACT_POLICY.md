@@ -32,11 +32,18 @@ artifacts/llm_v2/<campaign>/<condition>/<device>/<dsl>/<model>/<operator>/<dtype
                                        status, truncation flag, raw usage, raw response dump, transport list
   round_NN/attempt_M/impl_<dsl>.py     the parsed candidate
   round_NN/attempt_M/compliance.json   static + contract evidence, verdict, review items
-  round_NN/attempt_M/evaluation.json   worker result (stage records, three samples, mean, timing record,
-                                       isolation report, seed)
-  round_NN/attempt_M/evaluation/       archived sandbox evidence: job.json, result.json, worker stdout/stderr,
-                                       the candidate file, the retained Proton profile, ARCHIVE_INDEX.json
-  round_NN/evaluation.json             the round's final evaluation (duplicate of the last evaluated attempt)
+  round_NN/attempt_M/compliance_recheck_NNNN.json   append-only rechecks (checker version, supersedes)
+  round_NN/attempt_M/eval_NNNN/META.json            one directory per evaluation revision: reason (initial /
+                                                    retry_incomplete / independent re-evaluation), supersedes,
+                                                    executor, evaluator fingerprint, candidate sha256
+  round_NN/attempt_M/eval_NNNN/evaluation.json      worker result (stage records, three samples, mean, timing record,
+                                                    config reads, isolation report, seed)
+  round_NN/attempt_M/eval_NNNN/evaluation/          archived sandbox evidence: job.json, result.json, progress.json,
+                                                    worker stdout/stderr, the candidate file, the retained Proton
+                                                    profile (*.hatchet), ARCHIVE_INDEX.json
+  (campaign of 2026-10-05, before revisions existed: round_NN/attempt_M/evaluation.json + evaluation/ are that
+   attempt's first and only revision; later re-evaluations of those candidates start at eval_0002 and say
+   `supersedes: evaluation.json (legacy revision 1)`)
   best_valid/impl_<dsl>.py             the fastest valid candidate
 <campaign>/campaign.json               run type, generator spec (model id, settings, key *variable name*), config
                                        hash, template hash, host, git SHA, isolation report
@@ -45,7 +52,18 @@ artifacts/llm_v2/<campaign>/<condition>/<device>/<dsl>/<model>/<operator>/<dtype
 
 Not only the final round or the winner: every attempt of every round,
 including violations, format errors and failed evaluations, is exported.
-Files are copied byte for byte; nothing is rewritten.
+Files are copied byte for byte; nothing is rewritten. Evidence files
+(requests, responses, candidates, compliance records, evaluation revisions,
+archives, ledgers) are immutable once written: a later export of the same
+campaign ADDS entries to INDEX.json (new revisions, new rechecks) and
+never changes their hashes. The only files whose hash legitimately changes
+between exports are the living records `trajectory.json` (notes and the
+revision list are appended; earlier rounds/attempts are never edited) and
+the ledgers (`usage.jsonl`, `transport.jsonl`, `reviews.jsonl`, append-only).
+The export of 2026-10-05 after the two `eval_0002` re-evaluations
+demonstrates this: 20 entries added, the two re-evaluated trajectories'
+`trajectory.json` changed (additive: `evaluation_revisions` + one note
+each), the other 1,612 entries unchanged.
 
 ## 3. What never enters Git
 
@@ -60,7 +78,10 @@ Files are copied byte for byte; nothing is rewritten.
 - compile caches (Triton / cuTile / TileLang), NEFF files, large profiler
   captures (NCU, rocprof): they live in the per-evaluation sandbox and are
   deleted with it; only the small Proton hatchet JSON of the three timed
-  launches is archived;
+  launches is archived. `.gitignore` re-includes exactly
+  `artifacts/llm_v2/*/{base,enhanced}/**/evaluation/*.hatchet` (profiler
+  output anywhere else stays ignored), so a clean clone verifies INDEX.json
+  (`tests/llm_v2/test_freeze_fixes.py::test_published_index_verifies_in_a_clean_git_archive`);
 - the run cache itself (`outputs/`) and any temporary ZIP.
 
 ## 4. Size and limits

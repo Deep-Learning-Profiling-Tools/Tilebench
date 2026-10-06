@@ -46,14 +46,28 @@ def skill_env(tmp_path, monkeypatch, study):
     for dev in ("B200", "GH200", "MI300X", "Trn2"):
         rel = _write(root, f"skills/device/{dev}/2026-10-05/SKILL.md", f"# {dev} facts\nunknown: yes\n")
         loader.register_asset(m, "device", dev, "2026-10-05", rel, permission="public", status="approved", source="test")
-    rel = _write(root, "skills/optimization/triton/source-B200/fold-A/SKILL.md", "# triton skill A\nrule.\n")
-    loader.register_asset(m, "optimization", "triton/A", "v1", rel, permission="public", status="frozen", source="test")
-    rel = _write(root, "skills/optimization/triton/source-B200/fold-C/SKILL.md", "# triton skill C\nrule.\n")
-    loader.register_asset(m, "optimization", "triton/C", "v1", rel, permission="public", status="frozen", source="test")
-    rel = _write(root, "skills/optimization/triton/source-B200/fold-B/SKILL.md", "# triton skill B (draft)\n")
-    loader.register_asset(m, "optimization", "triton/B", "v1", rel, permission="public", status="draft", source="test")
+    for fold, status, body in (("A", "frozen", "# triton skill A\nrule.\n"), ("C", "frozen", "# triton skill C\nrule.\n"),
+                               ("B", "draft", "# triton skill B (draft)\n")):
+        rel = _write(root, f"skills/optimization/triton/source-B200/fold-{fold}/SKILL.md", body)
+        write_opt_manifest(root, rel, dsl="triton", fold=fold, status=status)
+        loader.register_asset(m, "optimization", f"triton/{fold}", "v1", rel, permission="public", status=status, source="test")
     loader.save_manifest(m, manifest_path)
     return m, root
+
+
+def write_opt_manifest(root: Path, rel: str, *, dsl: str, fold: str, status: str, **overrides) -> dict:
+    """A provenance manifest beside an optimization SKILL.md, valid for an
+    evaluation-mode Enhanced run of (dsl, fold) unless overridden."""
+    import hashlib
+    from tilebench.llm.v2.manifests.schema import training_folds
+    text = loader.transform((root / rel).read_bytes())
+    m = {"schema": "tilebench-optimization-skill/2", "dsl": dsl, "compatible_versions": [{"triton": "3.6.0", "cutile": "1.5.0", "tilelang": "0.1.11"}[dsl]],
+         "source_device": "B200", "held_out_fold": fold, "training_folds": list(training_folds(fold)),
+         "evaluation_or_release": "evaluation", "source_trajectory_ids": ["t-synthetic-1", "t-synthetic-2"],
+         "content_sha256": hashlib.sha256(text.encode()).hexdigest(), "status": status}
+    m.update(overrides)
+    (root / rel).parent.joinpath("manifest.json").write_text(json.dumps(m, indent=1))
+    return m
 
 
 @pytest.fixture

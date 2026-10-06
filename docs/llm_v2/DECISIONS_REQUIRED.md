@@ -3,7 +3,9 @@
 Nothing below was decided by the framework; each item names the artifact
 that encodes the decision and the file to change. Items marked
 **[protocol]** touch the v2 method text; the code stays on the v2 reading
-until the owner rules.
+until the owner rules. `docs/llm_v2/FREEZE_DECISIONS.md` sorts the same
+material into (A) already decided by the owner, (B) closed by code and
+(C) still to rule on, with recommendations; this file keeps the detail.
 
 ## A. Contracts (per operator; details in `docs/llm_v2/CANONICAL_AUDIT.md`)
 
@@ -101,8 +103,13 @@ assigned to any task; assigning it requires approval per task.
 
 ## C. Study configuration
 
-C1. **Model ids and decoding settings** — `manifests/models.yaml` now
-carries the owner's instruction of 2026-10-05 as `status: candidate`:
+C1. **Model ids and decoding settings** — DECIDED by the owner
+(NEXT_STEP_CLAUDE.md 2026-10-05, freeze round): `manifests/models.yaml`
+records the generators as `status: approved` with `approved_by` /
+`approved_evidence` (probes + 120 archived responses). Not re-opened. The
+original wording is kept below for the record; the distiller role is still
+unset (FREEZE_DECISIONS C4). Earlier text: `manifests/models.yaml` carried
+the owner's instruction of 2026-10-05 as `status: candidate`:
 `gpt` = `gpt-6.1-sol`, `reasoning.effort=xhigh`, `max_output_tokens=128000`
 (`OPENAI_API_KEY`); `claude` = `claude-opus-5-5`, `output_config.effort=xhigh`
 (not `max`), adaptive thinking, `max_tokens=128000` (`CLAUDE_API_KEY`). Both
@@ -216,6 +223,24 @@ unrolled kernel produced a 20 MB PTX kept `ptxas` busy for the full 30
 minutes while holding the device lock. Decide the formal limit (the
 validation campaign used 1800 s, then 600 s for the re-opened round) and
 whether it belongs in `study.yaml`. **[protocol: round outcome set]**
+
+E13. **Evaluator fingerprint and append-only evidence** (code, this round):
+a trajectory records the evaluator fingerprint at creation (job tolerance /
+rules sha256 / timing settings / capture policy / checker and evaluation
+sources / worker timeout / isolation backend / environment); a formal
+resume refuses any difference, a validation resume accepts it only with
+`--allow-evaluator-change` and records it. Evaluations are revisions
+(`eval_NNNN/` with META reason/supersedes/executor); `re-evaluate` appends
+a revision to an archived candidate without a request. Confirm that a
+formal campaign is one evaluator fingerprint per device from start to end.
+
+E14. **Transport reopen** (code, this round): `--resume-transport --reason`
+re-opens an attempt closed by exhausted retries or a provider refusal; the
+attempt's transport history is rebuilt from every durable event (unknown
+charges keep propagating, lost responses keep their known charge), a
+`reopened` event with the settings hashes is recorded, no round or
+candidate is added. Confirm the retry budget reading: per process session,
+cumulative events kept.
 
 E11. **Review decisions during validation runs** were made by the operator
 running the campaign and are recorded with the evidence in each

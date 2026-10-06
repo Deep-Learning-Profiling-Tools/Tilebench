@@ -88,12 +88,31 @@ python -m tilebench.llm.v2 enhanced --device B200 --dsl triton --model gpt --cam
 ```
 
 Options: `--resume` continues persisted trajectories (archived responses
-are reused, never re-requested; the config hash, content hashes, run type
-and generator settings must be unchanged); `--stop-after-rounds N` pauses
-after N closed rounds (state is resumable); `--isolation auto|bwrap|none`
-(auto = bubblewrap when it works, recorded in every result);
-`--worker-timeout`, `--max-trajectories`, `--out-root` (default
-`outputs/llm_v2`).
+are reused, never re-requested; the config hash, content hashes, run type,
+generator settings AND the evaluator fingerprint must be unchanged — a
+formal resume refuses any evaluator change, a validation resume accepts one
+only with `--allow-evaluator-change` and records it in
+`evaluator_changes.jsonl`); `--retry-incomplete` re-evaluates a round
+closed by an evaluation-side infrastructure failure (new `eval_NNNN`
+revision, no request); `--resume-transport --reason "<why>"` re-opens an
+attempt closed by exhausted transport retries or a provider refusal (the
+transport history is rebuilt from `transport.jsonl`, unknown charges keep
+propagating, a `reopened` event is recorded, no round is added);
+`--stop-after-rounds N` pauses after N closed rounds; `--isolation
+auto|bwrap|none` (formal runs require bwrap and a passing isolation probe);
+`--worker-timeout`, `--executor`, `--max-trajectories`, `--out-root`
+(default `outputs/llm_v2`).
+
+Evidence is append-only: the first `compliance.json` of an attempt is never
+rewritten (rechecks are `compliance_recheck_NNNN.json`), every evaluation is
+an `eval_NNNN/` revision with `META.json` (reason, supersedes, executor,
+evaluator fingerprint, candidate sha256).
+
+Independent re-evaluation of an archived candidate (no request):
+
+```
+python -m tilebench.llm.v2 re-evaluate --trajectory-dir <dir> --round 1 --reason "<why>" --executor "<who>" [--adopt]
+```
 
 Chain per task: manifests → eligibility → task context (prompt) +
 evaluation job (tolerance, rules, timing; asserted equal to the prompt's
@@ -128,6 +147,13 @@ python -m tilebench.llm.v2 base ... --resume        # continue
 Decisions are appended to `reviews.jsonl` and to `trajectory.json.notes`.
 There is no automatic clearance; the optional LLM reviewer is disabled.
 
+## Clean-tree publication check
+
+```
+T=$(mktemp -d); git archive HEAD artifacts/llm_v2/<name> | tar -x -C $T   # then verify INDEX.json hashes under $T
+python -m pytest tests/llm_v2/test_freeze_fixes.py -k clean_git_archive -q
+```
+
 ## Distillation (**paid** in formal mode; refuses without its gates)
 
 ```
@@ -136,13 +162,23 @@ python -m tilebench.llm.v2 distill --campaign-dir ... --dsl triton --mode releas
 python -m tilebench.llm.v2 distill --campaign-dir ... --dsl triton --fold A --run-type test-only --out ...   # test-only skill, never registered
 ```
 
-Formal mode needs an approved distiller model, frozen folds and formal
-Base trajectories of the source device and training folds (the trusted
-index is built from the campaign directory with file hashes; identity,
-root containment and hashes are re-verified before any state is read).
-Observations and the synthesis are persisted under `--out` and reused on
-resume. Registration of a produced skill in `skills/manifest.json` is a
-separate, explicit owner act (`skills-register`).
+Formal mode needs an approved distiller model, frozen folds and formal,
+COMPLETE Base trajectories of the source device and training folds (the
+trusted index is built from the campaign directory with file hashes and
+the frozen fold manifest — folds are recomputed per operator, a state whose
+own label disagrees is excluded; identity, root containment and hashes are
+re-verified before any state is read; coverage against the pre-declared
+task set is required unless `--allow-partial-coverage` is recorded).
+Materials per trajectory: every attempt's source, verdict, diagnostics and
+diff, every round's raw samples, plus the offline SOL record
+(`sol_info.json`). Observations and the synthesis are persisted with the
+full request/raw response under `--out` and reused on resume by input
+identity; a truncated or interrupted response is kept as a partial record
+with its cost and never becomes an observation or a skill (exit 3).
+Registration of a produced skill in `skills/manifest.json` is a separate,
+explicit owner act (`skills-register`); the Enhanced loader validates the
+skill's own provenance manifest (DSL, version, source device, mode, folds,
+source ids, content hash) before injecting it.
 
 ## Skills and device snapshots
 
