@@ -455,6 +455,30 @@ def cmd_run_mock(a) -> int:
     return 0
 
 
+def cmd_calibrate(a) -> int:
+    from tilebench.llm.v2.calibration.run import CalibrationRefused, run_calibration
+    try:
+        r = run_calibration(a.device, Path(a.out) if a.out else None, modes=a.modes, quick=a.quick,
+                            index=a.device_index, lock_timeout_s=a.lock_timeout, log=_log)
+    except CalibrationRefused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return 2
+    _print(r)
+    return 0
+
+
+def cmd_calibration_check(a) -> int:
+    from tilebench.llm.v2.calibration import schema as cs
+    bad = 0
+    for path in a.profiles:
+        p = json.loads(Path(path).read_text())
+        errs = cs.validate_profile(p)
+        bad += bool(errs)
+        _print({"profile": path, "calibration_id": p.get("calibration_id"), "profile_sha256": p.get("profile_sha256"),
+                "errors": errs, "modes": {k: [m.get("status"), m.get("unit"), m.get("value")] for k, m in p.get("modes", {}).items()}})
+    return 1 if bad else 0
+
+
 def cmd_metrics(a) -> int:
     from tilebench.llm.v2.devtools import recompute_metrics
     _print(recompute_metrics(Path(a.campaign_dir), budgets=a.budgets))
@@ -629,6 +653,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--condition", default="base", choices=["base", "enhanced"])
     s.add_argument("--resume", action="store_true"); s.set_defaults(fn=cmd_run_mock)
 
+    s = sub.add_parser("calibrate", help="empirical Roofline calibration of this host's device; writes ONLY a new "
+                       "calibration directory (never the legacy peak table)")
+    s.add_argument("--device", required=True, help="study device label (B200, GH200, MI300X, Trn2)")
+    s.add_argument("--out", help="new calibration directory (default artifacts/llm_v2/calibration/<device>/<id>)")
+    s.add_argument("--modes", nargs="+", help="registered mode names (default: every mode of the detected backend)")
+    s.add_argument("--quick", action="store_true", help="smoke-test protocol; such a profile can never be activated")
+    s.add_argument("--device-index", type=int, default=0)
+    s.add_argument("--lock-timeout", type=float, default=600.0, help="seconds to wait for the device lock")
+    s.set_defaults(fn=cmd_calibrate)
+    s = sub.add_parser("calibration-check", help="validate empirical profile JSON files (schema, units, seal)")
+    s.add_argument("profiles", nargs="+"); s.set_defaults(fn=cmd_calibration_check)
     s = sub.add_parser("metrics", help="recompute E(B) curves from a campaign directory")
     s.add_argument("campaign_dir"); s.add_argument("--budgets", nargs="*", type=int); s.set_defaults(fn=cmd_metrics)
     s = sub.add_parser("coverage", help="task coverage / status counts of a campaign directory"); s.add_argument("campaign_dir"); s.set_defaults(fn=cmd_coverage)
