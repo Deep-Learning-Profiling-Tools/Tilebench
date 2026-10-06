@@ -27,8 +27,9 @@ freeze still needs and who decides.
 | Isolation | bounded allowlist bubblewrap sandbox (system dirs, runtime prefix, repository with masks over benchmarks/results/artifacts/outputs/skills/docs/tests/contracts/.git; only the task's `impl_torch.py` re-bound); sentinel probe; formal preflight requires bwrap + passing probe; NVIDIA nodes verified, AMD/Neuron described and pending | `evaluation/launcher.py` | `test_restricted_paths_are_unreadable_inside_the_sandbox`, `test_formal_preflight_requires_the_sandbox` |
 
 Tests (dgx003, `tilebench_env`, this code state): `python -m pytest tests/llm_v2 -q` → 146 passed;
-`python -m pytest tests -q` → see `outputs/llm_v2/test_logs_freeze/pytest_full_suite.log`
-(copied into the handoff); `python -m compileall -q tilebench scripts tests` → ok.
+`python -m pytest tests -q` → 623 passed, 2 skipped; `python -m compileall -q tilebench scripts tests` → ok.
+Logs: `artifacts/llm_v2/validation_b200_2026-10-05/evidence/test_logs_freeze/`; isolation probe and
+formal preflight reports: `.../evidence/gates_freeze/`.
 
 ### Executed on hardware in this round (B200; no new model requests)
 

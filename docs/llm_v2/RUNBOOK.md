@@ -16,7 +16,7 @@ hidden.
 python -m tilebench.llm.v2 doctor                 # versions, device, manifests, skills, contracts, isolation backend
 python -m tilebench.llm.v2 validate-manifests     # study/folds/modes/skills/contracts/rule scopes; exit 1 on errors
 python -m tilebench.llm.v2 inventory              # registered assets with hashes and provider/publication grants
-python -m pytest tests/llm_v2 -q                  # CPU/mock tests of the protocol (123 tests)
+python -m pytest tests/llm_v2 -q                  # CPU/mock tests of the protocol (146 tests)
 ```
 
 ## Task definition
