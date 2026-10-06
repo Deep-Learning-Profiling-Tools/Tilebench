@@ -1,3 +1,6 @@
+import functools
+import os
+import re
 from types import SimpleNamespace
 
 import torch
@@ -38,6 +41,15 @@ def _kernel_assert(cond, msg):
 
 def _div_ceil(n, d):
     return (n + d - 1) // d
+
+
+@functools.lru_cache(maxsize=1)
+def _lnc_degree() -> int:
+    explicit = os.environ.get("NEURON_LOGICAL_NC_CONFIG", "")
+    if explicit.strip().isdigit():
+        return int(explicit.strip())
+    match = re.search(r"--lnc[=\s]+(\d+)", os.environ.get("NEURON_CC_FLAGS", ""))
+    return int(match.group(1)) if match else 1
 
 
 if nki is not None:
@@ -244,11 +256,25 @@ if nki is not None:
                 nisa.tensor_scalar(dst=work_off, data=work_off, op0=nl.add, operand0=-ROWS * S)
                 nisa.tensor_scalar(dst=slot_off, data=slot_off, op0=nl.add, operand0=-ROWS)
 
-        for d in range(RADIX - 1, -1, -1):
+        n_prog = nl.num_programs()
+        pid = nl.program_id(0)
+        d_lo = pid * (RADIX // n_prog)
+        for d in range(d_lo + RADIX // n_prog - 1, d_lo - 1, -1):
             nisa.memset(dst=digit_sel, value=float(d))
             nisa.memset(dst=work_off, value=(n_tiles - 1) * ROWS * S)
             nisa.memset(dst=slot_off, value=d * NBLK + (n_tiles - 1) * ROWS)
             nl.fori_loop(0, n_tiles // SCATTER_TILES_PER_ITER, _scatter_tiles)
+
+        if n_prog > 1:
+            nisa.core_barrier(data=out, cores=(0, 1))
+            if pid > 0:
+                region_start = nl.ndarray((1, 1), dtype=nl.int32, buffer=nl.sbuf)
+                nisa.dma_copy(dst=region_start,
+                              src=base.ap(pattern=[[1, 1], [1, 1]], offset=d_lo * NBLK))
+                nisa.dma_copy(
+                    dst=out.ap(pattern=[[1, S]], scalar_offset=region_start, indirect_dim=0),
+                    src=stages[(ROWS - 1) % 4][0:1, 0:S],
+                )
         return out
 
 
@@ -275,7 +301,11 @@ def _pass_args(keys: torch.Tensor, S: int) -> tuple:
     return torch.cat([keys.to(torch.int32), tail]).reshape(work_len, 1), n_blocks
 
 
-_tuner = NkiAutotuner(radix_pass) if nki is not None else None
+def _launch(work, shift, S, NBLK):
+    return radix_pass[_lnc_degree()](work, shift, S, NBLK)
+
+
+_tuner = NkiAutotuner(_launch, name=f"{__name__}.radix_pass") if nki is not None else None
 _last_autotune_config: dict = {}
 
 
@@ -306,7 +336,7 @@ def run(input: torch.Tensor, N: int, block_size: int = 1024,
 
     for shift in range(0, KEY_BITS, RADIX_BITS):
         shift_t = torch.full((PMAX, 1), shift, dtype=torch.int32, device=device)
-        work = radix_pass(work, shift_t, S, n_blocks)
+        work = _launch(work, shift_t, S, n_blocks)
         _mark_step(device)
 
     return work.reshape(-1)[:N].to(dtype)
