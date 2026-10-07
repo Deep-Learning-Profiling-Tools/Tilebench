@@ -444,6 +444,48 @@ def test_generation_overlaps_other_evaluations_same_trajectory_waits_and_backlog
     assert any(g[2] < v[3] and v[2] < g[3] for g in gens for v in evals)       # other trajectories generate meanwhile
 
 
+def test_concurrency_ramp_is_gated_on_the_evaluation_backlog_not_on_budget_reservations(study, folds, tmp_path, monkeypatch):
+    """With more trajectories than budget slots, every slot is reserved by a trajectory waiting to send; the limiter
+    must still ramp while few candidates wait for the device (the B200 formal launch stayed at 3 otherwise)."""
+    from tilebench.llm.v2.orchestration import campaign, scheduler
+    from tilebench.llm.v2.orchestration.campaign import CampaignSpec, Preflight
+    monkeypatch.setattr(campaign, "preflight", lambda *a, **k: Preflight(device="B200", dsl=k.get("dsl", "triton"), condition="base",
+                                                                         ok=True, run_type="validation"))
+    seen = {}
+    real_limiter, real_tracker = scheduler.AdaptiveLimiter, scheduler.EvalTracker
+
+    class Lim(real_limiter):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            seen.setdefault("pending_fns", []).append(k["pending_fn"])
+
+    class Tracker(real_tracker):
+        def __init__(self, inner):
+            super().__init__(inner)
+            seen["tracker"] = self
+
+    class Budget(scheduler.EvalBudget):
+        def __init__(self, cap):
+            super().__init__(cap)
+            seen["budget"] = self
+    monkeypatch.setattr(scheduler, "AdaptiveLimiter", Lim)
+    monkeypatch.setattr(scheduler, "EvalTracker", Tracker)
+    monkeypatch.setattr(scheduler, "EvalBudget", Budget)
+    spec = CampaignSpec(name="unit_ramp_gate", run_type="validation", device="B200", dsl="triton", condition="base", model="gpt",
+                        operators=["vector_add"], out_root=tmp_path, resume=True, isolation="none")
+    good = scripted_text("impl_triton.py", "# MOCK: valid 1.0\ndef run(*a): pass\ndef get_last_config(): return {}")
+
+    class Ev(MockEvaluator):
+        report, timeout_s = {"backend": "bwrap"}, 3600
+    scheduler.run_scheduled(spec, ["triton"], models=["gpt"], max_pending=4, log=lambda s: None,
+                            providers={"gpt": MockProvider([{"text": good}] * 5)}, evaluator=Ev(), telemetry_interval_s=0.2)
+    fn, tracker, budget = seen["pending_fns"][0], seen["tracker"], seen["budget"]
+    budget.used, tracker.pending = 4, 1                     # every slot reserved, one candidate at the device
+    assert fn() == 1 < 4 / 2
+    tracker.pending = 3
+    assert fn() == 3
+
+
 def test_scheduler_continues_a_trajectory_after_the_adjudicator_resolves_its_review(study, folds, tmp_path, monkeypatch):
     from tilebench.llm.v2.orchestration import campaign
     from tilebench.llm.v2.orchestration.campaign import CampaignSpec, Preflight
