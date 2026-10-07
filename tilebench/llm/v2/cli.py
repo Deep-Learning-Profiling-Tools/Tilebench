@@ -445,9 +445,11 @@ def cmd_review_resolve(a) -> int:
         # Re-run the current checker on the stored candidate (e.g. after a checker fix). Only a `clear`/`audit_only`
         # re-check resolves the review; anything else leaves the trajectory blocked for adjudication.
         from tilebench.llm.v2.contracts.loader import load_contract
+        from tilebench.llm.v2.tasks.input_kinds import scalar_positions
         from tilebench.llm.v2.validation.contract_checks import CHECKER_VERSION, check_compliance
         rules = load_contract(st.task["operator"], require_approved=False).rules
-        res = check_compliance(Path(att.source_path).read_text(), st.task["dsl"], rules)
+        res = check_compliance(Path(att.source_path).read_text(), st.task["dsl"], rules,
+                               scalar_positions=scalar_positions(st.task["operator"]))
         from tilebench.llm.v2.evaluation.fingerprint import checker_fingerprint
         rc = res.to_dict(); rc["diagnostics"] = res.diagnostics(); rc["checker_version"] = CHECKER_VERSION
         rc["checker"] = checker_fingerprint(); rc["executor"] = a.reviewer or ms.ADJUDICATOR; rc["checked_at"] = time.time()

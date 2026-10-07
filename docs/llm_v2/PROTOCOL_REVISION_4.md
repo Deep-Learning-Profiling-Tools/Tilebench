@@ -94,7 +94,7 @@ candidates replayed on B200 are all `valid`, 0 precision violations
 legacy TF32, the new API, `set_float32_matmul_precision`, cuDNN TF32, the default dtype or deterministic mode are
 still violations (`tests/llm_v2/test_protocol_v4.py`).
 
-## 7. Checker v3 (`contract_checks/2026-10-07.v3`)
+## 7. Checker v3 (`contract_checks/2026-10-07.v3`) and v4 (`contract_checks/2026-10-07.v4`)
 
 Generic, AST/token-based (no candidate whitelist):
 - a regex match that spans a line break is not evidence unless the rule declares `multiline: true`;
@@ -110,6 +110,16 @@ Regression on the 1144 archived pilot candidates (`artifacts/llm_v2/checker_v3_r
 pilot reviews become audit-only (the remaining one, a matmul_int8 transposed copy permitted only per call, is a
 genuine review); the revision-3 `confirmed_violation` of a candidate whose own function was named
 `_flash_attn_fwd` becomes audit-only; no new review or violation.
+
+Checker v4 (found during the first formal launch's reviews, see §11): the cache data-flow seeded EVERY `run()`
+parameter not annotated as a scalar as a tensor argument, so a per-call configuration dict holding a launch grid
+computed from scalar inputs (`run(input, N, C, H, W, kernel_size, stride, padding)`) went to review; 25 of the 45
+interfaces pass Python numbers. v4 reads the frozen kinds of the task's positional `run()` inputs
+(`manifests/input_kinds.yaml`, derived by calling each operator's input generator on all 20 frozen cases, identical
+across cases; part of the checker fingerprint): a parameter whose position receives a Python number is configuration,
+not a tensor seed. Tensor inputs, outputs and anything torch-produced stay tensor-derived. Regression on all 1161
+archived candidates (`artifacts/llm_v2/checker_v4_regression/`): only the 4 reviews of the aborted launch change (3
+clear, 1 audit-only); no candidate becomes stricter; the genuine revision-3 review stays.
 
 ## 8. Compliance review: Claude Code adjudicates
 
@@ -146,8 +156,10 @@ per-provider adaptive concurrency (3 -> 6 -> 12 ..., 429 Retry-After/reset, sust
 global hard evaluation-backlog budget (`--max-pending-evaluations`, default 16): a trajectory reserves a slot
 atomically before its generation request is sent and releases it when the round closes, so generated + waiting +
 in-evaluation candidates never exceed the cap. Round i+1 of a trajectory waits for its own round-i evaluation;
-other trajectories generate while the device evaluates. STOP / STOP_<model> pause gracefully; resume only under
-the exact frozen identity.
+other trajectories generate while the device evaluates. The concurrency ramp is gated on the evaluation backlog
+(candidates waiting for or in evaluation), not on the budget reservations of trajectories still waiting to send (the
+first formal launch stayed at 3 per provider because of that, §11). STOP / STOP_<model> pause gracefully; resume only
+under the exact frozen identity.
 
 ## 11. Freeze, validation smoke and campaign layout
 
@@ -165,7 +177,12 @@ suite-stop/freeze commit, `validation_b200_rev4_vector_add_1r_2026-10-07b`): vec
   `coalesced_width` error of the model's code). The suite stopped at its first case (19 cases `not_evaluated`, nothing
   fabricated), and the next prompt would receive "valid on 0 of 20 cases (1 evaluated); first failing case: n=1048576".
   This is an ordinary model failure; it was not re-requested. 141,434 tokens, USD 0.66 (exact).
-- Both smokes:
+- Smoke 3 (`validation_b200_rev4_vector_add_1r_2026-10-07c`, checker v4 + scheduler fix): 4/6 candidates valid on
+  20/20 cases (cuTile x2, Triton x GPT, TileLang x Claude); Triton x Claude omitted the required block title
+  (`format_error`, not evaluated) and TileLang x GPT failed to compile at its first case (suite stopped); both are
+  ordinary model failures and were not re-requested; the OpenAI concurrency ramped 3 -> 6 with the evaluation budget
+  partly reserved; 147,656 tokens, USD 0.85 (exact).
+- All smokes:
   - Per-case records (1 warmup + 3 samples, mean, configuration, timing mode) and one profile per evaluated case are
     archived; each round geometric mean recomputes exactly.
   - The round-2 feedback (rendered offline) carries only the valid-case count, the geometric mean, and for an
@@ -177,6 +194,12 @@ suite-stop/freeze commit, `validation_b200_rev4_vector_add_1r_2026-10-07b`): vec
   - GPU evaluations overlapped other tracks' generation, and the global evaluation budget peaked at 6 of 16.
   - There were no 429s and no review was required.
   - A `--resume` of each finished smoke sent nothing and changed no archived byte.
+
+First formal launch `formal_b200_base_rev4_20case_2026-10-07` (03:35-04:00, 19 generations): four of the first 19
+candidates went to review on the checker-v3 false positive above (resolved compliant by claude-code), and the concurrency
+stayed at 3 per provider. Following §9/§21 the campaign was paused with the STOP file, drained, and excluded
+(`manifests/excluded_campaigns.yaml`); checker v4 and the scheduler fix were versioned, tested and smoke-tested, and the
+B200 formal Base restarted under a new identity (`docs/llm_v2/S_LLM.md`).
 
 Formal campaigns run only from device branches brought to S_llm (`docs/llm_v2/S_LLM.md`): `exp/llm-b200`,
 `exp/llm-gh200`, `exp/llm-mi300x`, `exp/llm-trn2`.

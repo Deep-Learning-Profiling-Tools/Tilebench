@@ -37,7 +37,9 @@ def test_frozen_rev4_manifest_matches_the_tree():
     assert f["case_sets"]["case_set_ids"] == {op: v["case_set_id"] for op, v in cs["operators"].items()}
     assert all(len(v["cases"]) == 20 for v in cs["operators"].values()) and len(cs["operators"]) == 45
     assert f["representative_dtypes"]["mapping"] == representative.selected() and f["representative_dtypes"]["tasks_per_dsl"] == 45
-    assert f["checker"] == fpm.checker_fingerprint()
+    assert f["checker"] == fpm.checker_fingerprint() and f["checker"]["checker_version"] == "contract_checks/2026-10-07.v4"
+    assert f["input_kinds"]["sha256"] == _sha(ms.MANIFEST_DIR / "input_kinds.yaml")
+    assert "manifests/input_kinds.yaml" in fpm.CHECKER_SOURCES          # the kinds are part of the checker fingerprint
     pol = f["evaluator_fingerprint_policy"]
     assert pol["evaluation_sources_sha256"] == fpm._sources_sha256(fpm.V2_ROOT, fpm.EVALUATION_SOURCES)
     assert pol["core_sources_sha256"] == fpm._sources_sha256(fpm.CORE_ROOT, fpm.CORE_SOURCES)

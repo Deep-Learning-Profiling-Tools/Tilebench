@@ -309,6 +309,45 @@ def test_compiled_kernel_cache_is_not_a_tensor_cache_but_an_output_cache_still_i
     assert any("holds tensor data" in i for i in _verdict(out_cache, "tilelang", "gaussian_blur").review_items())
 
 
+POOL_CONFIG = ("import torch\nimport triton\nimport triton.language as tl\n_last_config = {}\n\n@triton.jit\n"
+               "def _k(X, Y, n, BLOCK: tl.constexpr):\n    o = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)\n"
+               "    tl.store(Y + o, tl.load(X + o, mask=o < n), mask=o < n)\n\n"
+               "def run(input, N, C, H, W, kernel_size, stride, padding, **kwargs):\n    global _last_config\n"
+               "    oh = (H + 2 * padding - kernel_size) // stride + 1\n    ow = (W + 2 * padding - kernel_size) // stride + 1\n"
+               "    total = N * C * oh * ow\n    out = torch.empty(total, dtype=input.dtype, device=input.device)\n"
+               "    grid = (triton.cdiv(total, 256),)\n    _last_config = {'BLOCK': 256, 'grid': grid}\n"
+               "    _k[grid](input, out, total, BLOCK=256)\n    return out\n\ndef get_last_config():\n    return dict(_last_config)\n")
+
+
+def test_scalar_run_inputs_are_configuration_but_tensor_and_output_caches_stay_review():
+    from tilebench.llm.v2.tasks.input_kinds import scalar_positions
+    rules = load_contract("2d_max_pooling").rules
+    pos = scalar_positions("2d_max_pooling")
+    assert pos == frozenset(range(1, 8))                       # input, N, C, H, W, kernel_size, stride, padding
+    # a launch grid computed from the scalar inputs, kept for get_last_config(): configuration (checker v3 flagged it)
+    assert any("holds tensor data" in i for i in check_compliance(POOL_CONFIG, "triton", rules).review_items())
+    assert not any("holds tensor data" in i for i in check_compliance(POOL_CONFIG, "triton", rules, scalar_positions=pos).review_items())
+    # the tensor input or the output in persistent state stays a possible result cache
+    keeps_input = POOL_CONFIG.replace("_last_config = {'BLOCK': 256, 'grid': grid}", "_last_config = {'BLOCK': 256, 'x': input}")
+    keyed_out = POOL_CONFIG.replace("    return out\n\ndef get", "    _last_config[(N, C, H, W)] = out\n    return out\n\ndef get")
+    for src in (keeps_input, keyed_out):
+        assert any("holds tensor data" in i for i in check_compliance(src, "triton", rules, scalar_positions=pos).review_items())
+    # only the positions the task passes as numbers: a scalar position never covers a tensor input
+    assert 0 not in pos and scalar_positions("vector_add") == frozenset()
+
+
+def test_input_kinds_manifest_matches_the_case_sets_and_the_generators():
+    from tilebench.llm.v2.tasks import input_kinds
+    m = input_kinds.load_manifest()
+    cs = ms.load_case_sets()["operators"]
+    assert set(m["operators"]) == set(cs) and len(cs) == 45
+    assert all(e["kinds"][0] == "tensor" for e in m["operators"].values())
+    if not torch.cuda.is_available():
+        pytest.skip("generators need the GPU")
+    for op, e in sorted(m["operators"].items()):                 # first case of every task, as the evaluator builds it
+        assert input_kinds.derive(op, {**cs[op], "cases": cs[op]["cases"][:1]}) == e["kinds"], op
+
+
 # ----------------------------------------------------------------------------- Claude Code adjudication
 def _formal_review_state(study, folds, tmp_path):
     ctx, job, _ = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)

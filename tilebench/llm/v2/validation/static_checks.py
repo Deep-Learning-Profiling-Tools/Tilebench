@@ -44,7 +44,10 @@ PyTorch delegation):
   functions: a value is TENSOR-DERIVED when it comes from a tensor argument of
   `run()` (or of a helper called with one), from a torch call that produces a
   tensor, or from a tensor address (`data_ptr()`, `id()`); shape, dtype,
-  device, stride and numel reads are metadata and break the derivation;
+  device, stride and numel reads are metadata and break the derivation. A
+  `run()` parameter is a tensor argument unless it is annotated as a scalar or
+  its position receives a Python number in the task's frozen input kinds
+  (`scalar_positions`, tasks.input_kinds; e.g. `N, C, H, W` of a pooling task);
 - regex rules from the contract run on CODE-ONLY text (comments and string
   literals blanked, line structure preserved), in the scope the rule
   declares (`host` by default, `kernel`, or `any`)."""
@@ -440,8 +443,9 @@ def degenerate_exit_lines(tree: ast.AST, kernel: set[int]) -> set[int]:
 # --------------------------------------------------------------------------
 
 class _Flow:
-    def __init__(self, tree: ast.Module, aliases: dict[str, str], kernel: set[int]):
+    def __init__(self, tree: ast.Module, aliases: dict[str, str], kernel: set[int], scalar_positions: frozenset = frozenset()):
         self.tree, self.aliases, self.kernel = tree, aliases, kernel
+        self.scalar_positions = frozenset(scalar_positions)
         self.parents = _parents(tree)
         self.functions: dict[str, ast.FunctionDef] = {}
         self.classes: dict[str, ast.ClassDef] = {}
@@ -515,7 +519,10 @@ class _Flow:
         seeds: dict[str, set[str]] = {k: set() for k in self.functions}
         run = self.functions.get("run")
         if run is not None:
+            positional = run.args.posonlyargs + run.args.args
             for a in self._params(run):
+                if a in positional and positional.index(a) in self.scalar_positions:
+                    continue                             # receives a Python number (frozen input kinds of the task)
                 ann = ast.unparse(a.annotation) if a.annotation is not None else None
                 if ann is None or not any(ann == s or ann.endswith("." + s) for s in _SCALAR_ANNOTATIONS):
                     seeds["run"].add(a.arg)
@@ -764,7 +771,7 @@ class _Flow:
 # analysis
 # --------------------------------------------------------------------------
 
-def analyze(source: str, dsl: str, *, allowed_torch_calls: tuple[str, ...] = ()) -> StaticReport:
+def analyze(source: str, dsl: str, *, allowed_torch_calls: tuple[str, ...] = (), scalar_positions=frozenset()) -> StaticReport:
     rep = StaticReport()
     try:
         tree = ast.parse(source)
@@ -863,7 +870,7 @@ def analyze(source: str, dsl: str, *, allowed_torch_calls: tuple[str, ...] = ())
                                                  node.lineno, rep.scope_of(node.lineno)))
 
     # persistent state (data flow)
-    flow = _Flow(tree, aliases, rep.kernel_lines)
+    flow = _Flow(tree, aliases, rep.kernel_lines, scalar_positions=frozenset(scalar_positions))
     review_lines: set[int] = set()
     for w in flow.persistent_writes():
         if w["tensor"]:
