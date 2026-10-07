@@ -62,15 +62,15 @@ def _sha(p: Path) -> str:
 # ---------------------------------------------------------------- R1
 def test_r1_incomplete_task_stays_in_the_frozen_denominator():
     curves = {("op", "fp16"): e.curve(1.0, rounds(([10], True, 1.0))),
-              ("op", "fp32"): e.curve(1.0, rounds(([10], True, 1.0)), status="incomplete")}
-    agg = e.aggregate(curves, [100], {("op", "fp16"): "eligible", ("op", "fp32"): "eligible"})
+              ("op2", "fp32"): e.curve(1.0, rounds(([10], True, 1.0)), status="incomplete")}
+    agg = e.aggregate(curves, [100], {("op", "fp16"): "eligible", ("op2", "fp32"): "eligible"})
     assert agg["mean"] == [None]                                   # exact suite value unknown
     assert agg["lower_bound_mean"] == [0.5]                        # unknown counted as 0 over the full denominator
-    assert agg["tasks_included"] == [("op", "fp16"), ("op", "fp32")]
+    assert agg["tasks_included"] == [("op", "fp16"), ("op2", "fp32")]
     assert agg["completed_only_mean"] == [1.0] and agg["completed_only_tasks"] == [("op", "fp16")]
-    assert agg["incomplete"] == [("op", "fp32")] and agg["partial"]
+    assert agg["incomplete"] == [("op2", "fp32")] and agg["partial"]
     with pytest.raises(ValueError, match="pre-declared"):         # execution state is not an eligibility status
-        e.aggregate(curves, [100], {("op", "fp16"): "eligible", ("op", "fp32"): "incomplete"})
+        e.aggregate(curves, [100], {("op", "fp16"): "eligible", ("op2", "fp32"): "incomplete"})
 
 
 # ---------------------------------------------------------------- R2
@@ -223,7 +223,7 @@ def test_evaluation_revisions_are_append_only_and_compliance_is_recorded_once(st
 def test_review_recheck_files_are_numbered_and_the_first_record_kept(study, folds, tmp_path):
     from tilebench.llm.v2.cli import main as cli_main
     ctx, job, st, cfg, tdir = _setup(study, folds, tmp_path)
-    susp = scripted_text("impl_triton.py", "import os\n# MOCK: valid 1.0\ndef run(*a): pass\ndef get_last_config(): return {}")
+    susp = scripted_text("impl_triton.py", "import importlib\n# MOCK: valid 1.0\ndef run(*a): pass\ndef get_last_config(): return {}")
     r = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider([{"text": susp}]), evaluator=MockEvaluator(), job=job, cfg=cfg)
     assert r.run() == "review_required"
     adir = tdir / "round_01" / "attempt_1"
@@ -242,7 +242,8 @@ def test_r7_fold_recomputed_from_manifest_and_incomplete_sources_refused(tmp_pat
     good = synthetic_index(root / "ok", folds, dsl="triton", devices=["B200"], models=["gpt"], operators=["layernorm"])
     # a formal state that labels relu (fold A) as fold B, and a 0-round incomplete formal state
     mis = {"trajectory_id": "mis", "model": "gpt", "condition": "base", "status": "complete", "run_type": "formal",
-           "schema": "tilebench-llm-v2-trajectory/2", "task": {"operator": "relu", "dtype": "fp16", "dsl": "triton", "device": "B200", "fold": "B"},
+           "campaign": "synthetic", "protocol": {"revision": 4},
+           "schema": "tilebench-llm-v2-trajectory/4", "task": {"operator": "relu", "dtype": "fp16", "dsl": "triton", "device": "B200", "fold": "B"},
            "rounds": [{"round": 1, "status": "valid", "attempts": []}]}
     inc = {**mis, "trajectory_id": "inc", "status": "incomplete", "rounds": [],
            "task": {"operator": "softmax", "dtype": "fp16", "dsl": "triton", "device": "B200", "fold": "C"}}

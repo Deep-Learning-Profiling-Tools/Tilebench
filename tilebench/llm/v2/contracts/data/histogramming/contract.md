@@ -26,7 +26,7 @@ int32 integers and verification is exact (zero tolerance).
    P private partial histograms, shape (P, num_bins), and zero-initialise
    it. The zero fill may be a device fill issued by run() or done by each
    owning program before it counts. P is a configuration choice for the
-   task's fixed input length (see the permitted mappings), and the scratch
+   case's input length (see the permitted mappings), and the scratch
    is never kept across calls.
 2. Private counting: partition the input among P programs; each program
    owns exactly one private row of the scratch and counts the values of its

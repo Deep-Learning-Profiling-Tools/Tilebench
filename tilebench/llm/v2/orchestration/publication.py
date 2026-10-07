@@ -112,7 +112,7 @@ def summary_markdown(rows: list[dict], redactions: list[dict]) -> str:
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         t = r["task"]
-        best = r["best_valid"]["latency_ms_mean"] if r.get("best_valid") else None
+        best = (r["best_valid"].get("latency_ms_geomean") or r["best_valid"].get("latency_ms_mean")) if r.get("best_valid") else None
         lines.append(f"| {r['trajectory_id']} | {t['device']}/{t['dsl']}/{t['operator']}/{t['dtype']} | {r['model']} | "
                      f"{r['condition']} | {r['run_type']} | {r['status']} | {r['rounds_closed']} | {r['valid_rounds']} | "
                      f"{r['attempts']} | {best if best is None else f'{best:.4f}'} | {r['cumulative_tokens']} |")

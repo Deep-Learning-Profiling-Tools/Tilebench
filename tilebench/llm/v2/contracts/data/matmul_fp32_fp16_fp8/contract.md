@@ -27,9 +27,8 @@ the entry point on every call.
 
 ## Algorithm family and structure
 Blocked dense matrix multiplication with fp32 accumulation. The K reduction
-order is free. Wherever the chosen tile does not divide the task's M, N or
-K, tails beyond them must contribute 0 and must never be stored; supporting
-shapes other than the task's declared shape is not required.
+order is free. Wherever the chosen tile does not divide a case's M, N or
+K, tails beyond them must contribute 0 and must never be stored; supporting shapes outside the task's configured cases is not required.
 
 ## Precision and accumulation
 - fp32 inputs: operands may be rounded to TF32 (10-bit mantissa) for the

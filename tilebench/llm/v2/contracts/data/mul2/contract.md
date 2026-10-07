@@ -17,7 +17,7 @@ arguments are passed.
   so overflow behaviour is outside the verified domain.
 - `y` (returned): `(n,)`, same dtype as `x`, freshly allocated inside `run()`
   on every call. Returned as a single tensor.
-- Edge handling is required wherever the task's fixed `n` is not a multiple
+- Edge handling is required wherever a case's `n` is not a multiple
   of the chosen tile; no element outside `[0, n)` may be read or written.
 
 ## Required logical stages
@@ -69,10 +69,8 @@ may be cached across calls.
   processed once and no intermediate is written to global memory.
 - Tail handling by explicit masks or by the DSL's bounds-padded loads and
   bounds-clipped stores is free, provided no out-of-range element is
-  written. Edge handling is required wherever the task's fixed `n` is not a
-  multiple of the chosen tile; supporting shapes other than the task's
-  declared shape is not required, and specialising on that shape (for
-  example as a compile-time constant) is permitted.
+  written. Edge handling is required wherever a case's `n` is not a
+  multiple of the chosen tile; supporting shapes outside the task's configured cases is not required, and specialising per case shape (for example the shape as a compile-time constant, one specialisation per configured case) is permitted.
 - The arithmetic form of the doubling (`* 2`, `+ x`, shift for integers) is
   free.
 

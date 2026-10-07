@@ -62,6 +62,8 @@ def build_task_context(e: Eligibility, study: dict, manifest: dict, condition: s
     contract = load_contract(e.key.operator, require_approved=require_approved)
     cfg = load_operator_config(e.key.operator)
     tf = task_fields(e.key.operator, e.key.dtype, e.params, cfg, arch)
+    from tilebench.llm.v2.tasks.case_sets import domain
+    shown = domain(e.cases) if e.cases else e.params          # revision 4: the suite's domain, never the case list
     if len(tf.functional_reference.source) > study["context_limits"]["functional_reference"]:
         raise SkillError(f"{e.key.operator}: functional reference exceeds the context limit")
     if len(contract.model_text) > study["context_limits"]["algorithm_contract"]:
@@ -69,10 +71,10 @@ def build_task_context(e: Eligibility, study: dict, manifest: dict, condition: s
     return TaskContext(
         operator=e.key.operator, dtype=e.key.dtype, torch_dtype=tf.torch_dtype, dsl=e.key.dsl,
         dsl_version=dsl_cfg["reference_version"], device=e.key.device, output_file=dsl_cfg["output_file"],
-        params=e.params, atol=tf.tolerance["atol"], rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"],
+        params=shown, atol=tf.tolerance["atol"], rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"],
         run_signature=tf.run_signature, returns=tf.returns, functional_reference=tf.functional_reference.source,
         fp8_format=e.fp8_format, components=comps, contract_text=contract.model_text,
-        rounds=study["trajectory"]["rounds"],
+        rounds=study["trajectory"]["rounds"], n_cases=len(e.cases) if e.cases else 1,
     )
 
 
@@ -80,10 +82,12 @@ def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition
                          contract_hash: str, template_hash: str, *, run_type: str = "formal",
                          campaign: str | None = None, generator: dict | None = None,
                          evaluation_job: dict | None = None, evaluator_fp: dict | None = None,
-                         scoring_binding: dict | None = None) -> TrajectoryState:
+                         scoring_binding: dict | None = None, protocol: dict | None = None,
+                         pricing_binding: dict | None = None) -> TrajectoryState:
     task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
             "device": e.key.device, "dsl": e.key.dsl, "fold": e.fold, "fp8_format": e.fp8_format,
-            "problem_size": e.problem_size, "case_index": e.case_index}
+            "problem_size": e.problem_size, "case_index": e.case_index,
+            "case_set_id": e.case_set_id, "case_ids": [c["case_id"] for c in e.cases], "n_cases": len(e.cases)}
     hashes = hash_record(ctx.components)
     hashes["contract"] = contract_hash
     hashes["templates"] = template_hash
@@ -91,7 +95,7 @@ def new_trajectory_state(e: Eligibility, ctx: TaskContext, model: str, condition
                            model=model, condition=condition, config_hash=config_hash, content_hashes=hashes,
                            output_file=ctx.output_file, run_type=run_type, campaign=campaign, generator=generator,
                            evaluation_job=evaluation_job, evaluator_fingerprint=evaluator_fp,
-                           scoring_binding=scoring_binding)
+                           scoring_binding=scoring_binding, protocol=protocol, pricing_binding=pricing_binding)
 
 
 def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict | None = None,
@@ -252,13 +256,14 @@ class CampaignSpec:
     resume: bool = False
     stop_after_rounds: int | None = None
     isolation: str = "auto"           # auto | bwrap | none
-    worker_timeout_s: int = 1800
+    worker_timeout_s: int = 3600
     max_trajectories: int | None = None
     retry_incomplete: bool = False    # re-open a round closed by an evaluation-side infrastructure failure
     resume_transport: bool = False    # re-open an attempt closed by exhausted transport retries / a provider refusal
     resume_reason: str | None = None  # required with resume_transport (recorded as a durable `reopened` event)
     allow_evaluator_change: bool = False   # validation only: continue although the evaluator fingerprint changed (recorded)
     executor: str = "runner"          # who runs this process (recorded in META / compliance / reopen events)
+    shard: str | None = None          # "i/n": deterministic runtime shard of the operator list (independent of folds)
 
     def record(self) -> dict:
         d = asdict(self)
@@ -266,12 +271,82 @@ class CampaignSpec:
         return d
 
 
+def parse_shard(shard: str | None) -> tuple[int, int] | None:
+    if not shard:
+        return None
+    try:
+        i, n = (int(x) for x in shard.split("/"))
+    except ValueError:
+        raise ValueError(f"shard must be 'i/n', got {shard!r}") from None
+    if not (n >= 1 and 1 <= i <= n):
+        raise ValueError(f"shard {shard!r}: need 1 <= i <= n")
+    return i, n
+
+
+def shard_operators(shard: str | None, operators: list[str] | None = None) -> list[str]:
+    """Deterministic runtime shard: round-robin over the sorted full operator
+    list (position p belongs to shard p % n + 1). Independent of the A/B/C
+    folds and of any result; shards are disjoint and cover every operator."""
+    ops = sorted(list_operators())
+    sel = parse_shard(shard)
+    if sel is not None:
+        i, n = sel
+        ops = [op for p, op in enumerate(ops) if p % n == i - 1]
+    if operators:
+        ops = [op for op in ops if op in set(operators)]
+    return ops
+
+
 def select_tasks(study: dict, folds: dict, device: str, dsl: str, operators: list[str] | None,
-                 dtypes: list[str] | None) -> list[Eligibility]:
-    table = [e for e in task_table(study, folds, operators) if e.key.device == device and e.key.dsl == dsl]
+                 dtypes: list[str] | None, shard: str | None = None) -> list[Eligibility]:
+    ops = shard_operators(shard, operators) if (shard or operators) else None
+    table = [e for e in task_table(study, folds, ops) if e.key.device == device and e.key.dsl == dsl]
     if dtypes:
         table = [e for e in table if e.key.dtype in dtypes]
     return table
+
+
+def protocol_identity(study: dict) -> dict:
+    """What a trajectory records about the protocol it was created under; a
+    resume refuses any other identity (revision-2 pilot states have none)."""
+    from tilebench.llm.v2.validation.contract_checks import CHECKER_VERSION
+    unit = study.get("task_unit") or {}
+    return {"revision": study["revision"], "rounds": study["trajectory"]["rounds"],
+            "max_generations_per_round": study["trajectory"]["max_generations_per_round"],
+            "task_unit": unit.get("kind"), "cases": unit.get("cases"), "cases_per_task": unit.get("cases_per_task"),
+            "checker_version": CHECKER_VERSION, "adjudicator": (study.get("compliance") or {}).get("adjudicator")}
+
+
+class TrajectoryLock:
+    """Exclusive, non-blocking per-trajectory lock: one process owns one
+    (operator, dtype, dsl, model, condition) trajectory at a time."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.fh = None
+
+    def acquire(self) -> bool:
+        import fcntl
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = open(self.path, "a+")
+        try:
+            fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            self.fh.close()
+            self.fh = None
+            return False
+        self.fh.seek(0)
+        self.fh.truncate()
+        self.fh.write(f"pid={os.getpid()} host={socket.gethostname()} t={time.time()}\n")
+        self.fh.flush()
+        return True
+
+    def release(self) -> None:
+        import fcntl
+        if self.fh is not None:
+            fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+            self.fh.close()
+            self.fh = None
 
 
 def _git_head() -> dict:
@@ -331,10 +406,12 @@ def scoring_gate(device: str, dsl: str, study: dict, folds: dict, operators: lis
 
 
 def campaign_record(spec: CampaignSpec, gen: GeneratorSpec, config_hash: str, isolation: dict,
-                    template_hash: str, scoring_binding: dict | None = None, preflight_facts: dict | None = None) -> dict:
+                    template_hash: str, scoring_binding: dict | None = None, preflight_facts: dict | None = None,
+                    pricing_binding: dict | None = None, scheduler: dict | None = None) -> dict:
     return {"schema": "tilebench-llm-v2-campaign/1", "spec": spec.record(), "generator": gen.record(),
             "config_hash": config_hash, "templates_sha256": template_hash, "host": socket.gethostname(),
-            "scoring_binding": scoring_binding, "preflight_facts": preflight_facts,
+            "scoring_binding": scoring_binding, "preflight_facts": preflight_facts, "pricing_binding": pricing_binding,
+            "scheduler": scheduler,
             "git": _git_head(), "isolation": isolation, "pid": os.getpid(), "started": time.time(),
             "protocol_note": ("validation runs are unscored engineering acceptance of the execution chain; "
                               "they never enter E(B) curves or distillation" if spec.run_type == "validation"
@@ -348,7 +425,8 @@ class ResumeRefused(RuntimeError):
 def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: dict, run_type: str,
                   gen: GeneratorSpec, evaluator_fp: dict | None = None, allow_evaluator_change: bool = False,
                   tdir: Path | None = None, executor: str = "runner", log=lambda s: None,
-                  scoring_binding: dict | None = None) -> None:
+                  scoring_binding: dict | None = None, protocol: dict | None = None,
+                  pricing_binding: dict | None = None) -> None:
     """A resume must run under the SAME evaluator as the trajectory so far:
     besides the study config hash, the injected prompt content and the
     generator settings, the evaluator fingerprint (job tolerance/rules/
@@ -357,6 +435,18 @@ def _check_resume(state: TrajectoryState, *, config_hash: str, content_hashes: d
     refuses. Validation: a difference is accepted only with
     `allow_evaluator_change`, and is then recorded durably (state and
     evaluator_changes.jsonl) with the differing keys."""
+    if protocol is not None and (state.schema != TRAJ_SCHEMA or state.protocol != protocol):
+        raise ResumeRefused(f"{state.trajectory_id}: created under protocol {state.protocol or state.schema}, not {protocol}; "
+                            "a trajectory is never resumed under another protocol revision")
+    if pricing_binding is not None:
+        old = (state.pricing_binding or {}).get("pricing_snapshot_sha256")
+        new = pricing_binding.get("pricing_snapshot_sha256")
+        if old != new:
+            msg = f"{state.trajectory_id}: pricing snapshot changed ({old} -> {new})"
+            if run_type == "formal":
+                raise ResumeRefused(msg + "; formal resumes refuse a changed pricing snapshot (no mixing of USD bindings)")
+            state.notes.append(msg + " (validation: recorded)")
+            state.pricing_binding = pricing_binding
     if state.config_hash != config_hash:
         raise ResumeRefused(f"{state.trajectory_id}: config hash changed ({state.config_hash[:12]} -> {config_hash[:12]}); refusing to resume")
     if state.content_hashes != content_hashes:
@@ -489,19 +579,51 @@ def reopen_transport_attempt(state: TrajectoryState, tdir: Path, *, reason: str,
     return note
 
 
-def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
-    """The live chain. Refuses on any preflight blocker. Returns a summary."""
+@dataclass
+class Track:
+    """Everything one (device, dsl, condition, model) needs to run its trajectories; built once by
+    prepare_track and shared by every trajectory (and every scheduler thread) of the track."""
+    spec: CampaignSpec
+    study: dict
+    folds: dict
+    manifest: dict
+    arch: str | None
+    gen: GeneratorSpec
+    provider: object
+    evaluator: object
+    cfg: object
+    config_hash: str
+    template_hash: str
+    binding: dict
+    pricing: dict
+    protocol: dict
+    out_root: Path
+    cdir: Path
+    formal: bool
+    tasks: list
+    summary: dict
+
+
+def prepare_track(spec: CampaignSpec, *, log=print, provider=None, evaluator=None, scheduler: dict | None = None):
+    """Preflight, campaign record and task list of one track. Returns a Track,
+    or a dict with refused=True (no API call, no device run)."""
     from tilebench.llm.v2.evaluation.launcher import SubprocessEvaluator
-    from tilebench.llm.v2.orchestration.runner import RunnerConfig, TrajectoryRunner
+    from tilebench.llm.v2.metrics.cost import pricing_binding
+    from tilebench.llm.v2.orchestration.runner import RunnerConfig
+    from tilebench.llm.v2.orchestration.telemetry import append_locked
 
     study, models, folds, modes = ms.load_study(), ms.load_models(), ms.load_folds(), ms.load_arithmetic_modes()
     formal = spec.run_type == "formal"
+    excluded = ms.excluded_campaign(spec.name)
+    if excluded is not None:
+        return {"refused": True, "reason": f"campaign {spec.name!r} is excluded ({excluded.get('role')}); it is kept "
+                                           "unchanged and is never resumed or extended (manifests/excluded_campaigns.yaml)"}
     accept = ("approved",) if formal else ("approved", "candidate")
     gen = generator_spec(models, spec.model, accept_status=accept)
     pf = preflight(spec.device, spec.dsl, spec.condition, live=True, study=study, run_type=spec.run_type,
                    models_selected=(spec.model,), provider=gen.provider, operators=spec.operators)
     if not pf.ok:
-        return {"refused": True, "preflight": pf.to_dict()}
+        return {"refused": True, "preflight": pf.to_dict(), "dsl": spec.dsl}
     frozen_timeout = int((study.get("evaluation") or {}).get("worker_timeout_s", spec.worker_timeout_s))
     if formal and spec.worker_timeout_s != frozen_timeout:
         return {"refused": True, "preflight": pf.to_dict(),
@@ -514,93 +636,165 @@ def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
     out_root = spec.out_root or LLM_V2_OUTPUT_ROOT
     cdir = out_root / spec.name
     cdir.mkdir(parents=True, exist_ok=True)
-    provider = build_provider(gen, timeout_s=float(models.get("transport", {}).get("timeout_s", 3600)))
-    evaluator = SubprocessEvaluator(device=spec.device, timeout_s=spec.worker_timeout_s,
-                                    sandbox_root=cdir / "_sandbox", isolation=spec.isolation, lock_root=out_root)
+    if provider is None:
+        provider = build_provider(gen, timeout_s=float(models.get("transport", {}).get("timeout_s", 3600)))
+    if evaluator is None:
+        evaluator = SubprocessEvaluator(device=spec.device, timeout_s=spec.worker_timeout_s,
+                                        sandbox_root=cdir / "_sandbox", isolation=spec.isolation, lock_root=out_root)
     if formal and evaluator.report.get("backend") != "bwrap":
         return {"refused": True, "preflight": pf.to_dict(),
                 "reason": f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"}
     binding = empirical.scoring_binding(spec.device)
+    pricing = pricing_binding()
     rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash, binding,
                           preflight_facts={k: pf.facts.get(k) for k in ("blas_stack", "scoring", "contracts", "component_status",
-                                                                        "components", "isolation_probe", "detected_arch")})
+                                                                        "components", "isolation_probe", "detected_arch")},
+                          pricing_binding=pricing, scheduler=scheduler)
     first = cdir / f"campaign_{spec.condition}_{spec.dsl}_{spec.model}.json"
-    if not first.exists():
-        first.write_text(json.dumps(rec, indent=1, sort_keys=True, default=str) + "\n")
-    with open(cdir / "campaign_runs.jsonl", "a") as fh:      # one record per process start (resumes included)
-        fh.write(json.dumps(rec, sort_keys=True, default=str) + "\n")
-    tasks = [e for e in select_tasks(study, folds, spec.device, spec.dsl, spec.operators, spec.dtypes)]
+    try:
+        with open(first, "x") as fh:                            # exactly one creator, even with concurrent processes
+            fh.write(json.dumps(rec, indent=1, sort_keys=True, default=str) + "\n")
+    except FileExistsError:
+        prev = json.loads(first.read_text())
+        if formal and (prev.get("pricing_binding") or {}).get("pricing_snapshot_sha256") != pricing["pricing_snapshot_sha256"]:
+            return {"refused": True, "reason": f"{first.name} pins pricing snapshot "
+                                               f"{(prev.get('pricing_binding') or {}).get('pricing_snapshot_sha256')}, "
+                                               f"this process has {pricing['pricing_snapshot_sha256']}"}
+    append_locked(cdir / "campaign_runs.jsonl", rec)            # one record per process start (resumes included)
+    protocol = protocol_identity(study)
+    tasks = [e for e in select_tasks(study, folds, spec.device, spec.dsl, spec.operators, spec.dtypes, shard=spec.shard)]
     if spec.max_trajectories:
         tasks = tasks[:spec.max_trajectories]
     transport = models.get("transport", {})
     cfg = RunnerConfig(model_id=gen.model_id, provider_name=gen.provider, settings=gen.settings,
                        rounds=study["trajectory"]["rounds"], max_generations=study["trajectory"]["max_generations_per_round"],
                        max_transport_retries=int(transport.get("max_transport_retries", 3)),
+                       max_rate_limit_retries=int(transport.get("max_rate_limit_retries", 12)),
                        retry_backoff_s=float(transport.get("retry_backoff_s", 30)), feedback_limits=study["feedback"],
                        total_prompt_max_chars=study["context_limits"]["total_prompt"], executor=spec.executor)
-    summary = {"campaign": spec.name, "run_type": spec.run_type, "generator": gen.record(), "config_hash": config_hash,
-               "scoring_binding": binding, "isolation": evaluator.report, "trajectories": [], "skipped": []}
-    for e in tasks:
-        if e.status != "eligible":
-            summary["skipped"].append({"task": e.key.as_str(), "status": e.status, "reason": e.reason})
-            continue
-        contract: ContractBundle = load_contract(e.key.operator, require_approved=formal)
-        ctx = build_task_context(e, study, manifest, spec.condition, require_approved=formal, arch=arch,
-                                 provider=gen.provider)
-        identity = {"campaign": spec.name, "run_type": spec.run_type, "model": spec.model, "condition": spec.condition}
-        job: EvaluationJob = build_evaluation_job(operator=e.key.operator, dtype=e.key.dtype, params=e.params,
-                                                  dsl=e.key.dsl, device=e.key.device, arch=arch, rules=contract.rules,
-                                                  study=study, identity=identity)
-        if (ctx.atol, ctx.rtol) != (job.atol, job.rtol):
-            raise RuntimeError(f"{e.key.as_str()}: prompt tolerance {ctx.atol}/{ctx.rtol} != evaluator tolerance {job.atol}/{job.rtol}")
-        task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
-                "device": e.key.device, "dsl": e.key.dsl}
-        tdir = trajectory_dir(spec.name, task, spec.model, spec.condition, root=out_root)
-        tpath = tdir / "trajectory.json"
-        content_hashes = {**hash_record(ctx.components), "contract": contract.sha256, "templates": template_hash}
-        fp = evaluator_fingerprint(job, worker_timeout_s=spec.worker_timeout_s, isolation_backend=evaluator.report.get("backend", "none"))
-        if tpath.exists():
-            if not spec.resume:
-                raise RuntimeError(f"{tdir} already holds a trajectory; pass resume=True to continue it")
-            state = TrajectoryState.load(tpath)
-            _check_resume(state, config_hash=config_hash, content_hashes=content_hashes, run_type=spec.run_type, gen=gen,
-                          evaluator_fp=fp, allow_evaluator_change=spec.allow_evaluator_change, tdir=tdir,
-                          executor=spec.executor, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"),
-                          scoring_binding=binding)
-            job.identity["trajectory_id"] = state.trajectory_id
-            if spec.retry_incomplete:
-                note = retry_incomplete(state)
-                if note:
-                    log(f"[{e.key.as_str()}] {note}")
-            if spec.resume_transport:
-                shash = ms.sha256_text(ms.canonical_json(gen.settings))
-                prev = ms.sha256_text(ms.canonical_json((state.generator or {}).get("settings"))) if state.generator else None
-                note = reopen_transport_attempt(state, tdir, reason=spec.resume_reason or "", executor=spec.executor,
-                                                settings_hash_before=prev, settings_hash_after=shash)
-                if note:
-                    log(f"[{e.key.as_str()}] {note}")
-            log(f"[{e.key.as_str()}] resuming {state.trajectory_id}: status {state.status}, "
-                f"{sum(1 for r in state.rounds if r.status != 'pending')} rounds closed, {state.request_count()} transport events")
-        else:
-            state = new_trajectory_state(e, ctx, spec.model, spec.condition, config_hash, contract.sha256, template_hash,
-                                         run_type=spec.run_type, campaign=spec.name, generator=gen.record(),
-                                         evaluation_job=job.record(), evaluator_fp=fp, scoring_binding=binding)
-            job.identity["trajectory_id"] = state.trajectory_id
-            state.evaluation_job = job.record()
-            log(f"[{e.key.as_str()}] new trajectory {state.trajectory_id} -> {tdir} (evaluator fingerprint {fp['fingerprint_sha256'][:12]})")
-        runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=provider, evaluator=evaluator, job=job,
-                                  cfg=cfg, sleep=sleep, log=lambda s, k=e.key.as_str(): log(f"[{k}] {s}"))
-        status = runner.run(stop_after_rounds=spec.stop_after_rounds)
-        summary["trajectories"].append(trajectory_summary(state, tdir, status))
-        log(f"[{e.key.as_str()}] -> {status}")
-    (cdir / f"summary_{spec.model}_{spec.dsl}_{int(time.time())}.json").write_text(json.dumps(summary, indent=1, default=str) + "\n")
-    return summary
+    summary = {"campaign": spec.name, "run_type": spec.run_type, "dsl": spec.dsl, "generator": gen.record(),
+               "config_hash": config_hash, "scoring_binding": binding, "pricing_binding": pricing,
+               "isolation": evaluator.report, "protocol": protocol, "shard": spec.shard, "trajectories": [], "skipped": []}
+    return Track(spec=spec, study=study, folds=folds, manifest=manifest, arch=arch, gen=gen, provider=provider,
+                 evaluator=evaluator, cfg=cfg, config_hash=config_hash, template_hash=template_hash, binding=binding,
+                 pricing=pricing, protocol=protocol, out_root=out_root, cdir=cdir, formal=formal, tasks=tasks, summary=summary)
+
+
+def run_campaign(spec: CampaignSpec, *, log=print, sleep=time.sleep) -> dict:
+    """The live chain for one track, trajectories one after another. Refuses on
+    any preflight blocker. Returns a summary. (orchestration.scheduler runs
+    several tracks and trajectories concurrently with the same per-trajectory
+    code.)"""
+    from tilebench.llm.v2.orchestration.telemetry import ProcessTelemetry, TelemetryProvider
+    track = prepare_track(spec, log=log)
+    if isinstance(track, dict):
+        return track
+    shard_tag = (spec.shard or "all").replace("/", "of")
+    telemetry = ProcessTelemetry(track.cdir / "telemetry" / f"{spec.condition}_{spec.dsl}_{spec.model}_{shard_tag}_{os.getpid()}.jsonl",
+                                 labels={"dsl": spec.dsl, "model": spec.model, "condition": spec.condition,
+                                         "shard": spec.shard}).start()
+    track.provider = TelemetryProvider(track.provider, telemetry)
+    try:
+        for e in track.tasks:
+            run_track_task(track, e, log=log, sleep=sleep, telemetry=telemetry)
+    finally:
+        telemetry.stop()
+    (track.cdir / f"summary_{spec.model}_{spec.dsl}_{shard_tag}_{int(time.time())}_{os.getpid()}.json").write_text(
+        json.dumps(track.summary, indent=1, default=str) + "\n")
+    return track.summary
+
+
+def track_task_dir(track: Track, e: Eligibility) -> Path:
+    """The trajectory directory of task `e` in `track` (the same path run_track_task uses)."""
+    task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
+            "device": e.key.device, "dsl": e.key.dsl}
+    return trajectory_dir(track.spec.name, task, track.spec.model, track.spec.condition, root=track.out_root)
+
+
+def run_track_task(track: Track, e: Eligibility, *, log=print, sleep=time.sleep, telemetry=None) -> str | None:
+    """One trajectory of a track, under its exclusive trajectory lock. Returns its status."""
+    spec, summary = track.spec, track.summary
+    if e.status != "eligible":
+        summary["skipped"].append({"task": e.key.as_str(), "status": e.status, "reason": e.reason})
+        return None
+    contract: ContractBundle = load_contract(e.key.operator, require_approved=track.formal)
+    ctx = build_task_context(e, track.study, track.manifest, spec.condition, require_approved=track.formal, arch=track.arch,
+                             provider=track.gen.provider)
+    identity = {"campaign": spec.name, "run_type": spec.run_type, "model": spec.model, "condition": spec.condition}
+    job: EvaluationJob = build_evaluation_job(operator=e.key.operator, dtype=e.key.dtype, cases=e.cases or None,
+                                              params=None if e.cases else e.params,
+                                              dsl=e.key.dsl, device=e.key.device, arch=track.arch, rules=contract.rules,
+                                              study=track.study, identity=identity)
+    if (ctx.atol, ctx.rtol) != (job.atol, job.rtol):
+        raise RuntimeError(f"{e.key.as_str()}: prompt tolerance {ctx.atol}/{ctx.rtol} != evaluator tolerance {job.atol}/{job.rtol}")
+    task = {"operator": e.key.operator, "dtype": e.key.dtype, "case_id": e.key.case_id, "params": e.params,
+            "device": e.key.device, "dsl": e.key.dsl}
+    tdir = trajectory_dir(spec.name, task, spec.model, spec.condition, root=track.out_root)
+    tpath = tdir / "trajectory.json"
+    lock = TrajectoryLock(track.cdir / "_locks" / f"{spec.condition}_{e.key.device}_{e.key.dsl}_{spec.model}_{e.key.operator}_"
+                                                  f"{e.key.dtype}_{e.key.case_id}.lock")
+    if not lock.acquire():
+        log(f"[{e.key.as_str()}] owned by another process (lock {lock.path.name}); not touched by this process")
+        summary["skipped"].append({"task": e.key.as_str(), "status": "locked_by_other_process"})
+        return None
+    if telemetry is not None:
+        telemetry.task_started(e.key.as_str())
+    try:
+        return _run_one(track, e, ctx, job, contract, tdir, tpath, log, sleep)
+    finally:
+        lock.release()
+        if telemetry is not None:
+            telemetry.task_finished(e.key.as_str())
+
+
+def _run_one(track: Track, e, ctx, job, contract, tdir, tpath, log, sleep) -> str:
+    from tilebench.llm.v2.orchestration.runner import TrajectoryRunner
+    spec, gen = track.spec, track.gen
+    lg = (lambda s, k=e.key.as_str(): log(f"[{k}] {s}"))
+    content_hashes = {**hash_record(ctx.components), "contract": contract.sha256, "templates": track.template_hash}
+    fp = evaluator_fingerprint(job, worker_timeout_s=spec.worker_timeout_s, isolation_backend=track.evaluator.report.get("backend", "none"))
+    if tpath.exists():
+        if not spec.resume:
+            raise RuntimeError(f"{tdir} already holds a trajectory; pass resume=True to continue it")
+        state = TrajectoryState.load(tpath)
+        _check_resume(state, config_hash=track.config_hash, content_hashes=content_hashes, run_type=spec.run_type, gen=gen,
+                      evaluator_fp=fp, allow_evaluator_change=spec.allow_evaluator_change, tdir=tdir,
+                      executor=spec.executor, log=lg, scoring_binding=track.binding, protocol=track.protocol,
+                      pricing_binding=track.pricing)
+        job.identity["trajectory_id"] = state.trajectory_id
+        if spec.retry_incomplete:
+            note = retry_incomplete(state)
+            if note:
+                lg(note)
+        if spec.resume_transport:
+            shash = ms.sha256_text(ms.canonical_json(gen.settings))
+            prev = ms.sha256_text(ms.canonical_json((state.generator or {}).get("settings"))) if state.generator else None
+            note = reopen_transport_attempt(state, tdir, reason=spec.resume_reason or "", executor=spec.executor,
+                                            settings_hash_before=prev, settings_hash_after=shash)
+            if note:
+                lg(note)
+        lg(f"resuming {state.trajectory_id}: status {state.status}, "
+           f"{sum(1 for r in state.rounds if r.status != 'pending')} rounds closed, {state.request_count()} transport events")
+    else:
+        state = new_trajectory_state(e, ctx, spec.model, spec.condition, track.config_hash, contract.sha256, track.template_hash,
+                                     run_type=spec.run_type, campaign=spec.name, generator=gen.record(),
+                                     evaluation_job=job.record(), evaluator_fp=fp, scoring_binding=track.binding,
+                                     protocol=track.protocol, pricing_binding=track.pricing)
+        job.identity["trajectory_id"] = state.trajectory_id
+        state.evaluation_job = job.record()
+        lg(f"new trajectory {state.trajectory_id} -> {tdir} (evaluator fingerprint {fp['fingerprint_sha256'][:12]})")
+    runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=track.provider, evaluator=track.evaluator, job=job,
+                              cfg=track.cfg, sleep=sleep, log=lg)
+    status = runner.run(stop_after_rounds=spec.stop_after_rounds)
+    track.summary["trajectories"].append(trajectory_summary(state, tdir, status))
+    lg(f"-> {status}")
+    return status
 
 
 def trajectory_summary(state: TrajectoryState, tdir: Path, status: str | None = None) -> dict:
     rounds = [{"round": r.round, "status": r.status, "attempts": len(r.attempts),
-               "verdicts": [a.verdict for a in r.attempts], "latency_ms_mean": r.latency_ms_mean,
-               "latency_ms_samples": r.latency_ms_samples, "cost": [a.cost for a in r.attempts],
+               "verdicts": [a.verdict for a in r.attempts], "latency_ms_geomean": r.latency_ms_geomean,
+               "valid_cases": r.valid_cases, "cases_total": r.cases_total, "cost": [a.cost for a in r.attempts],
                "response_ids": [a.response_id for a in r.attempts], "timing_execution_mode": r.timing_execution_mode}
               for r in state.rounds]
     costs = [a.cost for r in state.rounds for a in r.attempts]

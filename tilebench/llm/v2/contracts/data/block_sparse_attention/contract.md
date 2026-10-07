@@ -48,7 +48,7 @@ are positional. The entry point is called positionally with exactly the inputs l
   choice (the results differ only in summation order).
 - `EVEN_M`, `EVEN_N`: booleans stating whether `M` is a multiple of
   `BLOCK_M` / `BLOCK_N`; they may be ignored (bounds masking is required
-  wherever the task's fixed `M` is not a multiple of the chosen block).
+  wherever a case's `M` is not a multiple of the chosen block).
 - Output: `(B, H, M, D)`, dtype of `Q`, freshly allocated inside `run()` on
   every call, returned as a single tensor. It must not alias any input.
 
@@ -85,7 +85,7 @@ Flash-attention-style online softmax restricted to a CSR block layout:
 - Per visited block: `S = softmax_scale * (Q_blk . K_blk^T)` in fp32;
   entries with key index `> query index`, key index `>= total_seq_len` or
   query index `>= total_seq_len` are set to `-inf` (the sequence-bound
-  terms matter only where the task's fixed `M` is not a multiple of the
+  terms matter only where a case's `M` is not a multiple of the
   block size); the mask may be applied to every visited block or only to
   blocks that intersect the diagonal or the sequence end.
 - `m_new = max(m_old, rowmax(S))`; a guard (for example clamping the
@@ -160,7 +160,7 @@ masked half of diagonal blocks.
   combine pass, or atomic accumulation: each adds a second logical pass or
   a global intermediate.
 - Softmax statistics or accumulators in less than fp32; omitting the
-  causal mask, or the sequence-bound mask where the task's fixed `M` is
+  causal mask, or the sequence-bound mask where a case's `M` is
   not a multiple of the block size; visiting unlisted blocks or the zero
   padding of the column list.
 - Writing any input; returning a view of any input.

@@ -1,4 +1,5 @@
-"""Ten-round state machine; mock end-to-end runner with persistence and resume."""
+"""Five-round, one-generation-per-round state machine (protocol revision 3); mock end-to-end runner with
+persistence and resume."""
 import json
 from pathlib import Path
 
@@ -25,18 +26,32 @@ def _att(n, verdict, cost=10):
                          transport_attempts=1, verdict=verdict, cost=cost, source_path="/dev/null")
 
 
-def test_violation_allows_at_most_three_generations_and_charges_all():
+def test_confirmed_violation_closes_the_round_without_any_regeneration():
     st = _state()
     assert sm.next_action(st).kind == "generate_initial"
     sm.apply_attempt(st, 1, _att(1, "confirmed_violation"))
-    assert sm.next_action(st) == sm.Action("repair", 1, 2)
-    sm.apply_attempt(st, 1, _att(2, "confirmed_violation"))
-    assert sm.next_action(st) == sm.Action("repair", 1, 3)
-    sm.apply_attempt(st, 1, _att(3, "confirmed_violation"))
-    assert st.rounds[0].status == "contract_violation" and sum(a.cost for a in st.rounds[0].attempts) == 30
-    assert sm.next_action(st) == sm.Action("generate_initial", 2, 1)
+    assert st.rounds[0].status == "contract_violation" and st.rounds[0].attempts[0].cost == 10   # tokens charged
+    assert sm.next_action(st) == sm.Action("generate_initial", 2, 1)                             # next ROUND, not a repair
     with pytest.raises(RuntimeError):
-        sm.apply_attempt(st, 1, _att(4, "clear"))
+        sm.apply_attempt(st, 1, _att(2, "clear"))                                                # no second generation
+    with pytest.raises(ValueError):
+        sm.next_action(st, max_generations=3)                                                    # revision 3 only
+
+
+def test_audit_only_is_evaluated_like_clear():
+    st = _state()
+    sm.apply_attempt(st, 1, _att(1, "audit_only"))
+    assert st.rounds[0].status == "pending" and sm.next_action(st) == sm.Action("evaluate", 1, 1)
+    sm.apply_evaluation(st, 1, {"status": "valid", "latency_ms_mean": 1.0, "latency_ms_samples": [1.0] * 3, "config": {}})
+    assert st.rounds[0].status == "valid" and st.best_valid["round"] == 1
+
+
+def test_human_review_violation_closes_round_and_compliant_evaluates_archived_candidate():
+    st = _state()
+    sm.apply_attempt(st, 1, _att(1, "review_required"))
+    sm.resolve_review(st, 1, "violation", "persistent cache keyed by data_ptr")
+    assert st.rounds[0].status == "contract_violation" and st.status == "in_progress"
+    assert sm.next_action(st) == sm.Action("generate_initial", 2, 1) and len(st.rounds[0].attempts) == 1
 
 
 def test_ordinary_failures_consume_the_round_without_repair():
@@ -49,14 +64,17 @@ def test_ordinary_failures_consume_the_round_without_repair():
     assert st.rounds[1].status == "numerical_error" and sm.next_action(st) == sm.Action("generate_initial", 3, 1)
 
 
-def test_regression_keeps_best_and_ten_rounds_complete():
+def test_regression_keeps_best_and_exactly_five_rounds_complete():
     st = _state()
-    for r in range(1, 11):
+    for r in range(1, 6):
+        assert st.status == "in_progress"                      # no early stop, whatever the latency
         sm.apply_attempt(st, r, _att(1, "clear"))
         lat = 1.0 if r == 2 else 2.0 + r
         sm.apply_evaluation(st, r, {"status": "valid", "latency_ms_mean": lat, "latency_ms_samples": [lat] * 3, "config": {}})
     assert st.best_valid["round"] == 2 and st.status == "complete" and sm.next_action(st).kind == "done"
-    assert len(st.valid_rounds()) == 10
+    assert len(st.valid_rounds()) == 5
+    with pytest.raises(RuntimeError):
+        sm.apply_attempt(st, 6, _att(1, "clear"))             # nothing beyond the protocol's rounds
 
 
 def test_review_required_blocks_and_resolves():
@@ -81,38 +99,39 @@ def test_two_samples_is_a_timing_error():
     assert st.rounds[0].status == "timing_error"
 
 
-def test_mock_ten_rounds_persist_and_resume_without_new_requests(tmp_path):
+def test_mock_five_rounds_persist_and_resume_without_new_requests(tmp_path):
     out = run_mock_trajectory(tmp_path, operator="vector_add", dtype="fp16", device="B200", dsl="triton", condition="base")
-    assert out["status"] == "complete" and len(out["rounds"]) == 10
-    statuses = [s for _, s, _ in out["rounds"]]
-    assert statuses[2] == "valid" and statuses[4] == "numerical_error"      # round 3 repaired; round 5 consumed
-    assert out["attempts"] == 11 and out["transport_failures"] == 1
+    assert out["status"] == "complete" and len(out["rounds"]) == 5
+    statuses = [r[1] for r in out["rounds"]]
+    assert all(r[4] == 20 and r[3] == 20 for r in out["rounds"] if r[1] == "valid")
+    assert statuses == ["valid", "contract_violation", "numerical_error", "valid", "valid"]    # violation consumed round 2
+    assert out["attempts"] == 5 and out["transport_failures"] == 1                          # retry is not an attempt
     tdir = Path(out["trajectory_dir"])
     ledger = [json.loads(l) for l in (tdir / "usage.jsonl").read_text().splitlines()]
-    assert len(ledger) == 11                                                 # every generation, violations included
-    assert (tdir / "round_03" / "attempt_2" / "impl_triton.py").exists() and (tdir / "best_valid" / "impl_triton.py").exists()
+    assert len(ledger) == 5 and all(row["attempt"] == 1 for row in ledger)                  # every generation, violation included
+    assert not (tdir / "round_02" / "attempt_2").exists() and (tdir / "best_valid" / "impl_triton.py").exists()
     # resume: provider that raises on any call; completed state must be reloaded untouched
     again = run_mock_trajectory(tmp_path, operator="vector_add", dtype="fp16", device="B200", dsl="triton", condition="base", resume=True)
-    assert again["status"] == "complete" and again["attempts"] == 11
-    assert len((tdir / "usage.jsonl").read_text().splitlines()) == 11
+    assert again["status"] == "complete" and again["attempts"] == 5
+    assert len((tdir / "usage.jsonl").read_text().splitlines()) == 5
 
 
 def test_resume_mid_trajectory_reuses_archived_responses(tmp_path, study, folds):
     ctx, job, rules = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
     e = eligibility("vector_add", "fp16", "B200", "triton", study, folds)
     st = new_trajectory_state(e, ctx, "m", "base", "h", "c", "t")
-    script = [{"text": scripted_text("impl_triton.py", f"# MOCK: valid {1.0 + i / 10}\ndef run(*a): pass\ndef get_last_config(): return {{}}")} for i in range(10)]
+    script = [{"text": scripted_text("impl_triton.py", f"# MOCK: valid {1.0 + i / 10}\ndef run(*a): pass\ndef get_last_config(): return {{}}")} for i in range(5)]
     cfg = RunnerConfig(model_id="m", provider_name="mock", settings={}, feedback_limits=study["feedback"])
     tdir = tmp_path / "t"
-    r1 = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider(script[:4]), evaluator=MockEvaluator(), job=job, cfg=cfg)
-    for _ in range(8):      # 4 generations + 4 evaluations
+    r1 = TrajectoryRunner(state=st, tdir=tdir, ctx=ctx, provider=MockProvider(script[:2]), evaluator=MockEvaluator(), job=job, cfg=cfg)
+    for _ in range(4):      # 2 generations + 2 evaluations
         r1.step()
-    assert len(st.rounds) == 4 and st.rounds[-1].status == "valid"
-    # resume from disk with a provider holding only the remaining 6 responses
+    assert len(st.rounds) == 2 and st.rounds[-1].status == "valid"
+    # resume from disk with a provider holding only the remaining 3 responses
     st2 = TrajectoryState.load(tdir / "trajectory.json")
-    r2 = TrajectoryRunner(state=st2, tdir=tdir, ctx=ctx, provider=MockProvider(script[4:]), evaluator=MockEvaluator(), job=job, cfg=cfg)
+    r2 = TrajectoryRunner(state=st2, tdir=tdir, ctx=ctx, provider=MockProvider(script[2:]), evaluator=MockEvaluator(), job=job, cfg=cfg)
     assert r2.run() == "complete"
-    assert len(st2.rounds) == 10 and len((tdir / "usage.jsonl").read_text().splitlines()) == 10
+    assert len(st2.rounds) == 5 and len((tdir / "usage.jsonl").read_text().splitlines()) == 5
 
 
 def test_resume_refuses_foreign_archived_response(tmp_path, study, folds):

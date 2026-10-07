@@ -27,8 +27,7 @@ have defaults and must not affect the computation).
 ## Inputs and outputs
 
 - `input`: `(batch, in_channels, D, H, W)`, contiguous, dtype fp16 or fp32.
-  Read-only. The task's declared shape has `W == H`; supporting shapes
-  other than the declared one is not required.
+  Read-only. Every configured case has `W == H`; supporting shapes outside the task's configured cases is not required.
 - `weight`: `(out_channels, in_channels // groups, kD, kH, kW)`, contiguous,
   same dtype as `input`. Read-only.
 - `stride`, `padding`, `groups`: Python ints applied isotropically.

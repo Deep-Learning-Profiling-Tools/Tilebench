@@ -17,8 +17,7 @@ tolerance-based, so bit-exact association is not required.
 - IN: shape (rows, cols), row-major contiguous, dtype fp16 | bf16 | fp32.
   Read-only; it must never be written.
 - rows, cols: Python ints (second and third positional arguments). The
-  task's declared shape is square (cols == rows); supporting shapes other
-  than the declared one is not required.
+  every configured case is square (cols == rows); supporting shapes outside the task's configured cases is not required.
 - OUT: a freshly allocated tensor of shape (rows, cols) and dtype IN.dtype,
   allocated inside the entry point. Every element, boundary included, is
   written by the implementation's own device pass. No aliasing.

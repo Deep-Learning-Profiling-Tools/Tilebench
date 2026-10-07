@@ -11,7 +11,12 @@ pooled. Everything else is refused by code, not by prompt:
 - validation-run trajectories (engineering acceptance data),
 - incomplete / blocked trajectories (missing rounds are never silently
   accepted; a complete trajectory with failed rounds is legitimate),
-- states whose own fold label disagrees with the frozen manifest.
+- states whose own fold label disagrees with the frozen manifest,
+- every trajectory of a campaign listed in manifests/excluded_campaigns.yaml
+  (the revision-2 pilot formal_b200_base_2026-10-06 and the revision-3 pilot
+  formal_b200_base_1dtype5r_2026-10-06), in evaluation AND release mode, and
+  every state that was not produced under protocol revision 4 (trajectory
+  schema /4: 20-case suites).
 A release-full-data run uses a different, explicitly named mode.
 
 The index is TRUSTED only when built by `build_index` from trajectory.json
@@ -36,7 +41,9 @@ from pathlib import Path
 
 from tilebench.llm.v2.manifests.schema import FOLDS, ManifestError, canonical_json, fold_of, sha256_text, training_folds
 
-ACCEPTED_STATE_SCHEMAS = ("tilebench-llm-v2-trajectory/1", "tilebench-llm-v2-trajectory/2")
+# Only protocol-revision-4 states (20-case suites, 5 rounds, one generation per round) are distillation sources;
+# /1, /2 (revision 2) and /3 (revision 3) are pilot data.
+ACCEPTED_STATE_SCHEMAS = ("tilebench-llm-v2-trajectory/4",)
 
 
 class EvidenceAccessError(PermissionError):
@@ -62,6 +69,7 @@ class TrajectoryRef:
     schema: str | None = None
     state_fold: str | None = None        # the state's own label (for the mismatch check)
     rounds: int = 0
+    protocol_revision: int | None = None  # state.protocol.revision (None for revision-2 pilot states)
 
 
 def _no_symlink(path: Path) -> None:
@@ -88,6 +96,12 @@ class EvidenceScope:
     folds_status: str | None = None      # status of the fold manifest used (frozen | proposed)
 
     def allows(self, ref: TrajectoryRef) -> tuple[bool, str]:
+        from tilebench.llm.v2.manifests.schema import PROTOCOL_REVISION, excluded_campaign
+        excl = excluded_campaign(ref.campaign)
+        if excl is not None:
+            return False, f"campaign {ref.campaign} is excluded ({excl.get('role')}); never a distillation source"
+        if ref.protocol_revision is not None and ref.protocol_revision != PROTOCOL_REVISION:
+            return False, f"protocol revision {ref.protocol_revision} is not the frozen revision {PROTOCOL_REVISION}"
         if ref.run_type != "formal":
             return False, f"run type {ref.run_type} is not a distillation source"
         if ref.schema is not None and ref.schema not in ACCEPTED_STATE_SCHEMAS:
@@ -194,7 +208,8 @@ def refs_from_states(states: list[dict], folds: dict | None = None) -> list[Traj
                                  state_sha256=s.get("state_sha256"), config_hash=s.get("config_hash"),
                                  campaign=s.get("campaign"), status=s.get("status", "complete"), schema=s.get("schema"),
                                  state_fold=state_fold if folds is not None else None,
-                                 rounds=sum(1 for r in s.get("rounds", []) if r.get("status") != "pending")))
+                                 rounds=sum(1 for r in s.get("rounds", []) if r.get("status") != "pending"),
+                                 protocol_revision=(s.get("protocol") or {}).get("revision")))
     return out
 
 
@@ -220,7 +235,8 @@ def coverage_report(scope: EvidenceScope, *, study: dict, folds: dict, models: l
     """Expected (operator, dtype, model) of the training folds on the source
     device versus what the scope selected. `expected_tasks` (operator,
     dtype) pairs default to every eligible task of the source device/DSL
-    whose operator is in a training fold (tasks.support.task_table)."""
+    whose operator is in a training fold (tasks.support.task_table): under
+    protocol revision 3, each operator's one representative dtype."""
     if expected_tasks is None:
         from tilebench.llm.v2.tasks.support import task_table
         expected_tasks = [(e.key.operator, e.key.dtype) for e in task_table(study, folds)

@@ -48,8 +48,8 @@ index range is partitioned into (each element still processed once, no
 intermediate written to global memory), a where/select versus max-style
 arithmetic formulation, whether N is a kernel argument or inferred from the
 array bounds, masked versus zero-padded tail handling. Edge handling is
-required wherever the task's fixed N is not a multiple of the chosen tile;
-supporting shapes other than the task's declared shape is not required.
+required wherever a case's N is not a multiple of the chosen tile;
+supporting shapes outside the task's configured cases is not required.
 
 ## Forbidden substitutions
 torch.nn.functional.leaky_relu, torch.nn.LeakyReLU, torch.nn.functional.relu,

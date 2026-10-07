@@ -1,0 +1,227 @@
+{
+  "generated_by": "smoke_tests.py",
+  "versions": {
+    "python": "3.10.19",
+    "tilelang": "0.1.11",
+    "apache-tvm-ffi": "0.1.11",
+    "torch": "2.10.0+cu130",
+    "cuda_runtime_torch": "13.0"
+  },
+  "gpu": {
+    "name": "NVIDIA B200",
+    "compute_capability": "10.0"
+  },
+  "tilelang_cache_dir": "/tmp/claude-684005380/-projects-kzhou6-bcui2-research-tilebench-Tilebench/a6521ec3-fabf-426d-8ca1-816fe03bec13/scratchpad/tilelang_public_skill/tilelang_cache",
+  "summary": {
+    "total": 16,
+    "passed": 16,
+    "failed": []
+  },
+  "tests": [
+    {
+      "name": "vector_add_lazy_out_idx",
+      "source": "SKILL.md 17.1",
+      "status": "pass",
+      "details": {
+        "N": 1000,
+        "returned": "Tensor"
+      },
+      "seconds": 6.46
+    },
+    {
+      "name": "row_max_dynamic_M_masked_partial_tile",
+      "source": "SKILL.md 17.2",
+      "status": "pass",
+      "details": {
+        "M=64": "ok",
+        "M=129": "ok",
+        "return_without_out_idx": "[]"
+      },
+      "seconds": 6.6
+    },
+    {
+      "name": "gemm_eager_fp16",
+      "source": "SKILL.md 17.3",
+      "status": "pass",
+      "details": {
+        "shapes": [
+          [
+            256,
+            192,
+            320
+          ],
+          [
+            200,
+            100,
+            130
+          ]
+        ],
+        "mma_sync_in_source": true
+      },
+      "seconds": 14.67
+    },
+    {
+      "name": "gemm_blackwell_tmem_tcgen05",
+      "source": "SKILL.md 9.4",
+      "status": "pass",
+      "details": {
+        "M,N,K": [
+          256,
+          256,
+          256
+        ],
+        "tcgen05_in_source": true
+      },
+      "seconds": 6.98
+    },
+    {
+      "name": "lazy_and_eager_styles",
+      "source": "SKILL.md 3.2",
+      "status": "pass",
+      "details": {
+        "eager_compile_returns": "JITKernel"
+      },
+      "seconds": 11.68
+    },
+    {
+      "name": "plain_python_wrapper_dynamic_N_scalar_arg",
+      "source": "SKILL.md 4.4",
+      "status": "pass",
+      "details": {
+        "sizes": [
+          1000,
+          3001,
+          "strided view 1000"
+        ]
+      },
+      "seconds": 6.11
+    },
+    {
+      "name": "row_cumsum",
+      "source": "SKILL.md 10.2",
+      "status": "pass",
+      "details": {
+        "M,N": [
+          8,
+          256
+        ]
+      },
+      "seconds": 6.13
+    },
+    {
+      "name": "column_sums_atomic_add",
+      "source": "SKILL.md 11",
+      "status": "pass",
+      "details": {
+        "M,N": [
+          100,
+          200
+        ]
+      },
+      "seconds": 6.38
+    },
+    {
+      "name": "macro_square",
+      "source": "SKILL.md 14",
+      "status": "pass",
+      "details": {
+        "N": 300
+      },
+      "seconds": 6.0
+    },
+    {
+      "name": "claim_current_torch_stream",
+      "source": "SKILL.md 4.2",
+      "status": "pass",
+      "details": {
+        "launched_on_current_stream": true
+      },
+      "seconds": 5.58
+    },
+    {
+      "name": "claim_host_checks",
+      "source": "SKILL.md 4.1 / 4.5",
+      "status": "pass",
+      "details": {
+        "arg_count": "Kernel expected 2 inputs, but 1 are provided.",
+        "non_contiguous": "kernel main input A strides[0] violates packed ABI constraint; expected: 2, got: 1",
+        "dtype": "kernel main input A dtype mismatch, expected float32"
+      },
+      "seconds": 1.62
+    },
+    {
+      "name": "claim_oob_global_load_reads_zero",
+      "source": "SKILL.md 6.2",
+      "status": "pass",
+      "details": {
+        "unmasked_row_max_of_negative_rows": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "seconds": 6.07
+    },
+    {
+      "name": "claim_integer_division",
+      "source": "SKILL.md 8.1",
+      "status": "pass",
+      "details": {
+        "floor_div": [
+          -3,
+          -2,
+          -1,
+          0,
+          0,
+          1,
+          2,
+          2
+        ],
+        "floor_mod": [
+          2,
+          0,
+          2,
+          0,
+          1,
+          2,
+          1,
+          2
+        ],
+        "integer_slash": "rejected"
+      },
+      "seconds": 6.08
+    },
+    {
+      "name": "claim_kernel_scope_statement_runs_on_every_thread",
+      "source": "SKILL.md 3.1 / 18.1",
+      "status": "pass",
+      "details": {
+        "counts": [
+          128,
+          1
+        ]
+      },
+      "seconds": 5.74
+    },
+    {
+      "name": "claim_fp32_gemm_uses_tf32",
+      "source": "SKILL.md 9.2",
+      "status": "pass",
+      "details": {
+        "kTensorFloat32_in_source": true
+      },
+      "seconds": 6.54
+    },
+    {
+      "name": "claim_postponed_annotations_break_prim_func",
+      "source": "SKILL.md 18.12",
+      "status": "pass",
+      "details": {
+        "python": "3.10.19",
+        "error": "Forward references must evaluate to types. Got buffer."
+      },
+      "seconds": 0.02
+    }
+  ]
+}

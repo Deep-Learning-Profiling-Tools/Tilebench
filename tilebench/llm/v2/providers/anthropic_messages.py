@@ -26,7 +26,8 @@ import os
 import time
 from typing import Any
 
-from tilebench.llm.v2.providers.base import GenerationRequest, GenerationResult, ProviderConfigError, TransportError
+from tilebench.llm.v2.providers.base import (GenerationRequest, GenerationResult, ProviderConfigError, TransportError,
+                                             response_headers, safe_error_body)
 from tilebench.llm.v2.providers.usage import ANTHROPIC_SCHEMA, normalize, unknown
 
 DEFAULT_API_KEY_ENV = "CLAUDE_API_KEY"
@@ -113,10 +114,14 @@ class AnthropicMessagesProvider:
         text_chars = 0
         partial: dict | None = None
         msg = None
+        headers = None
+        last_event = None
         try:
             with self._client.messages.stream(**kwargs) as stream:
+                headers = response_headers(stream)
                 for event in stream:
                     events += 1
+                    last_event = getattr(event, "type", "") or last_event
                     partial = _usage_from_event(event, partial)
                     if getattr(event, "type", "") == "text":
                         text_chars += len(getattr(event, "text", "") or "")
@@ -125,13 +130,20 @@ class AnthropicMessagesProvider:
             raise
         except Exception as e:  # noqa: BLE001
             err = classify_exception(e)
-            if isinstance(err, TransportError) and events > 0:
-                err = TransportError(str(err), charged="unknown", usage_partial=partial, stream_events=events,
-                                     partial_text_chars=text_chars)
+            rl = headers or response_headers(e)
+            if isinstance(err, TransportError):
+                if events > 0:
+                    err = TransportError(str(err), charged="unknown", usage_partial=partial, stream_events=events,
+                                         partial_text_chars=text_chars)
+                err.rate_limit, err.last_event = rl, last_event
+                err.error_body = safe_error_body(getattr(e, "body", None))
+                err.status_code = getattr(e, "status_code", None)
+            elif isinstance(err, ProviderConfigError):
+                err.rate_limit = rl
             raise err from e
         raw = _dump(msg)
         usage_raw = raw.get("usage") if isinstance(raw, dict) else None
-        usage = normalize(ANTHROPIC_SCHEMA, usage_raw) if usage_raw else unknown(self.name, ANTHROPIC_SCHEMA, "usage absent")
+        usage = normalize(ANTHROPIC_SCHEMA, usage_raw, raw if isinstance(raw, dict) else None) if usage_raw else unknown(self.name, ANTHROPIC_SCHEMA, "usage absent")
         stop = raw.get("stop_reason") if isinstance(raw, dict) else None
         truncated = stop == "max_tokens"
         error = None
@@ -146,4 +158,4 @@ class AnthropicMessagesProvider:
                                 usage_raw=usage_raw, usage=usage, transport_attempts=1, elapsed_s=time.time() - t0,
                                 error=error, raw_response=raw, terminal_status=stop, truncated=truncated,
                                 stream_events=events, streamed=True, requested_model_id=request.model_id,
-                                request_settings_sent=sent)
+                                request_settings_sent=sent, rate_limit=headers)

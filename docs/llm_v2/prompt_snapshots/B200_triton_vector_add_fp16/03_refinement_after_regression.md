@@ -887,10 +887,8 @@ precomputation outside `run()`.
   launch or partitioned across several, provided each element is still
   processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
-  for a last partial block. Edge handling is required wherever the task's
-  fixed `n` is not a multiple of the chosen tile (no element at index `>= n`
-  may be read or written); supporting shapes other than the task's declared
-  shape is not required.
+  for a last partial block. Edge handling is required wherever a case's `n` is not a multiple of the chosen tile (no element at index `>= n`
+  may be read or written); supporting shapes outside the task's configured cases is not required.
 - Whether `n` is a compile-time constant or a runtime argument.
 
 ## Forbidden substitutions
@@ -919,8 +917,8 @@ Everything else in `torch` is forbidden inside `run()`.
 
 - Operator: `vector_add`; DSL `triton` 3.6.0; output file `impl_triton.py`
 - Datatype: `fp16` (torch `torch.float16`)
-- Fixed input case:
-  - `n` = `20971520`
+- Evaluated inputs: 20 configured cases of this dtype, the same set in every round; the file must be correct and is timed on each of them. Parameter domain:
+  - `n`: an integer from `1048576` to `20971520`, always a multiple of `1048576`
 - Numerical acceptance: `atol=0.001, rtol=0.001` (source: config.verify+dtype_default)
 - Interface: `def run(x, y):`; returns the output tensor(s) described in the contract.
 
@@ -931,7 +929,7 @@ def run(x, y):
     return x + y
 ```
 
-# Optimization round 5 of 10
+# Optimization round 5 of 5
 
 ## Previous candidate (round 4)
 
@@ -939,24 +937,24 @@ def run(x, y):
 # slower candidate source
 ```
 
-Configuration reported by `get_last_config()`: `{"BLOCK": 256}`
+Configurations reported by `get_last_config()` across the cases (1 distinct): `{"BLOCK": 256}`
 
-Outcome: compiled, passed numerical verification and was timed: 0.0532 ms (samples: 0.0528, 0.0533, 0.0535)
+Outcome: compiled, passed numerical verification and was timed on all 20 cases: geometric-mean runtime 0.0532 ms
 
 
-## Best valid candidate so far (round 3, 0.0410 ms)
+## Best valid candidate so far (round 3, geometric mean 0.0410 ms over the 20 cases)
 
 ```python title="impl_triton.py"
 # best valid candidate source
 ```
 
-Configuration: `{"BLOCK": 1024}`
+Configurations reported by `get_last_config()` across the cases (2 distinct): `{"BLOCK": 1024}`, `{"BLOCK": 2048}`
 
-## Runtime history of this task (valid candidates only; ms, mean of 3 timed runs after 1 warmup)
+## Runtime history of this task (valid candidates only: all 20 cases valid; geometric mean over the 20 cases of the per-case runtime, each the mean of 3 timed runs after 1 warmup)
 
-| round | mean ms | samples ms |
+| round | valid cases | geometric-mean ms |
 |---|---|---|
-| 3 | 0.0410 | 0.0405, 0.0410, 0.0415 |
-| 4 | 0.0532 | 0.0528, 0.0533, 0.0535 |
+| 3 | 20/20 | 0.0410 |
+| 4 | 20/20 | 0.0532 |
 
-Improve on the best valid runtime while keeping the contract. Return exactly one fenced block titled `impl_triton.py`.
+Improve on the best valid geometric-mean runtime while keeping the contract and staying correct on every case. Return exactly one fenced block titled `impl_triton.py`.

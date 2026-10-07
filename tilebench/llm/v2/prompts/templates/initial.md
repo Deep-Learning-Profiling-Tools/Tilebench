@@ -17,8 +17,7 @@
 - Operator: `{{operator}}`
 - DSL: `{{dsl}}` {{dsl_version}}; output file: `{{output_file}}`
 - Datatype: `{{dtype}}` (torch `{{torch_dtype}}`){{fp8_note}}
-- Fixed input case (every evaluation uses exactly these parameters):
-{{params_block}}
+- Evaluated inputs: {{domain_block}}
 - Numerical acceptance: `torch.testing.assert_close(output, reference, atol={{atol}}, rtol={{rtol}})`{{tolerance_note}}
 - Interface: `{{run_signature}}`; returns {{returns}}.
 
@@ -30,4 +29,4 @@
 
 ## Output requirements
 
-Return exactly one fenced block titled `{{output_file}}`. The file must define `run(...)` with the interface above and `get_last_config()`. Fixed configuration values must be literals. No autotuning, no runtime configuration search, no cached results, no use of the reference implementation or other compute libraries for the operator's computation.
+Return exactly one fenced block titled `{{output_file}}`. The file must define `run(...)` with the interface above and `get_last_config()`. Configuration values are literals or a deterministic function of the input shapes and static metadata. No autotuning, no runtime configuration search or timing, no table keyed to particular benchmark shapes, no cached results, no use of the reference implementation or other compute libraries for the operator's computation.

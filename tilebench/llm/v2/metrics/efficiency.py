@@ -1,8 +1,21 @@
-"""SOL-Efficiency@B and its aggregation, exactly as in the protocol:
+"""SOL-Efficiency@B and its aggregation, exactly as in the protocol
+(revision 4: 5 rounds, exactly one candidate generation per round, one
+predeclared representative dtype per operator, every candidate evaluated on
+the operator's 20 frozen cases):
 
-    C_i   = sum_{j<=i} sum_{a<=A_j} c_{j,a},   A_j <= 3
-    E(B)  = max({T_SOL / T_i : C_i <= B and valid_i = 1} union {0})
-    E_bar(B) = mean_over_operators(mean_over_eligible_dtypes(E_{o,d}(B)))
+    C_i   = sum_{j<=i} c_j,   i in {1..5}   (c_j: every sent generation of round j, whatever its outcome)
+    eff_i = geomean_j (T_emp_j / T_ij)  over the 20 cases j of a valid round i (valid = 20/20 cases valid)
+    E(B)  = max({eff_i : C_i <= B and valid_i = 1} union {0})
+    E_bar(B) = arithmetic mean over the predeclared operators of E_{o,d(o)}(B)   (d(o): the operator's selected dtype)
+
+`t_sol_ms` is either one target (single-case pilot rounds: eff_i = T_SOL / T_i)
+or a {case_id: T_emp_j} mapping (revision 4: the round must report
+`case_latency_ms` for every case). The same geometric-mean form gives the
+reporting speedup with {case_id: T_torch_j} (`geomean_ratio`).
+
+Two independent budget axes: E_token(B_token) with C_i in logical tokens
+(the main metric) and E_usd(B_usd) with C_i in estimated list-price USD
+(metrics.cost); the same curve logic, never mixed.
 
 Inputs are round records: {"round": i, "attempts": [{"cost": c or None}],
 "valid": bool, "latency_ms": T_i or None, "latency_ms_samples": [...]}.
@@ -65,9 +78,33 @@ def _finite_positive(x) -> bool:
     return math.isfinite(v) and v > 0
 
 
+def geomean_ratio(numerators: dict, case_latency_ms: dict | None) -> float | None:
+    """geomean_j (numerators[j] / case_latency_ms[j]) over every case of `numerators`; None if any is missing."""
+    if not numerators or not case_latency_ms:
+        return None
+    logs = []
+    for cid, num in numerators.items():
+        lat = case_latency_ms.get(cid)
+        if not (_finite_positive(num) and _finite_positive(lat)):
+            return None
+        logs.append(math.log(float(num) / float(lat)))
+    return math.exp(sum(logs) / len(logs))
+
+
 def round_is_valid(r: dict) -> tuple[bool, str | None]:
     if not r.get("valid"):
         return False, None
+    if r.get("cases_total"):
+        lat = r.get("case_latency_ms") or {}
+        if r.get("valid_cases") != r["cases_total"] or len(lat) != r["cases_total"]:
+            return False, f"round {r.get('round')}: marked valid without every case valid ({r.get('valid_cases')}/{r.get('cases_total')})"
+        if not all(_finite_positive(v) for v in lat.values()):
+            return False, f"round {r.get('round')}: a case latency is not finite positive"
+        for cid, samples in (r.get("case_samples_ms") or {}).items():
+            if samples is not None and (len(samples) != 3 or not all(_finite_positive(x) for x in samples)
+                                        or abs(float(lat[cid]) - sum(float(x) for x in samples) / 3) > 1e-9 * max(1.0, float(lat[cid]))):
+                return False, f"round {r.get('round')}: case {cid} lacks three finite positive samples whose mean is its latency"
+        return True, None
     lat = r.get("latency_ms")
     if not _finite_positive(lat):
         return False, f"round {r.get('round')}: marked valid but latency {lat!r} is not finite positive"
@@ -80,22 +117,25 @@ def round_is_valid(r: dict) -> tuple[bool, str | None]:
     return True, None
 
 
-def cumulative_costs(rounds: list[dict]) -> tuple[list[int | None], int]:
-    """C_i per round; None from the first round with an unknown attempt cost."""
+def cumulative_costs(rounds: list[dict], *, max_attempts: int = 1, cost_key: str = "cost") -> tuple[list, int]:
+    """C_i per round; None from the first round with an unknown attempt cost.
+    Protocol revision 3 allows exactly one generation per round. cost_key
+    "cost" = logical tokens (E_token), "usd" = estimated list-price USD
+    (E_usd); the two axes are never mixed."""
     out: list[int | None] = []
     total = 0
     known_through = 0
     unknown = False
     for r in rounds:
         attempts = r.get("attempts", [])
-        if len(attempts) > 3:
-            raise ValueError(f"round {r.get('round')} has {len(attempts)} attempts (> 3)")
+        if len(attempts) > max_attempts:
+            raise ValueError(f"round {r.get('round')} has {len(attempts)} attempts (> {max_attempts})")
         for a in attempts:
-            c = a.get("cost")
+            c = a.get(cost_key)
             if c is None:
                 unknown = True
             elif not unknown:
-                total += int(c)
+                total += int(c) if cost_key == "cost" else float(c)
         if unknown:
             out.append(None)
         else:
@@ -104,19 +144,28 @@ def cumulative_costs(rounds: list[dict]) -> tuple[list[int | None], int]:
     return out, known_through
 
 
-def curve(t_sol_ms: float | None, rounds: list[dict], *, status: str = "complete") -> TrajectoryCurve:
-    costs, known = cumulative_costs(rounds)
+def curve(t_sol_ms: float | None, rounds: list[dict], *, status: str = "complete", max_attempts: int = 1,
+          cost_key: str = "cost") -> TrajectoryCurve:
+    costs, known = cumulative_costs(rounds, max_attempts=max_attempts, cost_key=cost_key)
     points: list[RoundPoint] = []
     best: float | None = None
     flags: list[str] = []
-    sol_ok = t_sol_ms is not None and _finite_positive(t_sol_ms)
+    per_case = isinstance(t_sol_ms, dict)
+    sol_ok = (bool(t_sol_ms) and all(_finite_positive(v) for v in t_sol_ms.values())) if per_case else \
+        (t_sol_ms is not None and _finite_positive(t_sol_ms))
     for r, c in zip(rounds, costs):
         valid, why = round_is_valid(r)
         if why:
             flags.append(why)
         eff = None
-        if valid and sol_ok:
+        if valid and sol_ok and per_case:
+            eff = geomean_ratio(t_sol_ms, r.get("case_latency_ms"))
+            if eff is None:
+                flags.append(f"round {r.get('round')}: case latencies do not cover the target's cases")
+                valid = False
+        elif valid and sol_ok:
             eff = float(t_sol_ms) / float(r["latency_ms"])
+        if eff is not None:
             if eff > 1.0:
                 flags.append(f"round {r.get('round')}: efficiency {eff:.3f} > 1 (audit measurement/model; not an automatic hacking verdict)")
             best = eff if best is None else max(best, eff)
@@ -173,8 +222,13 @@ PREDECLARED_STATUSES = ("eligible", "unsupported")
 
 
 def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budgets: Iterable[int],
-              eligible: dict[tuple[str, str], str]) -> dict:
+              eligible: dict[tuple[str, str], str], *, one_dtype_per_operator: bool = True) -> dict:
     """Operator-balanced E_bar(B) over the FROZEN pre-declared task set.
+
+    Protocol revision 3: `eligible` holds exactly one (operator, selected
+    dtype) per predeclared operator (one_dtype_per_operator=True refuses
+    anything else), so E_bar(B) is the mean over the operators, with no
+    inner dtype average.
 
     task_curves: {(operator, dtype): curve or None}; eligible: {(op, dtype):
     status} is the pre-declared eligibility (`eligible` | `unsupported`), fixed
@@ -194,6 +248,16 @@ def aggregate(task_curves: dict[tuple[str, str], TrajectoryCurve | None], budget
     mean over complete tasks only: a differently named quantity, not E_bar(B)
     and not a substitute for the paired Base/Enhanced comparison."""
     budgets = list(budgets)
+    if one_dtype_per_operator:
+        per_op: dict[str, list[str]] = {}
+        for op, dt in eligible:
+            per_op.setdefault(op, []).append(dt)
+        multi = {op: dts for op, dts in per_op.items() if len(dts) > 1}
+        if multi:
+            raise ValueError(f"one representative dtype per operator is required; got several for {multi}")
+        stray = sorted(k for k in task_curves if k not in eligible)
+        if stray:
+            raise ValueError(f"curves for tasks outside the predeclared set: {stray}")
     for key, status in eligible.items():
         if status not in PREDECLARED_STATUSES:
             raise ValueError(f"eligibility of {key} must be pre-declared as one of {PREDECLARED_STATUSES}, got {status!r} "

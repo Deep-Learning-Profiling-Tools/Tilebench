@@ -15,14 +15,17 @@ def rounds(*specs):
     return out
 
 
-def test_cumulative_cost_sums_all_attempts_including_violations():
-    costs, known = e.cumulative_costs(rounds(([10], True, 1.0), ([5, 6, 7], False, None), ([2], True, 0.5)))
+def test_cumulative_cost_counts_every_sent_generation_whatever_its_outcome():
+    # protocol revision 3: one generation per round; a failed / violating round's tokens are charged too
+    costs, known = e.cumulative_costs(rounds(([10], True, 1.0), ([18], False, None), ([2], True, 0.5)))
     assert costs == [10, 28, 30] and known == 3
 
 
-def test_more_than_three_attempts_is_an_error():
+def test_more_than_one_attempt_per_round_is_an_error():
     with pytest.raises(ValueError):
-        e.cumulative_costs(rounds(([1, 1, 1, 1], False, None)))
+        e.cumulative_costs(rounds(([1, 1], False, None)))
+    # revision-2 pilot states (up to 3 attempts) are readable only when the caller says so explicitly
+    assert e.cumulative_costs(rounds(([1, 1, 1], False, None)), max_attempts=3)[0] == [3]
 
 
 def test_efficiency_zero_without_valid_and_best_never_erased():
@@ -52,22 +55,26 @@ def test_non_uniform_token_steps_not_round_indices():
 
 
 def test_operator_balanced_aggregation_with_zero_unsupported_incomplete():
-    curves = {("op1", "fp16"): e.curve(1.0, rounds(([10], True, 1.0))),
-              ("op1", "fp32"): e.curve(1.0, rounds(([10], False, None))),
+    # one representative dtype per operator: E_bar(B) is the mean over the predeclared operators
+    curves = {("op1", "fp16"): e.curve(1.0, rounds(([10], False, None))),
               ("op2", "fp16"): e.curve(1.0, rounds(([10], True, 2.0))),
               ("op3", "fp16"): None,
-              ("op4", "fp16"): e.curve(1.0, rounds(([10], True, 1.0)), status="incomplete")}
-    elig = {("op1", "fp16"): "eligible", ("op1", "fp32"): "eligible", ("op2", "fp16"): "eligible",
-            ("op3", "fp16"): "unsupported", ("op4", "fp16"): "eligible"}        # execution state is NOT eligibility
+              ("op4", "fp16"): e.curve(1.0, rounds(([10], True, 1.0)), status="incomplete"),
+              ("op5", "fp32"): e.curve(1.0, rounds(([10], True, 1.0)))}
+    elig = {("op1", "fp16"): "eligible", ("op2", "fp16"): "eligible", ("op3", "fp16"): "unsupported",
+            ("op4", "fp16"): "eligible", ("op5", "fp32"): "eligible"}        # execution state is NOT eligibility
     agg = e.aggregate(curves, [10], elig)
-    # op1 = (1.0 + real 0)/2 = 0.5 ; op2 = 0.5 ; op3 unsupported (out of the denominator) ; op4 incomplete -> exact mean unknown
-    assert agg["mean"] == [None] and agg["n_operators"] == 3 and agg["partial"]
-    assert agg["lower_bound_mean"] == [(0.5 + 0.5 + 0.0) / 3] and agg["completed_only_mean"] == [0.5]
+    # op1 real 0 ; op2 0.5 ; op3 unsupported (out of the denominator) ; op4 incomplete -> exact mean unknown ; op5 1.0
+    assert agg["mean"] == [None] and agg["n_operators"] == 4 and agg["partial"]
+    assert agg["lower_bound_mean"] == [(0.0 + 0.5 + 0.0 + 1.0) / 4] and agg["completed_only_mean"] == [(0.0 + 0.5 + 1.0) / 3]
     assert agg["unsupported"] == [("op3", "fp16")] and agg["incomplete"] == [("op4", "fp16")]
-    assert agg["tasks_included"] == [("op1", "fp16"), ("op1", "fp32"), ("op2", "fp16"), ("op4", "fp16")]
-    assert agg["completed_only_tasks"] == [("op1", "fp16"), ("op1", "fp32"), ("op2", "fp16")]
+    assert agg["tasks_included"] == [("op1", "fp16"), ("op2", "fp16"), ("op4", "fp16"), ("op5", "fp32")]
     with pytest.raises(ValueError, match="pre-declared"):
-        e.aggregate(curves, [10], {("op4", "fp16"): "incomplete"})
+        e.aggregate({}, [10], {("op4", "fp16"): "incomplete"})
+    with pytest.raises(ValueError, match="one representative dtype"):
+        e.aggregate({}, [10], {("op1", "fp16"): "eligible", ("op1", "fp32"): "eligible"})
+    with pytest.raises(ValueError, match="outside the predeclared set"):
+        e.aggregate({("op9", "fp16"): curves[("op2", "fp16")]}, [10], {("op1", "fp16"): "eligible"})
 
 
 def test_legacy_t_sol_uses_v2_declarations_without_aliases():

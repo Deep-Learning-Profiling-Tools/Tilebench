@@ -27,7 +27,7 @@ arguments are passed.
   every call. Returning a metadata-only view (for example a squeeze of a
   run-allocated `(M, 1)` buffer) is acceptable; the returned tensor must not
   share storage with `x`. Returned as a single tensor.
-- Edge handling is required wherever the task's fixed `N` is not a multiple
+- Edge handling is required wherever a case's `N` is not a multiple
   of the chosen tile width; columns outside `[0, N)` must
   contribute exactly zero to the sum and the divisor must be the exact `N`.
 
@@ -91,9 +91,8 @@ no-op guard.
 - One program per row, or a row split across several programs with a combine
   of their float32 partial sums (see the stages).
 - Whether `N` is specialised as a compile-time constant or passed at runtime
-  is free; edge handling is required wherever the task's fixed `N` is not a
-  multiple of the chosen chunk width, and supporting shapes other than the
-  task's declared shape is not required.
+  is free; edge handling is required wherever a case's `N` is not a
+  multiple of the chosen chunk width, and supporting shapes outside the task's configured cases is not required.
 - The order in which float32 partial sums are combined is free.
 - Allocating the output as `(M,)` or `(M, 1)` float32 and returning a view of
   shape `(M,)` is free.

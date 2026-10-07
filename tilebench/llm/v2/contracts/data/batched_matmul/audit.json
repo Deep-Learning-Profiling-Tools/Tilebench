@@ -2,7 +2,7 @@
   "schema": "tilebench-contract-audit/1",
   "operator": "batched_matmul",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
-  "contract_revision": 2,
+  "contract_revision": 3,
   "status": "approved",
   "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
   "approved_on": "2026-10-06",
@@ -210,6 +210,13 @@
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): bytes_expr = 3 * BATCH * M * M * dtype_size (one read of A and B, one write of C) remains the lower-bound / compulsory-I/O model; per-call repack traffic is diagnostic. The manual Triton column relied on a steady-state cached transpose (impl_triton.py 41-51, 136) that the decided rule forbids, so it stays human_reference_not_comparable (human_reference_comparable = false); the cuTile column, which reads row-major B directly (impl_cutile.py 58-62, 83), is comparable.",
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the identity-keyed B^T cache (impl_triton.py 41-51) is a property of the manual reference, not of the contract; it is not fixed here and is the reason the Triton column is marked not comparable. Candidates are forbidden from reproducing it."
   ],
-  "contract_sha256": "5e56f06f0748ead724e39bbddb7718d2366f59c40bbcdd52c1dc6751ab59734a",
-  "previous_status_before_approval": "needs-review"
+  "contract_sha256": "dd3bf77d8bd455b91112cc692c5df32e680bf1cf9dbf56386f601aa3d4a31e4f",
+  "previous_status_before_approval": "needs-review",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "5e56f06f0748ead724e39bbddb7718d2366f59c40bbcdd52c1dc6751ab59734a",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
 }

@@ -76,9 +76,8 @@ consumed as given; no copy, cast, cached state or precomputation outside
   processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
   for the last partial block; padded lanes are never stored. Edge handling is
-  required wherever the task's fixed shape is not a multiple of the chosen
-  tile; supporting shapes other than the task's declared shape is not
-  required.
+  required wherever a case's shape is not a multiple of the chosen
+  tile; supporting shapes outside the task's configured cases is not required.
 - The exact sigmoid formulation (see above).
 - Whether the element count is a compile-time constant or runtime argument.
 

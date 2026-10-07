@@ -298,9 +298,17 @@ def scoring_binding(device: str, *, manifest: dict | None = None) -> dict:
             "ceiling_basis": cs.CEILING_BASIS}
 
 
+def case_targets(device: str, operator: str, dtype: str, cases: list[dict], metrics_cfg: dict, modes_doc: dict,
+                 profile: dict | None) -> dict[str, EmpiricalTarget]:
+    """T_emp of every case of a suite: {case_id: EmpiricalTarget}."""
+    return {c["case_id"]: t_emp(device, operator, dtype, c["params"], c.get("problem_size", 1), metrics_cfg, modes_doc, profile)
+            for c in cases}
+
+
 def scoring_table(device: str, tasks: list[dict], *, modes_doc: dict | None = None, profile: dict | None = None,
                   config_loader=None) -> dict:
-    """One row per (operator, dtype) of `tasks` (eligibility rows of this device)."""
+    """One row per CASE of every eligible (operator, dtype) task of this device (revision 4: the 20 frozen cases;
+    a task without a case suite contributes its single representative case)."""
     from tilebench.llm.v2.tasks.case_selection import load_operator_config, operator_config
     modes_doc = modes_doc or load_modes()
     config_loader = config_loader or load_operator_config
@@ -311,18 +319,22 @@ def scoring_table(device: str, tasks: list[dict], *, modes_doc: dict | None = No
             continue
         seen.add((k["operator"], k["dtype"]))
         cfg = config_loader(k["operator"])
-        rec = t_emp(device, k["operator"], k["dtype"], t["params"], t.get("problem_size", 1),
-                    cfg.get("metrics", {}), modes_doc, profile).to_dict()
-        rec["params"] = t["params"]
-        rec["case_id"] = k.get("case_id")
-        rec["flops_expr"] = cfg.get("metrics", {}).get("flops_expr")
-        rec["bytes_expr"] = cfg.get("metrics", {}).get("bytes_expr")
         try:
-            rec["config_sha256"] = sha256_file(operator_config(k["operator"]))
+            cfg_sha = sha256_file(operator_config(k["operator"]))
         except Exception:  # noqa: BLE001
-            rec["config_sha256"] = None
-        rows.append(rec)
-    rows.sort(key=lambda r: (r["operator"], r["dtype"]))
+            cfg_sha = None
+        cases = t.get("cases") or [{"case_id": k.get("case_id"), "params": t["params"], "problem_size": t.get("problem_size", 1)}]
+        for c in cases:
+            rec = t_emp(device, k["operator"], k["dtype"], c["params"], c.get("problem_size", 1),
+                        cfg.get("metrics", {}), modes_doc, profile).to_dict()
+            rec["params"] = c["params"]
+            rec["case_id"] = c["case_id"]
+            rec["case_set_id"] = t.get("case_set_id")
+            rec["flops_expr"] = cfg.get("metrics", {}).get("flops_expr")
+            rec["bytes_expr"] = cfg.get("metrics", {}).get("bytes_expr")
+            rec["config_sha256"] = cfg_sha
+            rows.append(rec)
+    rows.sort(key=lambda r: (r["operator"], r["dtype"], str(r.get("case_id"))))
     counts: dict[str, int] = {}
     for r in rows:
         counts[r["status"]] = counts.get(r["status"], 0) + 1

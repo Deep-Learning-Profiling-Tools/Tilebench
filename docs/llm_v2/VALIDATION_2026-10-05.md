@@ -1,5 +1,8 @@
 # VALIDATION_2026-10-05 — real ten-round acceptance of the v2 execution chain on B200
 
+> Historical (protocol revision 2: ten rounds, up to three generations per round). Superseded by
+> revision 3 (docs/llm_v2/PROTOCOL_REVISION_3.md); kept unchanged as the record of that campaign.
+
 Campaign `validation_b200_2026-10-05` (`outputs/llm_v2/validation_b200_2026-10-05/`
 run cache; publication copy under `artifacts/llm_v2/validation_b200_2026-10-05/`).
 Run type `validation`: engineering acceptance of the shared execution chain

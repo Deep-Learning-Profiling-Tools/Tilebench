@@ -28,9 +28,7 @@ have defaults and must not affect the computation).
   `A`, freshly allocated inside `run()` on every call and returned as a
   single tensor (a flat view of a freshly allocated 3-D buffer is fine). It
   must not alias `A` or `B`.
-- The task's declared shape has `N == K == M`; supporting shapes other than
-  the declared one is not required. Edge handling is required wherever that
-  shape is not a multiple of the chosen tile.
+- Every configured case has `N == K == M`; supporting shapes outside the task's configured cases is not required. Edge handling is required wherever a case's shape is not a multiple of the chosen tile.
 
 ## Required logical stages
 
@@ -58,11 +56,10 @@ multiply. No split-K, no atomics, no partial-sum scratch, because splitting
 `K` would combine partial sums through global memory, a different reduction
 structure. The batch index may be a grid axis or folded into a linear tile
 index; the raster order of tiles (including grouped or swizzled orderings)
-is free. Wherever the chosen tile does not divide the task's `M`, `N` or
+is free. Wherever the chosen tile does not divide a case's `M`, `N` or
 `K`, edge tiles must be handled by zero-filled loads (out-of-range `K` lanes
 contribute zero) and clipped or masked stores (no out-of-range element is
-written); supporting shapes other than the task's declared shape is not
-required.
+written); supporting shapes outside the task's configured cases is not required.
 
 ## Precision and accumulation
 

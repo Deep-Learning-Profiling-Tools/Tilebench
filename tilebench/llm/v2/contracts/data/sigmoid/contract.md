@@ -16,7 +16,7 @@ The entry point is called as `run(X, N)`: `X` and `N` positional; no keyword
 arguments are passed.
 
 - `X`: `(N,)`, contiguous, dtype one of fp16, bf16, fp32. Read-only.
-- `N`: Python int, the number of elements to process (fixed by the task).
+- `N`: Python int, the number of elements to process (one of the task's configured sizes).
   Elements at index `>= N` must never be read or written.
 - Returned: one new tensor of `X`'s shape and dtype, allocated inside
   `run()` on every call. It must not alias `X`.
@@ -71,9 +71,7 @@ beyond a free view, cached state or precomputation outside `run()`.
   processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
   for the last partial block; the fill value of padded lanes is irrelevant
-  because they are never stored. Edge handling is required wherever the
-  task's fixed `N` is not a multiple of the chosen tile; supporting shapes
-  other than the task's declared shape is not required.
+  because they are never stored. Edge handling is required wherever a case's `N` is not a multiple of the chosen tile; supporting shapes outside the task's configured cases is not required.
 - The exact sigmoid formulation (see above).
 
 ## Forbidden substitutions

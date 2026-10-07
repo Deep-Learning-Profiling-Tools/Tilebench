@@ -2,7 +2,7 @@
   "schema": "tilebench-contract-audit/1",
   "operator": "histogramming",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
-  "contract_revision": 2,
+  "contract_revision": 3,
   "status": "approved",
   "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
   "approved_on": "2026-10-06",
@@ -188,6 +188,13 @@
     "(non-blocking, metric) bytes_expr omits the per-call scratch zero-fill (num_partials * num_bins * 4 B memset inside run()), the N atomic read-modify-writes into the scratch and the reduce pass's full scratch read, all of which are inside the timed window on both sides: decide whether to keep the compulsory-traffic convention (input read + output write) or to add the scratch traffic so that bandwidth/SOL figures are not understated in the small-N / large-num_bins corner.",
     "(non-blocking, scope) Both implementations count with global-memory atomic adds into a private row of a zero-filled global scratch; the contract requires the two-level structure (private partial histograms, then a cross-partial sum) and a scratch initialised inside run(), but leaves the private-row update mechanism (per-element atomics versus on-chip pre-aggregation such as a register/shared-memory histogram primitive followed by additive updates of the row) as a permitted mapping. Confirm that this freedom is intended, since on-chip pre-aggregation can cut the scratch traffic the manual kernels pay."
   ],
-  "contract_sha256": "76a137fc9c2a9a7272523945165002a078ae53ba169aec724057e3d8bd3dcff7",
-  "previous_status_before_approval": "draft"
+  "contract_sha256": "6a2948510d356f8782ff99827b276d8adb2adc08230b720515e0b8db3f6f4499",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "76a137fc9c2a9a7272523945165002a078ae53ba169aec724057e3d8bd3dcff7",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
 }

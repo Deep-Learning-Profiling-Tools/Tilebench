@@ -17,7 +17,7 @@ The entry point is called as `run(A, N)`. `N` is the side length and equals
   Read-only: `A` must not be written, and the result must not alias it.
 - `B` (returned): `(N, N)`, same dtype as `A`, freshly allocated inside
   `run()` on every call, contiguous row-major. Returned as a single tensor.
-- Edge handling is required wherever the task's fixed `N*N` is not a
+- Edge handling is required wherever a case's `N*N` is not a
   multiple of the chosen tile; an implementation must not read or write
   outside the `N*N` elements.
 
@@ -70,9 +70,8 @@ before the kernel reads it. Nothing may be cached across calls.
   written to global memory.
 - Tail handling by explicit masks or by the DSL's bounds-padded loads and
   bounds-clipped stores is free, provided no out-of-range element is written.
-  Edge handling is required wherever the task's fixed `N*N` (or, for 2-D
-  tiles, `N`) is not a multiple of the chosen tile; supporting shapes other
-  than the task's declared shape is not required.
+  Edge handling is required wherever a case's `N*N` (or, for 2-D
+  tiles, `N`) is not a multiple of the chosen tile; supporting shapes outside the task's configured cases is not required.
 - Flattening `A` and `B` to 1-D views on the host is permitted (metadata
   only; it must not copy).
 - Whether the lowering uses bulk/asynchronous copies or ordinary loads and

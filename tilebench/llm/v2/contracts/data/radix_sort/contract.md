@@ -24,7 +24,7 @@ keyword arguments are passed.
   It may be whichever of the run-allocated key buffers holds the final
   result; it must not be `input`, a view of `input`, or shared storage with
   it.
-- `N` is the task's fixed key count; keys outside `[0, N)` must never be
+- `N` is the case's key count; keys outside `[0, N)` must never be
   counted or written (edge handling wherever `N` is not a multiple of the
   chosen block size).
 
@@ -113,10 +113,9 @@ permitted.
 - Tail handling by explicit masks, zero-padded loads whose padded lanes are
   excluded from counts and ranks, and out-of-range destinations for padded
   lanes that the store drops.
-- Specialising on the task's fixed `N` (for example as a compile-time
-  constant): edge handling is required wherever the fixed `N` is not a
-  multiple of the chosen block, and supporting lengths other than the
-  task's declared shape is not required.
+- Specialising per case on `N` (for example as a compile-time
+  constant): edge handling is required wherever a case's `N` is not a
+  multiple of the chosen block, and supporting lengths outside the task's configured cases is not required.
 
 ## Forbidden substitutions
 

@@ -2,7 +2,7 @@
   "schema": "tilebench-contract-audit/1",
   "operator": "matmul_fp32_fp16_fp8",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
-  "contract_revision": 2,
+  "contract_revision": 3,
   "status": "approved",
   "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
   "approved_on": "2026-10-06",
@@ -175,6 +175,13 @@
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the manual Triton _bt_cache (impl_triton.py:32-39; plain dict keyed by (data_ptr, shape, dtype), never evicted, stale-address hazard) is a property of the manual reference and is not fixed here; it is the reason the Triton column is marked not comparable. Candidates are forbidden from any cross-call cache of a transformed operand (contract Forbidden substitutions; evaluator_rules cache rule).",
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the documented precision class is preserved (TF32-class products permitted for fp32 with fp32 accumulation; fp16/fp8 native input products with fp32 accumulation). Process-wide precision flags (torch.backends.*, torch.set_float32_matmul_precision, allow_tf32) are evaluator state, not candidate-controlled state: the evaluator owns the reference's TF32 setting at verification time (impl_torch.py:4 sets allow_tf32 = True at import; matmul_int8's reference sets it False inside run()), and a candidate that reads or changes them is a confirmed violation (evaluator_rules forbidden_substitutions, confirmed, scope host)."
   ],
-  "contract_sha256": "eb74f1661babcc3e658dd3ead2c0100599a2fac32ad22e81736c45655660eadb",
-  "previous_status_before_approval": "needs-review"
+  "contract_sha256": "7d777b9c79174883c16d974ccd66f338f82435fc78c6ec1d1d8b2b34e2fcf693",
+  "previous_status_before_approval": "needs-review",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "eb74f1661babcc3e658dd3ead2c0100599a2fac32ad22e81736c45655660eadb",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
 }

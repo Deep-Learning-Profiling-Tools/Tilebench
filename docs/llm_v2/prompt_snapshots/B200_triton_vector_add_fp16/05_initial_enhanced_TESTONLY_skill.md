@@ -892,10 +892,8 @@ precomputation outside `run()`.
   launch or partitioned across several, provided each element is still
   processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
-  for a last partial block. Edge handling is required wherever the task's
-  fixed `n` is not a multiple of the chosen tile (no element at index `>= n`
-  may be read or written); supporting shapes other than the task's declared
-  shape is not required.
+  for a last partial block. Edge handling is required wherever a case's `n` is not a multiple of the chosen tile (no element at index `>= n`
+  may be read or written); supporting shapes outside the task's configured cases is not required.
 - Whether `n` is a compile-time constant or a runtime argument.
 
 ## Forbidden substitutions
@@ -925,8 +923,8 @@ Everything else in `torch` is forbidden inside `run()`.
 - Operator: `vector_add`
 - DSL: `triton` 3.6.0; output file: `impl_triton.py`
 - Datatype: `fp16` (torch `torch.float16`)
-- Fixed input case (every evaluation uses exactly these parameters):
-  - `n` = `20971520`
+- Evaluated inputs: 20 configured cases of this dtype, the same set in every round; the file must be correct and is timed on each of them. Parameter domain:
+  - `n`: an integer from `1048576` to `20971520`, always a multiple of `1048576`
 - Numerical acceptance: `torch.testing.assert_close(output, reference, atol=0.001, rtol=0.001)` (source: config.verify+dtype_default)
 - Interface: `def run(x, y):`; returns the output tensor(s) described in the contract.
 
@@ -939,4 +937,4 @@ def run(x, y):
 
 ## Output requirements
 
-Return exactly one fenced block titled `impl_triton.py`. The file must define `run(...)` with the interface above and `get_last_config()`. Fixed configuration values must be literals. No autotuning, no runtime configuration search, no cached results, no use of the reference implementation or other compute libraries for the operator's computation.
+Return exactly one fenced block titled `impl_triton.py`. The file must define `run(...)` with the interface above and `get_last_config()`. Configuration values are literals or a deterministic function of the input shapes and static metadata. No autotuning, no runtime configuration search or timing, no table keyed to particular benchmark shapes, no cached results, no use of the reference implementation or other compute libraries for the operator's computation.

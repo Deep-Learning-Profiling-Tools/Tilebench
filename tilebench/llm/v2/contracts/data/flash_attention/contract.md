@@ -14,12 +14,11 @@ i.e. `torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=causal
 with the default scale. The causal mask is top-left aligned (query i attends
 keys 0..i inclusive; q and k share seq_len). No dropout, no additive mask
 tensor, no grouped-query sharing (one key/value head per query head), no
-log-sum-exp side output, no backward. `causal` is True in every benchmark
-case; the flag must be honoured, with `causal=False` meaning full attention.
+log-sum-exp side output, no backward. `causal` is True in every configured case; the flag must be honoured, with `causal=False` meaning full attention.
 
 ## Inputs and outputs
 - `q`, `k`, `v`: (batch, heads, seq_len, head_dim), fp16, contiguous (may be
-  assumed). seq_len is a multiple of 1024 in the benchmark cases; head_dim
+  assumed). seq_len is a multiple of 1024 in every configured case; head_dim
   is 128 and is held whole along the feature axis (no loop over head_dim is
   needed, but one is permitted).
 - `causal`: Python bool (default True).

@@ -77,7 +77,8 @@ def test_snapshots_come_from_the_renderer(tmp_path):
     out = make_snapshots(tmp_path / "snap", use_manifest=False)
     names = out["files"]
     assert names[:5] == ["00_system.md", "01_initial_base.md", "02_refinement_after_compile_failure.md",
-                         "03_refinement_after_regression.md", "04_compliance_repair.md"]
+                         "03_refinement_after_regression.md", "07_refinement_after_violation_round.md"]
+    assert not any("repair" in n for n in names)            # protocol revision 3: no same-round repair prompt
     text = (tmp_path / "snap" / "02_refinement_after_compile_failure.md").read_text()
     assert "[line withheld]" in text and "roofline" not in text
     enh = (tmp_path / "snap" / "05_initial_enhanced_TESTONLY_skill.md").read_text()

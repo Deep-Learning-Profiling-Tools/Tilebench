@@ -12,8 +12,7 @@ Ties resolve to the first (lowest-index) occurrence. The result is an int64
 vector of length `M`. NaN handling is unspecified; the benchmark inputs
 contain no NaN.
 
-The entry point is called as `run(x, dim, **kwargs)`. `dim` is `1` in every
-benchmark case; the implementation may assert `dim == 1` or handle other
+The entry point is called as `run(x, dim, **kwargs)`. `dim` is `1` in every configured case; the implementation may assert `dim == 1` or handle other
 values by any means, but the `dim == 1` path must not copy `x`.
 The entry point is called positionally with exactly the inputs listed below;
 no keyword arguments are passed (declared keyword parameters, if any, must
@@ -52,8 +51,7 @@ the running best is replaced only when the chunk maximum is strictly greater
 than the running best value. Combined with the lowest-index rule inside a
 chunk this yields the first occurrence over the row. Another chunk order, or
 a single chunk covering the whole row, is permitted when the merge still
-keeps the first occurrence. Columns beyond `N` in the last chunk (where the
-task's `N` is not a multiple of the chunk width) must be padded with `-inf`
+keeps the first occurrence. Columns beyond `N` in the last chunk (where a case's `N` is not a multiple of the chunk width) must be padded with `-inf`
 so they never win; the running best value starts at `-inf` and the running
 index at `0`, so an all-`-inf` row yields index `0`, as the reference does.
 Index arithmetic (`chunk_start + local_index`) must be exact in int64 (or in

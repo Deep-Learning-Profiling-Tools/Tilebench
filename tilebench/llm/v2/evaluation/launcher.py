@@ -235,29 +235,84 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-CANDIDATE_PHASES = ("candidate_loaded", "first_execution_done", "numerical_checks_done", "timing_started", "timing_done")
+CANDIDATE_PHASES = ("candidate_loaded", "first_execution", "first_execution_done", "numerical_checks_done", "timing_started",
+                    "timing_done", "suite_done")
 
 
-def classify_no_result(sandbox: Path, *, timed_out: bool, timeout_s: int, rc, stderr: str) -> dict:
+def _partial_cases(sandbox: Path) -> list[dict]:
+    out = []
+    try:
+        for line in (sandbox / "cases.jsonl").read_text().splitlines():
+            if line.strip():
+                out.append(json.loads(line))
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def classify_no_result(sandbox: Path, *, timed_out: bool, timeout_s: int, rc, stderr: str, job_cases: list | None = None) -> dict:
     """The worker produced no result.json. The worker's progress marker says
     how far it got: a hang or crash after the candidate was loaded is the
     candidate's ordinary failure (`runtime_error`, round consumed, no
-    repair); before that it is `infrastructure_incomplete`."""
-    phase = None
+    repair); before that it is `infrastructure_incomplete`. Cases the worker
+    finished before it died (cases.jsonl) are kept; the case it was working
+    on is recorded as the failing one; later cases are `not_evaluated`."""
+    from tilebench.llm.v2.evaluation.worker import RESULT_SCHEMA, summarize_suite
+    prog = {}
     try:
-        phase = json.loads((sandbox / "progress.json").read_text()).get("phase")
+        prog = json.loads((sandbox / "progress.json").read_text())
     except (OSError, ValueError):
         pass
-    base = {"stages": {}, "config": None, "latency_ms_mean": None, "latency_ms_samples": None, "timing": None,
-            "worker_phase": phase, "timed_out": timed_out}
+    phase, at_case = prog.get("phase"), prog.get("case")
     tail = stderr[-4000:]
+    base = {"schema": RESULT_SCHEMA, "stages": {}, "worker_phase": phase, "worker_case_position": at_case, "timed_out": timed_out,
+            "worker_exit": rc, "worker_killed_by_signal": (-rc if isinstance(rc, int) and rc < 0 else None)}
     if phase in CANDIDATE_PHASES:
         what = (f"candidate exceeded the evaluation wall-clock limit of {timeout_s}s" if timed_out
                 else f"evaluation process ended (exit {rc}) without a result")
-        return {**base, "status": "runtime_error",
-                "diagnostic": f"{what} during phase {phase} (import/compile, verification or timing of the generated file)\n{tail}".rstrip()}
+        diag = f"{what} during phase {phase} (case position {at_case}) of the generated file\n{tail}".rstrip()
+        res = {**base, "status": "runtime_error", "diagnostic": diag}
+        if job_cases:
+            done = _partial_cases(sandbox)
+            seen = {c.get("case_id") for c in done}
+            records = list(done)
+            dying = True
+            for c in job_cases:
+                if c["case_id"] in seen:
+                    continue
+                records.append({"case_id": c["case_id"], "case_index": c.get("case_index"), "params": c["params"],
+                                "status": "runtime_error" if dying else "not_evaluated",
+                                "diagnostic": diag if dying else "worker ended before this case"})
+                dying = False
+            summarize_suite(res, records, len(job_cases))
+            res["status"], res["diagnostic"] = "runtime_error", diag
+            res["suite_stopped"] = {"reason": "worker_death", "at_case": next((r["case_id"] for r in records if r["status"] == "runtime_error"), None)}
+        return res
     what = f"worker exceeded {timeout_s}s" if timed_out else f"worker exited {rc} without a result"
     return {**base, "status": "infrastructure_incomplete", "diagnostic": f"{what} before the candidate was loaded (phase {phase})\n{tail}".rstrip()}
+
+
+def cgroup_memory_events() -> dict:
+    """oom / oom_kill counters and peak of this process's cgroup (v2), read-only; {} when unavailable."""
+    try:
+        rel = next(line.split("::", 1)[1].strip() for line in Path("/proc/self/cgroup").read_text().splitlines() if line.startswith("0::"))
+    except (OSError, StopIteration):
+        return {}
+    out: dict = {"cgroup": rel}
+    base = Path("/sys/fs/cgroup") / rel.lstrip("/")
+    for d in [base] + list(base.parents):
+        ev = d / "memory.events"
+        if ev.exists() and (d / "memory.max").exists() and (d / "memory.max").read_text().strip() != "max":
+            try:
+                out.update({f"events.{k}": int(v) for k, v in (ln.split() for ln in ev.read_text().splitlines())})
+                out["memory.max"] = (d / "memory.max").read_text().strip()
+                pk = d / "memory.peak"
+                out["memory.peak"] = pk.read_text().strip() if pk.exists() else None
+                out["limited_cgroup"] = str(d)
+            except (OSError, ValueError):
+                pass
+            break
+    return out
 
 
 def archive_sandbox(sandbox: Path, archive_dir: Path, extra: dict | None = None) -> dict:
@@ -267,7 +322,7 @@ def archive_sandbox(sandbox: Path, archive_dir: Path, extra: dict | None = None)
     sandbox."""
     archive_dir.mkdir(parents=True, exist_ok=True)
     index: dict = {"files": {}, "extra": extra or {}}
-    names = ["job.json", "result.json", "worker_stdout.txt", "worker_stderr.txt", "progress.json"]
+    names = ["job.json", "result.json", "worker_stdout.txt", "worker_stderr.txt", "progress.json", "cases.jsonl"]
     for p in sorted(sandbox.glob("tilebench_proton_*")):
         names.append(p.name)
     for p in sorted(sandbox.glob("impl_*.py")):
@@ -285,7 +340,7 @@ def archive_sandbox(sandbox: Path, archive_dir: Path, extra: dict | None = None)
 @dataclass
 class SubprocessEvaluator:
     device: str
-    timeout_s: int = 1800
+    timeout_s: int = 3600
     sandbox_root: Path | None = None
     isolation: str = "auto"           # auto | bwrap | none
     lock_root: Path | None = None
@@ -315,6 +370,7 @@ class SubprocessEvaluator:
             t_lock = time.time()
             with device_lock(self.device, root=self.lock_root):
                 lock_wait = time.time() - t_lock
+                mem_before = cgroup_memory_events()
                 t0 = time.time()
                 try:
                     proc = subprocess.run(argv, cwd=str(sandbox), env=env, timeout=self.timeout_s,
@@ -324,13 +380,18 @@ class SubprocessEvaluator:
                     rc, timed_out = None, True
                     stdout = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
                     stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
+                mem_after = cgroup_memory_events()
             wall = time.time() - t0
             (sandbox / "worker_stdout.txt").write_text(stdout or "")
             (sandbox / "worker_stderr.txt").write_text(stderr or "")
             if timed_out or not out.exists():
-                res = classify_no_result(sandbox, timed_out=timed_out, timeout_s=self.timeout_s, rc=rc, stderr=stderr or "")
+                res = classify_no_result(sandbox, timed_out=timed_out, timeout_s=self.timeout_s, rc=rc, stderr=stderr or "",
+                                         job_cases=getattr(job, "cases", None))
             else:
                 res = json.loads(out.read_text())
+            res["resources"] = {"cgroup_before": mem_before, "cgroup_after": mem_after,
+                                "cgroup_oom_kill_delta": (mem_after.get("events.oom_kill", 0) - mem_before.get("events.oom_kill", 0))
+                                if mem_before and mem_after else None}
             res["seed"] = seed
             res["worker_rc"] = rc
             res["worker_wall_s"] = wall                 # worker process only (the timeout applies to this)
@@ -347,12 +408,37 @@ class SubprocessEvaluator:
             shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def mock_suite(job, kind: str, base: float = 1.0, fail_at: int | None = None) -> dict:
+    """A suite result shaped like the worker's (schema eval/3), for tests and dry runs."""
+    from tilebench.llm.v2.evaluation.worker import RESULT_SCHEMA, summarize_suite
+    cases = list(getattr(job, "cases", None) or (job.get("cases") if isinstance(job, dict) else None) or
+                 [{"case_id": "c0", "case_index": 0, "params": {}}])
+    recs = []
+    res: dict = {"schema": RESULT_SCHEMA, "status": None, "isolation": {"backend": "mock"}, "stages": {}}
+    for i, c in enumerate(cases):
+        lat = base * (1.0 + 0.1 * i)
+        samples = [lat * 0.99, lat, lat * 1.01]
+        if kind == "valid" or (fail_at is not None and i < fail_at):
+            recs.append({"case_id": c["case_id"], "case_index": c.get("case_index"), "params": c["params"], "status": "valid",
+                         "latency_ms_mean": sum(samples) / 3, "latency_ms_samples": samples, "config": {"BLOCK": 128},
+                         "timing": {"timing_execution_mode": "graph", "capture_succeeded": True}, "timing_mode_differs": False})
+        else:
+            recs.append({"case_id": c["case_id"], "case_index": c.get("case_index"), "params": c["params"], "status": kind,
+                         "diagnostic": f"mock {kind} diagnostic\nroofline 55% should be scrubbed"})
+    if kind == "contract_violation":
+        res["status"] = "contract_violation"
+    summarize_suite(res, recs, len(cases))
+    if kind == "contract_violation":
+        res.update(status="contract_violation", diagnostic="contract_violation: mock execution evidence")
+    return res
+
+
 @dataclass
 class MockEvaluator:
     """Scripted outcomes keyed by the source text's first line marker, e.g.
-    '# MOCK: valid 1.5' -> valid with samples around 1.5 ms,
-    '# MOCK: numerical_error', '# MOCK: compile_error', '# MOCK: infrastructure',
-    '# MOCK: contract_violation', '# MOCK: interface_error'."""
+    '# MOCK: valid 1.5' -> every case valid with samples around 1.5 ms (x 1.1 per case),
+    '# MOCK: numerical_error' (every case), '# MOCK: numerical_error_at 3' (cases 0..2 valid, case 3 on fails),
+    '# MOCK: compile_error', '# MOCK: infrastructure', '# MOCK: contract_violation', '# MOCK: interface_error'."""
     calls: list = None
 
     def evaluate(self, source_path: Path, job, round_index: int, attempt: int, *, archive_dir: Path | None = None) -> dict:
@@ -364,13 +450,9 @@ class MockEvaluator:
         parts = first.replace("# MOCK:", "").split()
         kind = parts[0] if parts else "valid"
         if kind == "valid":
-            base = float(parts[1]) if len(parts) > 1 else 1.0
-            samples = [base * 0.99, base, base * 1.01]
-            return {"status": "valid", "latency_ms_mean": sum(samples) / 3, "latency_ms_samples": samples,
-                    "config": {"BLOCK": 128}, "timing": {"timing_execution_mode": "graph", "capture_succeeded": True},
-                    "timing_mode_differs": False, "isolation": {"backend": "mock"}}
+            return mock_suite(job, "valid", float(parts[1]) if len(parts) > 1 else 1.0)
         if kind == "infrastructure":
             return {"status": "infrastructure_incomplete", "diagnostic": "mock infrastructure failure"}
-        if kind == "contract_violation":
-            return {"status": "contract_violation", "diagnostic": "contract_violation: mock execution evidence"}
-        return {"status": kind, "diagnostic": f"mock {kind} diagnostic\nroofline 55% should be scrubbed"}
+        if kind.endswith("_at"):
+            return mock_suite(job, kind[:-3], 1.0, fail_at=int(parts[1]) if len(parts) > 1 else 0)
+        return mock_suite(job, kind)

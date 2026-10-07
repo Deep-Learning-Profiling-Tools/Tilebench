@@ -487,7 +487,7 @@ Dataset revision 7cb81050 holds the current reports of all three folders. For GH
 
 ### Reading the results across GPUs
 
-- **B200 `tilelang_ms` is rebased.** A TileLang-only run re-times PyTorch and scales each case by the drift ratio `torch_frozen / torch_rerun`. The raw values stay in the JSON logs. On GH200 all four backends were measured in the same run.
+- **B200 `tilelang_ms` is direct.** The committed TileLang columns contain unscaled runtimes. A TileLang-only merge preserves the frozen PyTorch/Triton/cuTile columns and writes the measured TileLang time without torch drift scaling. Its CSV `speedup_tilelang` uses the saved `torch_ms` baseline divided by that direct time; the raw JSON instead records the new run's PyTorch timing and speedup. Separate runs may have different timing conditions. On GH200 all four backends were measured in the same run.
 - **Read CSV columns by name, not by position.** The orders differ:
   - B200: the frozen 8 columns followed by `tilelang_ms`, `speedup_tilelang`.
   - GH200: the runner's 10-column order.

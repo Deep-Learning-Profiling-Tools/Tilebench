@@ -16,7 +16,7 @@ keyword arguments are passed.
   Read-only: it must not be written and the result must not alias it.
 - `out` (returned): `(N,)`, same dtype as `input`, freshly allocated inside
   `run()` on every call, contiguous. Returned as a single tensor.
-- Tail handling is required wherever the task's fixed `N` is not a
+- Tail handling is required wherever a case's `N` is not a
   multiple of the chosen tile: no element outside `[0, N)` may be read or written
   (note that the mirrored index of an out-of-range output position is
   negative).
@@ -70,9 +70,8 @@ nothing may be cached across calls.
   on-chip tile reversal; likewise on the write side.
 - Tail handling by explicit masks, by gather padding values whose lanes are
   never stored, or by the DSL's bounds-clipped stores. Edge handling is
-  required wherever the task's fixed `N` is not a multiple of the chosen
-  tile; supporting shapes other than the task's declared shape is not
-  required.
+  required wherever a case's `N` is not a multiple of the chosen
+  tile; supporting shapes outside the task's configured cases is not required.
 - Whether `N` is a runtime argument or a compile-time constant.
 
 ## Forbidden substitutions

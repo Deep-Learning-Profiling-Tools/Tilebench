@@ -59,15 +59,20 @@ def synthetic_context(operator: str, dtype: str, device: str, dsl: str, conditio
                                          status="test-only"))
     contract = contract_text or (f"# {operator}: canonical algorithm contract (synthetic)\n## Functional semantics\n"
                                  "Compute the reference function.\n## Permitted PyTorch operations\n- torch.empty_like\n")
+    from tilebench.llm.v2.evaluation.job import single_case
+    from tilebench.llm.v2.tasks.case_sets import domain
+    cases = e.cases or single_case(operator, dtype, e.params)
     ctx = TaskContext(operator=operator, dtype=dtype, torch_dtype=tf.torch_dtype, dsl=dsl,
                       dsl_version=study["dsls"][dsl]["reference_version"], device=device,
-                      output_file=study["dsls"][dsl]["output_file"], params=e.params, atol=tf.tolerance["atol"],
+                      output_file=study["dsls"][dsl]["output_file"], params=domain(e.cases) if e.cases else e.params,
+                      atol=tf.tolerance["atol"],
                       rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"], run_signature=tf.run_signature,
                       returns=tf.returns, functional_reference=tf.functional_reference.source, fp8_format=e.fp8_format,
-                      components=comps, contract_text=contract, rounds=study["trajectory"]["rounds"])
+                      components=comps, contract_text=contract, rounds=study["trajectory"]["rounds"], n_cases=len(cases))
     rules = json.loads(json.dumps(SYNTHETIC_RULES))
     adapter = study["support_matrix"][device]["timing_adapter"]
-    job = EvaluationJob(operator=operator, dtype=dtype, params=e.params, dsl=dsl, device=device, arch=None,
+    job = EvaluationJob(operator=operator, dtype=dtype, cases=[{k: c.get(k) for k in ("case_id", "case_index", "params", "problem_size")}
+                                                               for c in cases], dsl=dsl, device=device, arch=None,
                         atol=tf.tolerance["atol"], rtol=tf.tolerance["rtol"], tolerance_source=tf.tolerance["source"],
                         rules=rules, timing=timing_settings(study),
                         expected_timing_mode="graph" if adapter == "proton_cuda_graph" else "eager",
@@ -75,17 +80,17 @@ def synthetic_context(operator: str, dtype: str, device: str, dsl: str, conditio
     return ctx, job, rules
 
 
-def mock_script(output_file: str, rounds: int = 10) -> list[dict]:
-    """10 rounds: round 3 has a confirmed violation then a repair, round 5 a
-    numerical error, round 7 a transport failure before success."""
+def mock_script(output_file: str, rounds: int = 5) -> list[dict]:
+    """5 rounds, one generation each: round 2 is a confirmed violation (the
+    round closes; no regeneration), round 3 a numerical error, round 4 a
+    transport failure before success, rounds 1/4/5 valid."""
     items = []
     for r in range(1, rounds + 1):
-        if r == 3:
+        if r == 2:
             items.append({"text": scripted_text(output_file, "import triton\n@triton.autotune(configs=[], key=[])\ndef k(): pass\ndef run(*a): pass\ndef get_last_config(): return {}")})
-            items.append({"text": scripted_text(output_file, f"# MOCK: valid {1.2 - 0.02 * r:.3f}\ndef run(*a): pass\ndef get_last_config(): return {{'BLOCK': 64}}")})
-        elif r == 5:
+        elif r == 3:
             items.append({"text": scripted_text(output_file, "# MOCK: numerical_error\ndef run(*a): pass\ndef get_last_config(): return {'BLOCK': 32}")})
-        elif r == 7:
+        elif r == 4:
             items.append({"text": scripted_text(output_file, f"# MOCK: valid {1.2 - 0.02 * r:.3f}\ndef run(*a): pass\ndef get_last_config(): return {{'BLOCK': 128}}"),
                           "transport_failures": 1})
         else:
@@ -120,13 +125,15 @@ def run_mock_trajectory(out: Path, *, operator: str, dtype: str, device: str, ds
     else:
         state = new_trajectory_state(e, ctx, "mock-model", condition, chash, "synthetic-contract", "synthetic-templates",
                                      run_type="validation", campaign="mock")
-        provider = MockProvider(mock_script(ctx.output_file))
+        provider = MockProvider(mock_script(ctx.output_file, study["trajectory"]["rounds"]))
     cfg = RunnerConfig(model_id="mock-model", provider_name="mock", settings={}, retry_backoff_s=0.0,
+                       rounds=study["trajectory"]["rounds"], max_generations=study["trajectory"]["max_generations_per_round"],
                        feedback_limits=study["feedback"], total_prompt_max_chars=study["context_limits"]["total_prompt"])
     runner = TrajectoryRunner(state=state, tdir=tdir, ctx=ctx, provider=provider, evaluator=MockEvaluator(), job=job,
                               cfg=cfg, sleep=lambda s: None)
     status = runner.run()
-    return {"trajectory_dir": str(tdir), "status": status, "rounds": [(r.round, r.status, r.latency_ms_mean) for r in state.rounds],
+    return {"trajectory_dir": str(tdir), "status": status,
+            "rounds": [(r.round, r.status, r.latency_ms_geomean, r.valid_cases, r.cases_total) for r in state.rounds],
             "best_valid": state.best_valid, "attempts": sum(len(r.attempts) for r in state.rounds),
             "transport_failures": len(state.transport_log)}
 
@@ -167,38 +174,94 @@ def campaign_scoring(campaign_dir: Path, device: str | None = None) -> dict:
             "modes_doc": empirical.load_modes(), "arithmetic_modes_sha256_now": empirical.modes_sha256()}
 
 
-def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> dict:
+def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None, usd_budgets: list[float] | None = None) -> dict:
     """E_emp(B) curves of a campaign directory against the campaign's pinned
     empirical profile. Validation-run trajectories are reported under their
     own key and labelled unscored."""
     from tilebench.llm.v2.metrics import empirical
+    from tilebench.llm.v2.tasks.representative import selected
     groups: dict[tuple, dict] = {}
     budgets = budgets or [50_000, 100_000, 200_000, 400_000, 800_000]
+    usd_budgets = usd_budgets or [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
     scoring_by_device: dict[str, dict] = {}
+    study = ms.load_study()
+    chosen = selected()                       # operator -> representative dtype (the predeclared denominator)
+    not_scored: dict[str, list[str]] = {}
     for path, st in _walk_states(campaign_dir):
+        excl = ms.excluded_campaign(st.campaign)
+        if excl is not None:
+            not_scored.setdefault(f"excluded campaign {st.campaign} ({excl.get('role')})", []).append(st.trajectory_id)
+            continue
+        if (st.protocol or {}).get("revision") != study["revision"]:
+            not_scored.setdefault(f"protocol revision {(st.protocol or {}).get('revision')} != {study['revision']}", []).append(st.trajectory_id)
+            continue
         t = st.task
+        if chosen.get(t["operator"]) != t["dtype"]:
+            not_scored.setdefault("dtype is not the operator's representative dtype", []).append(st.trajectory_id)
+            continue
         sc = scoring_by_device.setdefault(t["device"], campaign_scoring(campaign_dir, t["device"]))
         if st.scoring_binding and sc["binding"] and sc["binding"].get("profile_sha256") != st.scoring_binding.get("profile_sha256"):
             sc.setdefault("binding_mismatches", []).append(st.trajectory_id)
         cfg = load_operator_config(t["operator"])
-        rec = empirical.t_emp(t["device"], t["operator"], t["dtype"], t["params"], t.get("problem_size", 1),
-                              cfg.get("metrics", {}), sc["modes_doc"], sc["profile"])
         status = "incomplete" if st.status in ("in_progress", "incomplete", "review_required") else "eligible"
-        curve = eff.curve(rec.t_emp_ms, st.metric_rounds(), status="complete" if status == "eligible" else "incomplete")
-        if rec.status != "ok":
-            curve.audit_flags.append(f"target {rec.status}: {rec.reason}")
+        rounds_m = st.metric_rounds()
+        speed = None
+        if t.get("n_cases"):
+            from tilebench.llm.v2.metrics import baselines
+            from tilebench.llm.v2.tasks.case_sets import case_set
+            entry = case_set(t["operator"])
+            if entry["case_set_id"] != t.get("case_set_id"):
+                not_scored.setdefault("case set differs from the frozen case_sets.yaml", []).append(st.trajectory_id)
+                continue
+            targets = empirical.case_targets(t["device"], t["operator"], t["dtype"], entry["cases"], cfg.get("metrics", {}),
+                                             sc["modes_doc"], sc["profile"])
+            bad = {cid: r.status for cid, r in targets.items() if r.status != "ok"}
+            target = None if bad else {cid: r.t_emp_ms for cid, r in targets.items()}
+            tstatus = {"status": "ok" if not bad else "not_ok", "cases": len(targets), "not_ok_cases": bad,
+                       "mode": next(iter(targets.values())).mode if targets else None,
+                       "t_emp_ms_geomean": eff.geomean_ratio({c: 1.0 for c in target}, {c: 1.0 / v for c, v in target.items()})
+                       if target else None}
+            bl_path = (study.get("torch_baselines") or {}).get(t["device"])
+            torch_ms = None
+            if bl_path and (REPO_ROOT / bl_path).exists():
+                torch_ms = baselines.torch_ms(baselines.load(REPO_ROOT / bl_path), t["operator"])
+            speed = {"rounds": [{"round": r["round"], "speedup_geomean": eff.geomean_ratio(torch_ms, r.get("case_latency_ms"))
+                                 if (torch_ms and r.get("valid")) else None} for r in rounds_m],
+                     "baseline": bl_path if torch_ms else None}
+        else:
+            rec = empirical.t_emp(t["device"], t["operator"], t["dtype"], t["params"], t.get("problem_size", 1),
+                                  cfg.get("metrics", {}), sc["modes_doc"], sc["profile"])
+            target = rec.t_emp_ms
+            bad = {} if rec.status == "ok" else {"single": rec.status}
+            tstatus = {"status": rec.status, "mode": rec.mode, "t_emp_ms": rec.t_emp_ms, "provisional_t_emp_ms": rec.provisional_t_emp_ms}
+        curve = eff.curve(target, rounds_m, status="complete" if status == "eligible" else "incomplete",
+                          max_attempts=study["trajectory"]["max_generations_per_round"])
+        if bad:
+            curve.audit_flags.append(f"target not ok: {bad}")
+        curve_usd = eff.curve(target, rounds_m, status="complete" if status == "eligible" else "incomplete",
+                              max_attempts=study["trajectory"]["max_generations_per_round"], cost_key="usd")
         key = (t["device"], t["dsl"], st.model, st.condition, st.run_type)
-        g = groups.setdefault(key, {"curves": {}, "eligible": {}, "target_status": {}, "device": t["device"]})
+        g = groups.setdefault(key, {"curves": {}, "curves_usd": {}, "eligible": {}, "target_status": {}, "speedup": {},
+                                    "device": t["device"]})
         g["curves"][(t["operator"], t["dtype"])] = curve
-        g["eligible"][(t["operator"], t["dtype"])] = status
-        g["target_status"][f"{t['operator']}/{t['dtype']}"] = {"status": rec.status, "mode": rec.mode, "t_emp_ms": rec.t_emp_ms,
-                                                              "provisional_t_emp_ms": rec.provisional_t_emp_ms}
+        g["curves_usd"][(t["operator"], t["dtype"])] = curve_usd
+        g["target_status"][f"{t['operator']}/{t['dtype']}"] = tstatus
+        if speed is not None:
+            g["speedup"][f"{t['operator']}/{t['dtype']}"] = speed
     out = {}
     for key, g in groups.items():
         sc = scoring_by_device[g["device"]]
+        # denominator: every predeclared operator with its representative dtype, whether or not a trajectory exists
+        g["eligible"] = {(op, dt): "eligible" for op, dt in chosen.items()}
         agg = eff.aggregate(g["curves"], budgets, g["eligible"])
+        agg["denominator_operators"] = len(g["eligible"])
+        agg["axis"] = "E_token (logical tokens)"
+        agg["E_usd"] = {**eff.aggregate(g["curves_usd"], usd_budgets, g["eligible"]),
+                        "axis": "E_usd (estimated list-price USD, metrics.cost; a separate budget axis, never the main metric)"}
         agg["ceiling_basis"] = "empirical"
         agg["target_status"] = g["target_status"]
+        agg["speedup_vs_stored_torch"] = {"note": "reporting metric: geomean_j T_torch_j / T_ij of valid rounds (stored CSV "
+                                                  "baselines, never re-measured); not part of E(B)", "per_operator": g["speedup"]}
         agg["scoring_binding"] = sc["binding"]
         agg["scoring_binding_source"] = sc["source"]
         agg["calibration_id"] = (sc["profile"] or {}).get("calibration_id")
@@ -209,6 +272,8 @@ def recompute_metrics(campaign_dir: Path, budgets: list[int] | None = None) -> d
         if key[4] != "formal":
             agg["scoring_note"] = "validation run: unscored engineering acceptance; never a formal E(B) result"
         out["/".join(key)] = agg
+    if not_scored:
+        out["_not_scored"] = {k: sorted(v) for k, v in not_scored.items()}
     return out
 
 
@@ -309,7 +374,7 @@ def make_snapshots(out: Path, *, operator: str = "vector_add", dtype: str = "fp1
     the Enhanced snapshot and the distillation fixture use synthetic,
     TEST-ONLY components because no real Optimization Skill exists."""
     from tilebench.llm.v2.contracts.loader import ContractError, load_contract
-    from tilebench.llm.v2.prompts.renderer import (render_initial, render_refinement, render_repair, render_system,
+    from tilebench.llm.v2.prompts.renderer import (render_initial, render_refinement, render_system,
                                                    render_distill_synthesis)
     from tilebench.llm.v2.skills.loader import SkillError, compose_context, load_manifest
     study, folds = ms.load_study(), ms.load_folds()
@@ -334,26 +399,26 @@ def make_snapshots(out: Path, *, operator: str = "vector_add", dtype: str = "fp1
     files = {}
     files["00_system.md"] = render_system(ctx)
     files["01_initial_base.md"] = render_initial(ctx)
-    prev_fail = {"round": 1, "status": "compile_error", "source": "import triton\n# ...candidate...\n", "config": None,
-                 "latency_ms_mean": None, "latency_ms_samples": None,
+    n = ctx.n_cases
+    prev_fail = {"round": 1, "status": "compile_error", "source": "import triton\n# ...candidate...\n", "configs_distinct": None,
+                 "latency_ms_geomean": None, "valid_cases": 0, "cases_total": n, "cases_evaluated": 1,
+                 "first_failing_case": {"params": {"n": 1048576}, "status": "compile_error"},
                  "diagnostic": "CompilationError: at 12:8: tl.dot requires K >= 16\nroofline: 0% (this line must be withheld)"}
     files["02_refinement_after_compile_failure.md"] = render_refinement(ctx, round_index=2, prev=prev_fail, best_valid=None,
                                                                          history=[], limits=limits)
-    best = {"round": 3, "latency_ms_mean": 0.0410, "source": "# best valid candidate source\n", "config": {"BLOCK": 1024}}
-    prev_slow = {"round": 4, "status": "valid", "source": "# slower candidate source\n", "config": {"BLOCK": 256},
-                 "latency_ms_mean": 0.0532, "latency_ms_samples": [0.0528, 0.0533, 0.0535], "diagnostic": None}
-    hist = [{"round": 3, "status": "valid", "latency_ms_mean": 0.0410, "latency_ms_samples": [0.0405, 0.0410, 0.0415]}, prev_slow]
+    best = {"round": 3, "latency_ms_geomean": 0.0410, "source": "# best valid candidate source\n",
+            "configs_distinct": [{"BLOCK": 1024}, {"BLOCK": 2048}]}
+    prev_slow = {"round": 4, "status": "valid", "source": "# slower candidate source\n", "configs_distinct": [{"BLOCK": 256}],
+                 "latency_ms_geomean": 0.0532, "valid_cases": n, "cases_total": n, "diagnostic": None}
+    hist = [{"round": 3, "status": "valid", "latency_ms_geomean": 0.0410, "valid_cases": n, "cases_total": n}, prev_slow]
     files["03_refinement_after_regression.md"] = render_refinement(ctx, round_index=5, prev=prev_slow, best_valid=best,
                                                                     history=hist, limits=limits)
-    files["04_compliance_repair.md"] = render_repair(ctx, round_index=6, attempt=2, max_attempts=3,
-                                                     violations=["line 4: autotune decorator triton.autotune",
-                                                                 "line 19: reference-library computation torch.matmul"],
-                                                     rejected_source="# rejected candidate source\n",
-                                                     fallback={"round": 3, "source": "# best valid candidate source\n"})
-    prev_viol = {"round": 6, "status": "contract_violation", "source": None, "config": None, "latency_ms_mean": None,
-                 "latency_ms_samples": None, "diagnostic": "line 4: autotune decorator triton.autotune"}
-    files["07_refinement_after_violation_round.md"] = render_refinement(ctx, round_index=7, prev=prev_viol, best_valid=best,
-                                                                        history=hist, limits=limits,
+    # protocol revision 3: a confirmed violation closes its round (no same-round repair prompt exists);
+    # the next round receives the violation diagnostic and the last compliant implementation
+    prev_viol = {"round": 4, "status": "contract_violation", "source": None, "configs_distinct": None, "latency_ms_geomean": None,
+                 "valid_cases": None, "cases_total": None, "diagnostic": "line 4: autotune decorator triton.autotune"}
+    files["07_refinement_after_violation_round.md"] = render_refinement(ctx, round_index=5, prev=prev_viol, best_valid=best,
+                                                                        history=hist[:1], limits=limits,
                                                                         fallback={"round": 3, "source": "# best valid candidate source\n"})
     ctx_e, _, _ = synthetic_context(operator, dtype, device, dsl, "enhanced", study, folds)
     if use_manifest and "components_error" not in provenance:
@@ -456,26 +521,27 @@ def campaign_report(campaign_dir: Path) -> dict:
             "tokens_input": sum(x for x in usage_in if x is not None), "tokens_output": sum(x for x in usage_out if x is not None),
             "tokens_reasoning": None if any(x is None for x in reasoning) else sum(reasoning),
             "cost_exact": not any(c is None for c in costs),
-            "best_valid": {"round": best.get("round"), "latency_ms_mean": best.get("latency_ms_mean"),
-                           "latency_ms_samples": best_round.latency_ms_samples if best_round else None,
+            "best_valid": {"round": best.get("round"), "latency_ms_geomean": best.get("latency_ms_geomean"),
+                           "valid_cases": best_round.valid_cases if best_round else None,
                            "timing_execution_mode": best.get("timing_execution_mode")} if best else None,
-            "valid_latencies_ms": [(r.round, r.latency_ms_mean) for r in st.rounds if r.valid],
+            "valid_latencies_ms_geomean": [(r.round, r.latency_ms_geomean) for r in st.rounds if r.valid],
             "reviews": [{"round": x["round"], "decision": x["decision"], "reviewer": x["reviewer"]} for x in reviews],
-            "isolation": next((r.evaluation.get("isolation", {}).get("backend") for r in st.rounds if r.evaluation), None),
+            "isolation": next(((r.evaluation.get("isolation_backend") or (r.evaluation.get("isolation") or {}).get("backend"))
+                               for r in st.rounds if r.evaluation), None),
             "content_hashes": st.content_hashes, "config_hash": st.config_hash, "generator": st.generator,
         })
     return {"campaign_dir": str(campaign_dir), "trajectories": rows}
 
 
 def campaign_report_markdown(report: dict) -> str:
-    lines = ["| task | model | status | rounds | valid | attempts | repairs | best ms (round) | samples | tokens (in/out/reasoning) | exact | reviews |",
+    lines = ["| task | model | status | rounds | valid | attempts | repairs | best geomean ms (round) | valid cases | tokens (in/out/reasoning) | exact | reviews |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in report["trajectories"]:
         t = r["task"]
         b = r["best_valid"] or {}
-        if b and b.get("latency_ms_mean") is not None:
-            best = "%.4f (%s)" % (b["latency_ms_mean"], b.get("round"))
-            samples = ", ".join("%.4f" % x for x in (b.get("latency_ms_samples") or []))
+        if b and b.get("latency_ms_geomean") is not None:
+            best = "%.4f (%s)" % (b["latency_ms_geomean"], b.get("round"))
+            samples = str(b.get("valid_cases"))
         else:
             best, samples = "-", "-"
         reviews = ", ".join("r%s:%s" % (x["round"], x["decision"]) for x in r["reviews"]) or "-"
@@ -484,3 +550,48 @@ def campaign_report_markdown(report: dict) -> str:
             t["dsl"], t["operator"], t["dtype"], r["model"], r["status"], r["rounds_closed"],
             r["round_statuses"].get("valid", 0), r["attempts"], r["repairs"], best, samples, tokens, r["cost_exact"], reviews))
     return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------
+# USD / token cost report (estimated list price; metrics.cost)
+# --------------------------------------------------------------------------
+
+def cost_report(campaign_dir: Path) -> dict:
+    """Logical tokens and estimated list-price USD of a campaign, aggregated by
+    provider / model / DSL / operator and per trajectory. Unknown costs are
+    counted, never priced as 0 (the lower bound is reported separately)."""
+    groups: dict[str, dict] = {}
+    trajs = []
+    pricing = set()
+
+    def acc(key: str, s: dict, n_unknown: int, provider: str) -> None:
+        g = groups.setdefault(key, {"trajectories": 0, "known_logical_tokens": 0, "logical_tokens_exact": True,
+                                    "known_estimated_usd": 0.0, "estimated_usd_lower_bound": 0.0, "usd_cost_exact": True,
+                                    "unknown_cost_attempts": 0, "provider": provider})
+        if g["provider"] != provider:
+            g["provider"] = "mixed"         # a group spanning providers (e.g. "campaign")
+        g["trajectories"] += 1
+        g["known_logical_tokens"] += s["known_logical_tokens"]
+        g["logical_tokens_exact"] &= s["logical_tokens_exact"]
+        g["known_estimated_usd"] = round(g["known_estimated_usd"] + s["known_estimated_usd"], 10)
+        g["estimated_usd_lower_bound"] = round(g["estimated_usd_lower_bound"] + s["estimated_usd_lower_bound"], 10)
+        g["usd_cost_exact"] &= s["usd_cost_exact"]
+        g["unknown_cost_attempts"] += n_unknown
+
+    for path, st in _walk_states(campaign_dir):
+        s = st.compute_cost_summary()
+        provider = (st.generator or {}).get("provider") or "?"
+        model = (st.generator or {}).get("model_id") or st.model
+        t = st.task
+        pricing.add(s.get("pricing_snapshot_sha256"))
+        for key in (f"provider={provider}", f"model={model}", f"model={model}/dsl={t['dsl']}",
+                    f"model={model}/dsl={t['dsl']}/operator={t['operator']}", "campaign"):
+            acc(key, s, s["unknown_cost_attempts"], provider)
+        trajs.append({"trajectory_id": st.trajectory_id, "model": model, "dsl": t["dsl"], "operator": t["operator"],
+                      "dtype": t["dtype"], "status": st.status, **{k: s[k] for k in (
+                          "known_logical_tokens", "logical_tokens_exact", "known_estimated_usd", "estimated_usd_lower_bound",
+                          "usd_cost_exact", "unknown_cost_attempts")}})
+    return {"campaign_dir": str(campaign_dir), "pricing_snapshot_sha256": sorted(p for p in pricing if p),
+            "note": ("estimated_usd = provider-reported usage x frozen public list prices (manifests/api_pricing.yaml); "
+                     "not the provider's billed amount (see billing_reconciliation/, optional)"),
+            "groups": dict(sorted(groups.items())), "trajectories": trajs}

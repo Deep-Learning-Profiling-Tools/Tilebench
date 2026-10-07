@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tilebench.llm.v2.prompts.feedback import diagnostics_block, outcome_text, runtime_history
+from tilebench.llm.v2.prompts.feedback import configs_line, diagnostics_block, outcome_text, runtime_history
 from tilebench.llm.v2.skills.loader import SkillComponent
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -52,7 +52,7 @@ class TaskContext:
     dsl_version: str
     device: str
     output_file: str
-    params: dict
+    params: dict                       # revision 4: the parameter DOMAIN of the case suite (tasks.case_sets.domain)
     atol: float
     rtol: float
     tolerance_source: str
@@ -62,7 +62,8 @@ class TaskContext:
     fp8_format: str | None = None
     components: list[SkillComponent] = field(default_factory=list)
     contract_text: str = ""
-    rounds: int = 10
+    rounds: int = 5
+    n_cases: int = 1
 
     def component(self, kind: str) -> SkillComponent | None:
         for c in self.components:
@@ -78,12 +79,12 @@ class TaskContext:
             raise RenderError("reference and device components are required")
         opt_block = (f"# Optimization guidance for {self.dsl} (distilled; fold-specific)\n\n{opt.text}"
                      if opt is not None else "")
-        params_block = "\n".join(f"  - `{k}` = `{v}`" for k, v in self.params.items())
+        domain_block = render_domain(self.params, self.n_cases)
         fp8 = f"; FP8 format `{self.fp8_format}`" if self.fp8_format else ""
         return {
             "operator": self.operator, "dtype": self.dtype, "torch_dtype": self.torch_dtype,
             "dsl": self.dsl, "dsl_version": self.dsl_version, "device": self.device,
-            "output_file": self.output_file, "params_block": params_block, "fp8_note": fp8,
+            "output_file": self.output_file, "domain_block": domain_block, "n_cases": str(self.n_cases), "fp8_note": fp8,
             "atol": repr(self.atol), "rtol": repr(self.rtol),
             "tolerance_note": f" (source: {self.tolerance_source})",
             "run_signature": self.run_signature, "returns": self.returns or "the output tensor(s) described in the contract",
@@ -92,6 +93,21 @@ class TaskContext:
             "optimization_block": opt_block, "algorithm_contract": self.contract_text.rstrip("\n"),
             "rounds": str(self.rounds),
         }
+
+
+def render_domain(domain: dict, n_cases: int) -> str:
+    """The case suite's parameter domain (constants and integer ranges), never the individual cases."""
+    if "constant" not in domain and "varying" not in domain:       # a plain parameter dict (single fixed case)
+        lines = [f"  - `{k}` = `{v}`" for k, v in domain.items()]
+        return "one fixed case:\n" + "\n".join(lines)
+    lines = [f"  - `{k}` = `{v}` in every case" for k, v in (domain.get("constant") or {}).items()]
+    for k, v in (domain.get("varying") or {}).items():
+        if "min" in v:
+            lines.append(f"  - `{k}`: an integer from `{v['min']}` to `{v['max']}`, always a multiple of `{v['multiple_of']}`")
+        else:
+            lines.append(f"  - `{k}`: varies across cases ({v.get('values_are', 'see the reference')})")
+    return (f"{n_cases} configured cases of this dtype, the same set in every round; the file must be correct and is "
+            f"timed on each of them. Parameter domain:\n" + "\n".join(lines))
 
 
 def render_system(ctx: TaskContext) -> str:
@@ -104,17 +120,17 @@ def render_initial(ctx: TaskContext) -> str:
 
 def _prev_block(ctx: TaskContext, prev: dict, limits: dict, fallback: dict | None) -> str:
     """The previous-round section. A round that ended without a compliant
-    candidate (three contract violations) or without a parsable file is
-    described by its outcome only: its rejected code is never shown as a
-    starting point; the last compliant implementation (if any) is."""
+    candidate (a contract violation) or without a parsable file is described
+    by its outcome and sanitized diagnostics only: its rejected code is never
+    shown as a starting point; the last compliant implementation (if any) is."""
     status = prev.get("status")
     source = prev.get("source")
     if status == "contract_violation" or source is None:
         head = (f"## Previous round (round {prev['round']}): no compliant implementation\n\n"
                 f"Outcome: {outcome_text(prev)}\n{diagnostics_block(prev, limits)}")
         if status == "contract_violation":
-            head += ("\nThe candidates of that round were rejected for contract violations and are not shown; "
-                     "a rejected candidate must not serve as the basis of your next implementation.\n")
+            head += ("\nThe candidate of that round was rejected for a contract violation before evaluation and is not "
+                     "shown; a rejected candidate must not serve as the basis of your next implementation.\n")
         if fallback is not None and fallback.get("source"):
             head += (f"\n## Last compliant implementation (round {fallback['round']})\n\n"
                      f"```python title=\"{ctx.output_file}\"\n{fallback['source'].rstrip()}\n```\n\n"
@@ -124,7 +140,7 @@ def _prev_block(ctx: TaskContext, prev: dict, limits: dict, fallback: dict | Non
         return head
     return (f"## Previous candidate (round {prev['round']})\n\n"
             f"```python title=\"{ctx.output_file}\"\n{source.rstrip()}\n```\n\n"
-            f"Configuration reported by `get_last_config()`: `{json.dumps(prev.get('config'))}`\n\n"
+            f"{configs_line(prev.get('configs_distinct'))}\n\n"
             f"Outcome: {outcome_text(prev)}\n{diagnostics_block(prev, limits)}")
 
 
@@ -133,31 +149,15 @@ def render_refinement(ctx: TaskContext, *, round_index: int, prev: dict, best_va
     v = ctx.base_values()
     best_block = ""
     if best_valid is not None and best_valid.get("round") != prev.get("round"):
-        best_block = (f"\n## Best valid candidate so far (round {best_valid['round']}, "
-                      f"{best_valid['latency_ms_mean']:.4f} ms)\n\n```python title=\"{ctx.output_file}\"\n"
-                      f"{best_valid['source'].rstrip()}\n```\n\nConfiguration: `{json.dumps(best_valid.get('config'))}`\n")
+        best_block = (f"\n## Best valid candidate so far (round {best_valid['round']}, geometric mean "
+                      f"{best_valid['latency_ms_geomean']:.4f} ms over the {ctx.n_cases} cases)\n\n```python title=\"{ctx.output_file}\"\n"
+                      f"{best_valid['source'].rstrip()}\n```\n\n{configs_line(best_valid.get('configs_distinct'))}\n")
     v.update({
         "round": str(round_index),
         "prev_block": _prev_block(ctx, prev, limits, fallback),
         "best_valid_block": best_block, "runtime_history": runtime_history(history),
     })
     return render(load_template("refinement"), v)
-
-
-def render_repair(ctx: TaskContext, *, round_index: int, attempt: int, max_attempts: int,
-                  violations: list[str], rejected_source: str, fallback: dict | None) -> str:
-    v = ctx.base_values()
-    fb = ""
-    if fallback is not None:
-        fb = (f"## Your earlier compliant implementation (round {fallback['round']})\n\n"
-              f"```python title=\"{ctx.output_file}\"\n{fallback['source'].rstrip()}\n```\n\n"
-              "You may start from it; it is the last candidate that satisfied the contract.")
-    else:
-        fb = "No earlier compliant implementation exists in this task; start again from the contract."
-    v.update({"round": str(round_index), "attempt": str(attempt), "max_attempts": str(max_attempts),
-              "violations": "\n".join(f"- {x}" for x in violations) or "- (see evaluator notice)",
-              "rejected_source": rejected_source.rstrip("\n"), "fallback_block": fb})
-    return render(load_template("compliance_repair"), v)
 
 
 def render_distill_extraction(values: dict) -> str:

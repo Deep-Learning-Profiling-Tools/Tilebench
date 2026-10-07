@@ -46,8 +46,12 @@ def test_delegation_to_torch_is_confirmed_unless_allowed():
 def test_forbidden_imports_and_suspicious_cache():
     rep = analyze("import subprocess\nfrom tilebench.llm import evaluator\n", "triton")
     assert len(rep.confirmed) >= 2
+    # checker v2: a local / read-only use of a tensor address is audit-only; writing tensor identity or data into
+    # persistent state is high-risk (review_required)
     rep2 = analyze("_cache = {}\ndef run(x):\n    k = x.data_ptr()\n    return _cache.get(k)\n", "triton")
-    assert rep2.verdict() == "review_required" and any(e.category == "cache" for e in rep2.suspicious)
+    assert rep2.verdict() == "audit_only" and any(e.category == "cache" for e in rep2.audit)
+    rep3 = analyze("_cache = {}\ndef run(x):\n    k = x.data_ptr()\n    _cache[k] = x\n    return x\n", "triton")
+    assert rep3.verdict() == "review_required" and any(e.category == "cache" for e in rep3.review)
 
 
 def test_contract_rules_add_evidence():
@@ -57,6 +61,6 @@ def test_contract_rules_add_evidence():
     bad = check_compliance("import torch\ndef run(x):\n    return torch.sort(x)[0]\n", "triton", rules)
     assert bad.verdict == "confirmed_violation" and any("sort delegated" in d for d in bad.diagnostics())
     weak = check_compliance("import triton\ndef run(x):\n    return x\n", "triton", rules)
-    assert weak.verdict == "review_required"
+    assert weak.verdict == "audit_only" and any("missing evidence: tile load" in f for f in weak.audit_flags())
     good = check_compliance("import triton\nimport triton.language as tl\n@triton.jit\ndef k(p):\n    tl.load(p)\ndef run(x):\n    return x\n", "triton", rules)
     assert good.verdict == "clear"

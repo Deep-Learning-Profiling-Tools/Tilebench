@@ -62,8 +62,8 @@ run().
   processed once and nothing but the output is written to global memory.
 - Masked tail handling versus zero-padded loads with clipped stores (padded
   lanes evaluate to silu(0) = 0 and must never be written). Edge handling is
-  required wherever the task's fixed n is not a multiple of the chosen tile;
-  supporting shapes other than the task's declared shape is not required.
+  required wherever a case's n is not a multiple of the chosen tile;
+  supporting shapes outside the task's configured cases is not required.
 - Order and interleaving of the three loads; algebraic form of SiLU.
 
 ## Forbidden substitutions

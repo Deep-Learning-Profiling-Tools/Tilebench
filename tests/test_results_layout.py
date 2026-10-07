@@ -267,6 +267,43 @@ def frozen_view(path):
                             "speedup_triton", "speedup_cutile", "triton_vs_cutile")] for r in rows]
 
 
+@pytest.mark.parametrize("new_torch_ms", [5.0, 0.0, float("nan")])
+def test_tilelang_merge_preserves_direct_time_when_torch_changes(
+        run_bench, results, new_torch_ms, capsys):
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile")
+    path = results / "B200/csv/mul2_default.csv"
+    before = frozen_view(path)
+    run_bench.calls["torch_ms"] = new_torch_ms
+
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
+
+    _, rows = read_csv(path)
+    assert frozen_view(path) == before
+    assert all(r["tilelang_ms"] == "1.0000" for r in rows)
+    assert all(r["speedup_tilelang"] == "2.00" for r in rows)
+    raw = json.loads((results / "B200/logs/time_measurement_logs/mul2_default_tilelang.json").read_text())
+    assert all(r["tilelang_ms"] == 1.0 for r in raw)
+    assert "torch drift scale" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("latency", [0.0, -1.0, float("nan")])
+def test_failed_tilelang_merge_does_not_change_frozen_measurements(
+        run_bench, results, monkeypatch, latency):
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "triton,cutile")
+    path = results / "B200/csv/mul2_default.csv"
+    before = frozen_view(path)
+    failed = fake_results({"tilelang"})
+    for row in failed:
+        row["tilelang_ms"] = latency
+    monkeypatch.setattr(run_bench.module, "run_benchmark_suite", lambda *a, **kw: failed)
+
+    run_bench("--gpu", "B200", "--operator", "mul2", "--tile-language", "tilelang")
+
+    assert frozen_view(path) == before
+    assert all((r["tilelang_ms"], r["speedup_tilelang"]) == ("nan", "0.00")
+               for r in read_csv(path)[1])
+
+
 @pytest.fixture
 def campaign(run_bench, results):
     """B200 and GH200 each hold a frozen torch/triton/cutile CSV (torch_ms = 2.0)."""

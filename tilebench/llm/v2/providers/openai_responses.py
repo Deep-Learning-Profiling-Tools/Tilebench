@@ -25,7 +25,8 @@ import os
 import time
 from typing import Any
 
-from tilebench.llm.v2.providers.base import GenerationRequest, GenerationResult, ProviderConfigError, TransportError
+from tilebench.llm.v2.providers.base import (GenerationRequest, GenerationResult, ProviderConfigError, TransportError,
+                                             response_headers, safe_error_body)
 from tilebench.llm.v2.providers.usage import OPENAI_SCHEMA, normalize, unknown
 
 DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"
@@ -96,29 +97,40 @@ class OpenAIResponsesProvider:
         events = 0
         text_chars = 0
         final = None
+        headers = None
+        last_event = None
         try:
             with self._client.responses.stream(**kwargs) as stream:
+                headers = response_headers(stream)
                 for event in stream:
                     events += 1
                     et = getattr(event, "type", "")
+                    last_event = et or last_event
                     if et == "response.output_text.delta":
                         text_chars += len(getattr(event, "delta", "") or "")
                     elif et == "error":
                         raise TransportError(f"stream error event: {_dump(event)}", charged="unknown",
-                                             stream_events=events, partial_text_chars=text_chars)
+                                             stream_events=events, partial_text_chars=text_chars, rate_limit=headers,
+                                             last_event=last_event, error_body=safe_error_body(_dump(event)))
                 final = stream.get_final_response()
         except (TransportError, ProviderConfigError):
             raise
         except Exception as e:  # noqa: BLE001 - classified below
             err = classify_exception(e)
+            rl = headers or response_headers(e)
             if isinstance(err, TransportError):
                 if events > 0:
                     # the provider already produced events: generation may be billed
                     err = TransportError(str(err), charged="unknown", stream_events=events, partial_text_chars=text_chars)
+                err.rate_limit, err.last_event = rl, last_event
+                err.error_body = safe_error_body(getattr(e, "body", None))
+                err.status_code = getattr(e, "status_code", None)
+            elif isinstance(err, ProviderConfigError):
+                err.rate_limit = rl
             raise err from e
         raw = _dump(final)
         usage_raw = raw.get("usage") if isinstance(raw, dict) else None
-        usage = normalize(OPENAI_SCHEMA, usage_raw) if usage_raw else unknown(self.name, OPENAI_SCHEMA, "usage absent")
+        usage = normalize(OPENAI_SCHEMA, usage_raw, raw if isinstance(raw, dict) else None) if usage_raw else unknown(self.name, OPENAI_SCHEMA, "usage absent")
         status = raw.get("status") if isinstance(raw, dict) else None
         incomplete = raw.get("incomplete_details") if isinstance(raw, dict) else None
         reason = (incomplete or {}).get("reason") if isinstance(incomplete, dict) else None
@@ -136,4 +148,5 @@ class OpenAIResponsesProvider:
                                 response_id=getattr(final, "id", None), usage_raw=usage_raw, usage=usage,
                                 transport_attempts=1, elapsed_s=time.time() - t0, error=error, raw_response=raw,
                                 terminal_status=terminal, truncated=truncated, stream_events=events, streamed=True,
+                                rate_limit=headers,
                                 requested_model_id=request.model_id, request_settings_sent=sent)

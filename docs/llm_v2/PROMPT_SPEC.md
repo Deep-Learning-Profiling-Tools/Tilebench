@@ -18,8 +18,7 @@ another task, DSL, model, device, dtype or condition is ever rendered.
 |---|---|---|
 | `system_interface.md` | every generation request | `render_system` |
 | `initial.md` | round 1 (also round 1 of every Enhanced trajectory) | `render_initial` |
-| `refinement.md` | rounds 2..10, first generation of the round | `render_refinement` |
-| `compliance_repair.md` | same-round regeneration after a confirmed violation (attempt 2, 3) | `render_repair` |
+| `refinement.md` | rounds 2..5 (the round's single generation) | `render_refinement` |
 | `dev_contract_extraction.md` | development only: contract extractor (reads manual code) | `render_dev_extraction` |
 | `dev_contract_reconciliation.md` | development only: reconciliation of two extractions | `render_dev_reconciliation` |
 | `distill_evidence_extraction.md` | distillation map step (one trajectory) | `render_distill_extraction` |
@@ -111,21 +110,23 @@ the outcome text: valid, format_error, interface_error (missing/failing
 compile_error, runtime_error, numerical_error, timing_error,
 contract_violation, infrastructure_incomplete.
 
-## 5. Compliance repair
+## 5. Contract violations (no same-round repair; protocol revision 3)
 
-Rendered only after a CONFIRMED violation: static evidence level
-`confirmed` (autotune entry points resolved through the file's import
-aliases, host-scope reference-library calls, forbidden imports), a contract
-rule of level `confirmed` matched in its declared scope on a computational
-line of code-only text, or a violation confirmed by the evaluator at
-execution (autotuner object in the module, output aliasing an input).
-States the round, the attempt number and the maximum (3), lists the
-violations with line numbers, shows the rejected candidate, and offers the
-trajectory's last compliant implementation as the fallback (never the
-violating one). Ordinary compile/numerical/interface failures never reach
-this template. Suspicious evidence (`review_required`) blocks the
-trajectory for a recorded human decision (`review-resolve`); it never
-triggers a repair by itself.
+One round is exactly one candidate generation. A CONFIRMED violation (static
+evidence level `confirmed`: autotune entry points resolved through import or
+assignment aliases, host-scope reference-library calls, forbidden imports,
+precision-state changes; a contract rule of level `confirmed` matched in its
+declared scope on a computational line; or a violation confirmed by the
+evaluator at execution: autotuner object, output aliasing an input,
+cross-call output caching, precision tampering) closes the round as
+`contract_violation`. No regeneration happens in that round; the tokens are
+charged. The NEXT round's refinement prompt states the violation diagnostics
+and offers the trajectory's last compliant implementation (never the
+violating one). Checker v2 `audit_only` findings (e.g. a missing
+required-evidence pattern) are not shown to the model and do not block;
+`review_required` (high-risk ambiguity only) holds the trajectory for a
+recorded human decision (`review-resolve`): compliant evaluates the archived
+candidate without a new request, violation closes the round.
 
 ## 6. Distillation prompts
 
@@ -141,7 +142,7 @@ trajectories is enforced in `distillation/access.py`, not by the prompt.
 
 `validation/parser.py`: exactly one fenced `python` block with
 `title="<output_file>"`; it must parse as Python. Anything else is a
-`format_error` (consumes the round, no repair). A response the provider
+`format_error` (consumes the round; the next round follows). A response the provider
 reports as truncated (`incomplete:max_output_tokens`, `max_tokens`) is a
 `format_error` as well, even if its text happens to parse: it is not a
 complete candidate.

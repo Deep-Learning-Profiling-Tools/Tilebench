@@ -26,7 +26,7 @@ from tilebench.llm.v2.manifests.schema import CAPTURE_FAILURE_POLICIES, canonica
 from tilebench.llm.v2.tasks.case_selection import load_operator_config
 from tilebench.llm.v2.tasks.fields import effective_tolerance
 
-JOB_SCHEMA = "tilebench-llm-v2-evaljob/1"
+JOB_SCHEMA = "tilebench-llm-v2-evaljob/2"   # /2: a suite of cases (protocol revision 4)
 
 
 def timing_settings(study: dict, run_type: str = "formal") -> dict:
@@ -57,11 +57,19 @@ def expected_timing_mode(study: dict, device: str) -> str:
     return "eager"
 
 
+def single_case(operator: str, dtype: str, params: dict) -> list[dict]:
+    """A one-case suite (re-evaluation of legacy single-case states, unit tests)."""
+    from tilebench.data.tensors import infer_problem_size
+    from tilebench.llm.v2.tasks.case_selection import make_case_id
+    return [{"case_id": make_case_id(dict(params), dtype), "case_index": 0, "params": dict(params),
+             "problem_size": int(infer_problem_size(operator, dict(params)))}]
+
+
 @dataclass
 class EvaluationJob:
     operator: str
     dtype: str
-    params: dict
+    cases: list                       # [{case_id, case_index, params, problem_size}], evaluated in this order
     dsl: str
     device: str
     arch: str | None
@@ -78,6 +86,9 @@ class EvaluationJob:
     def rules_sha256(self) -> str:
         return hashlib.sha256(canonical_json(self.rules).encode()).hexdigest()
 
+    def case_ids(self) -> list[str]:
+        return [c["case_id"] for c in self.cases]
+
     def record(self) -> dict:
         """Identity/settings record for trajectory.json (rules by hash only)."""
         d = asdict(self)
@@ -87,7 +98,8 @@ class EvaluationJob:
 
     def worker_job(self, *, source_path: str, sandbox_dir: str, seed: int, round_index: int, attempt: int) -> dict:
         return {
-            "schema": self.schema, "operator": self.operator, "dtype": self.dtype, "params": self.params,
+            "schema": self.schema, "operator": self.operator, "dtype": self.dtype,
+            "cases": [{k: c.get(k) for k in ("case_id", "case_index", "params", "problem_size")} for c in self.cases],
             "dsl": self.dsl, "device": self.device, "arch": self.arch,
             "source_path": source_path, "sandbox_dir": sandbox_dir,
             "atol": self.atol, "rtol": self.rtol, "tolerance_source": self.tolerance_source,
@@ -100,9 +112,13 @@ def validate_worker_job(job: dict) -> list[str]:
     errs = []
     if job.get("schema") != JOB_SCHEMA:
         errs.append(f"schema must be {JOB_SCHEMA}")
-    for key in ("operator", "dtype", "params", "dsl", "source_path", "sandbox_dir", "atol", "rtol", "rules", "timing", "seed"):
+    for key in ("operator", "dtype", "cases", "dsl", "source_path", "sandbox_dir", "atol", "rtol", "rules", "timing", "seed"):
         if key not in job:
             errs.append(f"missing key {key}")
+    cases = job.get("cases")
+    if "cases" in job and (not isinstance(cases, list) or not cases or
+                           any(not isinstance(c, dict) or "params" not in c or "case_id" not in c for c in cases)):
+        errs.append("cases must be a non-empty list of {case_id, params, ...}")
     t = job.get("timing") or {}
     for key in ("warmup", "repeat", "use_cuda_graph", "flush", "capture_failure_policy"):
         if key not in t:
@@ -110,13 +126,20 @@ def validate_worker_job(job: dict) -> list[str]:
     return errs
 
 
-def build_evaluation_job(*, operator: str, dtype: str, params: dict, dsl: str, device: str, arch: str | None,
-                         rules: dict, study: dict, identity: dict | None = None, config: dict | None = None) -> EvaluationJob:
+def build_evaluation_job(*, operator: str, dtype: str, dsl: str, device: str, arch: str | None,
+                         rules: dict, study: dict, cases: list | None = None, params: dict | None = None,
+                         identity: dict | None = None, config: dict | None = None) -> EvaluationJob:
+    """`cases`: the task's frozen case set (revision 4). `params` alone builds a one-case suite (legacy states, tests)."""
+    if cases is None:
+        if params is None:
+            raise ValueError("build_evaluation_job needs cases (or params for a one-case suite)")
+        cases = single_case(operator, dtype, params)
     cfg = config if config is not None else load_operator_config(operator)
     tol = effective_tolerance(cfg, dtype, arch)
     adapter = study["support_matrix"][device]["timing_adapter"]
     require_adapter(adapter)
-    return EvaluationJob(operator=operator, dtype=dtype, params=dict(params), dsl=dsl, device=device, arch=arch,
+    cases = [{k: c.get(k) for k in ("case_id", "case_index", "params", "problem_size")} for c in cases]
+    return EvaluationJob(operator=operator, dtype=dtype, cases=cases, dsl=dsl, device=device, arch=arch,
                          atol=tol["atol"], rtol=tol["rtol"], tolerance_source=tol["source"], rules=rules,
                          timing=timing_settings(study, run_type=str((identity or {}).get("run_type", "formal"))),
                          expected_timing_mode=expected_timing_mode(study, device),

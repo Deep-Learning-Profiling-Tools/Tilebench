@@ -1,5 +1,12 @@
 # READINESS — TileBench++ LLM protocol v2 (state after the freeze-preparation round, 2026-10-05)
 
+> **Current protocol: revision 4 (2026-10-07)** — every candidate evaluated on all 20 frozen cases of the
+> operator's representative dtype, Claude Code compliance adjudication, PrecisionGuard and checker-v3 fixes,
+> normalized usage /2, one scheduler process with a hard global evaluation backlog:
+> `docs/llm_v2/PROTOCOL_REVISION_4.md`. Revision 3 (`docs/llm_v2/PROTOCOL_REVISION_3.md`,
+> campaign `formal_b200_base_1dtype5r_2026-10-06`) and revision 2 (`formal_b200_base_2026-10-06`) are excluded
+> pilots. The sections below are historical.
+
 Branch `exp/llm` (worktree `../llm_wt`), cut from `S_main = ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe`.
 Rounds so far: shared framework (89140bb3) → review fixes R1–R12 + live
 chain + real ten-round validation campaign (4a1f4591) → freeze preparation

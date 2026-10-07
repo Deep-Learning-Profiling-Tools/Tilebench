@@ -15,7 +15,7 @@ Sub-packages, by responsibility:
 - ``validation``     strict response parser, static evidence, contract checks
 - ``evaluation``     isolated worker, 1-warmup/3-timed measurement, anti-cache
 - ``metrics``        T_SOL, cumulative cost, SOL-Efficiency@B, aggregation
-- ``orchestration``  ten-round state machine, persistence, resume, locks
+- ``orchestration``  five-round, one-generation-per-round state machine, persistence, resume, locks
 - ``distillation``   source-device / fold-scoped evidence access and synthesis
 """
 

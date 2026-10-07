@@ -17,7 +17,7 @@ No keyword arguments are passed. Input that is not 2-D is outside the benchmark.
 - `out` (returned): `(n, m)`, same dtype as `x`, freshly allocated inside
   `run()` on every call, contiguous row-major (`out.stride() == (m, 1)`).
   Returned as a single tensor.
-- Edge handling is required wherever the task's fixed `m` or `n` is not a
+- Edge handling is required wherever a case's `m` or `n` is not a
   multiple of the chosen tile size; no element
   outside `[0, m) x [0, n)` may be read, and no element outside
   `[0, n) x [0, m)` of `out` may be written.
@@ -77,9 +77,8 @@ before the kernel reads it. Nothing may be cached across calls.
   strided, or re-laying out the tile on chip so that both sides are
   coalesced are all acceptable.
 - Edge tiles may be handled by explicit masks or by the DSL's bounds-padded
-  loads and bounds-clipped stores. Edge handling is required wherever the
-  task's fixed `m` or `n` is not a multiple of the chosen tile dimension;
-  supporting shapes other than the task's declared shape is not required.
+  loads and bounds-clipped stores. Edge handling is required wherever a case's `m` or `n` is not a multiple of the chosen tile dimension;
+  supporting shapes outside the task's configured cases is not required.
 - Passing explicit strides of `x` and `out` to the kernel is permitted; so is
   assuming the contiguous layouts stated above.
 

@@ -974,10 +974,10 @@ Everything else in `torch` is forbidden inside `run()`.
 
 - Operator: `streamk_matmul`; DSL `triton` 3.6.0; output file `impl_triton.py`
 - Datatype: `fp32` (torch `torch.float32`)
-- Fixed input case:
-  - `k` = `4096`
-  - `m` = `8192`
-  - `n` = `28672`
+- Evaluated inputs: 20 configured cases of this dtype, the same set in every round; the file must be correct and is timed on each of them. Parameter domain:
+  - `k` = `4096` in every case
+  - `m`: an integer from `1024` to `8192`, always a multiple of `1024`
+  - `n`: an integer from `4096` to `28672`, always a multiple of `256`
 - Numerical acceptance: `atol=1.0, rtol=0.01` (source: config.verify)
 - Interface: `def run(a: torch.Tensor, b: torch.Tensor, **kwargs):`; returns the output tensor(s) described in the contract.
 
@@ -993,7 +993,7 @@ def run(a: torch.Tensor, b: torch.Tensor, **kwargs):
     return torch.matmul(a, b)
 ```
 
-# Optimization round 2 of 10
+# Optimization round 2 of 5
 
 ## Previous candidate (round 1)
 
@@ -1002,9 +1002,9 @@ import triton
 # ...candidate...
 ```
 
-Configuration reported by `get_last_config()`: `null`
+Configurations reported by `get_last_config()`: none recorded.
 
-Outcome: compilation/import failed
+Outcome: compilation/import failed; valid on 0 of 20 cases (1 evaluated); first failing case: n=1048576 (compilation/import failed)
 
 Diagnostics:
 ```
@@ -1013,8 +1013,8 @@ CompilationError: at 12:8: tl.dot requires K >= 16
 ```
 
 
-## Runtime history of this task (valid candidates only; ms, mean of 3 timed runs after 1 warmup)
+## Runtime history of this task (valid candidates only: all 20 cases valid; geometric mean over the 20 cases of the per-case runtime, each the mean of 3 timed runs after 1 warmup)
 
 No valid candidate yet.
 
-Improve on the best valid runtime while keeping the contract. Return exactly one fenced block titled `impl_triton.py`.
+Improve on the best valid geometric-mean runtime while keeping the contract and staying correct on every case. Return exactly one fenced block titled `impl_triton.py`.

@@ -131,11 +131,10 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
     The frozen torch/triton/cutile columns are never touched. Rows are matched
     by (params, dtype).
 
-    - tilelang: the freshly measured tilelang_ms is re-based onto the frozen
-      timing environment via the per-case scale torch_frozen/torch_new, so the
-      written tilelang_ms is directly comparable with the frozen triton/cutile
-      columns. speedup_tilelang = torch_new/tilelang_new is scale-invariant
-      and written as measured.
+    - tilelang: tilelang_ms is written as measured, without torch drift scaling.
+      speedup_tilelang uses the preserved CSV torch_ms baseline divided by the
+      direct TileLang time. The raw JSON retains the new run's torch timing and
+      speedup; merging does not make separate runs share timing conditions.
     - nki (run on the Neuron host, not on <gpu>): torch_nki_ms (torch timed on
       the Neuron device) and nki_ms are appended as-is — cross-hardware, so no
       scaling. NKI compares against its own torch reference:
@@ -172,21 +171,16 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
         if c not in header:
             header.append(c)
 
-    scales = []
     for r, key in zip(timing_results, keys):
         old = index[key]
         torch_frozen = float(old["torch_ms"])
         torch_new = r["torch_ms"]
         if "tilelang" in active:
             tl = r["tilelang_ms"]
-            if tl > 0 and torch_new > 0 and torch_frozen > 0:
-                scale = torch_frozen / torch_new
-                scales.append(scale)
-                old["tilelang_ms"] = f"{tl * scale:.4f}"
-                old["speedup_tilelang"] = f"{r['speedup_tilelang']:.2f}"
-            else:
-                old["tilelang_ms"] = "nan"
-                old["speedup_tilelang"] = "0.00"
+            old["tilelang_ms"] = f"{tl:.4f}" if tl > 0 else "nan"
+            old["speedup_tilelang"] = (
+                f"{torch_frozen / tl:.2f}" if tl > 0 and torch_frozen > 0 else "0.00"
+            )
         if "nki" in active:
             old["torch_nki_ms"] = f"{torch_new:.4f}" if torch_new > 0 else "nan"
             old["nki_ms"] = f"{r['nki_ms']:.4f}" if r["nki_ms"] > 0 else "nan"
@@ -200,10 +194,6 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
     print(f"Merged {len(keys)} case(s) into {csv_path} "
           f"(columns: {', '.join(new_cols)}; "
           f"{len(old_rows) - len(keys)} frozen row(s) untouched)")
-    if scales:
-        s = sorted(scales)
-        print(f"  torch drift scale (frozen/new): min {s[0]:.3f} / "
-              f"median {s[len(s) // 2]:.3f} / max {s[-1]:.3f}")
 
 
 def main():
@@ -404,7 +394,7 @@ def main():
     # tilelang/nki runs never overwrite the frozen torch/triton/cutile CSV:
     # when only those backends ran and the summary CSV of this namespace already
     # exists, the results are MERGED into it in place (see _merge_into_csv for
-    # the per-case tilelang re-basing and the nki torch_nki_ms column). The
+    # the direct tilelang times and the nki torch_nki_ms column). The
     # plain writer below only ever runs for triton/cutile sweeps or when
     # no summary CSV exists yet.
     if active and set(active) <= {"tilelang", "nki"} and Path(csv_path).exists():

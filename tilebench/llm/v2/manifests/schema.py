@@ -27,6 +27,15 @@ CAPTURE_FAILURE_POLICIES = ("time_eagerly_and_flag", "timing_error")
 # frozen folds for Enhanced). validation: engineering acceptance of the
 # execution chain; identical mechanics, unscored, never a distillation source.
 RUN_TYPES = ("formal", "validation")
+# Protocol revision 4 (study-owner decision 2026-10-07): one representative
+# dtype per operator, all 20 configured cases per candidate, 5 rounds, exactly
+# one candidate generation per round, Claude Code compliance adjudication.
+PROTOCOL_REVISION = 4
+ROUNDS = 5
+MAX_GENERATIONS_PER_ROUND = 1
+CASES_PER_TASK = 20
+COMPLIANCE_VERDICTS = ("clear", "audit_only", "review_required", "confirmed_violation")
+ADJUDICATOR = "claude-code"
 
 
 class ManifestError(ValueError):
@@ -80,13 +89,30 @@ def load_arithmetic_modes() -> dict:
 # --------------------------------------------------------------------------
 
 def validate_study(study: dict) -> None:
-    if study.get("protocol") != "tilebench-llm-v2" or study.get("revision") != 2:
-        raise ManifestError("study.yaml: protocol/revision must be tilebench-llm-v2 / 2")
+    if study.get("protocol") != "tilebench-llm-v2" or study.get("revision") != PROTOCOL_REVISION:
+        raise ManifestError(f"study.yaml: protocol/revision must be tilebench-llm-v2 / {PROTOCOL_REVISION}")
     traj = study.get("trajectory", {})
-    if traj.get("rounds") != 10:
-        raise ManifestError("study.yaml: trajectory.rounds must be 10")
-    if traj.get("max_generations_per_round") != 3:
-        raise ManifestError("study.yaml: trajectory.max_generations_per_round must be 3")
+    if traj.get("rounds") != ROUNDS:
+        raise ManifestError(f"study.yaml: trajectory.rounds must be {ROUNDS}")
+    if traj.get("max_generations_per_round") != MAX_GENERATIONS_PER_ROUND:
+        raise ManifestError(f"study.yaml: trajectory.max_generations_per_round must be {MAX_GENERATIONS_PER_ROUND} "
+                            "(one round == one candidate generation; no same-round repair)")
+    if "repair_only_on" in traj:
+        raise ManifestError("study.yaml: revision 3 has no same-round repair (repair_only_on must not be set)")
+    unit = study.get("task_unit") or {}
+    if unit.get("kind") != "representative_dtype" or unit.get("manifest") != "representative_dtypes.yaml":
+        raise ManifestError("study.yaml: task_unit must be {kind: representative_dtype, manifest: representative_dtypes.yaml}")
+    if (unit.get("cases"), unit.get("case_manifest"), unit.get("cases_per_task"), unit.get("round_validity")) != \
+            ("all_configured", "case_sets.yaml", CASES_PER_TASK, "all_cases_valid"):
+        raise ManifestError(f"study.yaml: task_unit must evaluate all_configured cases (case_manifest case_sets.yaml, "
+                            f"cases_per_task {CASES_PER_TASK}, round_validity all_cases_valid)")
+    comp = study.get("compliance") or {}
+    if comp.get("verdicts") != list(COMPLIANCE_VERDICTS) or comp.get("blocking") != ["review_required"] \
+            or comp.get("missing_required_evidence") != "audit_only":
+        raise ManifestError(f"study.yaml: compliance must declare verdicts {list(COMPLIANCE_VERDICTS)}, blocking "
+                            "[review_required] and missing_required_evidence: audit_only (checker v2)")
+    if comp.get("adjudicator") != ADJUDICATOR:
+        raise ManifestError(f"study.yaml: compliance.adjudicator must be {ADJUDICATOR!r} (revision 4)")
     timing = study.get("timing", {})
     if (timing.get("warmup"), timing.get("repeat")) != (1, 3):
         raise ManifestError("study.yaml: timing must be warmup=1, repeat=3")
@@ -101,6 +127,9 @@ def validate_study(study: dict) -> None:
     ev = study.get("evaluation") or {}
     if ev and (not isinstance(ev.get("worker_timeout_s"), int) or isinstance(ev.get("worker_timeout_s"), bool) or ev["worker_timeout_s"] <= 0):
         raise ManifestError("study.yaml: evaluation.worker_timeout_s must be a positive integer (frozen per-candidate wall-clock limit)")
+    tb = study.get("torch_baselines") or {}
+    if set(tb) - set(DEVICES):
+        raise ManifestError(f"study.yaml: torch_baselines names unknown devices {sorted(set(tb) - set(DEVICES))}")
     snaps = study.get("device_snapshots") or {}
     if set(snaps) - set(DEVICES):
         raise ManifestError(f"study.yaml: device_snapshots names unknown devices {sorted(set(snaps) - set(DEVICES))}")
@@ -212,7 +241,40 @@ def blockers_folds(folds: dict) -> list[str]:
     return []
 
 
-def study_config_hash(study: dict, models: dict, folds: dict, modes: dict) -> str:
-    """Hash of everything that defines a campaign's protocol. Trajectories
-    carry it; the runner refuses to resume under a different hash."""
-    return config_hash(study, models, folds, modes)
+def load_representative() -> dict:
+    from tilebench.llm.v2.tasks.representative import load_manifest
+    return load_manifest()
+
+
+def load_case_sets() -> dict:
+    from tilebench.llm.v2.tasks.case_sets import load_manifest
+    return load_manifest()
+
+
+def load_excluded_campaigns() -> dict:
+    data = load_yaml("excluded_campaigns.yaml")
+    if data.get("schema") != "tilebench-llm-excluded-campaigns/1":
+        raise ManifestError("excluded_campaigns.yaml: schema must be tilebench-llm-excluded-campaigns/1")
+    for name, entry in (data.get("campaigns") or {}).items():
+        if not entry.get("forbidden_uses") or not entry.get("decided_by"):
+            raise ManifestError(f"excluded_campaigns.yaml: {name} needs forbidden_uses and decided_by")
+    return data
+
+
+def excluded_campaign(name: str | None) -> dict | None:
+    """The exclusion record of a campaign, or None when it may be used."""
+    if not name:
+        return None
+    return (load_excluded_campaigns().get("campaigns") or {}).get(name)
+
+
+def study_config_hash(study: dict, models: dict, folds: dict, modes: dict, representative: dict | None = None,
+                      case_sets: dict | None = None) -> str:
+    """Hash of everything that defines a campaign's protocol (study incl. the
+    5-round / one-generation rules and the checker-v2 policy, models, folds,
+    arithmetic modes, the representative-dtype manifest and the frozen 20-case
+    sets). Trajectories carry it; the runner refuses to resume under a
+    different hash."""
+    representative = representative if representative is not None else load_representative()
+    case_sets = case_sets if case_sets is not None else load_case_sets()
+    return config_hash(study, models, folds, modes, representative, case_sets)

@@ -57,8 +57,7 @@ normalises; a row held on chip needs a single load. Within a chunk the max
 and the sum are tile-wide reductions whose internal order is free; across
 chunks the recurrence is sequential. When the recurrence is used over
 several chunks its initial state is `m = -inf, l = 0` (or the statistics
-of the first chunk). Out-of-range lanes of a partial chunk (only when the
-task's fixed row length is not a multiple of the chosen chunk width) must
+of the first chunk). Out-of-range lanes of a partial chunk (only when a case's row length is not a multiple of the chosen chunk width) must
 behave as `-inf` in the statistics (they contribute `exp(-inf) = 0` to the
 sum and never win the max) and must never be stored. The classic
 three-traversal scheme (a max traversal, then a sum traversal, then the
@@ -86,8 +85,7 @@ output is allocated inside `run()` on every call.
 ## Permitted implementation mappings
 - Chunk width along the row, rows per program, grid shape, vectorisation,
   pipelining depth and other launch parameters; the kernel may be
-  specialised on the task's fixed shape (supporting other shapes is not
-  required).
+  specialised per case shape (supporting shapes outside the configured cases is not required).
 - Holding the whole row on chip (single load, direct max/sum) versus a
   chunked online traversal followed by a second traversal for the
   normalisation.

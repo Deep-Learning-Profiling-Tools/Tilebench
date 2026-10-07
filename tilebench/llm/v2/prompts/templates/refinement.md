@@ -16,8 +16,7 @@
 
 - Operator: `{{operator}}`; DSL `{{dsl}}` {{dsl_version}}; output file `{{output_file}}`
 - Datatype: `{{dtype}}` (torch `{{torch_dtype}}`){{fp8_note}}
-- Fixed input case:
-{{params_block}}
+- Evaluated inputs: {{domain_block}}
 - Numerical acceptance: `atol={{atol}}, rtol={{rtol}}`{{tolerance_note}}
 - Interface: `{{run_signature}}`; returns {{returns}}.
 
@@ -31,8 +30,8 @@
 
 {{prev_block}}
 {{best_valid_block}}
-## Runtime history of this task (valid candidates only; ms, mean of 3 timed runs after 1 warmup)
+## Runtime history of this task (valid candidates only: all {{n_cases}} cases valid; geometric mean over the {{n_cases}} cases of the per-case runtime, each the mean of 3 timed runs after 1 warmup)
 
 {{runtime_history}}
 
-Improve on the best valid runtime while keeping the contract. Return exactly one fenced block titled `{{output_file}}`.
+Improve on the best valid geometric-mean runtime while keeping the contract and staying correct on every case. Return exactly one fenced block titled `{{output_file}}`.

@@ -37,7 +37,7 @@ python -m tilebench.llm.v2 snapshots --out docs/llm_v2/prompt_snapshots/B200_tri
 `--allow-draft` accepts draft skills/contracts for development; formal
 campaigns require approved contracts and approved/frozen skills.
 
-## Mock execution (ten rounds, persistence, resume; no API, no GPU)
+## Mock execution (five rounds, one generation each, persistence, resume; no API, no GPU)
 
 ```
 python -m tilebench.llm.v2 run-mock --out outputs/llm_v2/mock --operator vector_add --dtype fp16 --device B200 --dsl triton
@@ -132,20 +132,26 @@ python -m tilebench.llm.v2 review-queue  outputs/llm_v2/<name>
 python -m tilebench.llm.v2 metrics       outputs/llm_v2/<name>       # validation runs are labelled unscored
 ```
 
-## Compliance review (human decision)
+## Compliance review (revision 4: the supervising Claude Code session adjudicates)
 
-A `review_required` verdict (suspicious static evidence) blocks the
-trajectory. Inspect and decide:
+A `review_required` verdict (suspicious static evidence) blocks the trajectory. The supervising Claude Code
+session polls the queue and decides from the candidate, the frozen contract, the evaluator rules, the exact
+checker evidence and the interface only (never latency, speedup, T_emp, E(B), cost or ranking); no reviewer API
+call, no human dependency (`study.yaml compliance.adjudicator: claude-code`):
 
 ```
-python -m tilebench.llm.v2 review-resolve --trajectory-dir <dir> --show
-python -m tilebench.llm.v2 review-resolve --trajectory-dir <dir> --decision compliant --note "<evidence>" --reviewer <name>
-python -m tilebench.llm.v2 review-resolve --trajectory-dir <dir> --decision violation --note "<evidence>" --reviewer <name>
-python -m tilebench.llm.v2 base ... --resume        # continue
+python -m tilebench.llm.v2 review-queue outputs/llm_v2/<campaign>
+python -m tilebench.llm.v2 review-packet --trajectory-dir <dir>          # evidence; asserts no performance/cost field
+python -m tilebench.llm.v2 review-resolve --trajectory-dir <dir> --decision compliant --note "<rationale>"
+python -m tilebench.llm.v2 review-resolve --trajectory-dir <dir> --decision violation --note "<rationale>"
 ```
 
-Decisions are appended to `reviews.jsonl` and to `trajectory.json.notes`.
-There is no automatic clearance; the optional LLM reviewer is disabled.
+The running `schedule` process polls every blocked trajectory (30 s) and continues it in the same process (same
+provider limiters, same global evaluation budget) as soon as its decision is recorded; while reviews are pending
+and nothing else runs, the process waits for them (STOP ends the wait). Decisions are appended to the round's
+`reviews`, to `reviews.jsonl` and to `trajectory.json.notes` with candidate/contract/rules/checker hashes.
+A checker or contract bug found during review pauses the campaign (STOP) and is versioned; never rewrite a
+frozen contract mid-campaign (review-resolve refuses a changed contract hash).
 
 ## Empirical calibration (GPU; exclusive with campaigns; writes only a new calibration directory)
 
@@ -273,3 +279,29 @@ python -m tilebench.llm.v2 base --device <DEV> --dsl <DSL> --model gpt --campaig
 The same `base`/`enhanced` commands run there; nothing is re-implemented
 per device. Trn2 additionally follows `docs/llm_v2/NKI_HANDOFF.md` (its
 timing adapter is not ready; the preflight blocks it).
+
+## Revision-4 formal campaign (one process, both models, 20 cases per candidate)
+
+```
+# all models and DSL tracks in ONE process; hard global evaluation backlog; LD_LIBRARY_PATH unset on dgx003
+env -u LD_LIBRARY_PATH nohup python -m tilebench.llm.v2 schedule --device B200 --models gpt claude --campaign <name> \
+    --dsls triton cutile tilelang --run-type formal --resume --max-pending-evaluations 16 --executor <who> \
+    > outputs/llm_v2/campaign_logs/<name>.log 2>&1 &
+touch outputs/llm_v2/<name>/STOP                 # graceful pause (remove to resume)
+python -m tilebench.llm.v2 review-queue outputs/llm_v2/<name>
+python -m tilebench.llm.v2 cost-report outputs/llm_v2/<name>
+python -m tilebench.llm.v2 metrics outputs/llm_v2/<name>      # geomean efficiency over the 20 cases; speedup vs stored torch
+```
+
+## Revision-3 formal campaign (schedule, cost, pause) — superseded pilot
+
+```
+# one process per model; all three DSL tracks; adaptive concurrency; LD_LIBRARY_PATH unset on dgx003
+env -u LD_LIBRARY_PATH nohup python -m tilebench.llm.v2 schedule --device B200 --model gpt    --campaign <name> \
+    --dsls triton cutile tilelang --run-type formal --resume --executor <who> > outputs/llm_v2/campaign_logs/<name>_gpt.log 2>&1 &
+env -u LD_LIBRARY_PATH nohup python -m tilebench.llm.v2 schedule --device B200 --model claude --campaign <name> \
+    --dsls triton cutile tilelang --run-type formal --resume --executor <who> > outputs/llm_v2/campaign_logs/<name>_claude.log 2>&1 &
+touch outputs/llm_v2/<name>/STOP                 # graceful pause (remove to resume)
+python -m tilebench.llm.v2 cost-report outputs/llm_v2/<name>
+python -m tilebench.llm.v2 metrics outputs/llm_v2/<name>      # E_token and E_usd, 45-operator denominator
+```

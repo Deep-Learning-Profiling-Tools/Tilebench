@@ -68,7 +68,11 @@ def test_precision_state_reads_are_repeatable():
     a = worker.precision_state()
     b = worker.precision_state()
     assert worker.precision_diff(a, b) == {} and not any(str(v).startswith("<unreadable") for v in a.values())
-    assert {"cuda.matmul.allow_tf32", "cudnn.benchmark", "float32_matmul_precision", "deterministic_algorithms"} <= set(a)
+    if worker.precision_api_family() == "fp32_precision":     # torch >= 2.9: the per-backend fp32_precision family is canonical
+        assert {"cuda.matmul.fp32_precision", "cudnn.conv.fp32_precision", "backends.fp32_precision", "cudnn.benchmark",
+                "deterministic_algorithms"} <= set(a) and "cuda.matmul.allow_tf32" not in a
+    else:
+        assert {"cuda.matmul.allow_tf32", "cudnn.benchmark", "float32_matmul_precision", "deterministic_algorithms"} <= set(a)
 
 
 def test_precision_guard_detects_candidate_changes_and_restores_before_reference():
@@ -159,7 +163,7 @@ def test_revision_numbering_never_reuses_a_number(tmp_path):
 
 
 def test_frozen_wall_clock_limit_and_distiller_and_folds_are_recorded(study):
-    assert study["evaluation"]["worker_timeout_s"] == 1800
+    assert study["evaluation"]["worker_timeout_s"] == 3600          # revision 4: one worker evaluates all 20 cases
     models = ms.load_models()
     d = models["roles"]["distiller"]
     assert (d["model_id"], d["reasoning_effort"], d["max_output_tokens"], d["status"]) == ("gpt-6.1-sol", "xhigh", 128000, "approved")

@@ -27,9 +27,7 @@ arguments positional; no keyword arguments are passed.
   Read-only.
 - `S`: `(ceil(M / T), ceil(N / T))`, contiguous row-major, same dtype as
   `X`. Read-only.
-- `M`, `N`, `TILE_SIZE`: Python ints (the task's fixed shape is square,
-  `N == M`; the implementation may specialise on the declared shape and
-  need not support other shapes).
+- `M`, `N`, `TILE_SIZE`: Python ints (every configured case is square, `N == M`; the implementation may specialise per case shape and need not support shapes outside the configured cases).
 - Returned: one new tensor `(M, N)` of `X`'s dtype, allocated inside
   `run()` on every call. It must not alias either input.
 
@@ -38,7 +36,7 @@ arguments positional; no keyword arguments are passed.
 1. **Allocate** the output.
 2. **Scaled elementwise map**: for every element, determine its block
    coordinates `(i // T, j // T)`, fetch the corresponding scale from `S`,
-   multiply, store (with edge handling wherever the task's fixed shape is
+   multiply, store (with edge handling wherever a case's shape is
    not a multiple of the chosen tile).
 
 Stage 2 is a single logical stage with no inter-block dependency; how it is

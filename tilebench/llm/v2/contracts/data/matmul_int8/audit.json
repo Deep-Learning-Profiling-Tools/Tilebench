@@ -2,7 +2,7 @@
   "schema": "tilebench-contract-audit/1",
   "operator": "matmul_int8",
   "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
-  "contract_revision": 2,
+  "contract_revision": 3,
   "status": "approved",
   "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
   "approved_on": "2026-10-06",
@@ -169,6 +169,13 @@
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the contract's earlier requirement that each packed byte be logically loaded exactly once per output tile is removed as contradictory with the free fields-inner / fields-outer loop order; packed-byte reuse is an implementation optimisation, not the canonical algorithm. Loop order is free so long as the packed B is decoded correctly inside the GEMM and no forbidden unpacked global intermediate is introduced.",
     "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3, applied by extension from the matmul_fp32_fp16_fp8 decision): process-wide precision/backend flags are evaluator state, not candidate-controlled state; the evaluator owns their isolation at verification time (impl_torch.py:17 sets torch.backends.cuda.matmul.allow_tf32 = False inside run() without restoring it, which the harness must contain). A candidate reading or changing them is flagged by evaluator_rules (suspicious here, since this operator's integer path has no precision class to alter)."
   ],
-  "contract_sha256": "96ce4b6ca165fcdf9450f51c1fb5855cd8be8ad64d8ce840935f71171ea0b95c",
-  "previous_status_before_approval": "needs-review"
+  "contract_sha256": "4a28ad0b64df58ff0cc44ebca6795c4209bec8f94638b45ae585f6361e450862",
+  "previous_status_before_approval": "needs-review",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "96ce4b6ca165fcdf9450f51c1fb5855cd8be8ad64d8ce840935f71171ea0b95c",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
 }

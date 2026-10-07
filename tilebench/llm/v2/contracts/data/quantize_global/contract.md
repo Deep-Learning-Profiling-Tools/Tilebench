@@ -23,10 +23,9 @@ arguments are passed.
   to infinity is outside the verified domain.
 - `out` (returned): `(n,)`, dtype float16, freshly allocated inside `run()`
   on every call. Returned as a single tensor.
-- Edge handling is required wherever the task's fixed `n` is not a multiple
+- Edge handling is required wherever a case's `n` is not a multiple
   of the chosen tile length; no element outside `[0, n)` may be read or
-  written. Supporting lengths other than the task's declared `n` is not
-  required.
+  written. Supporting lengths outside the task's configured cases is not required.
 
 ## Required logical stages
 

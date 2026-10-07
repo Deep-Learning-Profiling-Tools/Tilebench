@@ -1,7 +1,10 @@
 """Task eligibility, registered before generation and held fixed.
 
 A task is (operator, dtype, case_id, device, dsl); the trajectory adds model
-and condition. Status values:
+and condition. Under protocol revision 4 the task's `case_id` is the frozen
+CASE-SET id (manifests/case_sets.yaml): every candidate is evaluated on all 20
+configured cases of the selected dtype (`cases`); `params` keeps the largest
+(representative) case for reference only. Status values:
 
 - eligible      : in the support matrix and known to run (torch reference +
                   input generation succeed on that device)
@@ -14,7 +17,7 @@ Known device facts come from the archived manual campaigns and are cited in
 `reason`; nothing here is inferred from a generation attempt."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from tilebench.paths import list_operators
 
@@ -55,6 +58,8 @@ class Eligibility:
     params: dict
     problem_size: int
     case_index: int
+    cases: list = field(default_factory=list)      # revision 4: every case the candidate is evaluated on
+    case_set_id: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -62,12 +67,26 @@ class Eligibility:
         return d
 
 
+def _case_set(operator: str, dtype: str, study: dict, config: dict | None) -> tuple[str | None, list]:
+    """(case_set_id, cases) under the all-configured-cases task unit; (None, []) otherwise. The frozen
+    manifest is used for the selected dtype; another dtype (inventory tools only) is expanded directly."""
+    if (study.get("task_unit") or {}).get("cases") != "all_configured":
+        return None, []
+    from tilebench.llm.v2.tasks import case_sets
+    entry = (case_sets.load_manifest()["operators"] or {}).get(operator)
+    if entry is not None and entry["dtype"] == dtype:
+        return entry["case_set_id"], [dict(c) for c in entry["cases"]]
+    cases = case_sets.operator_cases(operator, dtype, config)
+    return case_sets.case_set_id(operator, dtype, [c["case_id"] for c in cases]), cases
+
+
 def eligibility(operator: str, dtype: str, device: str, dsl: str, study: dict, folds: dict,
                 config: dict | None = None) -> Eligibility:
     if device not in DEVICES:
         raise ValueError(f"unknown device {device}")
     sel = select_representative_case(operator, dtype, config)
-    key = TaskKey(operator, dtype, sel.case_id, device, dsl)
+    cs_id, cases = _case_set(operator, dtype, study, config)
+    key = TaskKey(operator, dtype, cs_id or sel.case_id, device, dsl)
     fold = fold_of(folds, operator)
     fp8 = FP8_FORMATS.get(dtype)
     matrix = study["support_matrix"][device]
@@ -82,16 +101,36 @@ def eligibility(operator: str, dtype: str, device: str, dsl: str, study: dict, f
     else:
         status, reason = "eligible", "manual B200 campaign ran this operator/dtype (results/B200/csv)"
     return Eligibility(key=key, fold=fold, status=status, reason=reason, fp8_format=fp8,
-                       params=sel.params, problem_size=sel.problem_size, case_index=sel.case_index)
+                       params=sel.params, problem_size=sel.problem_size, case_index=sel.case_index,
+                       cases=cases, case_set_id=cs_id)
 
 
-def task_table(study: dict, folds: dict, operators: list[str] | None = None) -> list[Eligibility]:
-    """Every (device, dsl, operator, dtype) of the support matrix with its status."""
+def selected_dtypes(study: dict) -> dict[str, str] | None:
+    """operator -> the predeclared representative dtype when the study's task
+    unit is `representative_dtype` (protocol revision 3); None otherwise."""
+    if (study.get("task_unit") or {}).get("kind") == "representative_dtype":
+        from tilebench.llm.v2.tasks.representative import selected
+        return selected()
+    return None
+
+
+def task_table(study: dict, folds: dict, operators: list[str] | None = None, *,
+               all_dtypes: bool = False) -> list[Eligibility]:
+    """Every (device, dsl, operator, dtype) of the support matrix with its
+    status. Under the representative-dtype task unit only the operator's
+    selected dtype is a task; `all_dtypes=True` lists every configured dtype
+    (inventory tools only, never a formal task list)."""
+    chosen = None if all_dtypes else selected_dtypes(study)
     out: list[Eligibility] = []
     for op in operators or list_operators():
         cfg = load_operator_config(op)
         cfg["_operator"] = op
-        for dtype in operator_dtypes(cfg):
+        dtypes = operator_dtypes(cfg)
+        if chosen is not None:
+            if op not in chosen:
+                raise ValueError(f"{op}: no representative dtype in the frozen manifest")
+            dtypes = [chosen[op]]
+        for dtype in dtypes:
             for device, entry in study["support_matrix"].items():
                 for dsl in entry["dsls"]:
                     out.append(eligibility(op, dtype, device, dsl, study, folds, cfg))

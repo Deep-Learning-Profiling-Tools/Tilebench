@@ -69,10 +69,8 @@ precomputation outside `run()`.
   launch or partitioned across several, provided each element is still
   processed once and no intermediate is written to global memory.
 - Explicit masks or the DSL's bounds-padded loads and bounds-clipped stores
-  for a last partial block. Edge handling is required wherever the task's
-  fixed `n` is not a multiple of the chosen tile (no element at index `>= n`
-  may be read or written); supporting shapes other than the task's declared
-  shape is not required.
+  for a last partial block. Edge handling is required wherever a case's `n` is not a multiple of the chosen tile (no element at index `>= n`
+  may be read or written); supporting shapes outside the task's configured cases is not required.
 - Whether `n` is a compile-time constant or a runtime argument.
 
 ## Forbidden substitutions

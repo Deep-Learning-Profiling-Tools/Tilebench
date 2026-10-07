@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,13 +48,17 @@ from tilebench.llm.v2.evaluation.job import EvaluationJob
 from tilebench.llm.v2.orchestration.identity import attempt_dir, request_hash
 from tilebench.llm.v2.orchestration.state import AttemptRecord, TrajectoryState
 from tilebench.llm.v2.orchestration import state_machine as sm
-from tilebench.llm.v2.prompts.renderer import TaskContext, render_initial, render_refinement, render_repair, render_system
-from tilebench.llm.v2.providers.base import GenerationRequest, GenerationResult, ProviderConfigError, TransportError
+from tilebench.llm.v2.prompts.renderer import TaskContext, render_initial, render_refinement, render_system
+from tilebench.llm.v2.metrics.cost import combine as combine_usd, pricing_sha256, transport_cost
+from tilebench.llm.v2.providers.base import (GenerationRequest, GenerationResult, ProviderConfigError, StopRequested,
+                                             TransportError, retry_after_seconds)
 from tilebench.llm.v2.providers.ledger import append_jsonl, archive_response, read_jsonl
 from tilebench.llm.v2.validation.contract_checks import check_compliance
 from tilebench.llm.v2.validation.parser import FormatError, parse_single_file
 
 TERMINAL_EVENTS = ("succeeded", "failed", "refused", "orphaned")
+# a 429 whose body says the account is out of quota/credit is not retried: the trajectory stops (provider refusal)
+_QUOTA = re.compile(r"insufficient_quota|billing_hard_limit|enforced_spend_limit_reached|credit balance|spend limit", re.I)
 
 
 class Evaluator(Protocol):
@@ -70,9 +75,10 @@ class RunnerConfig:
     model_id: str
     provider_name: str
     settings: dict
-    rounds: int = 10
-    max_generations: int = 3
+    rounds: int = 5
+    max_generations: int = 1               # protocol revision 3: one candidate generation per round
     max_transport_retries: int = 3
+    max_rate_limit_retries: int = 12       # HTTP 429 retries (charged "no"), each after the provider's Retry-After/reset
     retry_backoff_s: float = 0.0
     feedback_limits: dict | None = None
     total_prompt_max_chars: int = 260000
@@ -157,7 +163,8 @@ def durable_transport(tdir: Path, round_index: int, attempt: int, *, archived_tr
             last = terminal[-1]
             rec = {k: last.get(k) for k in ("round", "attempt", "transport_attempt", "event", "charged", "error", "usage",
                                             "usage_partial", "response_id", "model_id", "terminal_status", "elapsed_s", "t",
-                                            "stream_events", "partial_text_chars", "status_code", "kind")}
+                                            "stream_events", "partial_text_chars", "status_code", "kind", "rate_limit",
+                                            "last_event", "error_body", "usd")}
             rec["outcome"] = last.get("outcome") or last["event"]
         else:
             rec = {"round": round_index, "attempt": attempt, "transport_attempt": tid, "event": "orphaned", "outcome": "orphaned",
@@ -197,12 +204,43 @@ class TrajectoryRunner:
         self.state, self.tdir, self.ctx, self.provider, self.evaluator = state, tdir, ctx, provider, evaluator
         self.job, self.cfg, self.sleep = job, cfg, sleep
         self.rules = job.rules
+        # hard global evaluation-backlog budget (orchestration.scheduler.EvalBudget) when run under the scheduler:
+        # a slot is reserved before a generation request is sent and released when the round closes
+        self.budget = getattr(provider, "budget", None)
         self.feedback_limits = cfg.feedback_limits or {"max_diagnostic_lines": 60, "max_diagnostic_chars": 6000}
         self.log = log or (lambda s: None)
 
     # -- persistence -------------------------------------------------------
     def save(self) -> None:
+        self.state.cost_summary = self.state.compute_cost_summary()
         self.state.save(self.tdir / "trajectory.json")
+
+    # -- USD list-price cost (metrics.cost; never part of a prompt) ----------
+    def _usd(self, entry: dict, result: GenerationResult | None = None) -> dict:
+        raw = result.raw_response if (result is not None and isinstance(result.raw_response, dict)) else {}
+        return transport_cost(entry, self.cfg.provider_name, self.cfg.model_id,
+                              usage_raw=result.usage_raw if result is not None else None,
+                              service_tier=raw.get("service_tier"))
+
+    def _attach_usd(self, transport: list[dict], result: GenerationResult | None = None) -> None:
+        for t in transport:
+            if "usd" in t and t["usd"] is not None:
+                continue
+            ok = (t.get("outcome") or t.get("event")) == "succeeded"
+            if ok and t.get("response_archived") and result is not None:
+                t["usd"] = self._usd(t, result)
+            elif ok:
+                t["usd"] = {"pricing_snapshot_sha256": pricing_sha256(), "pricing_rule_id": None, "estimated_cost_usd": None,
+                            "estimated_cost_lower_bound_usd": None, "usd_cost_status": "unknown", "tokens": None,
+                            "note": "succeeded response never archived: raw usage unavailable"}
+            else:
+                t["usd"] = self._usd(t)
+
+    @staticmethod
+    def _usd_fields(transport: list[dict]) -> dict:
+        c = combine_usd([t.get("usd") or {"usd_cost_status": "unknown"} for t in transport])
+        return {"usd_cost": c["estimated_cost_usd"], "usd_cost_lower_bound": c["estimated_cost_lower_bound_usd"],
+                "usd_cost_status": c["usd_cost_status"], "pricing_snapshot_sha256": pricing_sha256()}
 
     # -- prompt construction -----------------------------------------------
     def _prompt_for(self, action: sm.Action) -> tuple[str, str, str]:
@@ -222,43 +260,42 @@ class TrajectoryRunner:
                 user = render_refinement(self.ctx, round_index=action.round, prev=prev, best_valid=best,
                                          history=history, limits=self.feedback_limits, fallback=fallback)
             kind = "initial"
-        elif action.kind == "repair":
-            rec = next(r for r in self.state.rounds if r.round == action.round)
-            rejected = rec.attempts[-1]
-            rejected_src = Path(rejected.source_path).read_text() if rejected.source_path else "# (no parsable file)"
-            violations = (rejected.compliance or {}).get("diagnostics") or [rejected.diagnostic or "contract violation"]
-            fb = self.state.last_compliant_source()
-            fallback = None
-            if fb:
-                fallback = {"round": fb["round"], "source": Path(fb["source_path"]).read_text()}
-            user = render_repair(self.ctx, round_index=action.round, attempt=action.attempt,
-                                 max_attempts=self.cfg.max_generations, violations=violations,
-                                 rejected_source=rejected_src, fallback=fallback)
-            kind = "repair"
         else:
             raise ValueError(action.kind)
         return system, user, kind
 
     def _round_view(self, round_index: int) -> dict:
         """What a later prompt may see of a round: its code only when the
-        round ended with an evaluated (compliant) candidate."""
+        round ended with an evaluated (compliant) candidate; aggregate outcome
+        only (valid cases, geometric-mean latency); for an invalid round the
+        first failing case's semantic parameters. Never per-case timing."""
         rec = next(r for r in self.state.rounds if r.round == round_index)
         src = None
         if rec.status not in ("contract_violation", "format_error", "review_required"):
             if rec.source_path:
                 src = Path(rec.source_path).read_text()
-            elif rec.attempts and rec.attempts[-1].verdict == "clear" and rec.attempts[-1].source_path:
+            elif rec.attempts and rec.attempts[-1].verdict in ("clear", "audit_only") and rec.attempts[-1].source_path:
                 src = Path(rec.attempts[-1].source_path).read_text()
-        return {"round": rec.round, "status": rec.status, "source": src, "config": rec.config,
-                "latency_ms_mean": rec.latency_ms_mean, "latency_ms_samples": rec.latency_ms_samples,
+        ev = rec.evaluation or {}
+        first_bad = ev.get("first_failing_case") if rec.status not in ("valid",) else None
+        return {"round": rec.round, "status": rec.status, "source": src,
+                "configs_distinct": (rec.config or {}).get("configs_distinct") if isinstance(rec.config, dict) else None,
+                "latency_ms_geomean": rec.latency_ms_geomean, "valid_cases": rec.valid_cases, "cases_total": rec.cases_total,
+                "cases_evaluated": ev.get("cases_evaluated"),
+                "first_failing_case": ({"params": first_bad.get("params"), "status": first_bad.get("status")} if first_bad else None),
                 "diagnostic": rec.diagnostic}
 
     def _best_view(self) -> dict | None:
         b = self.state.best_valid
         if not b:
             return None
-        return {"round": b["round"], "latency_ms_mean": b["latency_ms_mean"],
-                "source": Path(b["source_path"]).read_text(), "config": b["config"]}
+        return {"round": b["round"], "latency_ms_geomean": b["latency_ms_geomean"],
+                "source": Path(b["source_path"]).read_text(), "configs_distinct": b.get("configs_distinct")}
+
+    # -- evaluation backlog budget ------------------------------------------
+    def _release_slot(self) -> None:
+        if self.budget is not None:
+            self.budget.release()
 
     # -- ledger ------------------------------------------------------------
     def _ledger_has(self, rh: str, round_index: int, attempt: int) -> bool:
@@ -273,10 +310,16 @@ class TrajectoryRunner:
             usage = {"status": "not_sent", "logical_total": 0, "logical_input": 0, "logical_output": 0}
         else:
             usage = result.usage.to_dict() if result is not None else None
+        usd = self._usd_fields(transport) if transport else {"usd_cost": 0.0, "usd_cost_lower_bound": 0.0,
+                                                             "usd_cost_status": "not_sent", "pricing_snapshot_sha256": pricing_sha256()}
+        rule_ids = sorted({(t.get("usd") or {}).get("pricing_rule_id") for t in transport} - {None})
         row = {"round": action.round, "attempt": action.attempt, "kind": kind, "request_hash": rh, "usage": usage,
                "model_id": result.model_id if result else None, "response_id": result.response_id if result else None,
                "transport_attempts": len(transport), "transport": transport, "reconciled": reconciled,
-               "terminal_status": result.terminal_status if result else None, "t": time.time()}
+               "terminal_status": result.terminal_status if result else None, "t": time.time(),
+               "pricing_snapshot_sha256": usd["pricing_snapshot_sha256"], "pricing_rule_id": rule_ids[0] if len(rule_ids) == 1 else rule_ids or None,
+               "estimated_cost_usd": usd["usd_cost"], "estimated_cost_lower_bound_usd": usd["usd_cost_lower_bound"],
+               "usd_cost_status": usd["usd_cost_status"]}
         append_jsonl(self.tdir / "usage.jsonl", row)
 
     # -- compliance (first check recorded once; later rechecks are separate files) -----
@@ -316,6 +359,8 @@ class TrajectoryRunner:
                 self._ledger_row(action, kind, rh, None, transport=[], not_sent=True)
             return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                  transport_attempts=0, verdict="format_error", cost=0, cost_status="not_sent",
+                                 usd_cost=0.0, usd_cost_lower_bound=0.0, usd_cost_status="not_sent",
+                                 pricing_snapshot_sha256=pricing_sha256(),
                                  diagnostic=f"prompt_too_long: {prompt_chars} chars > {self.cfg.total_prompt_max_chars}; not sent")
         resp_path = adir / "response.json"
         if resp_path.exists():
@@ -331,6 +376,7 @@ class TrajectoryRunner:
             transport = durable_transport(self.tdir, action.round, action.attempt, archived_transport_id=arch_tid)
             if not transport:
                 transport = list(archived.get("transport") or [])      # legacy archives without durable rows
+            self._attach_usd(transport, result)
             if not self._ledger_has(rh, action.round, action.attempt):
                 self._ledger_row(action, kind, rh, result, transport=transport, reconciled=True)
                 self.state.notes.append(f"round {action.round} attempt {action.attempt}: usage ledger row reconciled from the archived response")
@@ -342,16 +388,17 @@ class TrajectoryRunner:
                 self.state.notes.append(f"round {action.round} attempt {action.attempt}: {len(lost)} succeeded response(s) were never archived; "
                                         "their known charge is kept and a new request follows")
             result, refused = self._request_with_retries(system, user, action, transport)
+            self._attach_usd(transport, result)
             if refused is not None:
                 cost, cstat = attempt_cost(transport)
                 return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                      transport_attempts=len(transport), verdict="provider_refused", transport=transport,
-                                     cost=cost, cost_status=cstat, error=f"provider refused: {refused}")
+                                     cost=cost, cost_status=cstat, error=f"provider refused: {refused}", **self._usd_fields(transport))
             if result is None:
                 cost, cstat = attempt_cost(transport)
                 return AttemptRecord(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                                      transport_attempts=len(transport), verdict="transport_failed", transport=transport,
-                                     cost=cost, cost_status=cstat,
+                                     cost=cost, cost_status=cstat, **self._usd_fields(transport),
                                      error="transport retries exhausted; " + ("charging uncertain" if cstat == "unknown" else "no charge recorded"))
             result.transport_attempts = len(transport)
             archive_response(adir, "response", {"request_hash": rh, "result": result.to_dict(), "transport": transport})
@@ -359,6 +406,7 @@ class TrajectoryRunner:
         cost, cstat = attempt_cost(transport, result.usage.to_dict())
         base = dict(attempt=action.attempt, kind=kind, request_hash=rh, prompt_chars=prompt_chars,
                     transport_attempts=len(transport), usage=result.usage.to_dict(), cost=cost, cost_status=cstat,
+                    **self._usd_fields(transport),
                     transport=transport, response_path=str(resp_path), response_id=result.response_id,
                     model_id=result.model_id, terminal_status=result.terminal_status, truncated=result.truncated)
         if result.truncated:
@@ -372,7 +420,7 @@ class TrajectoryRunner:
         if not src_path.exists():
             src_path.write_text(parsed.source)
         comp_d = self._compliance(adir, parsed.source)
-        verdict = {"clear": "clear", "confirmed_violation": "confirmed_violation",
+        verdict = {"clear": "clear", "audit_only": "audit_only", "confirmed_violation": "confirmed_violation",
                    "review_required": "review_required"}[comp_d["verdict"]]
         diag = "; ".join(comp_d.get("diagnostics") or []) or \
             ("; ".join(comp_d.get("review_items") or []) if verdict == "review_required" else None)
@@ -390,8 +438,11 @@ class TrajectoryRunner:
                                 settings=self.cfg.settings,
                                 metadata={"trajectory": self.state.trajectory_id, "round": action.round, "attempt": action.attempt})
         n = max([int(t["transport_attempt"]) for t in transport if t.get("transport_attempt") is not None], default=0)
-        session_start = n
+        other_failures = rate_limited = 0
+        before_send = getattr(self.provider, "before_send", None)
         while True:
+            if before_send is not None:
+                before_send()          # scheduler gate; raises StopRequested BEFORE anything is sent or logged as sending
             n += 1
             sending = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "sending",
                        "model_id": self.cfg.model_id, "t": time.time()}
@@ -403,6 +454,7 @@ class TrajectoryRunner:
             except ProviderConfigError as e:
                 entry = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "refused",
                          "outcome": "refused", "charged": "no", **e.record(), "elapsed_s": time.time() - t0, "t": time.time()}
+                entry["usd"] = self._usd(entry)
                 self.state.transport_log.append(entry)
                 append_jsonl(self.tdir / "transport.jsonl", entry)
                 transport.append(entry)
@@ -411,19 +463,32 @@ class TrajectoryRunner:
             except TransportError as e:
                 entry = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "failed",
                          "outcome": "failed", **e.record(), "elapsed_s": time.time() - t0, "t": time.time()}
+                entry["usd"] = self._usd(entry)
                 self.state.transport_log.append(entry)
                 append_jsonl(self.tdir / "transport.jsonl", entry)
                 transport.append(entry)
                 self.log(f"round {action.round} attempt {action.attempt}: transport failure ({e.charged} charge): {e}")
-                if n - session_start > self.cfg.max_transport_retries:
+                if e.status_code == 429 and _QUOTA.search(f"{e} {e.error_body or ''}"):
+                    return None, f"provider quota/billing limit (HTTP 429): {e}"
+                if e.status_code == 429:
+                    # rate limited before processing (charged "no"): wait for the provider's reset, separate budget
+                    rate_limited += 1
+                    if rate_limited > self.cfg.max_rate_limit_retries:
+                        return None, None
+                    self.sleep(max(retry_after_seconds(e.rate_limit), self.cfg.retry_backoff_s))
+                    continue
+                other_failures += 1
+                if other_failures > self.cfg.max_transport_retries:
                     return None, None
-                self.sleep(self.cfg.retry_backoff_s * (n - session_start))
+                self.sleep(self.cfg.retry_backoff_s * other_failures)
                 continue
             entry = {"round": action.round, "attempt": action.attempt, "transport_attempt": n, "event": "succeeded",
                      "outcome": "succeeded", "charged": "known" if result.usage.logical_total is not None else "unknown",
                      "response_id": result.response_id, "model_id": result.model_id,
                      "terminal_status": result.terminal_status, "usage": result.usage.to_dict(),
-                     "elapsed_s": time.time() - t0, "t": time.time(), "response_archived": True}
+                     "elapsed_s": time.time() - t0, "t": time.time(), "response_archived": True,
+                     "rate_limit": getattr(result, "rate_limit", None)}
+            entry["usd"] = self._usd(entry, result)
             append_jsonl(self.tdir / "transport.jsonl", entry)
             transport.append(entry)
             self.log(f"round {action.round} attempt {action.attempt}: response {result.response_id} "
@@ -438,41 +503,61 @@ class TrajectoryRunner:
     def step(self) -> sm.Action:
         action = sm.next_action(self.state, rounds=self.cfg.rounds, max_generations=self.cfg.max_generations)
         if action.kind in ("done", "blocked_review", "incomplete"):
+            self._release_slot()
             return action
-        if action.kind in ("generate_initial", "repair"):
-            rec = self._generate(action)
-            sm.apply_attempt(self.state, action.round, rec, max_generations=self.cfg.max_generations)
+        if action.kind == "generate_initial":
+            try:
+                rec = self._generate(action)
+            except StopRequested:
+                self._release_slot()
+                self.log(f"round {action.round} attempt {action.attempt}: pause requested before sending; nothing sent")
+                self.save()
+                return sm.Action("paused", round=action.round, attempt=action.attempt)
+            except BaseException:
+                self._release_slot()
+                raise
+            sm.apply_attempt(self.state, action.round, rec, max_generations=self.cfg.max_generations, rounds=self.cfg.rounds)
+            if rec.verdict not in sm.EVALUABLE_VERDICTS:
+                self._release_slot()           # nothing joins the evaluation backlog
             self.log(f"round {action.round} attempt {action.attempt}: verdict {rec.verdict}"
                      + (f" ({rec.diagnostic[:160]})" if rec.diagnostic else ""))
         elif action.kind == "evaluate":
-            rec = next(r for r in self.state.rounds if r.round == action.round)
-            src = Path(rec.attempts[-1].source_path)
-            adir = attempt_dir(self.tdir, action.round, action.attempt)
-            rev = self._next_revision(adir)
-            rdir = adir / rev
-            rdir.mkdir(parents=True, exist_ok=True)
-            fp = self.state.evaluator_fingerprint or {}
-            meta = {"revision": rev, "reason": rec.evaluation_reason or "initial", "supersedes": rec.evaluation_revision,
-                    "executor": self.cfg.executor, "evaluator_fingerprint_sha256": fp.get("fingerprint_sha256"),
-                    "candidate_sha256": _sha256_text(src.read_text()), "worker_timeout_s": getattr(self.evaluator, "timeout_s", None),
-                    "isolation_backend": (getattr(self.evaluator, "report", None) or {}).get("backend"), "created": time.time()}
-            (rdir / "META.json").write_text(json.dumps(meta, indent=1) + "\n")
-            result = self.evaluator.evaluate(src, self.job, action.round, action.attempt, archive_dir=rdir / "evaluation")
-            result["evaluation_revision"] = rev
-            (rdir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
-            sm.apply_evaluation(self.state, action.round, result, max_generations=self.cfg.max_generations)
-            rec.evaluation_revisions.append(rev)
-            rec.evaluation_revision = rev
-            rec.evaluation_reason = None
-            self.log(f"round {action.round}: evaluation {result.get('status')} [{rev}]"
-                     + (f" {result.get('latency_ms_mean'):.4f} ms {result.get('latency_ms_samples')}" if result.get("status") == "valid" else
-                        f" ({str(result.get('diagnostic'))[:160]})"))
-            if self.state.best_valid and self.state.best_valid["round"] == action.round and rec.status == "valid":
-                bdir = self.tdir / "best_valid"
-                bdir.mkdir(exist_ok=True)
-                (bdir / self.ctx.output_file).write_text(src.read_text())
+            if self.budget is not None:
+                self.budget.reserve(stoppable=False)   # no-op when this round's generation already holds the slot
+            try:
+                self._evaluate(action)
+            finally:
+                self._release_slot()
         self.save()
         return action
+
+    def _evaluate(self, action: sm.Action) -> None:
+        rec = next(r for r in self.state.rounds if r.round == action.round)
+        src = Path(rec.attempts[-1].source_path)
+        adir = attempt_dir(self.tdir, action.round, action.attempt)
+        rev = self._next_revision(adir)
+        rdir = adir / rev
+        rdir.mkdir(parents=True, exist_ok=True)
+        fp = self.state.evaluator_fingerprint or {}
+        meta = {"revision": rev, "reason": rec.evaluation_reason or "initial", "supersedes": rec.evaluation_revision,
+                "executor": self.cfg.executor, "evaluator_fingerprint_sha256": fp.get("fingerprint_sha256"),
+                "candidate_sha256": _sha256_text(src.read_text()), "worker_timeout_s": getattr(self.evaluator, "timeout_s", None),
+                "isolation_backend": (getattr(self.evaluator, "report", None) or {}).get("backend"), "created": time.time()}
+        (rdir / "META.json").write_text(json.dumps(meta, indent=1) + "\n")
+        result = self.evaluator.evaluate(src, self.job, action.round, action.attempt, archive_dir=rdir / "evaluation")
+        result["evaluation_revision"] = rev
+        (rdir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
+        sm.apply_evaluation(self.state, action.round, result, max_generations=self.cfg.max_generations, rounds=self.cfg.rounds)
+        rec.evaluation_revisions.append(rev)
+        rec.evaluation_revision = rev
+        rec.evaluation_reason = None
+        self.log(f"round {action.round}: evaluation {rec.status} [{rev}] valid cases {rec.valid_cases}/{rec.cases_total}"
+                 + (f", geomean {rec.latency_ms_geomean:.4f} ms" if rec.status == "valid" else
+                    f" ({str(rec.diagnostic)[:160]})"))
+        if self.state.best_valid and self.state.best_valid["round"] == action.round and rec.status == "valid":
+            bdir = self.tdir / "best_valid"
+            bdir.mkdir(exist_ok=True)
+            (bdir / self.ctx.output_file).write_text(src.read_text())
 
     def closed_rounds(self) -> int:
         return sum(1 for r in self.state.rounds if r.status != "pending")
@@ -488,6 +573,9 @@ class TrajectoryRunner:
                 self.save()
                 return "paused"
             action = self.step()
+            if action.kind == "paused":
+                self.save()
+                return "paused"
             if action.kind in ("done", "blocked_review", "incomplete"):
                 break
         self.save()

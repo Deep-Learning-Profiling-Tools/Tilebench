@@ -1,26 +1,92 @@
-# Frozen study configuration of the TileBench++ LLM protocol (revision 2).
+# Frozen study configuration of the TileBench++ LLM protocol (revision 4).
 # Loaded and validated by tilebench.llm.v2.manifests.schema.load_study().
 # Changing any value here changes the campaign config hash; trajectories
 # produced under another hash are refused by the runner.
+#
+# Revision 4 (study-owner decision, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md)
+# keeps revision 3 (one representative dtype per operator, 5 rounds, one
+# generation per round, checker v2) and changes the task unit: every candidate is
+# evaluated on ALL 20 frozen configured cases of the operator's selected dtype
+# (manifests/case_sets.yaml); a round is valid only with 20/20 valid cases; the
+# generator never sees per-case performance. Compliance reviews are adjudicated by
+# the supervising Claude Code session (reviewer `claude-code`), no human reviewer.
+# Revision 2 and revision 3 campaigns are protocol/infrastructure pilots
+# (manifests/excluded_campaigns.yaml): never Base results, never paired Enhanced
+# results, never distillation sources.
 protocol: tilebench-llm-v2
-revision: 2
+revision: 4
 
 trajectory:
-  rounds: 10                      # fixed; no performance-triggered early stop
-  max_generations_per_round: 3    # initial generation + at most 2 compliance repairs
-  repair_only_on: [confirmed_contract_violation, confirmed_reward_hacking]
+  rounds: 5                       # fixed; every trajectory runs all 5 rounds; no performance-triggered early stop
+  max_generations_per_round: 1    # one round == one candidate-generation attempt; no same-round regeneration
+  round_rule: >
+    Each round generates exactly one candidate, parses it, checks compliance,
+    then (when allowed) verifies, evaluates and times it, and closes. A format,
+    interface, compile, runtime, numerical or timing failure closes the round;
+    a confirmed contract violation (static or execution-confirmed) closes the
+    round as contract_violation without a new generation; an audit_only
+    compliance result is evaluated normally; review_required holds the
+    trajectory until the supervising Claude Code session decides (compliant:
+    the archived candidate is evaluated, no new request; violation: the round
+    closes as contract_violation). The candidate is evaluated on all 20 frozen
+    cases of the task; the round is valid only when all 20 cases are valid.
+    Every sent generation's tokens are charged whatever the outcome. Transport
+    retries are not candidate attempts.
   history_rule: >
     The refinement prompt carries (a) the previous round's candidate and its
-    outcome, (b) this trajectory's best valid candidate when one exists and
-    differs from (a), and (c) the raw runtime history of every valid round.
-    Nothing from any other task, DSL, model, device, dtype or condition.
+    outcome with sanitized diagnostics (a rejected or unparsable candidate is
+    described by its outcome and diagnostics; the last compliant candidate is
+    shown instead), (b) this trajectory's best valid candidate when one exists
+    and differs from (a), and (c) the aggregate runtime history of every valid
+    round: valid cases (20/20) and the geometric-mean latency over the 20
+    cases. Never per-case latency, speedup, Torch time, T_emp or efficiency.
+    An invalid round reports its valid-case count, a concise diagnostic and,
+    when needed to fix correctness, the semantic parameters of the first
+    failing case. Nothing from any other task, DSL, model, device, dtype or
+    condition.
   regression_rule: >
-    A valid candidate slower than the best valid one is recorded as the round's
-    result; the best valid candidate is never replaced by a slower one.
+    A valid candidate slower (higher geometric-mean latency over the 20 cases)
+    than the best valid one is recorded as the round's result; the best valid
+    candidate is never replaced by a slower one.
   context_overflow_rule: >
     If a rendered prompt exceeds total_max_chars the attempt fails with
     status=prompt_too_long before any API call; nothing is truncated or
     compressed per model.
+
+# Formal task unit: one predeclared representative dtype per operator
+# (manifests/representative_dtypes.yaml), the same for every DSL, model,
+# condition and device, evaluated on ALL its 20 configured cases
+# (manifests/case_sets.yaml). One candidate source serves every case; it may
+# derive its configuration deterministically from the shape / static metadata;
+# runtime timing/search/autotuning and benchmark-case lookup tables are forbidden.
+task_unit:
+  kind: representative_dtype
+  manifest: representative_dtypes.yaml
+  cases: all_configured
+  case_manifest: case_sets.yaml
+  cases_per_task: 20
+  round_validity: all_cases_valid
+  round_latency: geometric_mean_of_case_means
+
+# Compliance outcomes (checker v2). Only review_required blocks; a missing
+# required-evidence pattern alone is never blocking.
+compliance:
+  checker: contract_checks/v2
+  verdicts: [clear, audit_only, review_required, confirmed_violation]
+  blocking: [review_required]
+  closes_round: [confirmed_violation]
+  missing_required_evidence: audit_only
+  adjudicator: claude-code
+  review_policy: >
+    A genuine review_required item is adjudicated by the supervising Claude
+    Code session (reviewer `claude-code`; no reviewer API call, no human
+    dependency) from the candidate source, the frozen contract, the evaluator
+    rules, the exact checker evidence and the task interface only, never from
+    latency, speedup, T_emp, E(B), token/USD cost or any ranking. compliant ->
+    the archived candidate is evaluated (no new request); violation -> the
+    round closes as contract_violation and the next round receives the
+    diagnostic. A frozen contract/checker bug found during review pauses the
+    affected campaign; the fix is a new version, never a mid-campaign rewrite.
 
 timing:
   warmup: 1
@@ -52,11 +118,21 @@ timing:
 # formal campaigns (owner, 2026-10-06): identical for every model and DSL;
 # formal runs refuse any other value; part of the evaluator fingerprint.
 evaluation:
-  worker_timeout_s: 1800
+  worker_timeout_s: 3600            # one worker evaluates the candidate on all 20 cases
+  suite: all_cases_in_one_worker    # load once; per case: fresh inputs, checks, 1 warmup + 3 timed
+  stop_suite_on: [contract_violation, compile_error]   # per case; module-level failures and a dead worker also stop it
 
 # Device Context snapshot a campaign injects per device (manifest version key).
 device_snapshots:
   B200: "2026-10-06"
+
+# Stored PyTorch baselines per frozen case (reporting speedup = geomean_j T_torch_j / T_ij;
+# metrics.baselines): the committed results/<device>/csv/<op>_default.csv torch_ms
+# matched offline to the case suites. Never re-measured, never shown to a generator.
+torch_baselines:
+  B200: artifacts/llm_v2/baselines/B200/torch_baseline_B200_casesets_2026-10-07.json
+  GH200: artifacts/llm_v2/baselines/GH200/torch_baseline_GH200_casesets_2026-10-07.json
+  MI300X: artifacts/llm_v2/baselines/MI300X/torch_baseline_MI300X_casesets_2026-10-07.json
 
 # Run types. Both use the identical execution chain; only gating and the
 # downstream use of the results differ.
@@ -105,14 +181,16 @@ context_limits:            # characters of injected text; exceeding is an error
   total_prompt: 260000
 
 feedback:
-  performance_fields: [latency_ms_mean, latency_ms_samples]
+  performance_fields: [valid_cases, latency_ms_geomean]
   forbidden_fields: [t_sol, t_emp, p_emp, bw_emp, calibration_id, ceiling_basis, sol_efficiency, roofline,
-                     stop_score, speedup, human_ms, torch_ms, pct_peak, profiler_counters, score]
+                     stop_score, speedup, human_ms, torch_ms, pct_peak, profiler_counters, score,
+                     per_case_latency, per_case_speedup, per_case_efficiency, case_ranking]
   max_diagnostic_lines: 60
   max_diagnostic_chars: 6000
 
 case_selection:
   rule: >
-    Among the operator's expanded cases with the task dtype, pick the one with
-    the largest infer_problem_size(); ties keep the last case in grid order.
-    Parameters are taken from that single case, never combined across cases.
+    Revision 4: every expanded case of the selected dtype (case_sets.yaml).
+    The largest case (largest infer_problem_size(); ties keep the last in grid
+    order) is kept only as the representative case recorded in
+    representative_dtypes.yaml; it no longer defines the task.

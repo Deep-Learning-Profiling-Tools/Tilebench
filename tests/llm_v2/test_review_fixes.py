@@ -81,16 +81,17 @@ def test_regex_rules_ignore_comments_strings_and_kernel_scope():
              "required_evidence": [], "allowed_torch_calls": []}
     assert check_compliance("x = 1  # torch.matmul(\n", "triton", rules).verdict == "clear"
     assert check_compliance('"""docs: torch.matmul( here"""\nx = 1\n', "triton", rules).verdict == "clear"
-    # a regex hit on a non-computational line is downgraded to review, never confirmed
+    # a regex hit on a non-computational line is audit-only (checker v2), never confirmed
     rules2 = {"forbidden_substitutions": [{"pattern": r"sorted", "message": "m", "level": "confirmed", "scope": "host"}],
               "required_evidence": [], "allowed_torch_calls": []}
     res = check_compliance("sorted = None\n", "triton", rules2)
-    assert res.verdict == "review_required"
+    assert res.verdict == "audit_only"
 
 
 def test_config_record_dict_is_not_a_cache_but_data_ptr_keys_are():
-    assert analyze("_LAST_CONFIG = {}\ndef run(x):\n    return x\n", "triton").verdict() == "clear"
-    assert analyze("_cache = {}\ndef run(x):\n    return _cache.get(x.data_ptr())\n", "triton").verdict() == "review_required"
+    assert analyze("_LAST_CONFIG = {}\ndef run(x):\n    _LAST_CONFIG.update({'BLOCK': 64})\n    return x\n", "triton").verdict() == "clear"
+    assert analyze("_cache = {}\ndef run(x):\n    return _cache.get(x.data_ptr())\n", "triton").verdict() == "audit_only"
+    assert analyze("_cache = {}\ndef run(x):\n    _cache[x.data_ptr()] = 1\n    return x\n", "triton").verdict() == "review_required"
 
 
 # ---------------------------------------------------------------- R2 / R9: job schema, timing normalization
@@ -134,20 +135,21 @@ def cpu_worker(monkeypatch, tmp_path):
         return TimingRecord(1, 3, [0.5, 0.5, 0.5], 0.5, True, True, True, None, 4, "graph", True, 253)
     monkeypatch.setattr(timing, "measure", fake_measure)
 
-    def run(src: str) -> dict:
+    def run(src: str, cases: list | None = None) -> dict:
         p = tmp_path / "impl_triton.py"
         p.write_text(src)
         study = ms.load_study()
-        job = build_evaluation_job(operator="vector_add", dtype="fp32", params={"n": 64}, dsl="triton", device="B200",
-                                   arch=None, rules=VA_RULES, study=study)
+        job = build_evaluation_job(operator="vector_add", dtype="fp32", cases=cases, params=None if cases else {"n": 64},
+                                   dsl="triton", device="B200", arch=None, rules=VA_RULES, study=study)
         return w.run_job(job.worker_job(source_path=str(p), sandbox_dir=str(tmp_path), seed=1, round_index=1, attempt=1))
     return run
 
 
 def test_worker_requires_exports_and_fixed_config(cpu_worker):
     ok = cpu_worker("import torch\ndef run(x, y):\n    return x + y\ndef get_last_config():\n    return {'BLOCK': 64}\n")
-    assert ok["status"] == "valid" and ok["config"] == {"BLOCK": 64} and ok["stages"]["config_stability"]["stable"]
-    assert ok["latency_ms_samples"] == [0.5, 0.5, 0.5] and ok["timing_mode_differs"] is False
+    assert ok["status"] == "valid" and ok["cases"][0]["config"] == {"BLOCK": 64} and ok["valid_cases"] == ok["cases_total"] == 1
+    assert ok["cases"][0]["latency_ms_samples"] == [0.5, 0.5, 0.5] and ok["timing_mode_differs"] is False
+    assert abs(ok["latency_ms_geomean"] - 0.5) < 1e-12 and len(ok["cases"][0]["config_reads"]) == 3
     missing = cpu_worker("import torch\ndef run(x, y):\n    return x + y\n")
     assert missing["status"] == "interface_error" and "get_last_config" in missing["diagnostic"]
     notdict = cpu_worker("import torch\ndef run(x, y):\n    return x + y\ndef get_last_config():\n    return [1]\n")
@@ -331,19 +333,23 @@ def test_truncated_response_is_a_format_error(tmp_path, study, folds):
 
 
 # ---------------------------------------------------------------- execution-confirmed violation + fallback prompt (item 11)
-def test_execution_confirmed_violation_triggers_repair_and_violation_round_hides_code(tmp_path, study, folds):
+def test_execution_confirmed_violation_closes_the_round_and_next_round_hides_its_code(tmp_path, study, folds):
+    # protocol revision 3: an execution-confirmed violation closes the round with its ONE attempt (no regeneration);
+    # the next round gets the diagnostic and the last compliant code, never the rejected code
     ctx, job, st, cfg = _ctx(study, folds)
     viol = scripted_text("impl_triton.py", "# MOCK: contract_violation\n# SECRET_REJECTED_CODE\ndef run(*a): pass\ndef get_last_config(): return {}")
     good = scripted_text("impl_triton.py", "# MOCK: valid 1.0\n# GOOD_CODE\ndef run(*a): pass\ndef get_last_config(): return {}")
-    prov = MockProvider([good, viol, viol, viol, good]) if False else MockProvider([{"text": good}, {"text": viol}, {"text": viol}, {"text": viol}, {"text": good}])
+    prov = MockProvider([{"text": good}, {"text": viol}, {"text": good}])
     r = TrajectoryRunner(state=st, tdir=tmp_path / "t", ctx=ctx, provider=prov, evaluator=MockEvaluator(), job=job, cfg=cfg)
     for _ in range(2):
         r.step()                                           # round 1 valid
-    for _ in range(6):
-        r.step()                                           # round 2: 3 execution-confirmed violations
-    assert st.rounds[1].status == "contract_violation" and [a.verdict for a in st.rounds[1].attempts] == ["confirmed_violation"] * 3
+    for _ in range(2):
+        r.step()                                           # round 2: one generation, execution-confirmed violation
+    assert st.rounds[1].status == "contract_violation" and [a.verdict for a in st.rounds[1].attempts] == ["confirmed_violation"]
+    assert len(prov.requests) == 2
     r.step()                                               # round 3 request
     req = prov.requests[-1].user
+    assert len(prov.requests) == 3 and "Optimization round 3 of 5" in req
     assert "SECRET_REJECTED_CODE" not in req and "GOOD_CODE" in req and "no compliant implementation" in req
 
 
@@ -551,7 +557,7 @@ def test_retry_incomplete_reopens_only_evaluation_side_failures():
 
 def test_data_ptr_guard_is_not_a_cache_key_but_dict_use_is():
     guard = "import torch\ndef run(x):\n    y = x.contiguous()\n    assert y.data_ptr() == x.data_ptr()\n    return y.clone()\n"
-    assert not [e for e in analyze(guard, "triton").evidence if e.category == "cache"]
+    assert not [e for e in analyze(guard, "triton").evidence if e.category == "cache" and e.level != "audit"]
     keyed = "import torch\n_seen = {}\ndef run(x):\n    k = x.data_ptr()\n    if k in _seen:\n        return _seen[k]\n    return x\n"
     assert [e for e in analyze(keyed, "triton").evidence if e.category == "cache"]
     sub = "import torch\n_c = {}\ndef run(x):\n    return _c[x.data_ptr()]\n"

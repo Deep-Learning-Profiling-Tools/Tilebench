@@ -26,8 +26,7 @@ have defaults and must not affect the computation).
 
 - `input`: flat `(N*C*H*W,)`, contiguous, dtype fp16, bf16 or fp32; NCHW
   order (plane `n*C + c` occupies `H*W` consecutive elements). Read-only.
-  The task's declared shape has `W == H`; supporting shapes other than the
-  declared one is not required.
+  Every configured case has `W == H`; supporting shapes outside the task's configured cases is not required.
 - `kernel_size`, `stride`, `padding`: ints; the same value applies to both
   spatial axes; padding is symmetric.
 - Output: flat `(N*C*H_out*W_out,)` in NCHW order, dtype of `input`,

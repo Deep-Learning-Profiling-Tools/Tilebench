@@ -3,7 +3,7 @@ import pytest
 
 from tilebench.llm.v2.devtools import synthetic_context
 from tilebench.llm.v2.prompts import feedback as fb
-from tilebench.llm.v2.prompts.renderer import RenderError, render, render_initial, render_refinement, render_repair, render_system
+from tilebench.llm.v2.prompts.renderer import TEMPLATE_DIR, RenderError, render, render_initial, render_refinement, render_system
 
 SCRUB_TERMS = ("roofline", "T_SOL", "speedup", "stop_score", "pct_peak", "human", "torch_ms")
 
@@ -25,7 +25,8 @@ def test_initial_prompt_has_task_components_and_no_scores(study, folds):
     ctx, _, _ = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
     u = render_initial(ctx)
     assert "# API reference: triton 3.6.0" in u and "# Device context: B200" in u and "canonical algorithm contract" in u
-    assert "`n` = `" in u and "atol=" in u and "def run(" in u
+    assert "an integer from `1048576` to `20971520`, always a multiple of `1048576`" in u and "atol=" in u and "def run(" in u
+    assert "20 configured cases" in u and "case_id" not in u                     # the domain, never the case list
     assert "Optimization guidance" not in u
     fb.assert_feedback_clean(u.split("# Task")[1])
     assert "flops_expr" not in u and "bytes_expr" not in u
@@ -41,25 +42,32 @@ def test_enhanced_prompt_adds_only_optimization_block(study, folds):
 
 def test_refinement_feedback_is_runtime_only_and_scrubbed(study, folds):
     ctx, _, _ = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
-    prev = {"round": 2, "status": "numerical_error", "source": "def run(x): return x", "config": {"BLOCK": 64},
-            "latency_ms_mean": None, "latency_ms_samples": None,
+    prev = {"round": 2, "status": "numerical_error", "source": "def run(x): return x", "configs_distinct": [{"BLOCK": 64}],
+            "latency_ms_geomean": None, "valid_cases": 7, "cases_total": 20, "cases_evaluated": 20,
+            "first_failing_case": {"params": {"n": 3145728}, "status": "numerical_error"},
             "diagnostic": "mismatch at 3 elements\nroofline 55% speedup 2x T_SOL=1.0\nsecond line"}
-    best = {"round": 1, "latency_ms_mean": 1.5, "source": "def run(x): return x+0", "config": {"BLOCK": 32}}
-    history = [{"round": 1, "status": "valid", "latency_ms_mean": 1.5, "latency_ms_samples": [1.4, 1.5, 1.6]}]
+    best = {"round": 1, "latency_ms_geomean": 1.5, "source": "def run(x): return x+0", "configs_distinct": [{"BLOCK": 32}]}
+    history = [{"round": 1, "status": "valid", "latency_ms_geomean": 1.5, "valid_cases": 20, "cases_total": 20}]
     u = render_refinement(ctx, round_index=3, prev=prev, best_valid=best, history=history, limits=study["feedback"])
     assert "[line withheld]" in u and "roofline" not in u and "speedup" not in u
-    assert "1.5000 ms" in u and "| 1 | 1.5000 | 1.4000, 1.5000, 1.6000 |" in u
+    assert "valid on 7 of 20 cases" in u and "first failing case: n=3145728" in u
+    assert "geometric mean 1.5000 ms" in u and "| 1 | 20/20 | 1.5000 |" in u
     assert "Best valid candidate so far (round 1" in u
     fb.assert_feedback_clean(u.split("# Optimization round")[1])
 
 
-def test_repair_prompt_names_attempt_and_fallback(study, folds):
+def test_violation_round_feeds_its_diagnostic_to_the_next_round_and_no_repair_prompt_exists(study, folds):
+    # protocol revision 3: a confirmed violation closes its round; the NEXT round's prompt carries the diagnostic
+    # and the last compliant implementation; there is no same-round repair template any more
+    assert not (TEMPLATE_DIR / "compliance_repair.md").exists()
     ctx, _, _ = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
-    u = render_repair(ctx, round_index=4, attempt=2, max_attempts=3, violations=["line 3: autotune decorator triton.autotune"],
-                      rejected_source="bad", fallback={"round": 2, "source": "good"})
-    assert "attempt 2 of 3" in u and "autotune decorator" in u and "earlier compliant implementation (round 2)" in u
-    u2 = render_repair(ctx, round_index=1, attempt=3, max_attempts=3, violations=["x"], rejected_source="bad", fallback=None)
-    assert "No earlier compliant implementation" in u2
+    prev = {"round": 2, "status": "contract_violation", "source": None, "configs_distinct": None, "latency_ms_geomean": None,
+            "valid_cases": None, "cases_total": None, "diagnostic": "line 3: autotune decorator triton.autotune"}
+    u = render_refinement(ctx, round_index=3, prev=prev, best_valid=None, history=[], limits=study["feedback"],
+                          fallback={"round": 1, "source": "good"})
+    assert "Optimization round 3 of 5" in u and "autotune decorator triton.autotune" in u
+    assert "Last compliant implementation (round 1)" in u and "rejected for a contract violation" in u
+    assert "attempt" not in u.split("# Optimization round")[1].lower()
 
 
 def test_sanitize_truncates_by_fixed_rule():

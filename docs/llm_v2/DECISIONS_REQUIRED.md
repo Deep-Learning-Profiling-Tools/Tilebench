@@ -195,8 +195,8 @@ E7. **Execution-confirmed violations** (an autotuner object reachable from
 the generated module; an output that shares storage with an input where the
 contract requires a fresh output) are treated as confirmed violations after
 the candidate cleared the static check: the attempt verdict becomes
-`confirmed_violation` and the same-round repair rule applies (≤3
-generations). Confirm. **[protocol]**
+`confirmed_violation`. Revision 3 (2026-10-06): the round closes as
+`contract_violation`, no regeneration. Decided. **[protocol]**
 
 E8. **Capture-failure policy** is versioned in `study.yaml`
 (`timing.capture_failure_policy: time_eagerly_and_flag`): the candidate is
@@ -213,7 +213,7 @@ label. Confirm the separation and the label.
 E10. **Static-check corroboration**: a contract regex of level `confirmed`
 is confirmed only when it hits in its declared scope (host code by default;
 kernel bodies are tile arithmetic) on a computational line of comment- and
-string-stripped text; otherwise it is downgraded to `review_required`.
+string-stripped text; otherwise it is downgraded (revision 3 / checker v2: to `audit_only`).
 Rule scopes were assigned to all 250 rules (233 host, 17 any). Confirm.
 
 E12. **Evaluation wall-clock limit per candidate.** The launcher kills the

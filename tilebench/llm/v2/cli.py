@@ -218,9 +218,11 @@ def _campaign_spec(a, condition: str):
                         model=a.model, operators=a.operators, dtypes=a.dtypes,
                         out_root=Path(a.out_root) if a.out_root else None, resume=a.resume,
                         stop_after_rounds=a.stop_after_rounds, isolation=a.isolation,
-                        worker_timeout_s=a.worker_timeout, max_trajectories=a.max_trajectories,
+                        worker_timeout_s=a.worker_timeout or int(ms.load_study()["evaluation"]["worker_timeout_s"]),
+                        max_trajectories=a.max_trajectories,
                         retry_incomplete=a.retry_incomplete, resume_transport=a.resume_transport,
-                        resume_reason=a.reason, allow_evaluator_change=a.allow_evaluator_change, executor=a.executor)
+                        resume_reason=a.reason, allow_evaluator_change=a.allow_evaluator_change, executor=a.executor,
+                        shard=getattr(a, "shard", None))
 
 
 def _run_live(a, condition: str) -> int:
@@ -229,7 +231,9 @@ def _run_live(a, condition: str) -> int:
     summary = run_campaign(spec, log=_log)
     _print(summary)
     if summary.get("refused"):
-        print(f"REFUSED: {len(summary['preflight']['blockers'])} blocker(s); no API call, no device run.", file=sys.stderr)
+        n = len((summary.get("preflight") or {}).get("blockers") or [])
+        print(f"REFUSED: {n} blocker(s){'; ' + summary['reason'] if summary.get('reason') else ''}; no API call, no device run.",
+              file=sys.stderr)
         return 2
     return 0
 
@@ -337,9 +341,18 @@ def cmd_distill(a) -> int:
     for ref in scope.selected:
         st = json.loads(Path(ref.path).read_text()); tk = st["task"]
         sc = scoring_cache.setdefault(tk["device"], campaign_scoring(Path(a.campaign_dir), tk["device"]))
-        rec = empirical.t_emp(tk["device"], tk["operator"], tk["dtype"], tk["params"], tk.get("problem_size", 1),
-                              load_operator_config(tk["operator"]).get("metrics", {}), sc["modes_doc"], sc["profile"])
-        sol_info[ref.trajectory_id] = {**rec.to_dict(), "scoring_binding_source": sc["source"]}
+        mcfg = load_operator_config(tk["operator"]).get("metrics", {})
+        if tk.get("n_cases"):
+            from tilebench.llm.v2.tasks.case_sets import case_set
+            targets = empirical.case_targets(tk["device"], tk["operator"], tk["dtype"], case_set(tk["operator"])["cases"], mcfg,
+                                             sc["modes_doc"], sc["profile"])
+            sol_info[ref.trajectory_id] = {"case_t_emp_ms": {c: r.t_emp_ms for c, r in targets.items()},
+                                           "status": "ok" if all(r.status == "ok" for r in targets.values()) else "not_ok",
+                                           "scoring_binding_source": sc["source"]}
+        else:
+            rec = empirical.t_emp(tk["device"], tk["operator"], tk["dtype"], tk["params"], tk.get("problem_size", 1),
+                                  mcfg, sc["modes_doc"], sc["profile"])
+            sol_info[ref.trajectory_id] = {**rec.to_dict(), "scoring_binding_source": sc["source"]}
     (out / "sol_info.json").write_text(json.dumps(sol_info, indent=1, sort_keys=True) + "\n")
     try:
         obs = extract_observations(scope, provider, cfg, read_state=lambda p: json.loads(p.read_text()), out_dir=out,
@@ -355,64 +368,137 @@ def cmd_distill(a) -> int:
     return 0
 
 
+REVIEW_FORBIDDEN_KEYS = ("latency", "speedup", "t_emp", "t_sol", "efficiency", "usd", "cost", "token", "ranking", "score")
+
+
+def review_evidence(tdir: Path, st) -> dict:
+    """Everything a compliance adjudicator may use, and nothing else: candidate source, frozen contract,
+    evaluator rules, exact checker evidence, task interface. No latency, speedup, T_emp, E(B), token/USD
+    cost or ranking (asserted)."""
+    import hashlib
+    from tilebench.llm.v2.contracts.loader import load_contract
+    rec = st.rounds[-1]
+    att = rec.attempts[-1]
+    comp = att.compliance or {}
+    contract = load_contract(st.task["operator"], require_approved=False)
+    src = Path(att.source_path).read_text() if att.source_path else ""
+    out = {"trajectory_id": st.trajectory_id, "trajectory_dir": str(tdir), "campaign": st.campaign, "run_type": st.run_type,
+           "operator": st.task["operator"], "dtype": st.task["dtype"], "dsl": st.task["dsl"], "device": st.task["device"],
+           "model": st.model, "condition": st.condition, "round": rec.round, "attempt": att.attempt,
+           "candidate_path": att.source_path, "candidate_sha256": hashlib.sha256(src.encode()).hexdigest(),
+           "recorded_candidate_sha256": att.candidate_sha256,
+           "contract_path": str(Path("tilebench/llm/v2/contracts/data") / st.task["operator"] / "contract.md"),
+           "contract_sha256": contract.sha256, "trajectory_contract_sha256": (st.content_hashes or {}).get("contract"),
+           "rules_sha256": att.rules_sha256, "checker": att.checker_fingerprint,
+           "review_items": comp.get("review_items") or [],
+           "checker_evidence": [e for e in ((comp.get("static") or {}).get("evidence") or []) + (comp.get("contract_evidence") or [])
+                                if e.get("level") == "review"],
+           "interface": {"output_file": st.output_file, "n_cases": st.task.get("n_cases"), "case_set_id": st.task.get("case_set_id")}}
+    def keys(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                yield str(k).lower()
+                yield from keys(v)
+        elif isinstance(o, list):
+            for v in o:
+                yield from keys(v)
+    leaked = sorted({k for k in keys(out) for f in REVIEW_FORBIDDEN_KEYS if f in k})
+    if leaked:
+        raise RuntimeError(f"review evidence would carry performance/cost fields {leaked}")
+    return out
+
+
+def cmd_review_packet(a) -> int:
+    """Print the adjudication evidence of a review_required trajectory (no performance fields)."""
+    from tilebench.llm.v2.orchestration.state import TrajectoryState
+    tdir = Path(a.trajectory_dir)
+    st = TrajectoryState.load(tdir / "trajectory.json")
+    if st.status != "review_required":
+        print(f"{st.trajectory_id} is {st.status}, not review_required", file=sys.stderr)
+        return 1
+    _print(review_evidence(tdir, st))
+    return 0
+
+
 def cmd_review_resolve(a) -> int:
-    """Record a compliance decision for a review_required trajectory."""
+    """Record a compliance decision for a review_required trajectory. Formal campaigns are adjudicated by the
+    supervising Claude Code session (reviewer `claude-code`, study.yaml compliance.adjudicator); no human
+    reviewer and no reviewer API call is involved."""
+    import hashlib
     from tilebench.llm.v2.orchestration import state_machine as sm
     from tilebench.llm.v2.orchestration.state import TrajectoryState
-    tpath = Path(a.trajectory_dir) / "trajectory.json"
+    tdir = Path(a.trajectory_dir)
+    tpath = tdir / "trajectory.json"
     st = TrajectoryState.load(tpath)
+    if ms.excluded_campaign(st.campaign) and not a.show:
+        print(f"campaign {st.campaign!r} is excluded (manifests/excluded_campaigns.yaml); its trajectories are kept unchanged "
+              "and are never resolved, rechecked or resumed", file=sys.stderr)
+        return 2
     rec = st.rounds[-1]
     att = rec.attempts[-1]
     evidence = (att.compliance or {}).get("review_items", [])
     if a.show:
-        _print({"trajectory_id": st.trajectory_id, "round": rec.round, "attempt": att.attempt, "review_items": evidence,
-                "source_path": att.source_path})
+        _print(review_evidence(tdir, st) if st.status == "review_required" else
+               {"trajectory_id": st.trajectory_id, "status": st.status})
         return 0
     if a.recheck:
-        # Re-run the current checker on the stored candidate (e.g. after a checker fix). Only a `clear`
-        # re-check resolves the review; anything else leaves the trajectory blocked for a human decision.
+        # Re-run the current checker on the stored candidate (e.g. after a checker fix). Only a `clear`/`audit_only`
+        # re-check resolves the review; anything else leaves the trajectory blocked for adjudication.
         from tilebench.llm.v2.contracts.loader import load_contract
         from tilebench.llm.v2.validation.contract_checks import CHECKER_VERSION, check_compliance
         rules = load_contract(st.task["operator"], require_approved=False).rules
         res = check_compliance(Path(att.source_path).read_text(), st.task["dsl"], rules)
         from tilebench.llm.v2.evaluation.fingerprint import checker_fingerprint
         rc = res.to_dict(); rc["diagnostics"] = res.diagnostics(); rc["checker_version"] = CHECKER_VERSION
-        rc["checker"] = checker_fingerprint(); rc["executor"] = a.reviewer; rc["checked_at"] = time.time()
-        rc["candidate_sha256"] = __import__("hashlib").sha256(Path(att.source_path).read_bytes()).hexdigest()
-        adir = Path(a.trajectory_dir) / f"round_{rec.round:02d}" / f"attempt_{att.attempt}"
+        rc["checker"] = checker_fingerprint(); rc["executor"] = a.reviewer or ms.ADJUDICATOR; rc["checked_at"] = time.time()
+        rc["candidate_sha256"] = hashlib.sha256(Path(att.source_path).read_bytes()).hexdigest()
+        adir = tdir / f"round_{rec.round:02d}" / f"attempt_{att.attempt}"
         n = len(list(adir.glob("compliance_recheck_*.json"))) + 1
         rc_path = adir / f"compliance_recheck_{n:04d}.json"        # append-only; the first compliance.json is never rewritten
         rc["supersedes"] = att.compliance_revisions[-1] if att.compliance_revisions else "compliance.json"
         rc_path.write_text(json.dumps(rc, indent=1) + "\n")
         att.compliance_revisions.append(rc_path.name)
-        if res.verdict != "clear":
+        if res.verdict not in ("clear", "audit_only"):
             _print({"trajectory_id": st.trajectory_id, "round": rec.round, "recheck_verdict": res.verdict,
                     "review_items": res.review_items(), "resolved": False})
             return 1
         a.decision = "compliant"
-        a.note = (a.note or "") + f" [recheck under {CHECKER_VERSION} ({rc_path.name}): clear; previous items: {evidence}]"
+        a.note = (a.note or "") + f" [recheck under {CHECKER_VERSION} ({rc_path.name}): {res.verdict}; previous items: {evidence}]"
         a.reviewer = f"recheck:{CHECKER_VERSION}"
         att.compliance = {**(att.compliance or {}), "superseded_by": rc_path.name}
     if not a.decision:
         print("a --decision (or --recheck) is required", file=sys.stderr)
         return 2
-    if st.run_type == "formal" and not a.recheck and (not a.reviewer or a.reviewer == "human"):
-        print("formal trajectory: a designated human study reviewer must be named with --reviewer <name> "
-              "(no default identity, no LLM reviewer)", file=sys.stderr)
+    reviewer = a.reviewer or ms.ADJUDICATOR
+    adjudicator = (ms.load_study().get("compliance") or {}).get("adjudicator", ms.ADJUDICATOR)
+    if st.run_type == "formal" and not a.recheck and reviewer != adjudicator:
+        print(f"formal trajectory: the compliance adjudicator is {adjudicator!r} (study.yaml compliance.adjudicator)", file=sys.stderr)
         return 2
-    if st.run_type == "formal" and not a.recheck and not (a.note or "").strip():
-        print("formal trajectory: --note must record the evidence behind the decision", file=sys.stderr)
+    if not a.recheck and not (a.note or "").strip():
+        print("--note must record the rationale behind the decision", file=sys.stderr)
         return 2
-    a.reviewer = a.reviewer or "human"
-    sm.resolve_review(st, rec.round, a.decision, a.note, reviewer=a.reviewer)
+    packet = review_evidence(tdir, st) if not a.recheck else None
+    if packet is not None:
+        if packet["recorded_candidate_sha256"] and packet["candidate_sha256"] != packet["recorded_candidate_sha256"]:
+            print("candidate file differs from the recorded candidate sha256; refusing to decide", file=sys.stderr)
+            return 2
+        if packet["trajectory_contract_sha256"] and packet["contract_sha256"] != packet["trajectory_contract_sha256"]:
+            print("the frozen contract changed since this trajectory started (framework issue): pause the campaign and "
+                  "version the fix; no decision recorded", file=sys.stderr)
+            return 2
+    now = time.time()
+    record = {"rationale": a.note, "candidate_sha256": att.candidate_sha256,
+              "contract_sha256": (packet or {}).get("contract_sha256") or (st.content_hashes or {}).get("contract"),
+              "rules_sha256": att.rules_sha256, "checker": att.checker_fingerprint, "evidence": evidence,
+              "checker_evidence": (packet or {}).get("checker_evidence"), "t": now,
+              "decided_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now)), "reviewer_api_calls": 0}
+    sm.resolve_review(st, rec.round, a.decision, a.note, reviewer=reviewer,
+                      rounds=(st.protocol or {}).get("rounds") or ms.load_study()["trajectory"]["rounds"], record=record)
     st.save(tpath)
     from tilebench.llm.v2.providers.ledger import append_jsonl
-    append_jsonl(Path(a.trajectory_dir) / "reviews.jsonl", {"round": rec.round, "attempt": att.attempt, "decision": a.decision,
-                                                             "note": a.note, "reviewer": a.reviewer, "evidence": evidence,
-                                                             "candidate_sha256": att.candidate_sha256,
-                                                             "checker": att.checker_fingerprint, "rules_sha256": att.rules_sha256,
-                                                             "run_type": st.run_type, "t": time.time()})
-    _print({"trajectory_id": st.trajectory_id, "round": rec.round, "decision": a.decision, "status": st.status})
+    append_jsonl(tdir / "reviews.jsonl", {"round": rec.round, "attempt": att.attempt, "decision": a.decision,
+                                          "note": a.note, "reviewer": reviewer, "run_type": st.run_type, **record})
+    _print({"trajectory_id": st.trajectory_id, "round": rec.round, "decision": a.decision, "reviewer": reviewer, "status": st.status})
     return 0
 
 
@@ -433,6 +519,10 @@ def cmd_reevaluate(a) -> int:
     from tilebench.llm.v2.orchestration.state import TrajectoryState
     tdir = Path(a.trajectory_dir)
     st = TrajectoryState.load(tdir / "trajectory.json")
+    if ms.excluded_campaign(st.campaign):
+        print(f"campaign {st.campaign!r} is excluded (manifests/excluded_campaigns.yaml); nothing is written into it",
+              file=sys.stderr)
+        return 2
     rec = next(r for r in st.rounds if r.round == a.round)
     att = rec.attempts[(a.attempt - 1) if a.attempt else -1]
     if not att.source_path:
@@ -443,7 +533,17 @@ def cmd_reevaluate(a) -> int:
     contract = load_contract(st.task["operator"], require_approved=False)
     identity = {"campaign": st.campaign, "run_type": st.run_type, "model": st.model, "condition": st.condition,
                 "trajectory_id": st.trajectory_id, "reevaluation": True}
-    job = build_evaluation_job(operator=st.task["operator"], dtype=st.task["dtype"], params=st.task["params"], dsl=st.task["dsl"],
+    a.worker_timeout = a.worker_timeout or int(study["evaluation"]["worker_timeout_s"])
+    cases = None
+    if st.task.get("n_cases"):
+        from tilebench.llm.v2.tasks.case_sets import case_set
+        entry = case_set(st.task["operator"])
+        if entry["case_set_id"] != st.task.get("case_set_id"):
+            print("the trajectory's case set differs from the frozen case_sets.yaml", file=sys.stderr)
+            return 2
+        cases = entry["cases"]
+    job = build_evaluation_job(operator=st.task["operator"], dtype=st.task["dtype"], cases=cases,
+                               params=None if cases else st.task["params"], dsl=st.task["dsl"],
                                device=st.task["device"], arch=hardware.detect_arch(), rules=contract.rules, study=study, identity=identity)
     evaluator = SubprocessEvaluator(device=st.task["device"], timeout_s=a.worker_timeout, sandbox_root=tdir.parent / "_reeval_sandbox",
                                     isolation=a.isolation, lock_root=LLM_V2_OUTPUT_ROOT)
@@ -467,10 +567,10 @@ def cmd_reevaluate(a) -> int:
     (rdir / "evaluation.json").write_text(json.dumps(result, indent=1, default=str) + "\n")
     rec.evaluation_revisions.append(rev)
     note = (f"round {rec.round} attempt {att.attempt}: independent re-evaluation {rev} by {a.executor} ({a.reason}): "
-            f"{result.get('status')} {result.get('latency_ms_samples')}; recorded status {rec.status} "
+            f"{result.get('status')} valid cases {result.get('valid_cases')}/{result.get('cases_total')}; recorded status {rec.status} "
             + ("replaced (adopted)" if a.adopt else "kept (not adopted)"))
     if a.adopt:
-        prior = {"status": rec.status, "latency_ms_mean": rec.latency_ms_mean, "latency_ms_samples": rec.latency_ms_samples,
+        prior = {"status": rec.status, "latency_ms_geomean": rec.latency_ms_geomean, "valid_cases": rec.valid_cases,
                  "evaluation_revision": rec.evaluation_revision}
         rec.status = "pending"
         sm.apply_evaluation(st, rec.round, result)
@@ -479,9 +579,9 @@ def cmd_reevaluate(a) -> int:
     st.notes.append(note)
     st.save(tdir / "trajectory.json")
     _print({"trajectory_id": st.trajectory_id, "round": rec.round, "attempt": att.attempt, "revision": rev,
-            "status": result.get("status"), "latency_ms_mean": result.get("latency_ms_mean"),
-            "latency_ms_samples": result.get("latency_ms_samples"),
-            "timing_execution_mode": (result.get("timing") or {}).get("timing_execution_mode"),
+            "status": result.get("status"), "valid_cases": result.get("valid_cases"), "cases_total": result.get("cases_total"),
+            "latency_ms_geomean": result.get("latency_ms_geomean"),
+            "timing_mode_differs": result.get("timing_mode_differs"),
             "isolation": result.get("isolation", {}).get("backend"), "adopted": bool(a.adopt), "dir": str(rdir)})
     return 0 if result.get("status") == "valid" else 1
 
@@ -583,8 +683,40 @@ def cmd_calibration_check(a) -> int:
 
 def cmd_metrics(a) -> int:
     from tilebench.llm.v2.devtools import recompute_metrics
-    _print(recompute_metrics(Path(a.campaign_dir), budgets=a.budgets))
+    _print(recompute_metrics(Path(a.campaign_dir), budgets=a.budgets, usd_budgets=a.usd_budgets))
     return 0
+
+
+def cmd_cost_report(a) -> int:
+    from tilebench.llm.v2.devtools import cost_report
+    _print(cost_report(Path(a.campaign_dir)))
+    return 0
+
+
+def cmd_billing_reconcile(a) -> int:
+    from tilebench.llm.v2.providers.billing import reconcile
+    _print(reconcile(Path(a.campaign_dir), start=a.start, end=a.end))
+    return 0
+
+
+def cmd_schedule(a) -> int:
+    """Every (model, DSL) track in ONE process: adaptive per-provider concurrency and a hard global
+    evaluation-backlog budget (orchestration.scheduler)."""
+    from tilebench.llm.v2.orchestration.scheduler import run_scheduled
+    models = a.models or ([a.model] if a.model else None)
+    if not models:
+        print("--models (or --model) is required", file=sys.stderr)
+        return 2
+    a.model = models[0]
+    spec = _campaign_spec(a, a.condition)
+    out = run_scheduled(spec, a.dsls, models=models, initial=a.initial_concurrency, max_limit=a.max_concurrency,
+                        max_pending=a.max_pending_evaluations, log=_log)
+    if out.get("refused"):
+        print(f"REFUSED: {out['reason']}", file=sys.stderr)
+        return 2
+    _print({k: out[k] for k in ("campaign", "models", "scheduler", "limiter_final", "eval_budget", "evaluations_completed",
+                                "max_pending_evaluations_seen", "refused_tracks", "errors")})
+    return 2 if out["errors"] else 0
 
 
 def cmd_campaign_report(a) -> int:
@@ -671,7 +803,7 @@ def _add_live_args(s: argparse.ArgumentParser) -> None:
     s.add_argument("--resume", action="store_true", help="continue persisted trajectories (never re-requests archived responses)")
     s.add_argument("--stop-after-rounds", type=int, help="pause after this many closed rounds (resumable)")
     s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
-    s.add_argument("--worker-timeout", type=int, default=1800)
+    s.add_argument("--worker-timeout", type=int, default=None, help="default: study.yaml evaluation.worker_timeout_s")
     s.add_argument("--max-trajectories", type=int)
     s.add_argument("--retry-incomplete", action="store_true",
                    help="with --resume: re-evaluate the last round of a trajectory marked incomplete by an evaluation-side "
@@ -683,6 +815,8 @@ def _add_live_args(s: argparse.ArgumentParser) -> None:
     s.add_argument("--allow-evaluator-change", action="store_true",
                    help="validation runs only: continue a trajectory although the evaluator fingerprint changed (recorded)")
     s.add_argument("--executor", default="runner", help="who runs this process (recorded in META/compliance/reopen events)")
+    s.add_argument("--shard", help="deterministic runtime shard 'i/n' of the sorted operator list (independent of folds); "
+                                   "shards are disjoint, and a per-trajectory lock keeps any trajectory in one process")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -719,6 +853,21 @@ def build_parser() -> argparse.ArgumentParser:
         s = sub.add_parser(name, help=f"{name} campaign: preflight, then the live chain (provider -> runner -> isolated evaluator)")
         _add_live_args(s); s.set_defaults(fn=fn)
 
+    s = sub.add_parser("schedule", help="every (model, DSL) track in ONE process: adaptive per-provider generation "
+                                        "concurrency (3 -> 6 -> 12 -> ...), 429/overload backoff, hard global evaluation backlog")
+    _add_live_args(s)
+    for act in s._actions:                     # --dsls / --models replace --dsl / --model for the scheduler
+        if act.dest in ("dsl", "model"):
+            act.required = False
+    s.add_argument("--dsls", nargs="+", required=True, help="DSL tracks run by this process (e.g. triton cutile tilelang)")
+    s.add_argument("--models", nargs="+", help="generator models run by this process (e.g. gpt claude)")
+    s.add_argument("--condition", default="base", choices=["base", "enhanced"])
+    s.add_argument("--initial-concurrency", type=int, default=3)
+    s.add_argument("--max-concurrency", type=int, default=96)
+    s.add_argument("--max-pending-evaluations", type=int, default=16,
+                   help="GLOBAL hard bound: candidates being generated + waiting for + in evaluation (all models)")
+    s.set_defaults(fn=cmd_schedule, dsl="triton")
+
     s = sub.add_parser("probe-provider", help="one real request with the configured model/effort/cap; records ids, status, usage")
     s.add_argument("--model", required=True); s.add_argument("--prompt", default="Reply with the single word OK.")
     s.add_argument("--out", help="write the full record (incl. raw response) to this JSON file"); s.set_defaults(fn=cmd_probe_provider)
@@ -732,10 +881,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="formal: proceed although expected (operator, dtype, model) sources are missing; recorded in scope.json")
     s.add_argument("--out", required=True); s.set_defaults(fn=cmd_distill)
 
-    s = sub.add_parser("review-resolve", help="record a human compliance decision for a review_required trajectory")
+    s = sub.add_parser("review-packet", help="adjudication evidence of a review_required trajectory (no performance fields)")
+    s.add_argument("--trajectory-dir", required=True); s.set_defaults(fn=cmd_review_packet)
+    s = sub.add_parser("review-resolve", help="record a compliance decision (formal: reviewer claude-code) for a review_required trajectory")
     s.add_argument("--trajectory-dir", required=True)
     s.add_argument("--decision", choices=["compliant", "violation"])
-    s.add_argument("--note", default=""); s.add_argument("--reviewer", default=None, help="designated human reviewer (required for formal trajectories)")
+    s.add_argument("--note", default="", help="rationale (required): what in the candidate/contract/rules decides compliance")
+    s.add_argument("--reviewer", default=None, help="adjudicator identity; formal campaigns: claude-code (the default)")
     s.add_argument("--show", action="store_true", help="print the pending evidence without deciding")
     s.add_argument("--recheck", action="store_true",
                    help="re-run the current checker on the stored candidate; resolves only if the re-check is clear")
@@ -744,11 +896,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("re-evaluate", help="append-only independent re-evaluation of an archived candidate (no request; eval_NNNN revision)")
     s.add_argument("--trajectory-dir", required=True); s.add_argument("--round", type=int, required=True)
     s.add_argument("--attempt", type=int); s.add_argument("--reason", required=True); s.add_argument("--executor", default="operator")
-    s.add_argument("--worker-timeout", type=int, default=1800); s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
+    s.add_argument("--worker-timeout", type=int, default=None); s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
     s.add_argument("--adopt", action="store_true", help="also make the new result the round's recorded status (default: record only)")
     s.set_defaults(fn=cmd_reevaluate)
 
-    s = sub.add_parser("run-mock", help="ten-round mock trajectory with persistence and resume")
+    s = sub.add_parser("run-mock", help="five-round mock trajectory with persistence and resume")
     s.add_argument("--out", required=True)
     for name, default in (("--operator", "vector_add"), ("--dtype", "fp16"), ("--device", "B200"), ("--dsl", "triton")):
         s.add_argument(name, default=default)
@@ -774,8 +926,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("scoring-table", help="T_emp / status / hash table of every eligible task of a device against its registered profile")
     s.add_argument("--device", required=True); s.add_argument("--dsl"); s.add_argument("--out"); s.set_defaults(fn=cmd_scoring_table)
     s = sub.add_parser("metrics", help="recompute E(B) curves from a campaign directory")
-    s.add_argument("campaign_dir"); s.add_argument("--budgets", nargs="*", type=int); s.set_defaults(fn=cmd_metrics)
+    s.add_argument("campaign_dir"); s.add_argument("--budgets", nargs="*", type=int); s.add_argument("--usd-budgets", nargs="*", type=float); s.set_defaults(fn=cmd_metrics)
     s = sub.add_parser("coverage", help="task coverage / status counts of a campaign directory"); s.add_argument("campaign_dir"); s.set_defaults(fn=cmd_coverage)
+    s = sub.add_parser("cost-report", help="logical tokens and estimated list-price USD by provider/model/DSL/operator/trajectory")
+    s.add_argument("campaign_dir"); s.set_defaults(fn=cmd_cost_report)
+    s = sub.add_parser("billing-reconcile", help="OPTIONAL: provider aggregated billing cost for a time window "
+                                                 "(admin credentials only; stored apart from the estimated USD)")
+    s.add_argument("campaign_dir"); s.add_argument("--start", type=float, required=True); s.add_argument("--end", type=float, required=True)
+    s.set_defaults(fn=cmd_billing_reconcile)
     s = sub.add_parser("campaign-report", help="per-trajectory evidence table (ids, usage, timing, reviews) of a campaign directory")
     s.add_argument("campaign_dir"); s.add_argument("--out", help="write JSON here (and .md beside it)"); s.set_defaults(fn=cmd_campaign_report)
     s = sub.add_parser("review-queue", help="trajectories waiting for a compliance decision"); s.add_argument("campaign_dir"); s.set_defaults(fn=cmd_review_queue)

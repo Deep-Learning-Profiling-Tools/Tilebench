@@ -46,13 +46,10 @@ revisited once per field (fields-outer) is an implementation choice, not
 part of the canonical algorithm; what is fixed is that the packed B is
 decoded correctly on the device inside the GEMM pass and that no unpacked
 (K, N) B is written to global memory. Tail handling, wherever the chosen
-tile does not divide K_b, N or M of the task's shape: a zero-filled packed
+tile does not divide K_b, N or M of a case's shape: a zero-filled packed
 byte decodes to -1, not 0, so packed rows or columns beyond K_b or N must
 be masked (or paired only with zero A columns) so that they contribute
-nothing; stores are clipped to (M, N). Implementations must be correct for
-the task's declared shape (K is a multiple of 1024 in every task of this
-operator); supporting shapes other than the declared one, including
-arbitrary K_b, is not required.
+nothing; stores are clipped to (M, N). Implementations must be correct for every configured case (K is a multiple of 1024 in every configured case of this operator); supporting shapes outside the configured cases, including arbitrary K_b, is not required.
 
 ## Precision and accumulation
 Exact integer arithmetic: int8 x int8 products accumulated in int32. No

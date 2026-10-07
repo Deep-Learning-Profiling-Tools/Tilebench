@@ -88,7 +88,7 @@ each), the other 1,612 entries unchanged.
 
 ## 4. Size and limits
 
-A ten-round trajectory exports roughly 1–3 MB of text (the prompt repeats
+A five-round trajectory (revision 3) exports roughly 0.5–1.5 MB of text (the prompt repeats
 the Reference and Device Skills in every request). A 45-operator campaign
 per (device, DSL, model, condition) is therefore in the order of a few
 hundred MB of highly redundant text, which Git delta-compresses well but

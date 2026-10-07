@@ -69,9 +69,7 @@ never generated, transformed, packed into bits or cached by run().
 - Mask as a multiplicative factor versus a boolean select.
 - Division by (1 - p) versus multiplication by the reciprocal.
 - Masked tail handling versus padded loads with clipped stores (padded lanes
-  must never be written). Edge handling is required wherever the task's fixed
-  n is not a multiple of the chosen tile; supporting shapes other than the
-  task's declared shape is not required.
+  must never be written). Edge handling is required wherever a case's n is not a multiple of the chosen tile; supporting shapes outside the task's configured cases is not required.
 
 ## Forbidden substitutions
 - Any in-kernel or host-side random number generation (Philox/seed/offset

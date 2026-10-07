@@ -9,13 +9,21 @@ from tilebench.llm.v2.tasks import case_selection as cs, fields, support
 
 
 def test_study_manifest_validates_and_is_frozen_protocol(study):
-    assert study["trajectory"]["rounds"] == 10 and study["trajectory"]["max_generations_per_round"] == 3
+    assert study["revision"] == 4
+    assert study["trajectory"]["rounds"] == 5 and study["trajectory"]["max_generations_per_round"] == 1
+    assert "repair_only_on" not in study["trajectory"]
+    assert study["task_unit"]["kind"] == "representative_dtype" and study["task_unit"]["manifest"] == "representative_dtypes.yaml"
+    assert (study["task_unit"]["cases"], study["task_unit"]["case_manifest"], study["task_unit"]["cases_per_task"]) == \
+        ("all_configured", "case_sets.yaml", 20)
+    assert study["compliance"]["adjudicator"] == "claude-code"
+    assert study["compliance"]["blocking"] == ["review_required"] and study["compliance"]["missing_required_evidence"] == "audit_only"
     assert (study["timing"]["warmup"], study["timing"]["repeat"]) == (1, 3)
     assert study["support_matrix"]["MI300X"]["dsls"] == ["triton"] and study["support_matrix"]["Trn2"]["dsls"] == ["nki"]
 
 
 @pytest.mark.parametrize("mutation", [
-    ("trajectory", "rounds", 9), ("trajectory", "max_generations_per_round", 4), ("timing", "repeat", 100)])
+    ("trajectory", "rounds", 10), ("trajectory", "max_generations_per_round", 3), ("trajectory", "rounds", 4),
+    ("timing", "repeat", 100)])
 def test_study_rejects_protocol_changes(study, mutation):
     bad = copy.deepcopy(study)
     bad[mutation[0]][mutation[1]] = mutation[2]
@@ -81,11 +89,15 @@ def test_case_selection_ties_keep_last_case():
 
 
 def test_task_table_statuses(study, folds):
-    table = support.task_table(study, folds, ["matmul_fp32_fp16_fp8", "vector_add"])
+    # inventory view (every configured dtype): device facts
+    table = support.task_table(study, folds, ["matmul_fp32_fp16_fp8", "vector_add"], all_dtypes=True)
     by = {(e.key.device, e.key.dsl, e.key.operator, e.key.dtype): e for e in table}
     assert by[("MI300X", "triton", "matmul_fp32_fp16_fp8", "fp8_e4m3fn")].status == "unsupported"
     assert by[("MI300X", "triton", "matmul_fp32_fp16_fp8", "fp8_e4m3fn")].fp8_format == "float8_e4m3fn"
     assert by[("B200", "cutile", "vector_add", "int8")].status == "eligible"
+    # formal task view (protocol revision 3): only the representative dtype
+    formal = support.task_table(study, folds, ["matmul_fp32_fp16_fp8", "vector_add"])
+    assert {(e.key.operator, e.key.dtype) for e in formal} == {("matmul_fp32_fp16_fp8", "fp16"), ("vector_add", "fp16")}
     assert by[("Trn2", "nki", "vector_add", "fp16")].status == "needs_review"
     assert all(e.key.dsl in study["support_matrix"][e.key.device]["dsls"] for e in table)
     assert all(e.fold == ms.fold_of(folds, e.key.operator) for e in table)

@@ -55,7 +55,8 @@ SYNTHESIS_SYSTEM = "You synthesize a conditional Optimization Skill from observa
 TEMPLATES = ("distill_evidence_extraction", "distill_synthesis")
 MATERIAL_RULES = {"version": "distill-material/2", "order": "round ascending, attempt ascending",
                   "per_attempt": ["verdict", "tokens", "source", "compliance_diagnostics", "diff_from_previous_attempt"],
-                  "per_round": ["status", "latency_ms_mean", "latency_ms_samples", "timing_execution_mode", "diagnostic", "sol_efficiency"],
+                  "per_round": ["status", "valid_cases/cases_total", "latency_ms_geomean", "per-case status/runtime/efficiency/config",
+                                "timing_execution_mode", "diagnostic"],
                   "max_source_chars": 20000, "max_diagnostic_chars": 2000, "diff_context_lines": 3,
                   "selection": "every attempt of every round of the selected trajectory; no sampling, no ranking"}
 COMPLETE_TERMINAL = ("completed", "end_turn", "stop_sequence", None)
@@ -138,7 +139,9 @@ def rounds_block(state: dict, tdir: Path | None, sol: dict | None = None) -> tup
     lines = []
     hashes: dict = {}
     t_sol = (sol or {}).get("t_sol_ms")
-    if sol:
+    if sol and sol.get("case_t_emp_ms"):
+        lines.append(f"Empirical targets (offline): T_emp for each of the {len(sol['case_t_emp_ms'])} cases, status {sol.get('status')}")
+    elif sol:
         lines.append(f"SOL record (offline, declared mode {sol.get('arithmetic_mode')}, status {sol.get('status')}): "
                      f"T_SOL = {t_sol} ms; P_peak = {sol.get('p_peak_tflops')} TFLOP/s; BW_peak = {sol.get('bw_peak_gbs')} GB/s")
     prev_src = None
@@ -161,7 +164,25 @@ def rounds_block(state: dict, tdir: Path | None, sol: dict | None = None) -> tup
                     lines.append("diff from the previous attempt:\n```diff\n" + _clip("\n".join(d), MATERIAL_RULES["max_source_chars"]) + "\n```")
                 lines.append("```python\n" + _clip(src.rstrip(), MATERIAL_RULES["max_source_chars"]) + "\n```")
                 prev_src = src
-        if r.get("latency_ms_mean") is not None:
+        if r.get("cases_total"):
+            # revision 4: the round's 20-case evidence (offline, source device only; never shown to a generator)
+            case_t = (sol or {}).get("case_t_emp_ms") or {}
+            head = f"cases: {r.get('valid_cases')}/{r.get('cases_total')} valid"
+            if r.get("latency_ms_geomean") is not None:
+                head += f"; geometric-mean runtime {r['latency_ms_geomean']:.4f} ms (mode {r.get('timing_execution_mode')})"
+                effs = [case_t[c['case_id']] / c['latency_ms_mean'] for c in r.get("case_results") or []
+                        if c.get("status") == "valid" and case_t.get(c["case_id"]) and c.get("latency_ms_mean")]
+                if effs and len(effs) == r.get("cases_total"):
+                    import math
+                    head += f"; geomean empirical efficiency {math.exp(sum(math.log(e) for e in effs) / len(effs)):.4f}"
+            lines.append(head)
+            for c in r.get("case_results") or []:
+                lat = c.get("latency_ms_mean")
+                eff_c = (case_t.get(c["case_id"]) / lat) if (lat and case_t.get(c["case_id"])) else None
+                lines.append(f"  case {c.get('case_index')}: status {c.get('status')}"
+                             + (f", runtime {lat:.4f} ms" if lat else "") + (f", efficiency {eff_c:.4f}" if eff_c else "")
+                             + (f", config {json.dumps(c.get('config'))}" if c.get("config") else ""))
+        elif r.get("latency_ms_mean") is not None:
             lines.append(f"runtime_ms: {r['latency_ms_mean']:.4f} (samples {r.get('latency_ms_samples')}; "
                          f"mode {r.get('timing_execution_mode')})")
             if t_sol:
