@@ -1,0 +1,71 @@
+[
+  {
+    "lens": "useful work/instruction path",
+    "status": "supported",
+    "metrics": [
+      "smsp__inst_executed.sum"
+    ],
+    "missing_metrics": [],
+    "evidence": "All reports range 0/action 0; selected winner logs, source bodies and saved UTCHMMA SASS.",
+    "conclusion": "Same mathematical work; instruction totals do not predict ordering."
+  },
+  {
+    "lens": "launch/residency",
+    "status": "supported",
+    "metrics": [
+      "launch__grid_size",
+      "launch__block_size",
+      "launch__occupancy_limit_registers",
+      "launch__occupancy_limit_shared_mem",
+      "sm__warps_active.avg.pct_of_peak_sustained_active"
+    ],
+    "missing_metrics": [],
+    "evidence": "All reports range 0/action 0.",
+    "conclusion": "TileLang and Triton share three-CTA limits; their achieved activity differs."
+  },
+  {
+    "lens": "memory movement/reuse",
+    "status": "insufficient",
+    "metrics": [
+      "dram__bytes_read.sum",
+      "dram__bytes_write.sum"
+    ],
+    "missing_metrics": [],
+    "evidence": "All reports range 0/action 0; TileLang LDGSTS, peers UTMALDG SASS.",
+    "conclusion": "Delivery paths differ, but missing capture cache metadata and incomparable HBM writeback prevent a bandwidth explanation."
+  },
+  {
+    "lens": "issue/dependencies/synchronization",
+    "status": "insufficient",
+    "metrics": [
+      "smsp__warps_eligible.avg.per_cycle_active",
+      "smsp__issue_active.avg.pct_of_peak_sustained_active"
+    ],
+    "missing_metrics": [
+      "smsp__warps_eligible.avg.per_cycle_active",
+      "smsp__issue_active.avg.pct_of_peak_sustained_active"
+    ],
+    "evidence": "Triton/cuTile range 0/action 0 collect these metrics; missing_metrics applies to TileLang range 0/action 0. TileLang completion waits visible in SASS.",
+    "conclusion": "Leading synchronization inference is structurally supported, without TileLang stall localization."
+  },
+  {
+    "lens": "compute pipeline",
+    "status": "supported",
+    "metrics": [
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed"
+    ],
+    "missing_metrics": [],
+    "evidence": "All reports range 0/action 0; UTCHMMA and LDTM present in all.",
+    "conclusion": "TileLang tensor activity lower; absence of tensor cores rejected."
+  },
+  {
+    "lens": "balance/temporal behavior",
+    "status": "insufficient",
+    "metrics": [
+      "launch__waves_per_multiprocessor"
+    ],
+    "missing_metrics": [],
+    "evidence": "All reports range 0/action 0; no saved timeline inspected.",
+    "conclusion": "Few scheduling waves may matter; no measured tail duration or host launch cost."
+  }
+]

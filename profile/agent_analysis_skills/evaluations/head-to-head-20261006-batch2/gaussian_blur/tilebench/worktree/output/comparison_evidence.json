@@ -1,0 +1,190 @@
+{
+  "case": {
+    "hardware": "B200",
+    "operator": "gaussian_blur",
+    "dtype": "fp32",
+    "shape": [
+      10240,
+      10240
+    ],
+    "kernel_shape": [
+      7,
+      7
+    ],
+    "tuning_mode": "autotuned",
+    "semantics": "Direct zero-padded stencil, FP32 accumulation, one output per input pixel"
+  },
+  "implementations": [
+    {
+      "backend": "tilelang",
+      "benchmark_path": "results/B200/csv/gaussian_blur_autotune.csv",
+      "benchmark_csv_line": 41,
+      "benchmark_value": 1.1436,
+      "benchmark_unit": "ms",
+      "selected_configuration": {
+        "BLOCK_R": 4,
+        "BLOCK_C": 256,
+        "threads": 128
+      },
+      "profile": {
+        "backend": "tilelang",
+        "report": "evidence/tilelang_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "gaussian_blur_kernel_kernel",
+        "sha256_verified": true,
+        "reader_version": "2026.1.1",
+        "sources": [
+          {
+            "path": "/tmp/tmprph76jf1/tvm_kernels.cu",
+            "characters": 0
+          }
+        ],
+        "sass_addresses": 1356
+      },
+      "source_path": "tilebench/benchmarks/operators/gaussian_blur/impl_tilelang.py",
+      "source_revision_supplied": "17d2d4f6",
+      "winner_archive_revision_supplied": "9455c0bd",
+      "profile_dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+      "provenance_limits": "No capture command/stack manifest; TileLang CUDA source empty; cuTile occupancy hint only from winner log"
+    },
+    {
+      "backend": "triton",
+      "benchmark_path": "results/B200/csv/gaussian_blur_autotune.csv",
+      "benchmark_csv_line": 41,
+      "benchmark_value": 1.2487,
+      "benchmark_unit": "ms",
+      "selected_configuration": {
+        "BLOCK_R": 8,
+        "BLOCK_C": 64,
+        "num_warps": 8
+      },
+      "profile": {
+        "backend": "triton",
+        "report": "evidence/triton_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "gaussian_blur_kernel",
+        "sha256_verified": true,
+        "reader_version": "2026.1.1",
+        "sources": [
+          {
+            "path": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/operators/gaussian_blur/impl_triton.py",
+            "characters": 3206,
+            "saved": "output/triton_source_0.py",
+            "exact_current_match": false,
+            "kernel_ast_current_match": true
+          }
+        ],
+        "sass_addresses": 458
+      },
+      "source_path": "tilebench/benchmarks/operators/gaussian_blur/impl_triton.py",
+      "source_revision_supplied": "17d2d4f6",
+      "winner_archive_revision_supplied": "9455c0bd",
+      "profile_dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+      "provenance_limits": "No capture command/stack manifest; TileLang CUDA source empty; cuTile occupancy hint only from winner log"
+    },
+    {
+      "backend": "cutile",
+      "benchmark_path": "results/B200/csv/gaussian_blur_autotune.csv",
+      "benchmark_csv_line": 41,
+      "benchmark_value": 1.2713,
+      "benchmark_unit": "ms",
+      "selected_configuration": {
+        "tile_r": 2,
+        "tile_c": 128,
+        "occupancy": 4
+      },
+      "profile": {
+        "backend": "cutile",
+        "report": "evidence/cutile_fp32.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "gaussian_blur_kernel_Kt1_A2f32_1v4l0_2t1_3i16_p16_A1f32_1t1_p16_A2f32_1v4l0_2t1_3i16_p16_I7_I7_I2_I128",
+        "sha256_verified": true,
+        "reader_version": "2026.1.1",
+        "sources": [
+          {
+            "path": "/projects/kzhou6/bcui2/research/tilebench/Tilebench/benchmarks/operators/gaussian_blur/impl_cutile.py",
+            "characters": 3297,
+            "saved": "output/cutile_source_0.py",
+            "exact_current_match": false,
+            "kernel_ast_current_match": true
+          }
+        ],
+        "sass_addresses": 178
+      },
+      "source_path": "tilebench/benchmarks/operators/gaussian_blur/impl_cutile.py",
+      "source_revision_supplied": "17d2d4f6",
+      "winner_archive_revision_supplied": "9455c0bd",
+      "profile_dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23",
+      "provenance_limits": "No capture command/stack manifest; TileLang CUDA source empty; cuTile occupancy hint only from winner log"
+    }
+  ],
+  "timing": {
+    "benchmark": [
+      {
+        "name": "tilelang_ms / triton_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "triton_ms",
+        "status": "ok",
+        "numerator": 1.1436,
+        "denominator": 1.2487,
+        "ratio": 0.915832465764395
+      },
+      {
+        "name": "tilelang_ms / cutile_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "cutile_ms",
+        "status": "ok",
+        "numerator": 1.1436,
+        "denominator": 1.2713,
+        "ratio": 0.8995516400534884
+      }
+    ],
+    "profiler_duration_ns": {
+      "tilelang": 1134976.0,
+      "triton": 1274624.0,
+      "cutile": 1279904.0
+    },
+    "profiler_ratio_triton_over_tilelang": 1.1230404871997293,
+    "profiler_ratio_cutile_over_tilelang": 1.1276925679485734
+  },
+  "mechanisms": [
+    {
+      "claim": "TileLang amortizes weights/indexing across more outputs per thread and contiguous lanes",
+      "status": "inferred",
+      "code_difference": "4x256/128 versus 8x64/256 and 2x128/128; 8 versus 2 outputs/thread",
+      "expected_consequences": "Fewer repeated coefficient loads and bounds/address instructions; less L1 load-sector work",
+      "observations": [
+        "selected_records.json: smsp__inst_executed.sum, LDG/ISETP/IMAD instances; L1 sectors/requests",
+        "tilelang_sass.txt prologue, triton_sass.txt lane mapping"
+      ],
+      "alternative": "TileLang large register state reduces latency hiding",
+      "limits": "No controlled config comparison; fastest non-TileLang CSV gap within 10%"
+    },
+    {
+      "claim": "Triton has cache-side transaction pressure despite high concurrency",
+      "status": "inferred",
+      "code_difference": "Interleaved adjacent-column pairs, scalar and LDG.E.64 loads",
+      "expected_consequences": "Extra sectors and load-queue stalls without proportional extra HBM traffic",
+      "observations": [
+        "selected_records.json: L1 throughput, sectors, lg_throttle ratio, HBM bytes"
+      ],
+      "alternative": "Vector loads reduce input load instruction work; many ready warps hide dependencies",
+      "limits": "Stall ratios are per issue-active, not elapsed-time shares"
+    },
+    {
+      "claim": "cuTile gather bounds/index lowering and store layout conversion add overhead",
+      "status": "inferred",
+      "code_difference": "Runtime row loop with repeated checks; FFMA2 compute layout converted via STSM/BAR/LDS",
+      "expected_consequences": "More bounds/index instructions, ALU/issue activity and synchronization despite efficient paired FMA",
+      "observations": [
+        "cutile_sass.txt loop/store epilogue",
+        "selected_records.json: ISETP/VIADD/FFMA2 instances, ALU activity, barrier ratio"
+      ],
+      "alternative": "FFMA2 halves FMA instruction count and limits register footprint",
+      "limits": "No measured component time shares or compiler defect attribution"
+    }
+  ]
+}

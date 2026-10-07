@@ -1,0 +1,70 @@
+{
+  "csv": {
+    "params": "M=640",
+    "dtype": "fp16",
+    "torch_ms": "0.0233",
+    "triton_ms": "0.0293",
+    "cutile_ms": "0.0318",
+    "speedup_triton": "0.80",
+    "speedup_cutile": "0.73",
+    "triton_vs_cutile": "1.0869",
+    "tilelang_ms": "0.0514",
+    "speedup_tilelang": "0.45"
+  },
+  "winner_logs": {
+    "evidence/batched_matmul_autotune.json": [
+      {
+        "params": {
+          "BATCH": 32,
+          "M": 640
+        },
+        "problem_size": 16777216000,
+        "dtype": "fp16",
+        "triton_autotune_cfg": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 32,
+          "GROUPSIZE": 1,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "cutile_autotune_cfg": {
+          "tile_m": 128,
+          "tile_n": 128,
+          "tile_k": 64,
+          "occupancy": 4,
+          "group_size": 1
+        },
+        "tilelang_autotune_cfg": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 64,
+          "GROUPSIZE": 1,
+          "threads": 128,
+          "num_stages": 2
+        }
+      }
+    ],
+    "evidence/batched_matmul_tilelang_autotune.json": [
+      {
+        "params": {
+          "BATCH": 32,
+          "M": 640
+        },
+        "problem_size": 16777216000,
+        "dtype": "fp16",
+        "tilelang_autotune_cfg": {
+          "BLOCK_SIZE_M": 128,
+          "BLOCK_SIZE_N": 128,
+          "BLOCK_SIZE_K": 64,
+          "GROUPSIZE": 1,
+          "threads": 128,
+          "num_stages": 2
+        }
+      }
+    ]
+  },
+  "tilelang_over_triton": 1.7542662116040957,
+  "tilelang_over_cutile": 1.6163522012578615,
+  "tilelang_over_torch": 2.206008583690987
+}

@@ -1,0 +1,49 @@
+{
+  "csv": {
+    "params": "input_rows=10240",
+    "dtype": "fp32",
+    "torch_ms": "15.6215",
+    "triton_ms": "1.2487",
+    "cutile_ms": "1.2713",
+    "speedup_triton": "12.51",
+    "speedup_cutile": "12.29",
+    "triton_vs_cutile": "1.0181",
+    "tilelang_ms": "1.1436",
+    "speedup_tilelang": "13.66"
+  },
+  "winners": [
+    {
+      "params": {
+        "kernel_rows": 7,
+        "kernel_cols": 7,
+        "input_rows": 10240
+      },
+      "problem_size": 104857600,
+      "dtype": "fp32",
+      "triton_autotune_cfg": {
+        "BLOCK_R": 8,
+        "BLOCK_C": 64,
+        "num_warps": 8
+      },
+      "cutile_autotune_cfg": {
+        "tile_r": 2,
+        "tile_c": 128,
+        "occupancy": 4
+      }
+    },
+    {
+      "params": {
+        "kernel_rows": 7,
+        "kernel_cols": 7,
+        "input_rows": 10240
+      },
+      "problem_size": 104857600,
+      "dtype": "fp32",
+      "tilelang_autotune_cfg": {
+        "BLOCK_R": 4,
+        "BLOCK_C": 256,
+        "threads": 128
+      }
+    }
+  ]
+}

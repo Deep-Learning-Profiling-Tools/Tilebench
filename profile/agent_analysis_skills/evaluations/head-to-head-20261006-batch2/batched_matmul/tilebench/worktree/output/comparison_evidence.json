@@ -1,0 +1,196 @@
+{
+  "case": {
+    "hardware": "B200",
+    "operator": "batched_matmul",
+    "dtype": "fp16",
+    "shape": {
+      "BATCH": 32,
+      "M": 640,
+      "N": 640,
+      "K": 640
+    },
+    "semantics": "C[b]=A[b]@B[b], FP32 accumulation and FP16 output",
+    "tuning_mode": "autotune"
+  },
+  "provenance": {
+    "supplied_source_revision": "17d2d4f6",
+    "supplied_archive_revision": "9455c0bd",
+    "reports": [
+      {
+        "backend": "tilelang",
+        "path": "evidence/tilelang_fp16.ncu-rep",
+        "sha256": "8c2066c5c16c9c0641958f89ade6ba95c1526c4e93ec5c96628b6f5b3a02e4b8",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23"
+      },
+      {
+        "backend": "triton",
+        "path": "evidence/triton_fp16.ncu-rep",
+        "sha256": "5040f4b5b690b00a9784385013341a95dfafa0bd9ab183a6b2ad4ccf5d7a8404",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23"
+      },
+      {
+        "backend": "cutile",
+        "path": "evidence/cutile_fp16.ncu-rep",
+        "sha256": "140b503b69d163caa0cf48c79faf38738d63e94b40ceb486e1c2506d747fee16",
+        "dataset_revision": "21037737b7e371d38f3d029367dc3967d5b31a23"
+      }
+    ],
+    "hashes_verified": true,
+    "reader": "NCU 2026.1.1 Python API",
+    "limits": "Dataset revision/hash identify bytes, not capture command/compiler versions; no capture manifest supplied."
+  },
+  "implementations": [
+    {
+      "backend": "tilelang",
+      "benchmark": {
+        "path": "results/B200/csv/batched_matmul_autotune.csv",
+        "csv_line": 59,
+        "value": 0.0514,
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 64,
+        "GROUPSIZE": 1,
+        "threads": 128,
+        "num_stages": 2
+      },
+      "profile_actions": {
+        "report": "evidence/tilelang_fp16.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "bmm_kernel_kernel",
+        "metric_names": "see full export"
+      },
+      "source": {
+        "current_source": "tilebench/benchmarks/operators/batched_matmul/impl_tilelang.py",
+        "kernel_ast_equal": null,
+        "limit": "Embedded tvm_kernels.cu is empty; SASS and headers recovered."
+      },
+      "configuration_correspondence": "cuTile signature explicitly matches K tiles, BM/BN/BK and grouping; Triton/TileLang launch/resources/SASS consistent, exact config-to-capture manifest absent."
+    },
+    {
+      "backend": "triton",
+      "benchmark": {
+        "path": "results/B200/csv/batched_matmul_autotune.csv",
+        "csv_line": 59,
+        "value": 0.0293,
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "BLOCK_SIZE_M": 128,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 32,
+        "GROUPSIZE": 1,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "profile_actions": {
+        "report": "evidence/triton_fp16.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "bmm_kernel",
+        "metric_names": "see full export"
+      },
+      "source": {
+        "embedded_source": "output/triton_source_1_impl_triton.py",
+        "current_source": "tilebench/benchmarks/operators/batched_matmul/impl_triton.py",
+        "kernel_ast_equal": true
+      },
+      "configuration_correspondence": "cuTile signature explicitly matches K tiles, BM/BN/BK and grouping; Triton/TileLang launch/resources/SASS consistent, exact config-to-capture manifest absent."
+    },
+    {
+      "backend": "cutile",
+      "benchmark": {
+        "path": "results/B200/csv/batched_matmul_autotune.csv",
+        "csv_line": 59,
+        "value": 0.0318,
+        "unit": "ms"
+      },
+      "selected_configuration": {
+        "tile_m": 128,
+        "tile_n": 128,
+        "tile_k": 64,
+        "occupancy": 4,
+        "group_size": 1
+      },
+      "profile_actions": {
+        "report": "evidence/cutile_fp16.ncu-rep",
+        "range_index": 0,
+        "action_index": 0,
+        "kernel": "bmm_kernel_Kt1_A3f16_3v8l0_4t1_7i16_p16_A3f16_3v8l0_4t1_7i16_p16_A3f16_3v8l0_4t1_7i16_p16_I10_I128_I128_I64_I5_I5_I1",
+        "metric_names": "see full export"
+      },
+      "source": {
+        "embedded_source": "output/cutile_source_0_impl_cutile.py",
+        "current_source": "tilebench/benchmarks/operators/batched_matmul/impl_cutile.py",
+        "kernel_ast_equal": true
+      },
+      "configuration_correspondence": "cuTile signature explicitly matches K tiles, BM/BN/BK and grouping; Triton/TileLang launch/resources/SASS consistent, exact config-to-capture manifest absent."
+    }
+  ],
+  "timing": {
+    "benchmark_comparisons": [
+      {
+        "name": "tilelang_ms / triton_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "triton_ms",
+        "status": "ok",
+        "numerator": 0.0514,
+        "denominator": 0.0293,
+        "ratio": 1.7542662116040957
+      },
+      {
+        "name": "tilelang_ms / cutile_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "cutile_ms",
+        "status": "ok",
+        "numerator": 0.0514,
+        "denominator": 0.0318,
+        "ratio": 1.6163522012578615
+      },
+      {
+        "name": "tilelang_ms / torch_ms",
+        "numerator_column": "tilelang_ms",
+        "denominator_column": "torch_ms",
+        "status": "ok",
+        "numerator": 0.0514,
+        "denominator": 0.0233,
+        "ratio": 2.206008583690987
+      }
+    ],
+    "profiler_durations_ns": {
+      "tilelang": 48576.0,
+      "triton": 32064.0,
+      "cutile": 34848.0
+    },
+    "profiler_tilelang_over_triton": 1.5149700598802396,
+    "profiler_tilelang_over_cutile": 1.393939393939394
+  },
+  "mechanisms": [
+    {
+      "claim": "TileLang operand delivery and completion dependencies underfeed tensor compute",
+      "status": "inferred",
+      "code_difference": "Lane-issued LDGSTS copies, phase waits and block synchronization versus TMA transfers; current TileLang explicitly disables warp specialization and synchronizes each K tile.",
+      "expected_consequences": "Lower tensor activity and fewer active warps despite comparable CTA residency ceilings.",
+      "observations": [
+        "TileLang SASS LDGSTS.E.BYPASS.128, UTCHMMA, UTCBAR, SYNCS.PHASECHK.TRANS64.TRYWAIT and BAR.SYNC.DEFER_BLOCKING",
+        "selected_records.json: tensor activity, active warps, launch residency limits; all report range 0/action 0"
+      ],
+      "alternative": "Replay/cache differences or tensor-instruction granularity and epilogue costs also contribute; TileLang stall and eligible-warp metrics are uncollected.",
+      "limits": "No elapsed-time attribution or quantitative share of benchmark gap; TileLang capture-time kernel source missing."
+    },
+    {
+      "claim": "cuTile and Triton are benchmark parity; counters show different scheduling tradeoffs",
+      "status": "observed",
+      "code_difference": "cuTile uses 256 threads and role-specific register deallocation; Triton uses 128 threads and cached B transpose.",
+      "expected_consequences": "Higher cuTile active occupancy but lower warp instruction issue and eligibility; role-idle waits can be large.",
+      "observations": [
+        "selected_records.json: launch block size, registers, active warps, instructions, eligibility, long-scoreboard ratio; range 0/action 0"
+      ],
+      "alternative": "Role-specialized waits prevent interpreting whole-kernel stall averages as useful-compute critical-path stalls.",
+      "limits": "8.5% CSV latency difference is within 10% parity convention; no independent claimed cause of that small gap."
+    }
+  ]
+}
