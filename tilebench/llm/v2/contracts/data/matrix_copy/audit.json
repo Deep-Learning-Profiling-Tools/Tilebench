@@ -1,0 +1,155 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "matrix_copy",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/matrix_copy/impl_triton.py",
+      "functions": [
+        {
+          "name": "matrix_copy_kernel",
+          "lines": [
+            8,
+            18
+          ]
+        },
+        {
+          "name": "_matrix_copy_kernel_autotuned",
+          "lines": [
+            21,
+            31
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            34,
+            52
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            55,
+            59
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/matrix_copy/impl_cutile.py",
+      "functions": [
+        {
+          "name": "matrix_copy_kernel",
+          "lines": [
+            15,
+            19
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            32,
+            66
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            69,
+            70
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/matrix_copy/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            6
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "B = elementwise copy of A into a fresh empty_like buffer, same dtype, flat N*N addressing (impl_triton.py 14-18, 36).",
+      "cutile": "B = elementwise copy of A into a fresh empty_like buffer, same dtype, flat N*N addressing via A.contiguous().view(-1) / B.view(-1) (impl_cutile.py 17-19, 34, 38-39).",
+      "note": "Both realise the reference B = A + 0 (impl_torch.py 5) as a bit-exact copy; the reference's add-zero differs only for -0.0 (becomes +0.0), which value comparison cannot observe."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch of ceil(N*N / tile) programs, load-then-store (impl_triton.py 8-18, 40-50).",
+      "cutile": "One kernel, one launch of ceil(N*N / tile) CTAs, load-then-store (impl_cutile.py 15-19, 59-64).",
+      "note": "Identical single-stage streaming copy."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-stage dependencies; each program is independent (impl_triton.py 14-18).",
+      "cutile": "No inter-stage dependencies; each CTA is independent (impl_cutile.py 17-19).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (impl_triton.py 8-18).",
+      "cutile": "None (impl_cutile.py 15-19).",
+      "note": "Pure data movement."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "No arithmetic; values moved in the input dtype for fp16/bf16/fp32/int8 (impl_triton.py 17-18).",
+      "cutile": "No arithmetic; values moved in the input dtype (impl_cutile.py 18-19).",
+      "note": "Bit-exact copy on both sides."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "Allocates B = empty_like(A) and computes total = N*N; passes A as-is (impl_triton.py 36-37).",
+      "cutile": "Allocates B = empty_like(A); flattens via A.contiguous().view(-1) and B.view(-1), metadata-only for the contiguous generator input (impl_cutile.py 34, 38-39).",
+      "note": "The flatten views move no bytes; no cast, pack or cached preprocessing on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output (impl_triton.py 36).",
+      "cutile": "None beyond the output (impl_cutile.py 34).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "A is read-only; fresh B every call (impl_triton.py 17, 36).",
+      "cutile": "A is read-only; fresh B every call (impl_cutile.py 18, 34).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "N * N * dtype_size * 2",
+    "flops_expr": "N * N",
+    "consistent": "true",
+    "note": "Both timed run() bodies read N*N elements once and write N*N elements once with no preprocessing traffic and nothing prepacked, which is exactly what bytes_expr counts; flops_expr is a nominal one-op-per-element figure for an operator with no arithmetic (config.yaml 14-15)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "42758dfc3a80991be6ead6093a5e30404ac22673931f6becf8adac1ab481a347",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "aedeb9cbb12e3cb79565d3025cc9bf921a54deec0ac448adb7d5d1585235c07f",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

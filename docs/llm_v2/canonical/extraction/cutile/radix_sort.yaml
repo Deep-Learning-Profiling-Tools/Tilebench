@@ -1,0 +1,280 @@
+operator: radix_sort
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/radix_sort/impl_cutile.py
+    functions:
+      - name: radix_histogram_kernel
+        lines: [21, 41]
+        role: kernel
+      - name: radix_sum_chunks_kernel
+        lines: [44, 49]
+        role: kernel
+      - name: radix_scan_chunk_sums_kernel
+        lines: [52, 58]
+        role: kernel
+      - name: radix_scan_chunks_kernel
+        lines: [61, 68]
+        role: kernel
+      - name: radix_scatter_kernel
+        lines: [71, 92]
+        role: kernel
+      - name: run
+        lines: [105, 163]
+        role: host-driver
+      - name: get_last_config
+        lines: [166, 167]
+        role: helper
+  - path: tilebench/benchmarks/operators/radix_sort/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_radix_sort_inputs
+        lines: [116, 119]
+        role: helper
+functional_semantics: >
+  out = torch.sort(input).values (impl_torch.py line 5): ascending sort of
+  a 1-D int32 tensor, values only (no indices), returned as a new tensor.
+  No reference-side preprocessing. The generator (tensors.py lines
+  116-119) draws int32 keys uniformly from [0, 2^31) so bit 31 is always 0
+  and signed and unsigned orderings coincide; the case grid uses int32
+  only and config.yaml sets verify atol = rtol = 0 (exact match).
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: "single int32 tensor of shape (N,) holding the sorted keys (one of the two ping-pong buffers; for N <= 1 a clone of input)"
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: int32
+    layout: contiguous 1-D (generator output)
+    mutated_in_place: false
+    notes: "cloned at line 110 before any kernel touches it; keys must be non-negative for the unsigned digit extraction to be a valid signed sort (generator guarantee)."
+  - name: N
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "element count; runtime kernel argument used for masking and as the out-of-range destination for padded lanes."
+outputs:
+  - name: work (returned)
+    shape: "(N,)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "early exit: if N <= 1 return input.clone() without launching anything"
+    lines: [107, 108]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: never taken for the sweep.
+  - description: "work = input.clone(): device-to-device copy of the keys into the first ping-pong buffer"
+    lines: [110, 110]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: "this is what keeps the input unmodified; it is a full N-element read + write inside run()."
+  - description: "allocate output (N,) int32 (second ping-pong buffer), hist (RADIX*K,) int32 and chunk_sums (G2,) int32, where K = ceil(N / TILE), G2 = ceil(RADIX*K / TILE), BB = max(floor, next_pow2(G2))"
+    lines: [111, 119]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "hist and chunk_sums are uninitialised (torch.empty) and are fully overwritten by every pass; BB is a ConstInt tile width for the one-CTA scan and stays at its floor for every sweep size."
+stages:
+  - id: s1
+    description: >
+      Per-pass block histogram (grid (K, 1, 1), K = ceil(N / TILE)). Each
+      CTA loads its TILE-element tile of work with ZERO padding (lines
+      29-30) and a lane mask offset < N (lines 26-27), extracts the digit
+      (block >> shift) & (RADIX - 1) as int32 (line 31), and forms a
+      packed int64 counter per lane: mask << (digit * FIELD_BITS)
+      (line 34). One ct.sum over the tile (line 35) therefore yields all
+      RADIX digit counts at once in disjoint FIELD_BITS-wide fields; the
+      fields are unpacked with shifts and FIELD_MASK (lines 38-40) and
+      written with ct.scatter to hist[d * K + bid] for d in 0..RADIX-1
+      (line 41). The histogram is digit-major: all blocks of digit 0,
+      then all blocks of digit 1, and so on.
+    kind: kernel
+    lines: [21, 41]
+    launches: "K CTAs, once per pass (16 passes)"
+    depends_on: []
+    fusable_with: "none (a global barrier separates it from s5 of the previous pass and from s2); depends on the clone and allocations listed under preprocessing (lines 110-119) and, from pass 2 on, on s6 of the previous pass"
+    produces: "hist (RADIX*K,) int32 raw counts, digit-major"
+  - id: s2
+    description: >
+      Chunk sums of the histogram (grid (G2, 1, 1)). Each CTA loads one
+      TILE-wide chunk of hist with ZERO padding and stores its ct.sum as
+      the single element chunk_sums[bid] (lines 47-49).
+    kind: kernel
+    lines: [44, 49]
+    launches: "G2 CTAs, once per pass (16 passes)"
+    depends_on: [s1]
+    fusable_with: "s3, s4 (the three together form one logical exclusive scan of hist; a single-pass scan would be an equivalent realisation)"
+    produces: "chunk_sums (G2,) int32"
+  - id: s3
+    description: >
+      Exclusive scan of the chunk sums by one CTA (grid (1, 1, 1)): loads
+      chunk_sums as a BB-wide tile with ZERO padding, computes
+      ct.cumsum - vals (exclusive prefix), and stores it back in place
+      (lines 55-58).
+    kind: kernel
+    lines: [52, 58]
+    launches: "1 CTA, once per pass (16 passes)"
+    depends_on: [s2]
+    fusable_with: "s2, s4"
+    produces: "chunk_sums overwritten with exclusive chunk offsets"
+  - id: s4
+    description: >
+      Per-chunk exclusive scan with carry-in (grid (G2, 1, 1)): each CTA
+      loads its hist chunk with ZERO padding, loads the scalar
+      chunk_offsets[bid] (ct.load with shape (), line 66), computes
+      ct.cumsum - vals + base and stores it back in place over hist
+      (lines 64-68). After this, hist[d * K + b] is the global exclusive
+      prefix count, i.e. the output position of the first element with
+      digit d in block b.
+    kind: kernel
+    lines: [61, 68]
+    launches: "G2 CTAs, once per pass (16 passes)"
+    depends_on: [s3]
+    fusable_with: "s2, s3"
+    produces: "hist overwritten with global exclusive offsets (digit-major)"
+  - id: s5
+    description: >
+      Stable block scatter (grid (K, 1, 1)). Each CTA re-loads its tile of
+      work (ZERO padding) and recomputes the digit (lines 79-81). It builds
+      the same packed int64 counters as s1 (lines 84-85) and takes an
+      exclusive ct.cumsum over the tile (line 86); extracting the lane's
+      own field (line 87) gives rank = number of earlier elements in the
+      tile with the same digit (stable local rank). The global base for
+      (digit, block) is fetched with ct.gather(hist, digit * K + bid,
+      padding_value=0) (line 89). dest = base + rank for valid lanes and N
+      (out of range) for padded lanes (line 91); the keys are written with
+      ct.scatter(output, dest, block) (line 92).
+    kind: kernel
+    lines: [71, 92]
+    launches: "K CTAs, once per pass (16 passes)"
+    depends_on: [s4]
+    fusable_with: "none"
+    produces: "output holding the keys stably partitioned by the current digit"
+  - id: s6
+    description: "ping-pong: work, output = output, work after every pass (line 161); the loop at line 146 runs shift = 0, 2, ..., 30, i.e. 16 passes; after the final (even-numbered) swap the sorted keys are in work, which is returned (line 163)."
+    kind: host
+    lines: [146, 163]
+    launches: "0"
+    depends_on: [s5]
+    fusable_with: "none"
+    produces: returned buffer
+algorithm_family: >
+  LSD (least-significant-digit-first) radix sort of 32-bit keys with 2-bit
+  digits (radix 4), 16 passes; each pass is block histogram -> three-kernel
+  reduce-then-scan of a digit-major histogram -> stable block scatter;
+  keys only, out of place, ping-ponging between two buffers. The 2-bit
+  digit width is tied to the packed-counter trick: RADIX fields of
+  FIELD_BITS bits must fit one int64 (4 x 16 = 64) and a tile count must
+  fit one field (TILE < 2^FIELD_BITS).
+reduction_scan_sort_structure: >
+  Sort: LSD radix, 16 passes over bit pairs from bit 0 upward; each pass
+  is a stable counting-sort partition on the current digit, so the
+  composition is a correct stable sort. Keys are compared as unsigned bit
+  patterns (digit = (key >> shift) & (RADIX-1) with an arithmetic shift on
+  int32), valid for the non-negative generator keys. Histogram: within a
+  tile one int64 sum of packed per-lane counters (one bit field per
+  digit), i.e. a single tree reduction yields all RADIX counts; the global
+  histogram is laid out digit-major hist[d * K + b] so that a single flat
+  exclusive scan over RADIX*K entries directly gives each (digit, block)
+  its output offset. Scan: reduce-then-scan in three launches, chunk sums
+  (ct.sum per TILE chunk), one-CTA exclusive cumsum of the chunk sums,
+  per-chunk exclusive cumsum plus chunk base, all in place. Scatter rank:
+  exclusive cumsum of the packed counters within the tile, field
+  extraction gives the stable same-digit rank; in-tile order is element
+  order, cross-tile order is block order, hence stability. Equal keys keep
+  their input order, which the values-only reference cannot observe.
+precision:
+  input_dtypes: [int32]
+  accumulation: "int32 counts in hist/chunk_sums; int64 packed counters for in-tile histogram and rank"
+  output_dtype: int32
+  special_modes: "exact integer; keys treated as unsigned 32-bit bit patterns"
+  masking_or_padding_values: "ZERO padding on every tile load; lane mask offset < N multiplies padded lanes to 0 in the packed counters; ct.gather padding_value 0; padded scatter lanes get destination N (relies on out-of-range scatter indices being dropped by the library, not visible in the source)"
+intermediate_storage: >
+  work (N,) int32, a clone of input (line 110); output (N,) int32
+  (line 111); hist (RADIX*K,) int32 (line 118); chunk_sums (G2,) int32
+  (line 119). All four are allocated per call and live for the whole
+  call; hist and chunk_sums are rewritten in full by every pass (every
+  (digit, block) slot is scattered in s1), so no zeroing is needed; work
+  and output alternate roles every pass.
+mutation_rules: >
+  input is never written (it is cloned before the first kernel). hist,
+  chunk_sums and the two ping-pong buffers are private to the call. The
+  returned tensor is one of the two run-allocated buffers (after an even
+  number of swaps, the buffer created by the clone at line 110), never the
+  caller's tensor. Repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: occupancy
+    role: occupancy hint for radix_scatter_kernel only (the single tunable)
+    default_present: true
+  - name: _HELPER_OCC
+    role: fixed occupancy hint applied to the four helper kernels via replace_hints (lines 95-99); not searched
+    default_present: true
+  - name: _BLOCK_SIZE
+    role: tile size (fixed module constant used as ConstInt TILE for every kernel, line 14); not searched; the block_size keyword of run() is ignored
+    default_present: true
+  - name: BB
+    role: tile size of the one-CTA chunk-sum scan, derived from G2 (line 116); not searched
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner wraps only radix_scatter_kernel (line 102) over an
+  occupancy-only _SEARCH_SPACE (line 11), keyed on (N, dtype)
+  (lines 128-138); the sweep launches the scatter kernel with shift = 0
+  against the freshly allocated, still uninitialised hist buffer. The
+  winner is memoised through kernel_with_hints (line 144) and recorded in
+  _last_autotune_config (lines 139-140). The histogram and scan kernels
+  use fixed hints (lines 95-99). Default path uses _DEFAULT_CONFIG
+  (line 10).
+implementation_freedoms_observed: >
+  Occupancy hints; tile size (a fixed constant here); how the global
+  exclusive scan of the histogram is realised (three launches here; a
+  single-pass scan would be equivalent); whether per-digit counts are
+  packed into one integer or kept as separate reductions; use of gather
+  versus a contiguous load for the RADIX histogram offsets a tile needs.
+algorithm_constraints_observed: >
+  LSD radix sort with stable per-pass partitioning; 2-bit digits and 16
+  passes (the fq_boundary byte count assumes exactly 16 full read-read-
+  write passes); digit-major (digit, block) histogram scanned to global
+  offsets; two ping-pong key buffers plus histogram scratch; input cloned
+  and never modified; exact int32 output; keys ordered by unsigned bit
+  pattern (equal to signed order for the non-negative inputs).
+fq_boundary:
+  bytes_expr: "16 * 3 * n * dtype_size"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr = 16 passes x (read for histogram + read for scatter + write
+    for scatter) x n x 4 bytes, which matches the s1/s5 traffic of this
+    2-bit-digit implementation. It omits the input clone at line 110
+    (2 x n x dtype_size, inside run()), and the hist/chunk_sums traffic
+    (RADIX*K entries read and written a few times per pass, small
+    relative to n). The pass count 16 is baked into the formula, so a
+    re-implementation with a different digit width would be credited the
+    wrong byte volume. No prepacking is assumed.
+notes_for_review:
+  - "bytes_expr hardcodes 16 passes (2-bit digits); it is an implementation-specific constant rather than a property of the operator."
+  - "The autotune sweep runs the scatter kernel with an uninitialised hist (torch.empty at line 118); correctness of the later real passes depends on ct.scatter dropping out-of-range destinations and on output being fully rewritten afterwards."
+  - "Padded scatter lanes use destination N (line 91); dropping of out-of-range scatter indices is library behaviour not visible in the source."
+  - "The digit extraction uses an arithmetic right shift on int32; negative keys would be mis-sorted (sign and top digit); the generator's [0, 2^31) range avoids this."
+  - "run() ignores its block_size keyword and uses the module constant _BLOCK_SIZE; the ConstInt BB depends on N via G2 but stays at its floor for the whole sweep."
+  - "The input clone at line 110 is a device-to-device copy inside run() that bytes_expr does not count."

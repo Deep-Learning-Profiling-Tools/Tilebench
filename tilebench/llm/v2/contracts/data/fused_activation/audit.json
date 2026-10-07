@@ -1,0 +1,162 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "fused_activation",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/fused_activation/impl_triton.py",
+      "functions": [
+        {
+          "name": "fused_activation_kernel",
+          "lines": [
+            9,
+            22
+          ]
+        },
+        {
+          "name": "_fused_activation_kernel_autotuned",
+          "lines": [
+            25,
+            34
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            37,
+            58
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            61,
+            65
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/fused_activation/impl_cutile.py",
+      "functions": [
+        {
+          "name": "fused_activation_kernel",
+          "lines": [
+            21,
+            38
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            41,
+            41
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            44,
+            73
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            76,
+            77
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/fused_activation/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            5,
+            6
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "z = x*gate + bias; out = z * sigmoid(z) element-wise (impl_triton.py L20-21); output allocated fp32 (L44).",
+      "cutile": "z = x*gate + bias; out = z / (1 + exp(-z)) (impl_cutile.py L36-37); output allocated fp32 (L52).",
+      "note": "Both match impl_torch.py L6 (F.silu(x * gate + bias)); bias is a full same-shape tensor (tensors.py L171). Both hard-wire an fp32 output while the reference follows the input dtype; they coincide because config fixes dtype = fp32."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One element-wise kernel: three masked loads cast to fp32 (L17-19), FMA, SiLU, masked store (L20-22).",
+      "cutile": "One element-wise kernel: three zero-padded loads cast to fp32 (L24-35), FMA, SiLU, store (L36-38).",
+      "note": "Single pass, no intermediate on either side."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-program dependency.",
+      "cutile": "No inter-program dependency.",
+      "note": "Embarrassingly parallel."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Purely element-wise."
+    },
+    "precision": {
+      "status": "mapping-only",
+      "triton": "fp32 loads (L17-19), z*tl.sigmoid(z) (L21), fp32 store (L22).",
+      "cutile": "fp32 loads (L24-35), z/(1+ct.exp(-z)) (L37), fp32 store (L38).",
+      "note": "Same fp32 path; sigmoid intrinsic versus explicit 1/(1+exp(-z)) is a primitive choice covered by the config verify tolerance, so the contract permits either algebraic form of SiLU."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Shape-equality check (L39-40); .contiguous() on x, gate, bias (L41-43, no-ops for generator inputs); fp32 output allocation (L44).",
+      "cutile": "Shape check (L46-47); .contiguous() on the three inputs (L49-51, no-ops); fp32 output allocation (L52).",
+      "note": "Identical host work; no casts, copies or cached state."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None.",
+      "cutile": "None.",
+      "note": "Result written directly."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L44).",
+      "cutile": "No input written; fresh output per call (L52).",
+      "note": "Idempotent; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "4 * n * dtype_size",
+    "flops_expr": "5 * n",
+    "consistent": "true",
+    "note": "Three input reads and one output write of n elements at dtype_size bytes match the single kernel on both sides for the fp32-only config (the output is always fp32, so the formula would undercount the output write for a non-fp32 input dtype, which is never swept). The .contiguous() calls are no-ops; nothing is prepacked or preprocessed."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "1cee94c5906b6231e0e08fa48b37f78aebc5681e604835f9fcb9720115ec4511",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "cb1fa821fa6c6064befd8011a0466ac0a20090411210ef58cdc951431a4aaafe",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

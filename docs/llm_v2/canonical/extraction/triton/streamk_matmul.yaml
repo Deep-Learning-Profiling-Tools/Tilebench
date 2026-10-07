@@ -1,0 +1,365 @@
+operator: streamk_matmul
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/streamk_matmul/impl_triton.py
+    functions:
+      - name: _default_config
+        lines: [43, 56]
+        role: helper
+      - name: _b_transposed
+        lines: [66, 71]
+        role: helper
+      - name: _swizzle_tile
+        lines: [74, 85]
+        role: kernel
+      - name: first_wave
+        lines: [88, 135]
+        role: kernel
+      - name: full_tiles
+        lines: [138, 165]
+        role: kernel
+      - name: _device_sm_count
+        lines: [168, 169]
+        role: helper
+      - name: _streamk_partition
+        lines: [172, 177]
+        role: helper
+      - name: _launch_full_tiles
+        lines: [180, 191]
+        role: host-driver
+      - name: _launch_first_wave
+        lines: [194, 204]
+        role: host-driver
+      - name: _tune_pipeline
+        lines: [207, 243]
+        role: tuner
+      - name: run
+        lines: [246, 286]
+        role: host-driver
+      - name: get_last_config
+        lines: [289, 292]
+        role: helper
+  - path: tilebench/benchmarks/operators/streamk_matmul/impl_torch.py
+    functions:
+      - name: run
+        lines: [6, 7]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/streamk_matmul/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_streamk_matmul_inputs
+        lines: [410, 413]
+        role: helper
+  - path: tilebench/hardware.py
+    functions:
+      - name: detect_arch
+        lines: [74, 82]
+        role: helper
+functional_semantics: >
+  Dense GEMM C = A @ B with A of shape (M, K), B of shape (K, N), C of
+  shape (M, N), all in the same dtype, via torch.matmul(a, b)
+  (impl_torch.py line 7). The reference module sets
+  torch.backends.cuda.matmul.allow_tf32 = True at import (line 3), so the
+  fp32 reference itself uses TF32 tensor-core math; config.yaml verify
+  tolerances are atol 1.0 / rtol 1e-2. No reference-side preprocessing.
+run_signature:
+  text: |
+    def run(a: torch.Tensor, b: torch.Tensor,
+            block_size: int = None, autotune: bool = False, **kwargs):
+  positional_inputs: [a, b]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor out of shape (M, N) and dtype a.dtype (fresh allocation; for fp32 it is also the accumulation buffer)
+  get_last_config: present
+inputs:
+  - name: a
+    shape: "(M, K)"
+    dtype: "fp16 | bf16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous row-major (asserted at line 248)
+    mutated_in_place: false
+    notes: Read through a host-side TMA TensorDescriptor with box [BLOCK_M, BLOCK_K] (lines 182, 195).
+  - name: b
+    shape: "(K, N)"
+    dtype: same as a
+    layout: contiguous row-major (asserted at line 248)
+    mutated_in_place: false
+    notes: >
+      Not consumed directly: run() uses bt = b.t().contiguous(), an (N, K)
+      row-major copy, cached per b tensor identity in a
+      WeakTensorKeyDictionary (lines 63-71, 264). The kernels load (BLOCK_N,
+      BLOCK_K) boxes of bt and multiply by b.T (lines 123-124, 161-162).
+outputs:
+  - name: out
+    shape: "(M, N)"
+    dtype: same as a
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape unpack, NUM_SMS = multi_processor_count of the current CUDA device, DT_ID lookup
+    lines: [251, 254]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: NUM_SMS determines the Stream-K decomposition, so the decomposition is device-dependent.
+  - description: out = torch.empty((M, N), dtype=a.dtype)
+    lines: [257, 257]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: Always allocated.
+  - description: >
+      fp32 accumulation target c; fp32 inputs reuse out and zero it in place
+      (c.zero_()), half inputs allocate a separate fp32 (M, N) buffer with
+      torch.zeros.
+    lines: [258, 262]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      The zero fill is required for correctness because the Stream-K kernel
+      accumulates with atomic adds. For fp16/bf16 this is an extra
+      M*N*4-byte buffer plus memset inside the timed region.
+  - description: bt = _b_transposed(b) - b.t().contiguous(), cached per b tensor identity
+    lines: [63, 71]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: true
+    notes: >
+      The transpose copy (read K*N + write K*N) runs on the first call for
+      a given b object; subsequent calls with the same tensor hit the cache,
+      so steady-state timing effectively sees a prepacked (N, K) B. The
+      cache is keyed by tensor identity, not contents.
+  - description: host-side TensorDescriptor construction for a, bt (and c for full_tiles)
+    lines: [182, 184]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: Rebuilt on every launch (also lines 195-196); host metadata only.
+  - description: config selection (tuner or _default_config(a.dtype))
+    lines: [266, 272]
+    kind: other
+    inside_run: true
+    cached_across_calls: true
+    notes: The tuner caches its winner per (M, N, K, dtype); the default path calls detect_arch() each call.
+stages:
+  - id: s1
+    description: zero-fill of the fp32 accumulation buffer c (c.zero_() for fp32, torch.zeros for half dtypes).
+    kind: memcpy
+    lines: [258, 262]
+    launches: "1 (memset)"
+    depends_on: []
+    fusable_with: "unclear"
+    produces: c, an (M, N) fp32 buffer initialised to 0
+  - id: s2
+    description: >
+      first_wave kernel, grid = (NUM_SMS,) (line 197). Stream-K partition
+      (lines 96-103, mirrored on the host at lines 172-177):
+      total_tiles = cdiv(M, BLOCK_M) * cdiv(N, BLOCK_N);
+      iters_per_tile = cdiv(K, BLOCK_K); streamk_tiles = total_tiles mod
+      NUM_SMS, and if total_tiles - streamk_tiles > NUM_SMS (i.e. at least
+      two full waves remain) streamk_tiles += NUM_SMS. Tiles with id in
+      [0, streamk_tiles) form the Stream-K region; their
+      streamk_tiles * iters_per_tile K-iterations are divided evenly over
+      the NUM_SMS programs (each gets floor(total/NUM_SMS) iterations plus
+      one more when pid < total mod NUM_SMS; program pid owns the
+      contiguous range [start_iter, last_iter), lines 106-107). A program
+      walks its range segment by segment (while loop, lines 109-135): each
+      segment is the intersection of its range with one tile (lines
+      110-112); the tile id is mapped to (pid_m, pid_n) by the grouped
+      swizzle _swizzle_tile (lines 75-85, GROUP_M rows of tiles per group,
+      column-major inside the group); an fp32 (BLOCK_M, BLOCK_N)
+      accumulator is zeroed, and for each K-iteration of the segment a
+      (BLOCK_M, BLOCK_K) box of A and a (BLOCK_N, BLOCK_K) box of B^T are
+      loaded through the TMA descriptors and multiplied with
+      tl.dot(a, b.T, acc, input_precision="tf32") (lines 118-125). The
+      segment's partial sum is then combined into C with tl.atomic_add
+      under an (rm < M, rn < N) mask (lines 128-133) - there is no
+      separate fixup kernel, no semaphore/flag array and no partials
+      buffer; the zeroed fp32 C is the only combination target. Programs
+      whose range spans several tiles do this once per tile segment.
+    kind: kernel
+    lines: [88, 135]
+    launches: "1 (grid = NUM_SMS programs)"
+    depends_on: [s1]
+    fusable_with: "unclear"
+    produces: fully accumulated values for Stream-K tiles in c (sum of atomic partials)
+  - id: s3
+    description: >
+      full_tiles kernel, launched only when blocking_tiles = total_tiles -
+      streamk_tiles > 0 (lines 278-282), grid = (blocking_tiles,). Program
+      pid owns tile_id = pid + streamk_tiles (line 150; a guard at
+      lines 151-152 returns if tile_id >= total_tiles), recomputes the
+      same streamk_tiles rule (lines 145-148), swizzles to (pid_m, pid_n),
+      runs the full K loop with a static trip count tl.range(cdiv(K,
+      BLOCK_K)) using the same TMA loads and tl.dot(..., input_precision=
+      "tf32") into an fp32 accumulator (lines 158-162), and writes the
+      tile with a non-atomic TMA store c_desc.store (line 165), cast to
+      c's element type (fp32). These data-parallel tiles are disjoint from
+      the Stream-K tiles, so plain stores are correct.
+    kind: kernel
+    lines: [138, 165]
+    launches: "0 or 1 (grid = total_tiles - streamk_tiles programs)"
+    depends_on: [s1]
+    fusable_with: [s2]
+    produces: final values for the data-parallel tiles in c
+  - id: s4
+    description: out.copy_(c) when c is not out, i.e. for fp16/bf16 inputs; casts the fp32 accumulation buffer into the output dtype.
+    kind: memcpy
+    lines: [284, 285]
+    launches: "0 (fp32) or 1 (fp16/bf16) cast-copy kernel"
+    depends_on: [s2, s3]
+    fusable_with: "unclear"
+    produces: out (final)
+algorithm_family: >
+  Stream-K GEMM (hybrid data-parallel + Stream-K): the output tile grid is
+  split into a Stream-K region (the partial last wave plus, when at least
+  two full waves exist, one extra full wave) whose tile x K-iteration
+  space is divided evenly across one program per SM, and a data-parallel
+  region of full tiles with one program per tile. Two kernels: first_wave
+  (Stream-K region, atomic-add combination of partial K-slabs into a
+  zero-initialised fp32 C) and full_tiles (one tile per program, direct
+  store). TMA tensor-descriptor loads of A and of a pre-transposed B^T,
+  tl.dot with TF32 input precision, fp32 accumulation, grouped tile
+  swizzle.
+reduction_scan_sort_structure: >
+  Per output tile the K dimension is reduced in BLOCK_K slabs in fp32. For
+  data-parallel tiles the reduction is a single sequential loop over
+  cdiv(K, BLOCK_K) slabs inside one program. For Stream-K tiles the K range
+  is cut at segment boundaries (depending on NUM_SMS and the tile's
+  position in the iteration space); each segment is reduced sequentially
+  by one program and the segments are combined by fp32 tl.atomic_add into
+  C, so the combination order across segments is nondeterministic and
+  Stream-K tiles are not bitwise reproducible run to run. Inside tl.dot
+  the MMA accumulation order is hardware-defined.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "fp32 for every dtype (ACC_TYPE=tl.float32, lines 189 and 202; the atomic target c is always an fp32 tensor, lines 258-262)"
+  output_dtype: same as input (fp32 accumulates directly in out; fp16/bf16 are cast by out.copy_(c) at line 285)
+  special_modes: "tl.dot(..., input_precision=\"tf32\") on both kernels (lines 124, 162): TF32 tensor-core math for fp32 operands, matching the reference's allow_tf32=True; presumed to have no effect on fp16/bf16 operands (standard Triton semantics, not verified here)"
+  masking_or_padding_values: "TMA descriptor loads zero-fill out-of-bounds boxes (TMA semantics; no explicit `other`); the atomic store in first_wave is masked rm < M and rn < N (line 130); c_desc.store clips OOB rows/cols (TMA semantics)"
+intermediate_storage: >
+  c: an (M, N) fp32 accumulation buffer. For fp32 inputs it is the output
+  tensor itself (zeroed in place); for fp16/bf16 it is a separate
+  torch.zeros buffer allocated inside run() (line 262), alive until run()
+  returns after out.copy_(c). bt: the (N, K) transposed copy of B, cached
+  across calls in a module-level WeakTensorKeyDictionary keyed by the b
+  tensor (lines 63-71), freed when b is garbage-collected. The tuner uses
+  its own (M, N) fp32 scratch (line 213) that is never zeroed.
+mutation_rules: >
+  a and b are not modified. out (and c) are fresh per call, so repeated
+  calls are idempotent on the inputs. The B^T cache means that an in-place
+  modification of b's contents between calls would be silently ignored
+  (stale transpose); the cache keys on object identity only.
+hardware_dispatch_branches:
+  - condition: "_DEFAULT_CONFIG is not _BUILTIN_DEFAULT_CONFIG (a harness has replaced the module default)"
+    lines: [49, 50]
+    changes: the replaced config is used verbatim and the architecture fallbacks below are bypassed; non-autotuned path only.
+    algorithmic: false
+  - condition: "detect_arch() == 'cdna3' (tilebench/hardware.py lines 74-82; gfx942 / MI300X)"
+    lines: [51, 53]
+    changes: >
+      Non-autotuned path uses _CDNA3_DEFAULT_CONFIG (defined at lines
+      29-35), identical to the builtin default except for a smaller K tile
+      so the fp32 operand tiles fit the gfx942 LDS budget; output tile,
+      GROUP_M, warps and stages unchanged; the result is a member of the
+      unchanged _SEARCH_SPACE. Same kernels, same decomposition, same
+      atomics.
+    algorithmic: false
+  - condition: "detect_arch() == 'hopper' and dtype == torch.float32 (sm_90)"
+    lines: [54, 55]
+    changes: >
+      Non-autotuned path uses _HOPPER_FP32_DEFAULT_CONFIG (defined at lines
+      36-39), identical to the builtin default except for a smaller K tile
+      so the fp32 tiles fit the sm_90 per-block shared-memory limit; a
+      member of _SEARCH_SPACE. Legality only.
+    algorithmic: false
+  - condition: "autotune path: a config in _SEARCH_SPACE raises during do_bench (e.g. compile/launch failure on the present GPU)"
+    lines: [228, 232]
+    changes: that config is skipped and reported; the search space itself is identical on all architectures.
+    algorithmic: false
+  - condition: "NUM_SMS = multi_processor_count of the current device (queried at line 253)"
+    lines: [168, 169]
+    changes: >
+      The Stream-K / data-parallel split (streamk_tiles, blocking_tiles,
+      per-program iteration ranges) is a function of the SM count, so the
+      work decomposition - but not the mathematical result - differs per
+      GPU.
+    algorithmic: false
+tunable_parameters:
+  - name: BLOCK_M
+    role: tile size (output rows)
+    default_present: true
+  - name: BLOCK_N
+    role: tile size (output columns)
+    default_present: true
+  - name: BLOCK_K
+    role: tile size (K slab)
+    default_present: true
+  - name: GROUP_M
+    role: tile-swizzle group height
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  Custom tuner, not triton.autotune: _tune_pipeline (lines 207-243)
+  sweeps _SEARCH_SPACE (BLOCK_M x BLOCK_N x BLOCK_K x num_warps, with
+  GROUP_M and num_stages fixed) and times the whole first_wave +
+  full_tiles pipeline for each candidate with triton.testing.do_bench
+  (warmup=1, rep=3) into a private, never-zeroed fp32 (M, N) scratch;
+  candidates that raise are skipped; the winner is cached per
+  (M, N, K, dtype id) in _autotune_cache and copied into the mutable dict
+  _last_autotune_config, which get_last_config() returns (lines 266-269,
+  289-292). The non-autotuned path uses _default_config(dtype). Audit only.
+implementation_freedoms_observed: >
+  Tile sizes, warps, stages, swizzle grouping; TMA descriptors vs pointer
+  loads; whether B is consumed as (K, N) directly or pre-transposed to
+  (N, K) (the source transposes on the host and caches the copy); two
+  launches vs a single persistent kernel covering both regions; launch
+  order of the two kernels (they write disjoint tiles); using the output
+  as the atomic target for fp32 vs a separate scratch; pipelining of the
+  runtime-bounded K loop in first_wave.
+algorithm_constraints_observed: >
+  The Stream-K decomposition rule (streamk_tiles = total mod NUM_SMS, plus
+  NUM_SMS when at least two full waves remain; even division of the
+  Stream-K iteration space across NUM_SMS programs with the leading
+  programs taking the remainder; data-parallel tiles one per program);
+  fp32 accumulation for all dtypes; combination of Stream-K partial slabs
+  by atomic fp32 accumulation into a zero-initialised fp32 C with no fixup
+  kernel or partials buffer; TF32 MMA precision for fp32 operands; output
+  in the input dtype with a final cast for half dtypes; inputs unmodified;
+  contiguous inputs required; device SM count as the decomposition
+  parameter.
+fq_boundary:
+  bytes_expr: "(m * k + k * n + m * n) * dtype_size"
+  flops_expr: "2 * m * n * k"
+  consistent_with_timed_boundary: false
+  notes: >
+    The formula counts one read of A and B and one write of C in the input
+    dtype and assumes nothing else happens. The timed run() additionally:
+    (1) zero-fills the fp32 accumulation buffer on every call (m*n*4 bytes
+    written); (2) for fp16/bf16 allocates and zero-fills a separate fp32
+    scratch, accumulates into it (atomic read-modify-write for Stream-K
+    tiles, TMA stores for full tiles), then reads it back and writes the
+    half-precision out via copy_, so the C-side traffic is several times
+    the counted m*n*dtype_size; (3) performs atomic RMW on Stream-K tiles
+    even for fp32; (4) transposes B on the first call per tensor only, so
+    steady-state timing assumes a prepacked (N, K) B that the formula
+    (which counts B once) is indifferent to. Operand re-reads across output
+    tiles (standard GEMM reuse) are also idealised away, as for any GEMM.
+    The flop count 2mnk is consistent.
+notes_for_review:
+  - "DT_ID is passed as a constexpr to both kernels but never referenced in their bodies; it only forces per-dtype specialisation."
+  - "The B^T cache (WeakTensorKeyDictionary) keys on tensor identity; in-place edits of b between calls would reuse a stale transpose."
+  - "fp32 atomic accumulation makes Stream-K tiles non-deterministic run to run; verify tolerance atol 1.0 / rtol 1e-2 hides this."
+  - "first_wave's K loop is a runtime-bounded `for` nested in a `while` over tile segments; its pipelining under num_stages is Triton-internal (unclear)."
+  - "The tuner's scratch is never zeroed, so atomics accumulate garbage there; harmless for timing only."
+  - "impl_torch.py sets torch.backends.cuda.matmul.allow_tf32 = True at import, a process-global side effect on other operators' fp32 matmuls."
+  - "For fp16/bf16 the final out.copy_(c) is an extra cast kernel inside the timed region."
+  - "The `tf32` input_precision flag is assumed to be a no-op for half operands; not verified in this extraction."
+  - "Behaviour of TensorDescriptor loads on a GPU without TMA (CDNA3 path) is not visible in this file; unclear whether Triton lowers them to plain loads."
+  - "block_size keyword is accepted but unused."

@@ -1,0 +1,25 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "jacobi_stencil_2d",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "output_alloc", "description": "Allocate the (rows, cols) output of IN's dtype inside run()."},
+    {"id": "stencil_sweep", "description": "One logical sweep in which every OUT element is written once from IN: interior = 0.25*(up+down+left+right), boundary = centre copied; boundary and interior may be written by one launch or by separate launches over disjoint positions, but not by a full copy of IN followed by an interior update."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?conv2d\\(|F\\.conv2d\\(", "message": "convolution primitive computes the stencil", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.roll\\(|torch\\.nn\\.functional\\.unfold\\(|F\\.unfold\\(", "message": "roll/unfold would form the neighbour sum in PyTorch", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\[\\s*0\\s*:\\s*rows\\s*-\\s*2\\s*,|\\[\\s*2\\s*:\\s*rows\\s*,|\\[\\s*1\\s*:\\s*rows\\s*-\\s*1\\s*,", "message": "slicing arithmetic on the input grid (reference-style interior update)", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.clone\\(\\)|torch\\.clone\\(|\\.copy_\\(", "message": "host-side copy of the input to obtain the boundary", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.nn\\.functional\\.pad\\(|F\\.pad\\(", "message": "host-side halo padding of the input", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.where", "ct\\.where", "T\\.if_then_else", "nl\\.where", "where\\(", "select"], "message": "a boundary select between the average and the centre value", "level": "suspicious"},
+    {"any_of": ["0\\.25", "/\\s*4", "\\* ?0\\.25"], "message": "the 0.25 scaling of the four-neighbour sum", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (rows, cols) tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (here only the sweep launch(es)); the output allocation call is host-side work and not GPU time. No halo preprocessing, no cross-call cache."},
+  "tolerance_source": "config.verify"
+}

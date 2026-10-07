@@ -1,0 +1,40 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "top_k_selection",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "candidate_width", "description": "Compute K' = smallest power of two >= k and choose a block width B >= 2*K' inside run()."},
+    {"id": "block_topk_level", "description": "A level that cuts the current vector into blocks of at most B elements (contiguous blocks are natural; any fixed partition) padded with -inf, selects each block's K' largest values in descending order with an exact in-block primitive (block top-k builtin, bitonic sort + prefix, or equivalent) and writes them as rows of a fresh (nb, K') fp32 buffer."},
+    {"id": "hierarchy_loop", "description": "Repeat the block level on the flattened candidate buffer until a single block remains; each level depends on the whole previous level's global candidate buffer (one launch per level is the natural realisation)."},
+    {"id": "final_slice", "description": "Return the first k entries of the final single-block row as a 1-D (k,) fp32 tensor that does not alias the input."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.topk\\(|(?<!tl)\\.topk\\(|torch\\.sort\\(|torch\\.argsort\\(|torch\\.kthvalue\\(|torch\\.msort\\(", "message": "The whole selection is performed by a PyTorch top-k / sort routine.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.(sort|argsort)\\(", "message": "A tensor-method sort on the host replaces the in-kernel hierarchy.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(max|amax|argmax|maximum|where|nonzero|histc|bincount|bucketize|searchsorted|cumsum|unique)\\(", "message": "Host-side PyTorch reduction / histogram / threshold operations indicate a different selection family or host-side selection.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.tolist\\(\\)|\\.numpy\\(\\)|heapq|\\bsorted\\(|\\.item\\(\\)", "message": "Data moved to the host or selected in Python.", "level": "suspicious", "scope": "host"},
+    {"pattern": "radix|histogram|threshold|bucket|digit", "message": "Radix-select / histogram-threshold selection is a different algorithm family from the hierarchical block tournament.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|return\\s+input\\[|return\\s+input\\.|input\\.copy_\\(|input\\[.*\\]\\s*=|input\\.sort_\\(", "message": "Returning a view of the input or mutating it violates the aliasing / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "largest\\s*=\\s*False|ascending|reverse\\s*=\\s*True", "message": "Ascending / smallest selection; the output must be the k largest in descending order.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.topk", "tl\\.sort", "bitonic", "ct\\.minimum", "ct\\.maximum", "tl\\.maximum", "tl\\.minimum", "T\\.max", "nl\\.maximum", "nisa\\.max8", "nisa\\.nc_find_index8", "compare", "exchange", "sort"], "message": "No in-block selection / sort primitive found.", "level": "suspicious"},
+    {"any_of": ["-float\\(['\"]inf['\"]\\)", "-inf", "NEG_INF", "float\\(['\"]-inf['\"]\\)", "-math\\.inf"], "message": "No -inf padding evidence for partial blocks.", "level": "suspicious"},
+    {"any_of": ["next_power_of_2", "next_pow2", "bit_length", "1 << ", "K2", "K_pad", "Kp"], "message": "No evidence of the per-block candidate width K' = next power of two >= k.", "level": "suspicious"},
+    {"any_of": ["while", "for .* in range"], "message": "No level loop found; the hierarchy must repeat until one block remains.", "level": "suspicious"},
+    {"any_of": ["\\[0, :k\\]", "\\[0,\\s*:\\s*k\\]", "\\[:k\\]", ":k\\]"], "message": "No final slice to exactly k values found.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.view",
+    "Tensor.reshape",
+    "Tensor.numel",
+    "Tensor.__getitem__"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "a 1-D fp32 (k,) tensor; may be a slice/view of a candidate buffer allocated inside run() (both references return out[0, :k] of the final (1, K') buffer); must never be a view of or share storage with input"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (every level's selection kernel, and a device copy of the result if one is made); K' and block-width arithmetic, the per-level buffer allocation calls and the final slice are host work, not GPU time. No cached state across calls, no host-side sort or copy of the input, no prepacking. The per-level candidate buffers are part of the canonical algorithm, not preprocessing."},
+  "tolerance_source": "config.verify"
+}

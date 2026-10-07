@@ -1,0 +1,147 @@
+operator: quantize_global
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/quantize_global/impl_cutile.py
+    functions:
+      - name: quantize_kernel
+        lines: [21, 25]
+        role: kernel
+      - name: run
+        lines: [31, 56]
+        role: host-driver
+      - name: get_last_config
+        lines: [59, 60]
+        role: helper
+  - path: tilebench/benchmarks/operators/quantize_global/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_quantize_global_inputs
+        lines: [175, 176]
+        role: helper
+functional_semantics: >
+  y = x.to(torch.float16) (impl_torch.py line 5): a plain element-wise
+  down-cast of a 1-D fp32 tensor to fp16 (torch rounds to nearest even).
+  Despite the operator name there is no absmax reduction, no scale factor
+  and no integer quantisation anywhere in impl_torch.py or impl_cutile.py;
+  "quantize" here means the fp32 -> fp16 cast only. The generator
+  (tensors.py lines 175-176) always produces torch.float32 randn data
+  regardless of the dtype argument, and config.yaml fixes dtype to fp32
+  via case_defaults. No other reference-side preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (n,), dtype fp16
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: fp32 (fixed by the generator and by case_defaults)
+    layout: "contiguous 1-D; run() calls x.contiguous() (line 33), a no-op for the generator input"
+    mutated_in_place: false
+    notes: "n_elements is taken from x.numel() (line 35)."
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: fp16
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: x = x.contiguous()
+    lines: [33, 33]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no-op for the contiguous generator input; would copy a strided input.
+  - description: allocate output = torch.empty(x.shape, dtype=float16)
+    lines: [34, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one allocation per call.
+stages:
+  - id: s1
+    description: >
+      1-D element-wise cast kernel: each CTA loads one tile of TILE fp32
+      elements at block index bid (ct.load, no explicit padding_mode,
+      line 24), converts it with ct.astype(x_tile, ct.float16) and stores
+      the fp16 tile at the same block index of output (line 25). Grid =
+      ceil(n / TILE) CTAs (lines 53-54).
+    kind: kernel
+    lines: [21, 25]
+    launches: "1 launch of ceil(n / TILE) CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Single-pass 1-D tiled element-wise dtype down-cast (fp32 -> fp16); no
+  reduction and no scaling.
+reduction_scan_sort_structure: >
+  None. In particular there is no absmax pass: the source contains no
+  reduction of any kind.
+precision:
+  input_dtypes: [fp32]
+  accumulation: none
+  output_dtype: fp16
+  special_modes: "fp32 -> fp16 rounding via ct.astype; the rounding mode is not stated in the source (the reference torch .to() rounds to nearest even), so bit-exact agreement is unclear from the source alone"
+  masking_or_padding_values: >
+    No explicit padding_mode or mask; a tail tile would rely on library
+    default load padding and bounds-clipped stores. For the sweep n is a
+    multiple of 1024*1024, a multiple of every tile length in the search
+    space, so no tail tile occurs.
+intermediate_storage: >
+  None beyond the output buffer.
+mutation_rules: >
+  x is never written. A new output is allocated on every call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (1-D tile length, ConstInt TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE (impl_cutile.py lines 14-18):
+  ct.tune.exhaustive_search keyed on (n_elements, dtype) (lines 39-46),
+  winner cached per shape key; kernel_with_hints memoises replace_hints
+  (line 52). Default path uses _DEFAULT_CONFIG (line 13). Winner recorded
+  in _last_autotune_config (lines 47-48). block_size is accepted but
+  unused.
+implementation_freedoms_observed: >
+  Tile length and occupancy; load/store lowering and vectorisation; grid
+  shape.
+algorithm_constraints_observed: >
+  Single pass: each fp32 element read once and each fp16 element written
+  once; output is a fresh fp16 buffer of the same shape; no scratch memory;
+  no reduction or scaling step may be added (the reference is a bare
+  cast).
+fq_boundary:
+  bytes_expr: "n * dtype_size + n * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr = n * dtype_size for the fp32 read (dtype_size is the input
+    dtype size, 4 for the fixed fp32 case) plus n * 2 for the fp16 write,
+    exactly the kernel's traffic; nothing is prepacked and the host
+    contiguous() call is a no-op. flops_expr counts one convert per
+    element. The expression is only valid while the case dtype stays fp32
+    (the generator ignores the dtype argument anyway).
+notes_for_review:
+  - "Operator name is misleading: neither the reference nor the cuTile source performs an absmax reduction, scaling, or integer quantisation; the operator is a pure fp32 -> fp16 cast."
+  - "The rounding mode of ct.astype(fp32 -> fp16) is not visible in the source; the reference uses torch's round-to-nearest-even."
+  - "generate_quantize_global_inputs ignores its dtype parameter and always emits fp32, so the dtype_size term in bytes_expr is pinned to 4."

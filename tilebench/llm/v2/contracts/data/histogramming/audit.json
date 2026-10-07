@@ -1,0 +1,200 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "histogramming",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/histogramming/impl_triton.py",
+      "functions": [
+        {
+          "name": "_DEFAULT_CONFIG (includes NUM_PARTIAL)",
+          "lines": [
+            6,
+            14
+          ]
+        },
+        {
+          "name": "histogram_partial_kernel",
+          "lines": [
+            17,
+            42
+          ]
+        },
+        {
+          "name": "histogram_reduce_kernel",
+          "lines": [
+            45,
+            70
+          ]
+        },
+        {
+          "name": "_histogram_partial_kernel_autotuned",
+          "lines": [
+            73,
+            86
+          ]
+        },
+        {
+          "name": "_histogram_reduce_kernel_autotuned",
+          "lines": [
+            89,
+            106
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            109,
+            157
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            160,
+            179
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/histogramming/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_NUM_PARTIAL",
+          "lines": [
+            17,
+            17
+          ]
+        },
+        {
+          "name": "histogram_partial_kernel",
+          "lines": [
+            34,
+            64
+          ]
+        },
+        {
+          "name": "histogram_reduce_kernel",
+          "lines": [
+            67,
+            90
+          ]
+        },
+        {
+          "name": "_partial_tuner / _reduce_tuner",
+          "lines": [
+            93,
+            94
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            97,
+            185
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            188,
+            189
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/histogramming/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            9
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "hist[b] = number of input values equal to b for b in [0, num_bins); values outside the range are dropped by the valid mask (impl_triton.py L39-42); output (num_bins,) int32 (L124).",
+      "cutile": "Same: out-of-range values contribute an update of 0 (impl_cutile.py L56-62); output (num_bins,) int32 (L107).",
+      "note": "Both match impl_torch.py L9 (bincount(minlength=num_bins).to(int32)) for in-range inputs; the generator produces arange(N) % num_bins (tensors.py L554-556), so every value is in range and the exact (atol = rtol = 0) check holds. torch would raise on negatives / grow the output for values >= num_bins; neither manual side does, and the contract makes out-of-range handling 'must not corrupt in-range counts'."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "s0: histogram = torch.empty, partial = torch.zeros((num_partials, num_bins), int32) inside run() (L124-128); s1: partial kernel, grid (num_partials,), program p owns row p and grid-strides over the input in chunks (L31-42); s2: reduce kernel, per bin slice sums the partial rows in row chunks with tl.sum(axis=0) and stores (L56-70); launched s1 then s2 on the same stream (L141-155).",
+      "cutile": "s0: histogram = torch.empty, partial = torch.zeros inside run() (L107, L116); s1: partial kernel, grid (num_partials, 1, 1), program pid owns row pid and grid-strides over chunks (L45-64); s2: reduce kernel per bin slice with ct.sum(axis=0) over row tiles (L76-90); launched s1 then s2 (L142-145, L169-173).",
+      "note": "Identical three-step structure (zero-filled global scratch of private rows -> private counting -> column-sum reduce). NOT a register/shared-memory histogram primitive on either side: both count with global-memory atomic adds into the program's own row (L42 / L64). num_partials = min(cap, ceil(N / default chunk)) on both sides (L127 / L113)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "s1 requires the zeroed scratch (atomic accumulation); s2 requires every s1 program to have finished (separate launch on the same stream); no two s1 programs write the same row.",
+      "cutile": "Same (zeroed scratch L116, two launches L142/L169, private rows L60).",
+      "note": "Identical dependency graph; a single-launch fusion would need a grid-wide barrier, which neither side uses."
+    },
+    "reduction_scan_sort": {
+      "status": "mapping-only",
+      "triton": "s1: tl.atomic_add of a vector of ones MASKED to valid lanes (L32, L42), so invalid/tail lanes issue no atomic; s2: sequential loop over BLOCK_ROWS-row chunks with an intra-chunk tl.sum tree (L61-68).",
+      "cutile": "s1: ct.atomic_add of an int32 update that is 1 for valid lanes and 0 for invalid lanes, with invalid lanes redirected to bin 0 (L60-64); s2: sequential loop over row tiles with ct.sum (L80-88).",
+      "note": "Both are order-free exact int32 counting followed by an exact column sum; masking the atomic versus adding 0 is a mapping choice with identical counts. No sort, no scan."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "int32 throughout (L32, L59, L124, L128).",
+      "cutile": "int32 throughout (L62, L78, L107, L116).",
+      "note": "Exact integer arithmetic; result independent of scheduling."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "input.contiguous() (L123, no-op); output allocation (L124); num_partials from the default chunk size (L118, L127); partial scratch allocated AND zero-filled with torch.zeros on every call (L128).",
+      "cutile": "input.contiguous() (L106, no-op); output allocation (L107); num_partials (L110-113); partial scratch torch.zeros every call (L116); autotune-only throwaway scratch (L124) outside the default path.",
+      "note": "Identical: the scratch memset (num_partials * num_bins * 4 bytes) is inside the timed run() on both sides and is required by the atomic accumulation; nothing is cached across calls."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "partial: (num_partials, num_bins) int32 global scratch, zeroed per call, written by s1 with atomics, read by s2, released after run() (L128).",
+      "cutile": "Same scratch (L116).",
+      "note": "Both agree on a global scratch of private partial rows; its size is bounded by the partial cap times num_bins and does not scale with N."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh scratch and output per call (L124, L128).",
+      "cutile": "No input written; fresh scratch and output per call (L107, L116).",
+      "note": "Idempotent; contract forbids input mutation and cross-call scratch reuse."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(N + num_bins) * dtype_size",
+    "flops_expr": "N",
+    "consistent": "false",
+    "note": "dtype_size = 4. The formula counts one read of the N int32 inputs and one write of the num_bins int32 output only. The timed run() on BOTH sides additionally (i) zero-fills the (num_partials, num_bins) int32 scratch with torch.zeros (impl_triton.py L128 / impl_cutile.py L116), (ii) performs N atomic read-modify-writes into that scratch, and (iii) reads the whole scratch back in the reduce kernel; none of this is in bytes_expr. For the small-N / large-num_bins corner of the sweep (N = 262144, num_bins = 4096, 256 partials) the scratch is 4 MiB versus a 1 MiB input, so reported bandwidth there is a lower bound on actual traffic. No prepacked input or cached state exists; the mismatch is an uncounted in-run zero-fill/scratch, not an untimed prepack."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "(non-blocking, metric) bytes_expr omits the per-call scratch zero-fill (num_partials * num_bins * 4 B memset inside run()), the N atomic read-modify-writes into the scratch and the reduce pass's full scratch read, all of which are inside the timed window on both sides: decide whether to keep the compulsory-traffic convention (input read + output write) or to add the scratch traffic so that bandwidth/SOL figures are not understated in the small-N / large-num_bins corner.",
+    "(non-blocking, scope) Both implementations count with global-memory atomic adds into a private row of a zero-filled global scratch; the contract requires the two-level structure (private partial histograms, then a cross-partial sum) and a scratch initialised inside run(), but leaves the private-row update mechanism (per-element atomics versus on-chip pre-aggregation such as a register/shared-memory histogram primitive followed by additive updates of the row) as a permitted mapping. Confirm that this freedom is intended, since on-chip pre-aggregation can cut the scratch traffic the manual kernels pay."
+  ],
+  "contract_sha256": "6a2948510d356f8782ff99827b276d8adb2adc08230b720515e0b8db3f6f4499",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "76a137fc9c2a9a7272523945165002a078ae53ba169aec724057e3d8bd3dcff7",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

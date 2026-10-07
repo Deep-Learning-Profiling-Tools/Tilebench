@@ -1,0 +1,206 @@
+operator: gaussian_blur
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/gaussian_blur/impl_triton.py
+    functions:
+      - name: gaussian_blur_kernel
+        lines: [8, 41]
+        role: kernel
+      - name: _gaussian_blur_kernel_autotuned
+        lines: [44, 54]
+        role: tuner
+      - name: run
+        lines: [57, 93]
+        role: host-driver
+      - name: get_last_config
+        lines: [96, 104]
+        role: helper
+  - path: tilebench/benchmarks/operators/gaussian_blur/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 11]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/gaussian_blur/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_gaussian_blur_inputs
+        lines: [378, 387]
+        role: helper
+      - name: infer_problem_size (gaussian_blur branch)
+        lines: [761, 765]
+        role: helper
+functional_semantics: >
+  Single-channel 2-D "same" convolution of a flat image with a small
+  normalised kernel, zero padding. Reference impl_torch.run (lines 5-11):
+  x = input.view(1,1,R,C); w = kernel.view(1,1,kr,kc);
+  y = torch.nn.functional.conv2d(x, w, padding=(kr//2, kc//2));
+  y = y[:, :, :R, :C]; return y.reshape(-1). conv2d is cross-correlation
+  (no kernel flip), so y[r,c] = sum_{i<kr, j<kc} x[r + i - kr//2, c + j -
+  kc//2] * w[i, j] with out-of-image taps contributing 0. For odd kernel
+  sizes (config: 7x7) the slice is a no-op; for even sizes it trims the extra
+  row/column. The generator supplies a non-negative kernel normalised to sum
+  1 (tensors.py lines 385-386) and a flat randn image of R*C elements with
+  C defaulting to R (square).
+run_signature:
+  text: |-
+    def run(input, kernel, input_rows, input_cols,
+            kernel_rows, kernel_cols,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, kernel, input_rows, input_cols, kernel_rows, kernel_cols]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single flat tensor of input_rows * input_cols elements in input's dtype (or an empty tensor if the image has no elements)
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(input_rows * input_cols,) flat, interpreted as a row-major (input_rows, input_cols) image"
+    dtype: "fp16 | fp32 (config case_grid)"
+    layout: contiguous flat; kernel indexes input_ptr + r * input_cols + c (line 34), no strides
+    mutated_in_place: false
+    notes: generator torch.randn.
+  - name: kernel
+    shape: "(kernel_rows * kernel_cols,) flat, row-major (kernel_rows, kernel_cols)"
+    dtype: same as input
+    layout: contiguous flat; indexed kernel_ptr + kr * kernel_cols + kc (line 36)
+    mutated_in_place: false
+    notes: each tap weight is loaded as a scalar once per program per tap.
+  - name: input_rows
+    shape: scalar
+    dtype: Python int, runtime kernel argument
+    layout: n/a
+    mutated_in_place: false
+    notes: image height.
+  - name: input_cols
+    shape: scalar
+    dtype: Python int, runtime kernel argument
+    layout: n/a
+    mutated_in_place: false
+    notes: image width (equals input_rows in the generator).
+  - name: kernel_rows
+    shape: scalar
+    dtype: Python int, passed as tl.constexpr (line 15)
+    layout: n/a
+    mutated_in_place: false
+    notes: drives a statically unrolled tap loop; different values recompile.
+  - name: kernel_cols
+    shape: scalar
+    dtype: Python int, passed as tl.constexpr (line 16)
+    layout: n/a
+    mutated_in_place: false
+    notes: as above.
+outputs:
+  - name: output
+    shape: "(input_rows * input_cols,) flat"
+    dtype: same as input (torch.empty(total_elements, dtype=input.dtype), line 64); the fp32 accumulator is implicitly cast at tl.store (line 40)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: total_elements = rows * cols; early return of an empty tensor when <= 0
+    lines: [60, 62]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: degenerate-size guard only.
+  - description: allocate flat output in input dtype
+    lines: [64, 64]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: torch.empty.
+stages:
+  - id: s1
+    description: >
+      2-D grid of (BLOCK_R x BLOCK_C) output tiles. For each tap (kr, kc) in
+      two tl.static_range loops (fully unrolled at compile time), compute the
+      shifted source coordinates in_r = r + kr - kr_half, in_c = c + kc -
+      kc_half, load the shifted input tile under an in-image mask with
+      other=0.0 (zero padding), load the scalar weight, and accumulate
+      acc += x * w into an fp32 tile. Finally store acc under the in-image
+      output mask.
+    kind: kernel
+    lines: [8, 41]
+    launches: "1 launch, grid (ceil(input_rows/BLOCK_R), ceil(input_cols/BLOCK_C))"
+    depends_on: []
+    fusable_with: "none"
+    produces: output -- no intermediates
+algorithm_family: >
+  Direct 2-D stencil / small-kernel cross-correlation with zero padding:
+  register-tiled output, one masked global (re)load of the shifted input
+  tile per tap, taps statically unrolled. No im2col, no FFT, no separable
+  decomposition, no explicit shared-memory halo staging.
+reduction_scan_sort_structure: >
+  Per output element, a sequential sum over kr*kc taps in fixed row-major tap
+  order (kr outer, kc inner) into an fp32 accumulator. No cross-program
+  reduction, scan or sort.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: >
+    fp32 accumulator tile (tl.zeros(..., tl.float32), line 26). The per-tap
+    product x * w is formed in the input dtype (x tile and w scalar are both
+    loaded without a cast, lines 34-37), so for fp16 inputs each product is
+    rounded to fp16 before being added to the fp32 accumulator; for fp32
+    inputs everything is fp32.
+  output_dtype: same as input (fp32 accumulator cast at store)
+  special_modes: none (no tensor cores, no tf32 flags in source)
+  masking_or_padding_values: "0.0 for out-of-image shifted loads (zero padding, matches conv2d padding); output store masked to the image"
+intermediate_storage: >
+  None in global memory.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_R
+    role: tile size (output rows per program)
+    default_present: true
+  - name: BLOCK_C
+    role: tile size (output columns per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over a list of (BLOCK_R, BLOCK_C) pairs x num_warps (key
+  ["input_rows", "input_cols", "kernel_rows", "kernel_cols"], warmup=1,
+  rep=3), lines 44-54; grid lambda of meta BLOCK_R/BLOCK_C. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 78-91).
+  get_last_config returns BLOCK_R, BLOCK_C, num_warps. The block_size
+  keyword is accepted but unused.
+implementation_freedoms_observed: >
+  Output tile shape and warps; whether the halo is served by repeated masked
+  global loads (as here) or staged once; tap loop ordering/unrolling; whether
+  products are formed in fp32 before accumulation (this source forms them in
+  the input dtype); vectorisation along columns.
+algorithm_constraints_observed: >
+  Keep: cross-correlation orientation (tap (i,j) multiplies the pixel at
+  offset (i - kr//2, j - kc//2), no flip); zero padding outside the image;
+  "same" output size R x C in the input dtype; fp32 accumulation; kernel
+  dimensions treated as compile-time constants is an implementation choice
+  but the full kr*kc tap sum per output must be preserved; flat row-major
+  input/output views; no scratch.
+fq_boundary:
+  bytes_expr: >
+    input_rows * input_rows * dtype_size
+    + kernel_rows * kernel_cols * dtype_size
+    + input_rows * input_rows * dtype_size
+  flops_expr: >
+    2 * input_rows * input_rows * kernel_rows * kernel_cols
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml, where both are YAML folded scalars
+    (lines 22-28); the same folded form is used here so the parsed values
+    are identical. The timed run() is a size check, one
+    allocation and one kernel. The formula counts one read of the image, one
+    read of the kernel weights and one write of the output (compulsory
+    traffic), using input_rows squared because the config sweeps square
+    images (input_cols defaults to input_rows in the generator). It does not
+    count the kernel's kr*kc-fold re-reading of the shifted input tiles,
+    which is served from cache/L2 and is the usual minimal-traffic
+    convention. FLOPs = 2 per tap per output (multiply + add). No
+    preprocessing or prepacking is assumed or performed.
+notes_for_review:
+  - For fp16 inputs the per-tap product is computed in fp16 before fp32 accumulation (lines 34-37, no cast), which is looser than cuDNN's typical fp32-product path; config.yaml verify atol=0.1 / rtol=1e-2 absorbs this.
+  - The formula assumes square images (input_rows * input_rows); the operator and generator also accept input_cols != input_rows, where the formula would be wrong.
+  - Shifted input tiles are re-loaded from global memory for each of the kr*kc taps (49 masked loads per tile for 7x7); L1/L2 absorb most of it but it is not free.
+  - kernel_rows/kernel_cols are constexpr, so each distinct kernel size recompiles; the config fixes 7x7.
+  - Negative-index masking (in_r >= 0) relies on signed arithmetic of r + (kr - kernel_rows//2); the subtraction is done on Python ints inside static_range so it is well-defined.

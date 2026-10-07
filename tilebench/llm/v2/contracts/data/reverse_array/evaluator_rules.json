@@ -1,0 +1,29 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "reverse_array",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (N,) output of input's dtype inside run()."},
+    {"id": "mirrored_copy", "description": "One logical pass (any split across programs or launches, no global intermediate) that reads each element of input once and writes it once to position N - 1 - i of the output, with edge handling wherever N is not a multiple of the chosen tile (no out-of-range or negative-index access is stored or read)."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.flip\\(|torch\\.fliplr\\(|torch\\.flipud\\(|torch\\.gather\\(|torch\\.index_select\\(|torch\\.take\\(|torch\\.take_along_dim\\(", "message": "A PyTorch flip/gather replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.flip\\(|\\.index_select\\(|(?<!tl)(?<!ct)(?<!nl)\\.gather\\(|\\.copy_\\(|torch\\.arange\\(", "message": "Tensor-method flip/gather, a host copy, or a host-built index inside run() performs the reversal on the host.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|return\\s+input\\.|as_strided|stride\\s*=\\s*-", "message": "Returning the input, a view of it, or a negative-stride view violates the fresh contiguous-output requirement.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in reverse_array.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "ct\\.scatter", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the reversal must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["N\\s*-\\s*1\\s*-", "n\\s*-\\s*1\\s*-", "tl\\.flip", "ct\\.flip", "T\\.flip", "nl\\.flip", "reverse", "\\[::-1\\]"], "message": "No mirrored index arithmetic or in-tile flip found inside the kernel.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty_like",
+    "torch.cuda.current_stream",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (N,) tensor must be freshly allocated inside run(), contiguous, and must not share storage with input"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no host-side copy, index construction or conversion of input."},
+  "tolerance_source": "config.verify"
+}

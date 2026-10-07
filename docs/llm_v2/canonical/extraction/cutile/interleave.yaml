@@ -1,0 +1,180 @@
+operator: interleave
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/interleave/impl_cutile.py
+    functions:
+      - name: interleave_kernel
+        lines: [21, 27]
+        role: kernel
+      - name: run
+        lines: [33, 59]
+        role: host-driver
+      - name: get_last_config
+        lines: [62, 63]
+        role: helper
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [30, 30]
+        role: tuner
+  - path: tilebench/benchmarks/operators/interleave/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 8]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/interleave/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_interleave_inputs
+        lines: [340, 347]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Given two 1-D tensors A and B of equal length N, produce out of length 2N
+  with out[2i] = A[i] and out[2i+1] = B[i]. The reference (impl_torch.py
+  lines 4-8) allocates torch.empty(2*N, dtype=A.dtype) and performs the two
+  strided slice assignments output[0::2] = A and output[1::2] = B. Pure data
+  movement, no arithmetic; output dtype equals A.dtype. The generator
+  (tensors.py lines 340-347) draws randn for floating dtypes and
+  randint(-64, 65) cast to int8 for int8, and returns (a, b, n).
+run_signature:
+  text: "def run(A: torch.Tensor, B: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [A, B, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor of shape (2*N,) and dtype A.dtype
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(N,)"
+    dtype: "T in {fp16, bf16, fp32, int8} (config.yaml case_grid dtype)"
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: passed to the kernel as a tile-indexable array; loaded in TILE-sized blocks with zero padding past N (line 24)
+  - name: B
+    shape: "(N,)"
+    dtype: same as A
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: loaded in TILE-sized blocks with zero padding past N (line 25)
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: used only on the host for the output allocation (line 35) and the grid size (lines 43, 55); it is not a kernel argument, so in-kernel bounds come from the array shapes
+outputs:
+  - name: output
+    shape: "(2*N,)"
+    dtype: A.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate the uninitialised output buffer torch.empty(2*N, dtype=A.dtype, device=A.device)
+    lines: [35, 35]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: the only host-side work before the launch; no cast, copy or transpose of A or B
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [35, 35]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output buffer (2*N,) uninitialised
+  - id: s1
+    description: >
+      One 1-D program per contiguous chunk. Program bid loads TILE elements of
+      A and TILE elements of B at block index bid (zero padded past N),
+      reshapes each to (TILE, 1), concatenates them along axis 1 to a
+      (TILE, 2) tile whose row i is (A[i], B[i]), flattens it row-major to
+      (2*TILE,) so A and B elements alternate, and stores that tile at output
+      block index bid (element offset bid*2*TILE; elements beyond 2N are
+      clipped by the store). Launched at lines 55-57 with grid
+      (ceil(N/TILE), 1, 1).
+    kind: kernel
+    lines: [21, 27]
+    launches: "ceil(N/TILE)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: output (final result, written once)
+algorithm_family: >
+  Single-pass elementwise interleave (zip) of two equal-length vectors. Each
+  program owns one contiguous chunk of both inputs and writes one contiguous
+  chunk of twice the length; the interleave is formed in registers by
+  stacking the two input tiles along a new trailing axis and flattening,
+  rather than by strided scatter stores.
+reduction_scan_sort_structure: >
+  None. No reduction, scan or sort; the output index of every element is a
+  fixed function of its input index.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (no arithmetic is performed; values are moved bit-exactly)
+  output_dtype: same as A.dtype
+  special_modes: none; the same kernel serves the integer dtype
+  masking_or_padding_values: loads use PaddingMode.ZERO past N (lines 24-25); the store clips elements beyond 2N (line 27); no explicit masks
+intermediate_storage: >
+  None. The stacked (TILE, 2) tile and its flattened form are register
+  resident; no global scratch buffers.
+mutation_rules: >
+  A and B are never written. The output is freshly allocated on every call,
+  so repeated calls are idempotent and independent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements of A and of B per program; ConstInt kernel argument)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused (tile comes from the config object)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (tilebench/core/cutile_autotune.py lines
+  98-128) wraps ct.tune.exhaustive_search over _SEARCH_SPACE (lines 14-18)
+  with grid_fn/args_fn/hints_fn closures (lines 39-46); the result is cached
+  per shape_key (N, dtype) so subsequent run(autotune=True) calls only
+  launch. The winner's occupancy is applied with kernel_with_hints
+  (memoised replace_hints, lines 83-96) and its tile is passed as a ConstInt
+  argument. The default path uses _DEFAULT_CONFIG (line 12).
+  get_last_config reports the selected tile and occupancy (lines 47-51,
+  62-63). Audit only.
+implementation_freedoms_observed: >
+  Chunk size per program and occupancy; how the interleave is materialised in
+  registers (stack-and-reshape versus two strided stores); whether the tail
+  is handled by clipping or by an explicit mask; grid ordering; whether N is
+  passed to the kernel.
+algorithm_constraints_observed: >
+  Single kernel, single pass over the inputs; out[2i] = A[i], out[2i+1] =
+  B[i]; dtype preserved bit-exactly with no arithmetic (must also work for
+  int8); the output is allocated inside run(); no scratch and no
+  preprocessing of A or B.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 4"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula is read A (n) + read B (n) + write out (2n) elements, which is
+    exactly the traffic of the single kernel. run() performs no preprocessing
+    other than the output allocation, which is itself inside the timed
+    boundary, and assumes no prepacked inputs. flops_expr "n" is nominal
+    since the operator performs no arithmetic.
+notes_for_review:
+  - block_size is accepted by run() but never used; the tile size always comes from the config object.
+  - N is not a kernel argument; tail handling relies on cuTile zero-padded loads and clipped stores against the array shapes.
+  - The torch.empty output allocation is inside run() and therefore inside the timed region.
+  - int8 is served by the same data-movement kernel with no dtype-specific branch.
+  - The in-register stack-and-flatten formulation is an implementation choice; a faithful re-implementation only needs the same even/odd placement.

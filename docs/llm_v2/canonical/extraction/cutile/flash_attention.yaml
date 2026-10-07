@@ -1,0 +1,193 @@
+operator: flash_attention
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/flash_attention/impl_cutile.py
+    functions:
+      - name: fwd_kernel
+        lines: [24, 127]
+        role: kernel
+      - name: run
+        lines: [133, 180]
+        role: host-driver
+      - name: run.build_args (nested)
+        lines: [144, 156]
+        role: helper
+      - name: get_last_config
+        lines: [182, 183]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [130, 130]
+        role: tuner
+  - path: tilebench/benchmarks/operators/flash_attention/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/flash_attention/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_flash_attn_inputs
+        lines: [243, 249]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Causal scaled-dot-product attention forward. Reference (impl_torch.py line 5):
+  torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=causal) with the default
+  scale 1/sqrt(head_dim): out[b,h,i,:] = sum_j softmax_j(q[b,h,i,:] . k[b,h,j,:] / sqrt(D))
+  * v[b,h,j,:] restricted to j <= i when causal. q, k, v are (batch_size, n_heads, seq_len,
+  head_dim) contiguous tensors (generator, tensors.py 243-249) in the case dtype; output has
+  q's shape and dtype. config.yaml fixes causal = true, fp16 only, batch 4, 32 heads, head_dim 128.
+run_signature:
+  text: |
+    def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
+  positional_inputs: [q, k, v]
+  keyword_params: [causal, autotune, "**kwargs"]
+  returns: single tensor `Out` with q's shape and dtype
+  get_last_config: present
+inputs:
+  - name: q
+    shape: "(B, H, S, D)"
+    dtype: fp16 (config); kernel is written for any float dtype, P is cast to Q.dtype before the second MMA
+    layout: contiguous (B, H, S, D)
+    mutated_in_place: false
+    notes: one (1,1,TILE_M,TILE_D) tile per program, no padding_mode given (line 60-62)
+  - name: k
+    shape: "(B, H, S, D)"
+    dtype: same as q
+    layout: contiguous; loaded transposed via ct.load(..., shape=(1,1,TILE_D,TILE_N), order=(0,1,3,2)) (lines 80-85)
+    mutated_in_place: false
+    notes: k_seqlen is read from K.shape[2] inside the kernel (line 66)
+  - name: v
+    shape: "(B, H, S, D)"
+    dtype: same as q
+    layout: contiguous; loaded as (1,1,TILE_N,TILE_D) tiles (lines 116-119)
+    mutated_in_place: false
+    notes: null
+  - name: causal
+    shape: scalar
+    dtype: bool
+    layout: n/a
+    mutated_in_place: false
+    notes: passed as ConstBool CAUSAL (kernel specialisation); included in the autotune shape key
+outputs:
+  - name: Out
+    shape: "(B, H, S, D)"
+    dtype: q.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: Out = torch.empty_like(q)
+    lines: [141, 141]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: host scalars qk_scale = 1/sqrt(D_k), input_pos = 0, query_group_size = 1, EVEN_K = (SeqLen_Q % tile_n == 0)
+    lines: [137, 139]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: D_k (TILE_D), Heads (H), tile sizes, QUERY_GROUP_SIZE, CAUSAL and EVEN_K are all ConstInt/ConstBool kernel arguments (build_args lines 144-156), so the kernel is specialised per head_dim, head count, tile pair, causal flag and divisibility
+stages:
+  - id: s1
+    description: >
+      Single fused kernel, grid (ceil(S / TILE_M), B * H, 1) (line 177): bid_x selects a query
+      row tile, bid_y encodes (batch, head) as bid_y // H and bid_y % H; the KV head is head // QUERY_GROUP_SIZE
+      (lines 36-40; group size is 1 so no GQA sharing in practice). qk_scale is multiplied by 1/ln 2
+      so the softmax runs in base 2 (line 43). Running state per program: m_i = -inf (TILE_M,1),
+      l_i = 0 (TILE_M,1), acc = 0 (TILE_M,TILE_D), all fp32 (lines 55-57). Q tile loaded once (lines 60-62).
+      KV tile range: if CAUSAL, mask_start = (bid_x*TILE_M)//TILE_N capped at S//TILE_N and
+      Tc = cdiv(min((bid_x+1)*TILE_M, S), TILE_N) so only tiles up to and including the diagonal
+      are visited; else Tc = cdiv(S, TILE_N) and mask_start = S//TILE_N (lines 65-75).
+      Loop j in range(0, Tc) (runtime trip count; lines 78-122): load K^T tile (order=(0,1,3,2), latency hint),
+      qk = ct.mma(q, k, zeros fp32 (TILE_M,TILE_N)) (lines 86-87); when (CAUSAL or not EVEN_K) and
+      j >= mask_start build a boolean mask (offs_n < k_seqlen if not EVEN_K; offs_m >= offs_n if CAUSAL)
+      and add 0 / -inf (lines 90-100); m_ij = max(m_i, rowmax(qk)*qk_scale); qk = qk*qk_scale - m_ij;
+      p = exp2(qk, flush_to_zero=True); l_ij = rowsum(p); alpha = exp2(m_i - m_ij, flush_to_zero=True);
+      l_i = l_i*alpha + l_ij; acc *= alpha (lines 103-113); load V tile (latency hint), p cast to Q.dtype,
+      acc = ct.mma(p, v, acc) (fp32 accumulate), m_i = m_ij (lines 116-122).
+      Epilogue: acc = ct.truediv(acc, l_i, flush_to_zero=True, rounding_mode=APPROX), cast to Out.dtype,
+      store (1,1,TILE_M,TILE_D) at (batch, head, bid_x, 0) (lines 125-127).
+    kind: kernel
+    lines: [24, 127]
+    launches: "1 (ceil(S/TILE_M) * B * H programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: Out
+algorithm_family: >
+  FlashAttention-2 style single-kernel forward: online (streaming) softmax over KV tiles with
+  base-2 exponentials, causal block skipping (loop ends at the diagonal tile), per-program
+  query tile, two tensor-core MMAs per KV tile (QK^T and PV) with fp32 accumulators.
+reduction_scan_sort_structure: >
+  Sequential online-softmax recurrence over KV tiles j = 0 .. Tc-1 in increasing j order, with
+  running row max m_i and row sum l_i rescaled by alpha = exp2(m_old - m_new). Row-wise max and
+  sum inside each tile use ct.max / ct.sum along the last axis (library-defined tree). The
+  K-dimension of each MMA is reduced inside ct.mma. Normalisation by l_i happens once at the end.
+precision:
+  input_dtypes: [fp16]
+  accumulation: "QK^T accumulated in fp32 (zeros fp32 initial accumulator, line 86-87); P cast to Q.dtype (fp16) before the PV MMA (line 120); PV accumulated in fp32 acc (line 121); m_i / l_i fp32"
+  output_dtype: Out.dtype = q.dtype (astype at line 126)
+  special_modes: "softmax computed with exp2 after folding 1/ln2 into qk_scale; exp2 and the final division use flush_to_zero=True; the final division uses RoundingMode.APPROX (approximate reciprocal division)"
+  masking_or_padding_values: "-inf added to masked qk entries (causal j > i and, when not EVEN_K, j >= k_seqlen); m_i initialised to -inf; no padding_mode on the Q/K/V loads (S is a multiple of every tile size in the sweep so EVEN_K holds)"
+intermediate_storage: >
+  None in global memory; running max, sum and the (TILE_M, TILE_D) accumulator live in registers/tile state.
+mutation_rules: >
+  No input is modified; fresh Out each call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_m
+    role: tile size (query rows per program)
+    default_present: true
+  - name: tile_n
+    role: tile size (keys per inner iteration)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+  - name: TILE_D
+    role: tile size (equals head_dim; derived, not swept)
+    default_present: true
+  - name: latency (ct.load hints on K and V loads)
+    role: load latency / pipelining hint (hard-coded in the kernel, not swept)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over (tile_m, tile_n, occupancy), keyed by
+  (SeqLen_Q, D_k, Heads, causal, dtype); grid_fn and args_fn rebuild the grid and the ConstInt
+  arguments (including EVEN_K) per candidate. Audit only.
+implementation_freedoms_observed: >
+  Tile sizes and occupancy; load latency hints; whether K is loaded pre-transposed via the
+  `order` argument or transposed in-tile; use of base-2 vs natural exponent (mathematically
+  equivalent); approximate vs exact final division; the unused GQA (QUERY_GROUP_SIZE) and
+  input_pos machinery; the runtime-bound `range` loop could be restructured.
+algorithm_constraints_observed: >
+  Single kernel with online softmax (no materialised S x S scores, no separate softmax pass);
+  causal tiles beyond the diagonal are skipped, the diagonal tile is masked with -inf;
+  fp32 accumulation for both MMAs and the softmax statistics with P rounded to the input dtype
+  before PV; scale 1/sqrt(head_dim); output in the input dtype and layout (B, H, S, D); no
+  preprocessing or re-layout of q, k, v.
+fq_boundary:
+  bytes_expr: "4 * batch_size * n_heads * seq_len * head_dim * dtype_size"
+  flops_expr: "4 * batch_size * n_heads * seq_len * seq_len * head_dim"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read each of q, k, v and one write of Out, matching the compulsory
+    traffic of the single kernel (K/V are re-read once per query tile, but from the same arrays;
+    no scratch exists). flops_expr is the dense (non-causal) 4*S*S*D count; with causal = true
+    the kernel visits only about half the KV tiles, so the formula overstates executed FLOPs by
+    roughly 2x -- a convention, not a boundary mismatch. run() performs no preprocessing and
+    assumes nothing prepacked.
+notes_for_review:
+  - flops_expr is the dense count while the config fixes causal = true; reported TFLOPS are therefore nominal, not executed.
+  - The final normalisation uses RoundingMode.APPROX and flush_to_zero, and exp2 uses flush_to_zero; the config's verify tolerance (5e-3) absorbs this.
+  - The inner KV loop has a runtime trip count Tc (depends on bid_x), written as `range(0, Tc)`.
+  - QUERY_GROUP_SIZE and input_pos are plumbed but fixed to 1 and 0 in run(); EVEN_K is always true for the sweep (S multiple of 1024).
+  - head_dim is passed as TILE_D (ConstInt) and the whole head dimension is held in one tile; there is no loop over D.

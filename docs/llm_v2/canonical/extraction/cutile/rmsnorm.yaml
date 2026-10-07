@@ -1,0 +1,196 @@
+operator: rmsnorm
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/rmsnorm/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: rmsnorm_kernel
+        lines: [21, 54]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [57, 57]
+        role: tuner
+      - name: run
+        lines: [60, 100]
+        role: host-driver
+      - name: get_last_config
+        lines: [103, 104]
+        role: helper
+  - path: tilebench/benchmarks/operators/rmsnorm/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/rmsnorm/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_rmsnorm_inputs
+        lines: [207, 210]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Root-mean-square normalisation over the last dimension with a learned
+  per-feature weight: for every row r of x (all leading dims flattened),
+  y[r, :] = x[r, :] * rsqrt(mean_k(x[r, k]^2) + eps) * w[:], where K is the
+  size of the last dimension and the mean is 1/K times the sum of squares.
+  Reference (impl_torch.py lines 5-6): torch.nn.functional.rms_norm(x,
+  x.shape[-1:], weight=rms_w, eps=eps) with eps defaulting to 1e-6. No
+  reference-side preprocessing. Generator (tensors.py lines 207-210): x of
+  shape (batch, M, K) and rms_w of shape (K,), both torch.randn in the case
+  dtype; config.yaml fixes batch and M via case_defaults and sweeps K and
+  dtype.
+run_signature:
+  text: "def run(x: torch.Tensor, rms_w: torch.Tensor, eps: float = 1e-6, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x, rms_w]
+  keyword_params: [eps, autotune]
+  returns: single tensor `out`, same shape and dtype as x (allocated by run)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(batch, M, K) in general any (..., K); viewed as (batch*M, K)"
+    dtype: "case dtype: fp16 | bf16 | fp32"
+    layout: contiguous row-major (x.contiguous().reshape(batch_M, K) at line 71; a copy only if the caller passes a non-contiguous tensor)
+    mutated_in_place: false
+    notes: K = x.shape[-1] is passed to the kernel as the ConstInt argument named N (line 22), so the kernel is specialised per K.
+  - name: rms_w
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous (rms_w.contiguous() at line 74)
+    mutated_in_place: false
+    notes: cast to fp32 inside the kernel before use (lines 41-46).
+  - name: eps
+    shape: scalar
+    dtype: python float (default 1e-6)
+    layout: n/a
+    mutated_in_place: false
+    notes: passed to the kernel as a runtime scalar argument (line 98); added inside rsqrt (line 37).
+outputs:
+  - name: out
+    shape: x.shape
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: flatten leading dims of x into a 2D (batch_M, K) view
+    lines: [67, 71]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: reshape of a contiguous tensor; no data movement for the generator's inputs.
+  - description: allocate out = torch.empty_like(x) and take its 2D view out_2d
+    lines: [72, 73]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: rms_w.contiguous()
+    lines: [74, 74]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no-op for the generator's contiguous weight.
+stages:
+  - id: s1
+    description: >
+      One CTA per row (grid = (batch_M, 1, 1), lines 77 and 97-98). Pass 1
+      (lines 27-37): loop j over ceil(K/TILE) column tiles; load x[row, tile j]
+      as a (1, TILE) tile with ZERO padding, cast to fp32, accumulate x*x
+      lane-wise into a (1, TILE) fp32 accumulator; after the loop a single
+      ct.sum over the TILE lanes gives the row sum of squares; rstd =
+      rsqrt(sum / N + eps) where N is the true K (padding lanes contribute
+      exactly 0 to the sum and are not counted in the mean). Pass 2 (lines
+      40-54): loop j again; re-load the same x tile and the matching (TILE,)
+      slice of rms_w (both ZERO-padded, both cast to fp32), compute
+      x * rstd * w in fp32, cast to x.dtype, store into out[row, tile j].
+    kind: kernel
+    lines: [21, 54]
+    launches: "1 (grid = batch_M CTAs; each CTA loops twice over ceil(K/TILE) tiles)"
+    depends_on: []
+    fusable_with: none
+    produces: out (final result); no global intermediates
+algorithm_family: >
+  Row-wise two-pass RMS normalisation: pass 1 sum of squares, pass 2
+  normalise-and-scale, with x re-read from global memory in pass 2 (no
+  row caching in registers/shared memory across passes).
+reduction_scan_sort_structure: >
+  Row reduction in two levels: (a) sequential over column tiles, lane-wise
+  (element j of the accumulator sums x[row, j + t*TILE]^2 over tiles t, in
+  increasing t), then (b) one tile-wide ct.sum over the TILE lanes whose
+  internal order is left to the cuTile compiler. The division by N and the
+  eps add happen once on the reduced scalar; rsqrt is applied to that
+  scalar. No scan, no sort.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for the sum of squares and for the normalise multiply (explicit ct.astype to ct.float32 on every loaded tile)
+  output_dtype: x.dtype (single downcast at the final multiply, line 53)
+  special_modes: none visible (no fast-math or approximate-rsqrt flags in the source)
+  masking_or_padding_values: "ZERO padding on all three loads (x in both passes, rms_w); out-of-range lanes of the last tile are stored through ct.store, whose bounds handling is not explicit in this file"
+intermediate_storage: >
+  None in global memory. Per-CTA register/tile state only: a (1, TILE) fp32
+  partial-sum tile and a scalar rstd.
+mutation_rules: >
+  Neither x nor rms_w is modified. out is fully overwritten on every call;
+  repeated calls are idempotent. The autotune path's args_fn (line 85)
+  points the tuning launches at the real out_2d buffer, which is harmless
+  because the final launch overwrites every element.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_size
+    role: tile size (column-tile width TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) wrapping
+  ct.tune.exhaustive_search over the tile_size x occupancy cartesian space
+  (_SEARCH_SPACE, lines 14-18), keyed by (batch_M, K, dtype) (line 81),
+  with hints_fn applying occupancy; the winner is cached per key and
+  applied via the memoised kernel_with_hints kernel (line 96) for both the
+  default and the autotune launch. get_last_config returns the winner's
+  tile_size/occupancy; it is written only on the autotune path (lines 88-92).
+  Audit only.
+implementation_freedoms_observed: >
+  Column-tile width, occupancy, the per-load mapping annotations
+  allow_tma=False and latency=1 (lines 31, 43, 49, 54), whether the row is
+  kept on-chip between the two passes (this implementation re-reads it),
+  internal order of the lane-wide ct.sum, and the choice of one CTA per row
+  (the host grid is simply batch_M).
+algorithm_constraints_observed: >
+  Keep: normalisation over the last dimension with mean = sum/K (true K,
+  not padded K), eps added inside the rsqrt, fp32 accumulation and fp32
+  normalise multiply with a single downcast to the input dtype, weight
+  applied after the rstd scaling (x * rstd * w), output written to a fresh
+  buffer. The two-pass structure (reduce, then normalise) is the inherent
+  dependency: every output element needs the full-row statistic first.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "4 * n"
+  consistent_with_timed_boundary: unclear
+  notes: >
+    The config's case parameters are batch, M, K and dtype (config.yaml lines
+    8-15) but both metric expressions use `n`, whose derivation is not visible
+    in the files read for this extraction. If n = batch*M*K, 3*n*dtype_size
+    counts one read of x, one write of out and one more read of x (the
+    kernel's pass-2 re-read), or equivalently a generous bound; rms_w (K
+    elements per row) is not counted. run() performs no extra timed data
+    movement (views and one empty allocation only), so the boundary itself
+    is clean; only the meaning of n is unresolved here.
+notes_for_review:
+  - The metric expressions reference `n`, which is not a case parameter of this operator; its definition lives outside the files this extraction may read.
+  - The kernel's ConstInt parameter is called N but receives K (the row length), so the kernel is specialised per K and the host-side variable naming (K vs N) is inconsistent.
+  - run() has no block_size keyword and no **kwargs, unlike most operators; eps is exposed as a semantic keyword with the same default as the torch reference.
+  - Pass 2 re-loads x from global memory; whether that second read is served by L2 is a hardware question, not visible in the source.
+  - Loads carry allow_tma=False and latency=1 annotations; these are mapping hints, not tunables (they are fixed in the source).
+  - ct.store on the last partial tile relies on cuTile's implicit out-of-bounds clipping; the source does not mask explicitly.

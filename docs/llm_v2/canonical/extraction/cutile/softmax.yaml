@@ -1,0 +1,170 @@
+operator: softmax
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/softmax/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _HANG_CFGS / _SEARCH_SPACE_BASE (module constants)
+        lines: [12, 21]
+        role: tuner
+      - name: softmax_online_kernel
+        lines: [24, 61]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [64, 64]
+        role: tuner
+      - name: run
+        lines: [67, 108]
+        role: host-driver
+      - name: get_last_config
+        lines: [111, 112]
+        role: helper
+  - path: tilebench/benchmarks/operators/softmax/impl_torch.py
+    functions:
+      - name: run
+        lines: [3, 4]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/softmax/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_softmax_inputs
+        lines: [231, 240]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Row-wise softmax over the last dimension of a 2D matrix x (n_rows,
+  n_cols): y[r, c] = exp(x[r, c] - max_c' x[r, c']) / sum_c' exp(x[r, c'] -
+  max_c' x[r, c']). Reference (impl_torch.py lines 3-4): torch.softmax(x,
+  dim=-1). Generator (tensors.py lines 231-240): x = torch.randn(n_rows,
+  n_cols) in the case dtype; config.yaml fixes n_rows via case_defaults and
+  sweeps n_cols and dtype in {fp16, fp32}.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `output`, shape (n_rows, n_cols), dtype x.dtype (allocated by run)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n_rows, n_cols); must be exactly 2D (line 69 unpacks x.shape into two values)"
+    dtype: "case dtype: fp16 | fp32"
+    layout: contiguous row-major (passed directly; no view or copy)
+    mutated_in_place: false
+    notes: n_cols is passed as a runtime scalar N_COLS (unused inside the kernel body) and ceil(n_cols/BLOCK_SIZE) as the ConstInt N_TILES, so the kernel is specialised per (n_tiles, block_size).
+outputs:
+  - name: output
+    shape: "(n_rows, n_cols)"
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(x)
+    lines: [70, 70]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: host computation of n_tiles = ceil(n_cols / block_size), passed to the kernel as a compile-time constant
+    lines: [97, 100]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: on the autotune path the per-candidate n_tiles is precomputed into the search-space entries (lines 76-83).
+stages:
+  - id: s1
+    description: >
+      softmax_online_kernel, grid = (n_rows, 1, 1) (line 71): one CTA per
+      row. Pass 1 (lines 35-49, online statistics): scalars m = -inf and
+      l = 0 (fp32, 0-d tiles); for each of the N_TILES column tiles, load a
+      (1, BLOCK_SIZE) tile with NEG_INF padding, cast to fp32, block_max =
+      ct.max(tile), m_new = max(m, block_max), l = l * exp(m - m_new) +
+      sum(exp(tile - m_new)), m = m_new. Pass 2 (lines 52-61): for each
+      column tile, re-load it with ZERO padding, cast to fp32, y = exp(tile -
+      m) / l, cast to the output dtype, store to output[row, tile].
+    kind: kernel
+    lines: [24, 61]
+    launches: "1 (grid = n_rows CTAs; each CTA loops twice over N_TILES column tiles)"
+    depends_on: []
+    fusable_with: none
+    produces: output (final result); no global intermediates
+algorithm_family: >
+  Two-pass row softmax with an online (streaming, rescaling) max/sum in the
+  first pass and a normalising second pass that re-reads the row from global
+  memory; one CTA per row, row tiled along columns.
+reduction_scan_sort_structure: >
+  Pass 1 is a sequential left-to-right scan over column tiles maintaining
+  (running max m, running denominator l) with the standard online-softmax
+  rescale l = l*exp(m_old - m_new) + sum(exp(tile - m_new)); within a tile,
+  ct.max and ct.sum are tile-wide reductions whose internal order is left to
+  the compiler. The initial m = -inf makes the first iteration reduce to
+  l = sum(exp(tile - block_max)) because 0*exp(-inf) = 0. Pass 2 applies
+  exp(x - m)/l elementwise with a true division (no reciprocal
+  pre-computation). NEG_INF padding in pass 1 contributes exp(-inf) = 0 to
+  the sum and never wins the max; ZERO padding in pass 2 produces finite
+  junk in padded lanes that lies outside the stored range.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 for max, denominator, exponentials and the final division (explicit ct.astype to ct.float32 on every loaded tile; m and l are fp32 0-d tiles)
+  output_dtype: x.dtype (single downcast before the store, line 60)
+  special_modes: none (plain ct.exp; no fast-math or exp2 rewrite visible)
+  masking_or_padding_values: "NEG_INF padding on pass-1 loads (line 41); ZERO padding on pass-2 loads (line 55)"
+intermediate_storage: >
+  None in global memory; per-CTA fp32 scalars m and l only.
+mutation_rules: >
+  x is not modified; output is fully overwritten on each call; idempotent.
+  Tuning launches (args_fn, line 89) write into the real output buffer,
+  which the final launch overwrites.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: block_size
+    role: tile size (column-tile width BLOCK_SIZE; n_tiles is derived from it)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over
+  the block_size x occupancy cartesian space minus the three (block_size,
+  occupancy) pairs listed in _HANG_CFGS (lines 15-21, excluded because they
+  hang), with n_tiles precomputed into each candidate (lines 76-83); keyed
+  by (n_rows, n_cols, dtype) (line 85); winner applied through the
+  memoised kernel_with_hints kernel (line 102). get_last_config reports
+  block_size and occupancy and is written only on the autotune path (lines
+  92-96). Audit only.
+implementation_freedoms_observed: >
+  Column-tile width and occupancy; whether to keep the row on-chip between
+  the two passes instead of re-reading it; single-pass variants when the row
+  fits in one tile; exp vs exp2 formulations; reciprocal-multiply vs true
+  division; internal order of the tile-wide max/sum; one CTA per row vs
+  multiple rows per CTA.
+algorithm_constraints_observed: >
+  Keep: max-subtracted (numerically stable) softmax along the last dim of a
+  2D input, fp32 statistics and fp32 exponentials with a single downcast to
+  the input dtype, output in a fresh buffer of the input's shape and dtype.
+  The online-rescaling pass structure is one valid way to obtain the exact
+  row max and denominator; any faithful implementation must compute the
+  full-row max before normalising (two logical passes over the row).
+fq_boundary:
+  bytes_expr: "n_rows * n_cols * dtype_size * 2"
+  flops_expr: "n_rows * n_cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    Counts one read of x and one write of output; run() performs no other
+    data movement (one empty allocation plus host integer arithmetic). The
+    kernel's second pass re-reads each row from global memory, so the
+    formula is the minimal-traffic bound rather than the kernel's issued
+    traffic; whether the re-read is served from cache is not visible in the
+    source. flops_expr is the nominal one-operation-per-element convention.
+notes_for_review:
+  - The kernel argument N_COLS (line 28) is passed but never used in the kernel body; the column extent is encoded entirely by N_TILES and BLOCK_SIZE plus padding.
+  - run() requires a 2D input and has no **kwargs; block_size is accepted but ignored (the default path uses _DEFAULT_CONFIG.block_size).
+  - Three search-space entries are excluded via _HANG_CFGS because they hang; this is an audit-only tuning detail, not an algorithmic property.
+  - Pass 2 re-reads x; a cached-row single-read variant would move less data than this implementation.

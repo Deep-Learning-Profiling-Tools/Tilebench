@@ -1,0 +1,224 @@
+operator: flash_attention
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/flash_attention/impl_triton.py
+    functions:
+      - name: _tma_set_block_size_hook
+        lines: [9, 16]
+        role: tuner
+      - name: fwd_kernel
+        lines: [19, 73]
+        role: kernel
+      - name: _fwd_kernel_autotuned
+        lines: [76, 91]
+        role: tuner
+      - name: run
+        lines: [94, 141]
+        role: host-driver
+      - name: get_last_config
+        lines: [144, 153]
+        role: helper
+  - path: tilebench/benchmarks/operators/flash_attention/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/flash_attention/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_flash_attn_inputs
+        lines: [243, 249]
+        role: helper
+functional_semantics: >
+  Causal scaled-dot-product attention forward pass (no dropout, no explicit
+  mask tensor, no GQA). Reference impl_torch.run (lines 4-5):
+  torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=causal)
+  with causal defaulting to True. For each (batch b, head h):
+  O[b,h] = softmax_rows( (Q K^T) * (1/sqrt(head_dim)) + M ) V, where M is
+  the lower-triangular causal mask (query i may attend keys j <= i, top-left
+  aligned, which is exact here because q and k share seq_len). Inputs are
+  (batch, heads, seq_len, head_dim) fp16 from the generator (torch.randn,
+  .contiguous()). No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = True, autotune: bool = False, **kwargs):
+  positional_inputs: [q, k, v]
+  keyword_params: [causal, autotune, "**kwargs (absorbs block_size, unused)"]
+  returns: single tensor o with q's shape and dtype (batch, heads, seq_len, head_dim)
+  get_last_config: present
+inputs:
+  - name: q
+    shape: "(BS, HEAD, SEQLEN, DIM)"
+    dtype: fp16 (config case_grid dtype ["fp16"]; the kernel hard-casts to tl.float16 so fp16 is effectively required)
+    layout: contiguous row-major 4-D (run() calls .contiguous(), line 97); accessed via a host-side TMA TensorDescriptor
+    mutated_in_place: false
+    notes: loaded one [BLOCK_M, DIM] tile per program, pre-multiplied by sm_scale*log2(e) and cast back to fp16 (lines 44-45).
+  - name: k
+    shape: "(BS, HEAD, SEQLEN, DIM)"
+    dtype: fp16
+    layout: contiguous; TMA descriptor (line 98 / 127)
+    mutated_in_place: false
+    notes: streamed in [BLOCK_N, DIM] tiles and transposed in registers (lines 51-52).
+  - name: v
+    shape: "(BS, HEAD, SEQLEN, DIM)"
+    dtype: fp16
+    layout: contiguous; TMA descriptor
+    mutated_in_place: false
+    notes: streamed in [BLOCK_N, DIM] tiles (line 53).
+  - name: causal
+    shape: scalar
+    dtype: Python bool, passed as tl.constexpr IS_CAUSAL
+    layout: n/a
+    mutated_in_place: false
+    notes: default True; config case_defaults causal true. Whether the engine forwards it is outside the files read; the default already matches the reference.
+outputs:
+  - name: o
+    shape: "(BS, HEAD, SEQLEN, DIM)"
+    dtype: same as q (torch.empty_like(q), line 105); written as fp16 via TMA store (lines 70-73)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: q, k, v = .contiguous() on each input
+    lines: [97, 99]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: no-op for the generator's contiguous inputs; a timed copy otherwise.
+  - description: sm_scale = 1 / sqrt(q.shape[-1]); shape unpack
+    lines: [101, 106]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host scalar arithmetic.
+  - description: allocate output o = torch.empty_like(q)
+    lines: [105, 105]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: fully overwritten by the kernel.
+  - description: build four host-side TMA TensorDescriptors (q, k, v, o) with 4-D block shapes [1, 1, BLOCK, DIM]
+    lines: [110, 114]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      Default path (lines 126-129) sets the block shapes from the config;
+      autotune path (lines 110-114) creates them with a dummy [1,1,1,1]
+      block shape that the per-config pre_hook (_tma_set_block_size_hook,
+      lines 9-16) overwrites before each launch. Descriptor construction is
+      host-side metadata, no device work.
+stages:
+  - id: s1
+    description: >
+      Single fused flash-attention forward kernel. Grid
+      (ceil(SEQLEN/BLOCK_M), BS*HEAD). Each program owns one BLOCK_M query
+      block of one (b,h): (a) load Q tile, multiply by qk_scale = sm_scale *
+      log2(e), cast to fp16 (lines 44-45); (b) initialise running max m =
+      -inf, denominator l = 0, accumulator O = 0 in fp32 (lines 38-40); (c)
+      loop start_n over key tiles from 0 to hi in BLOCK_N steps, where hi =
+      (start_m+1)*BLOCK_M when causal else SEQLEN (lines 46-48): load K tile
+      and transpose, load V tile; qk = 0 tile, set qk to -inf where
+      query_row < key_col when causal (applied to every tile, lines 55-57);
+      qk += dot(Q, K^T) in fp32 (line 58); m_new = max(m, rowmax(qk)); alpha
+      = exp2(m - m_new); P = exp2(qk - m_new); O *= alpha; O += dot(P.fp16,
+      V); l = l*alpha + rowsum(P); m = m_new (lines 60-67); (d) O = O / l,
+      cast to fp16, TMA-store the [BLOCK_M, DIM] tile (lines 69-73).
+    kind: kernel
+    lines: [19, 73]
+    launches: "1 launch, grid (ceil(SEQLEN/BLOCK_M), BS*HEAD, 1)"
+    depends_on: []
+    fusable_with: "none"
+    produces: o -- no global intermediates (m, l, O live in registers)
+algorithm_family: >
+  Online-softmax flash attention (FlashAttention-2 style forward): one pass
+  over key/value tiles per query block with running max / running
+  denominator rescaling in base 2, QK^T and PV as tile matmuls (tl.dot),
+  causal tiles skipped by the loop bound and masked by -inf inside the
+  visited tiles. No logsumexp output, no backward.
+reduction_scan_sort_structure: >
+  Per query row: a sequential online reduction over key tiles in increasing
+  key order (start_n ascending), each step combining an intra-tile rowmax
+  and rowsum (tl.max / tl.sum over axis 1, tree order left to Triton) with
+  the running (m, l, O) via exp2 rescale. The final normalisation divides
+  once at the end (O / l). The order of key tiles is fixed ascending; the
+  intra-tile dot accumulation order is left to the MMA lowering. No
+  cross-program reduction, no scan, no sort.
+precision:
+  input_dtypes: [fp16]
+  accumulation: >
+    fp32 for QK^T (tl.dot fp16 x fp16 -> fp32), for the running max /
+    denominator / output accumulator and for P = exp2(...). Two deliberate
+    fp16 roundings inside: Q is scaled by sm_scale*log2(e) in fp32 and then
+    cast to fp16 before the dot (line 45), and P is cast to fp16 before the
+    PV dot (line 65).
+  output_dtype: fp16 (q's dtype)
+  special_modes: "base-2 softmax: scores are pre-scaled by log2(e) and exponentiated with tl.math.exp2; scale folded into Q rather than into the scores"
+  masking_or_padding_values: "-inf written into qk for key_col > query_row when IS_CAUSAL (before adding the dot, so masked entries are -inf + value = -inf); TMA out-of-bounds tile loads zero-fill, stores are clipped; no explicit SEQLEN column mask"
+intermediate_storage: >
+  None in global memory. Running statistics and the output accumulator are
+  register-resident per program.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_M
+    role: tile size (query rows per program)
+    default_present: true
+  - name: BLOCK_N
+    role: tile size (keys per inner iteration)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_M x BLOCK_N x num_warps x num_stages (key
+  ["SEQLEN", "DIM"], warmup=1, rep=3), with a pre_hook that rewrites the
+  four TensorDescriptor block shapes to the candidate config before each
+  trial (lines 9-16, 76-91). Default path builds descriptors with the
+  _DEFAULT_CONFIG block shapes and launches the undecorated kernel (lines
+  124-139). get_last_config returns BLOCK_M, BLOCK_N, num_warps,
+  num_stages. DIM = head_dim is a constexpr derived from the input, not
+  tuned.
+implementation_freedoms_observed: >
+  Query/key tile sizes, warps, pipelining depth, TMA vs pointer loads
+  (host-side TensorDescriptor here; a mapping choice, not an algorithmic
+  one), whether the causal mask is applied to every tile or only to
+  diagonal tiles, whether the softmax scale is folded into Q (as here) or
+  applied to the scores, base-2 vs natural exponent, grid ordering of (b,h)
+  vs query blocks, and the intra-tile reduction/MMA orders.
+algorithm_constraints_observed: >
+  Keep: single fused kernel, one pass over K/V per query block with online
+  (running max + rescale) softmax; causal semantics key <= query with the
+  diagonal included and top-left alignment; scale 1/sqrt(head_dim); fp32
+  accumulation of scores, statistics and output with fp16 operands into
+  both matmuls (P cast to fp16 before PV); single final division by the
+  denominator; fp16 output of q's shape; no global scratch, no logsumexp
+  side output; causal loop bound skipping fully masked key tiles (the
+  halved work is part of the algorithm as timed).
+fq_boundary:
+  bytes_expr: "4 * batch_size * n_heads * seq_len * head_dim * dtype_size"
+  flops_expr: "4 * batch_size * n_heads * seq_len * seq_len * head_dim"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() contains no real preprocessing (contiguous() no-ops,
+    descriptor metadata, one allocation) and one kernel. bytes counts one
+    read each of Q, K, V and one write of O (compulsory traffic); the
+    kernel's repeated K/V tile reads across query blocks (served largely
+    from L2) are not counted, which is the standard minimal-traffic
+    convention. flops counts DENSE attention (2 matmuls x 2 x S x S x D
+    per head); with causal=true the kernel visits only key tiles with
+    start_n < (start_m+1)*BLOCK_M, roughly half the dense work, so the
+    formula overstates executed FLOPs by about 2x. No prepacked inputs
+    assumed.
+notes_for_review:
+  - flops_expr is the dense (non-causal) count while config fixes causal=true; the kernel's loop bound halves the executed work, so any TFLOPS derived from it is a "dense-equivalent" figure.
+  - No explicit SEQLEN bound mask on key columns: correctness relies on causal masking or on SEQLEN being a multiple of BLOCK_N (TMA zero-filled K rows would otherwise receive weight exp2(0 - m) on zero V rows). Config seq_len values are multiples of 1024, so this is not exercised.
+  - The kernel hard-casts to tl.float16 (lines 45, 65, 72) and the output is empty_like(q); only fp16 inputs are valid, bf16 would be silently mis-handled.
+  - Q is scaled in fp16 before QK^T (line 45), a precision choice that differs from scaling fp32 scores; config verify atol=rtol=5e-3 covers it.
+  - Line 63 `out_scale = denom * 0 + alpha` is functionally just alpha (a shape-broadcast idiom), not an algorithmic step.
+  - The host-side TensorDescriptor path requires TMA-capable hardware; the source contains no fallback branch.

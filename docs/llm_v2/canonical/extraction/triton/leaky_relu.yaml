@@ -1,0 +1,135 @@
+operator: leaky_relu
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/leaky_relu/impl_triton.py
+    functions:
+      - name: leaky_relu_kernel
+        lines: [8, 15]
+        role: kernel
+      - name: _leaky_relu_kernel_autotuned
+        lines: [18, 28]
+        role: tuner
+      - name: run
+        lines: [31, 48]
+        role: host-driver
+      - name: get_last_config
+        lines: [51, 59]
+        role: helper
+  - path: tilebench/benchmarks/operators/leaky_relu/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/leaky_relu/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_leaky_relu_inputs
+        lines: [103, 105]
+        role: helper
+      - name: infer_problem_size (generic "n" branch used for metrics)
+        lines: [631, 632]
+        role: helper
+functional_semantics: >
+  Element-wise leaky ReLU with slope 0.01. Reference impl_torch.run (lines
+  5-6): F.leaky_relu(input, negative_slope=0.01), i.e. y = x if x > 0 else
+  0.01 * x, dtype preserved. Generator (tensors.py 103-105) returns (x, n)
+  with x = randn(n) in the case dtype. No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(input: torch.Tensor, N: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor with input's shape and dtype
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: fp16 | bf16 | fp32 (config case_grid dtype)
+    layout: contiguous (flat offsets)
+    mutated_in_place: false
+    notes: loaded with mask offs < N and no `other` (line 13); no explicit upcast.
+  - name: N
+    shape: scalar python int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: element count; autotune key (n_elements).
+outputs:
+  - name: output
+    shape: "input.shape"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output = torch.empty_like(input)
+    lines: [33, 33]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: only host work besides the launch; block_size kwarg is ignored.
+stages:
+  - id: s1
+    description: >
+      1-D grid over N in BLOCK_SIZE chunks; masked load of x; y = where(x >
+      0, x, 0.01 * x) (line 14); masked store.
+    kind: kernel
+    lines: [8, 15]
+    launches: "1 launch, grid ceil(N / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (N,) -- no intermediates
+algorithm_family: >
+  Single-pass element-wise map (select between x and a scaled x);
+  memory-bound.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "arithmetic on the loaded dtype with no explicit upcast; whether 0.01 * x is evaluated in fp16/bf16 or promoted to fp32 (python-float operand) is a Triton scalar-promotion detail -- unclear from this source; the result is stored in the pointer's dtype"
+  output_dtype: input dtype
+  special_modes: "slope 0.01 hard-coded in the kernel (line 14), matching the reference's negative_slope=0.01"
+  masking_or_padding_values: "load masked by offs < N without `other` (unspecified lanes never stored); masked store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps x num_stages (key
+  ["n_elements"], warmup=1, rep=3), lines 18-28. Default path launches the
+  undecorated kernel with _DEFAULT_CONFIG (lines 39-46). get_last_config
+  reads best_config (lines 51-59).
+implementation_freedoms_observed: >
+  Block size, warps, stages, vector width; formulation of the select (where
+  vs max-style arithmetic); whether to upcast to fp32 before multiplying by
+  the slope.
+algorithm_constraints_observed: >
+  Keep: single pass reading input once and writing output once; y = x for
+  x > 0 else 0.01 * x (strict > 0 test, so x == 0 maps to 0.01 * 0 = 0
+  either way); dtype and shape preserved; input read-only; no scratch.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation and one kernel. The formula counts
+    one read and one write of n elements at dtype_size bytes, exactly the
+    kernel's compulsory traffic. No preprocessing or prepacking performed
+    or assumed.
+notes_for_review:
+  - 0.01 is not exactly representable; fp16/bf16 results may differ from torch's fp32-opmath-then-round by one ulp, within default tolerances.
+  - Input load has no `other`; relies on the store mask discarding masked lanes.
+  - block_size kwarg is accepted but ignored.

@@ -1,0 +1,131 @@
+operator: reverse_array
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/reverse_array/impl_triton.py
+    functions:
+      - name: reverse_kernel
+        lines: [8, 15]
+        role: kernel
+      - name: _reverse_kernel_autotuned
+        lines: [18, 29]
+        role: tuner
+      - name: run
+        lines: [32, 49]
+        role: host-driver
+      - name: get_last_config
+        lines: [52, 56]
+        role: helper
+  - path: tilebench/benchmarks/operators/reverse_array/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/reverse_array/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_reverse_array_inputs
+        lines: [328, 333]
+        role: helper
+functional_semantics: >
+  out = input.flip(0).contiguous() (impl_torch.py lines 4-5): out[i] =
+  input[N - 1 - i] for a 1-D input of length N, materialised as a new contiguous
+  tensor of the same dtype. The second positional argument N is the length; the
+  reference ignores it. No reference-side preprocessing.
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor of shape (N,) with the dtype of input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: "one of fp16, bf16, fp32, int8 (config.yaml line 11)"
+    layout: "1-D contiguous from the generator; the kernel addresses it as a flat buffer of N elements"
+    mutated_in_place: false
+    notes: "int8 from randint(-64, 65), other dtypes from randn (tensors.py 328-333)"
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "length; used for the grid size (lines 37, 41) and inside the kernel for the tail mask and the mirrored index N - 1 - offsets (lines 12-13)"
+outputs:
+  - name: output
+    shape: "(N,)"
+    dtype: same as input
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "output = torch.empty_like(input)"
+    lines: [34, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast, copy or packing"
+stages:
+  - id: s1
+    description: "flat mirrored gather-copy: each program owns BLOCK_SIZE consecutive output offsets (mask offsets < N), loads input at the mirrored offsets N - 1 - offsets (other=0.0) and stores the values at the forward offsets of output; within a program the load addresses run backwards over a contiguous span while the store addresses run forwards"
+    kind: kernel
+    lines: [8, 15]
+    launches: "ceil(N / BLOCK_SIZE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "output (final result)"
+algorithm_family: >
+  Single-pass 1-D reversal as a streaming copy with mirrored (descending) read
+  addresses and contiguous (ascending) write addresses.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (bit-exact data movement)
+  output_dtype: same as input
+  special_modes: none
+  masking_or_padding_values: "other=0.0 on masked loads (line 14; the literal is converted to the pointer's element type for int8), masked store (line 15)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  input is read-only. A fresh output is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps x num_stages (lines 18-29),
+  key=["N"], warmup=1, rep=3. autotune=True launches the wrapper with a
+  meta-dependent grid (lines 37-38); otherwise the raw kernel is launched with
+  _DEFAULT_CONFIG (lines 40-47). get_last_config (52-56) reports all three.
+  Audit only.
+implementation_freedoms_observed: >
+  Tile size, warp count, pipelining depth, vector width, and whether the
+  mirroring is applied on the load side (as here), on the store side, or by
+  reversing a tile in registers between a contiguous load and a contiguous
+  store.
+algorithm_constraints_observed: >
+  One read and one write per element, out[i] = input[N - 1 - i], same dtype, new
+  contiguous output buffer, correct tail masking so no out-of-range address is
+  touched (the mirrored index of a masked lane is negative).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads N elements once and writes N elements once, exactly
+    what bytes_expr counts (config's n is the same quantity as the positional
+    N). flops_expr is nominal; the kernel does no arithmetic on the data. No
+    preprocessing traffic and no prepacked inputs.
+notes_for_review:
+  - "The block_size keyword is accepted but unused."
+  - "Masked lanes have a negative mirrored index (N - 1 - offsets < 0); correctness depends on the load mask suppressing those accesses, which it does."
+  - "The reference is a flip plus contiguous() copy; both sides produce a new buffer, so there is no aliasing difference to reconcile."

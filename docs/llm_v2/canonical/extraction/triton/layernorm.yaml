@@ -1,0 +1,177 @@
+operator: layernorm
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/layernorm/impl_triton.py
+    functions:
+      - name: layernorm_kernel
+        lines: [8, 44]
+        role: kernel
+      - name: _layernorm_kernel_autotuned
+        lines: [47, 57]
+        role: tuner
+      - name: run
+        lines: [60, 94]
+        role: host-driver
+      - name: get_last_config
+        lines: [97, 105]
+        role: helper
+  - path: tilebench/benchmarks/operators/layernorm/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/layernorm/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_layernorm_inputs
+        lines: [403, 407]
+        role: helper
+      - name: infer_problem_size (layernorm branch, n = batch*M*K used by metrics)
+        lines: [699, 700]
+        role: helper
+functional_semantics: >
+  Layer normalisation over the last dimension with affine parameters.
+  Reference impl_torch.run (lines 5-6): F.layer_norm(x, (K,), weight, bias,
+  eps) with eps defaulting to 1e-5: for every row r of x (batch, M, K),
+  y = (r - mean(r)) / sqrt(var(r) + eps) * weight + bias with the biased
+  variance (divide by K); PyTorch computes the statistics in fp32 and
+  returns x's dtype. Generator (tensors.py 403-407) returns (x, weight,
+  bias) with x = randn(batch, M, K), weight = randn(K), bias = randn(K),
+  all in the case dtype; config.yaml defines no eps, so both backends use
+  their run() default 1e-5. No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(
+        x: torch.Tensor,
+        weight: torch.Tensor,
+        bias: torch.Tensor,
+        eps: float = 1e-5,
+        autotune: bool = False,
+    ) -> torch.Tensor:
+  positional_inputs: [x, weight, bias]
+  keyword_params: [eps, autotune]
+  returns: single tensor with x's shape and dtype
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(batch, M, K), viewed as (batch*M, K)"
+    dtype: fp16 | bf16 | fp32 (config case_grid dtype)
+    layout: contiguous (run() calls .contiguous().reshape(batch_M, K), line 71)
+    mutated_in_place: false
+    notes: read twice by the kernel (statistics pass and apply pass), cast to fp32 on load (lines 27, 40).
+  - name: weight
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded per row program in the apply pass with other=1.0 (line 41), cast to fp32.
+  - name: bias
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded per row program in the apply pass with other=0.0 (line 42), cast to fp32.
+outputs:
+  - name: out
+    shape: "x.shape"
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none (out = empty_like(x), line 72; kernel writes through the reshape view out_2d, line 73)
+preprocessing:
+  - description: x.contiguous().reshape(batch_M, K); K and batch_M from x.shape
+    lines: [67, 71]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: a view (no copy) for the generator's contiguous inputs; a timed copy otherwise.
+  - description: allocate out = torch.empty_like(x) and its 2-D view
+    lines: [72, 73]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: the kernel addresses the output row with x's row stride (stride_row, line 18), valid because out mirrors x's contiguous layout.
+stages:
+  - id: s1
+    description: >
+      One program per row (grid (batch*M,)). Statistics pass (lines 22-29):
+      loop over the row in BLOCK_N_SIZE chunks, load x (mask, other=0.0) as
+      fp32 and accumulate sum_x and sum_x2 lane-wise. mean = sum(sum_x) /
+      N; var = sum(sum_x2) / N - mean^2 (one-pass E[x^2] - E[x]^2 formula,
+      lines 31-33); rstd = rsqrt(var + eps) (line 34). Apply pass (lines
+      37-44): re-load x, weight (other=1.0) and bias (other=0.0) as fp32,
+      y = (x - mean) * rstd * weight + bias, masked store (fp32 value cast
+      to the output pointer's element type by tl.store).
+    kind: kernel
+    lines: [8, 44]
+    launches: "1 launch, grid (batch*M,)"
+    depends_on: []
+    fusable_with: "none"
+    produces: out (batch*M, K) -- no intermediates (mean/rstd stay in registers)
+algorithm_family: >
+  Row-wise two-pass layer normalisation in a single kernel: one streaming
+  pass for sum and sum-of-squares (variance by E[x^2] - E[x]^2), one
+  re-read pass applying the normalisation and affine transform.
+reduction_scan_sort_structure: >
+  Per row: two BLOCK_N_SIZE-lane fp32 accumulators updated sequentially
+  over ceil(K / BLOCK_N_SIZE) chunks, each reduced once by tl.sum (tree
+  order defined by Triton). Variance is the single-pass E[x^2] - mean^2
+  form, not Welford and not a centred two-pass sum; torch's layer_norm uses
+  a centred/Welford formulation, so results differ by rounding
+  (cancellation risk when |mean| >> std; benign for randn inputs).
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 (explicit .to(tl.float32) on all loads)
+  output_dtype: input dtype (implicit cast of the fp32 result at tl.store, line 44)
+  special_modes: "biased variance (divide by N); rstd via tl.math.rsqrt"
+  masking_or_padding_values: "x other=0.0 (zeros contribute nothing to either sum; the divisor is the true N), weight other=1.0, bias other=0.0; masked store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_N_SIZE
+    role: tile size (column chunk)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_N_SIZE x num_warps x num_stages (key
+  ["N_SIZE"], warmup=1, rep=3), lines 47-57. Default path launches the
+  undecorated kernel with _DEFAULT_CONFIG (lines 84-92). get_last_config
+  reads best_config (lines 97-105).
+implementation_freedoms_observed: >
+  Chunk size, warps, stages, vector width; keeping the row in registers
+  versus re-reading it; the variance formula (one-pass vs Welford vs centred
+  two-pass) is an implementation choice here with numerical consequences;
+  splitting a row across programs.
+algorithm_constraints_observed: >
+  Keep: normalisation over the last dimension per row with biased
+  variance; eps added inside the rsqrt; statistics in fp32; affine y =
+  xhat * weight + bias with (K,) parameters; output cast to the input
+  dtype with x's shape; inputs read-only; no scratch; eps default 1e-5
+  (not supplied by config).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "6 * n"
+  consistent_with_timed_boundary: true
+  notes: >
+    n = batch*M*K (tensors.py infer_problem_size, lines 699-700). The timed
+    run() is a no-op contiguous()/reshape, one allocation and one kernel.
+    The formula counts x read twice (both passes) plus out written once at
+    dtype_size bytes each, which matches the kernel's traffic; the (K,)
+    weight and bias reads per row program are not counted (cache-resident).
+    No preprocessing or prepacking assumed.
+notes_for_review:
+  - run() has no block_size parameter and no **kwargs; it only works because the engine passes nothing beyond autotune (passing block_size would raise TypeError).
+  - Variance via E[x^2] - E[x]^2 differs numerically from torch's centred formulation; fine for randn data, cancellation-prone otherwise.
+  - The output row pointer uses x's stride_row (line 18); valid only because out = empty_like(x) of a contiguous x.
+  - The fp32 result is stored to a fp16/bf16 pointer without an explicit cast; relies on tl.store's implicit conversion.
+  - bytes_expr counts the second read of x, whereas l2_norm's config (same two-pass structure) counts only one read; conventions are inconsistent across operators.
+  - eps is absent from config.yaml; both backends rely on their signature default 1e-5.

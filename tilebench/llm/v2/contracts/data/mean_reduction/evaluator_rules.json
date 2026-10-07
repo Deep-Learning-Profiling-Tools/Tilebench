@@ -1,0 +1,37 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "mean_reduction",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a float32 output of M elements (or an (M, 1) buffer later viewed as (M,)) inside run()."},
+    {"id": "rowwise_fp32_sum", "description": "Single logical traversal of x in which every element is converted to float32 and accumulated into float32 partial sums that are combined into one float32 total per row; masked/padded columns contribute exactly 0."},
+    {"id": "normalise_store", "description": "Divide each row total by the exact N in float32 (or multiply by a float32 reciprocal) and store one float32 per row; fused with the sum, or applied by a combine that sums the per-call float32 partials of a split-row design (the combine must not re-read x)."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.mean\\(|\\.mean\\(|torch\\.nanmean|\\.nanmean\\(", "message": "The mean must be computed by the kernel, not by PyTorch.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.sum\\(|(?<!tl)(?<!ct)(?<!nl)\\.sum\\(|torch\\.einsum|torch\\.matmul|torch\\.mv\\(|\\s@\\s", "message": "Host-side row sums (sum/einsum/matmul with a ones vector) replace the reduction stage.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.cumsum|torch\\.logsumexp|torch\\.add\\(", "message": "Host-side arithmetic on x inside run() is not part of this operator.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.float\\(\\)|\\.to\\(\\s*torch\\.float32\\s*\\)|\\.to\\(\\s*dtype\\s*=\\s*torch\\.float32", "message": "Casting x to float32 with PyTorch inside run() is an extra pass over x (counted device work that the canonical algorithm does not have); the conversion must happen inside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "dtype\\s*=\\s*(tl|ct|T|nl)\\.(float16|bfloat16|fp16|bf16)", "message": "A float16/bfloat16 accumulator violates the float32 accumulation requirement.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(", "message": "An initialised global scratch is not part of the canonical algorithm; the only permitted scratch is a per-call partial-sum buffer of a split-row design, whose fill is counted device work.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "reduce_sum", "reduce"], "message": "No kernel-level sum reduction found.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No evidence of a float32 accumulator or cast inside the kernel.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.float32",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.squeeze",
+    "Tensor.view",
+    "Tensor.reshape",
+    "Tensor.stride",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none with respect to x; the returned (M,) float32 tensor may be a metadata-only view of a buffer allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (the reduction kernel); the output allocation call, an optional no-op contiguous() guard and an optional metadata-only squeeze/view are host work, not GPU time. No cached state, no host-side cast or copy of x; a per-call partial-sum buffer of a split-row design (and any device fill of it) is device work and is counted; no cross-call cache of it."},
+  "tolerance_source": "config.verify"
+}

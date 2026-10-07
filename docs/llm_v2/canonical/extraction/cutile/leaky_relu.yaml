@@ -1,0 +1,159 @@
+operator: leaky_relu
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/leaky_relu/impl_cutile.py
+    functions:
+      - name: leaky_relu_kernel
+        lines: [19, 24]
+        role: kernel
+      - name: run
+        lines: [30, 56]
+        role: host-driver
+      - name: get_last_config
+        lines: [59, 60]
+        role: helper
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [10, 15]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [27, 27]
+        role: tuner
+  - path: tilebench/benchmarks/operators/leaky_relu/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/leaky_relu/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_leaky_relu_inputs
+        lines: [103, 105]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Elementwise leaky ReLU with a fixed negative slope of 0.01:
+  y = x if x > 0 else 0.01 * x. The reference (impl_torch.py line 6) is
+  torch.nn.functional.leaky_relu(input, negative_slope=0.01); the N
+  argument is ignored by the reference. The generator (tensors.py lines
+  103-105) draws x = randn(n) in the case dtype and returns (x, n).
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor of shape (N,) and dtype input.dtype
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: "T in {fp16, bf16, fp32}"
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: loaded in TILE-sized 1-D blocks with zero padding past N (line 22)
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: used only on the host for the grid size (lines 40, 52); not a kernel argument
+outputs:
+  - name: output
+    shape: "(N,)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output = torch.empty_like(input)
+    lines: [32, 32]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no cast, copy or layout change of input
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [32, 32]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output buffer (N,) uninitialised
+  - id: s1
+    description: >
+      One 1-D program per TILE-element chunk, grid (ceil(N/TILE), 1, 1),
+      launched at lines 52-54. The program loads its (TILE,) tile of input
+      with zero padding (line 22), computes where(x > 0, x, 0.01 * x)
+      (line 23) in the tile's dtype, and stores the (TILE,) result at the
+      same block index (line 24; elements past N are clipped).
+    kind: kernel
+    lines: [19, 24]
+    launches: "ceil(N/TILE)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Single-pass elementwise map (select between identity and a constant
+  scale) over a flat vector; one program per contiguous chunk, no
+  reduction, no scratch.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: none; the product 0.01 * x is formed on the tile in its own dtype with no explicit fp32 upcast (line 23), so the rounding of the 0.01 constant for fp16/bf16 is left to cuTile (unclear)
+  output_dtype: input.dtype
+  special_modes: none
+  masking_or_padding_values: PaddingMode.ZERO on the load (line 22); store clipped at N (line 24); no explicit masks (a zero-padded element maps to 0 and is never stored)
+intermediate_storage: >
+  None.
+mutation_rules: >
+  input is never written. output is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per program; ConstInt kernel argument)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 11-15) with the
+  closures at lines 36-43, cached per shape_key (N, dtype). The winner's
+  occupancy is applied via kernel_with_hints (line 53) and the tile is
+  passed as a ConstInt argument (line 54). Default path uses
+  _DEFAULT_CONFIG (line 10). get_last_config returns tile and occupancy
+  (lines 44-48, 59-60). Audit only.
+implementation_freedoms_observed: >
+  Chunk size and occupancy; whether the comparison/scale is evaluated in
+  the input dtype or in fp32; grid ordering; whether N is a kernel
+  argument or inferred from array bounds.
+algorithm_constraints_observed: >
+  Single kernel, single pass; y = x for x > 0 and 0.01 * x otherwise
+  (x == 0 yields 0 on both branches); output has the input's shape and
+  dtype and is allocated inside run(); the slope 0.01 is a fixed constant,
+  not a parameter; no scratch.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    One read of input and one write of output, which is exactly the
+    kernel's traffic; run() performs no preprocessing other than the output
+    allocation (timed) and assumes no prepacked inputs. flops_expr counts
+    one operation per element.
+notes_for_review:
+  - block_size is accepted by run() but unused.
+  - No explicit fp32 upcast; low-precision rounding of 0.01 * x relative to F.leaky_relu is unclear but within the verifier's per-dtype tolerance by design of the benchmark.
+  - N is not passed to the kernel; tail handling relies on zero-padded loads and clipped stores.

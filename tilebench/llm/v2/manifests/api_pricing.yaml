@@ -1,0 +1,86 @@
+# Frozen public list-price snapshot for per-request USD cost estimation.
+# Loaded and validated by tilebench.llm.v2.metrics.cost; its file sha256 is
+# pinned by every formal campaign (pricing_snapshot_sha256) and a formal
+# resume refuses a changed snapshot. No adapter carries a price.
+#
+# estimated_cost_usd = provider-reported raw usage of the request x these
+# list prices. It is NOT the provider's billed amount (negotiated discounts,
+# credits, taxes are not modelled); an optional, separate billing
+# reconciliation (providers.billing) keeps provider-reported aggregated cost
+# under its own field. Pricing never enters a prompt, a feedback text or the
+# token metric E_token(B); it defines the separate budget axis E_usd(B).
+schema: tilebench-llm-api-pricing/1
+version: "2026-10-06.1"
+currency: USD
+unit: per_1M_tokens
+checked_at: "2026-10-06"
+checked_by: "integrating Claude Code session, study-owner instruction (2026-10-06) USD-cost §2; official pages fetched on 2026-10-06"
+
+providers:
+  openai:
+    sources:
+      - url: https://developers.openai.com/api/docs/pricing
+        note: "platform.openai.com/docs/pricing redirects here (301)"
+        retrieved: "2026-10-06"
+        excerpts:
+          - "Prices per 1M tokens."
+          - "Model | Short context input | Short context cached input | Short context cache writes | Short context output | Long context input | Long context cached input | Long context cache writes | Long context output"
+          - "gpt-6.1-sol | $2.00 | $0.10 | $2.50 | $10.00 | $4.00 | $0.20 | $5.00 | $15.00"
+          - "Short context: <=272K input tokens. Long context: >272K input tokens."
+          - "Regional processing (data residency) endpoints are charged a 10% uplift for models released on or after March 5, 2026."
+      - url: https://developers.openai.com/api/docs/guides/prompt-caching
+        retrieved: "2026-10-06"
+        excerpts:
+          - "ordinaryInputTokens = inputTokens - cachedTokens - cacheWriteTokens"
+          - "Cache writes cost 1.25x the standard, uncached input-token rate. Subsequent reads cost 0.1x that rate on most of these models and 0.05x on GPT-6.1 Sol."
+          - "Cache-write pricing is not an additive fee: input tokens use the uncached-input, cached-input, or cache-write rate."
+          - "Prompt caching is enabled by default for supported OpenAI models."
+      - url: https://developers.openai.com/api/docs/guides/reasoning
+        retrieved: "2026-10-06"
+        excerpts:
+          - "While reasoning tokens are not visible via the API, they still occupy space in the model's context window and are billed as output tokens."
+    usage_mapping:
+      ordinary_input: "input_tokens - input_tokens_details.cached_tokens - input_tokens_details.cache_write_tokens"
+      cached_input: "input_tokens_details.cached_tokens"
+      cache_write: "input_tokens_details.cache_write_tokens"
+      output: "output_tokens (output_tokens_details.reasoning_tokens is a SUBSET of output_tokens; never added again)"
+    models:
+      gpt-6.1-sol:
+        api: responses (streaming)
+        rules:
+          - id: openai/gpt-6.1-sol/standard/short-context/2026-10-06.1
+            processing: standard (service_tier not set in the request; responses report service_tier "default")
+            applies_when: {service_tier_in: ["default", "auto", null], regional_processing: false, max_input_tokens: 272000}
+            rates: {input: 2.00, cached_input: 0.10, cache_write: 2.50, output: 10.00}
+          - id: openai/gpt-6.1-sol/standard/long-context/2026-10-06.1
+            processing: standard, long context (> 272K input tokens; the whole request is priced at the long-context rates)
+            applies_when: {service_tier_in: ["default", "auto", null], regional_processing: false, min_input_tokens: 272001}
+            rates: {input: 4.00, cached_input: 0.20, cache_write: 5.00, output: 15.00}
+        not_applicable: "batch, flex, priority/fast tiers and regional-processing endpoints are not used by this study; a response reporting any other service_tier gets no rule (usd_cost_status unknown), never a guessed price"
+
+  anthropic:
+    sources:
+      - url: https://platform.claude.com/docs/en/about-claude/pricing
+        note: "docs.claude.com/en/... redirects here (301)"
+        retrieved: "2026-10-06"
+        excerpts:
+          - "Model | Base input tokens | 5m cache writes | 1h cache writes | Cache hits and refreshes | Output tokens"
+          - "Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok | $20 / MTok"
+          - "Cache hits and refreshes on Claude Opus 5.5 are priced at 0.05x the base input price."
+          - "For Claude 4.6 and later models, using inference_geo: \"us\" applies a 1.1x pricing multiplier. inference_geo: \"global\" (default) uses standard pricing."
+          - "Claude 4.6 and later models ... include the full 1M token context window at standard pricing."
+    usage_mapping:
+      uncached_input: "input_tokens (tokens after the last cache breakpoint)"
+      cache_write_5m: "cache_creation.ephemeral_5m_input_tokens (cache_creation_input_tokens when no breakdown is reported: priced as 5m)"
+      cache_write_1h: "cache_creation.ephemeral_1h_input_tokens"
+      cache_read: "cache_read_input_tokens"
+      output: "output_tokens (thinking tokens are included in output_tokens; never added again)"
+    models:
+      claude-opus-5-5:
+        api: messages (streaming)
+        rules:
+          - id: anthropic/claude-opus-5-5/standard/global/2026-10-06.1
+            processing: standard tier, global inference routing, standard speed (no batch, no fast mode)
+            applies_when: {service_tier_in: ["standard", null], inference_geo_in: ["global", null]}
+            rates: {input: 4.00, cache_write_5m: 5.00, cache_write_1h: 8.00, cache_read: 0.20, output: 20.00}
+        not_applicable: "batch, fast mode, priority tier and inference_geo us (1.1x) are not used by this study; any other reported service_tier / inference_geo gets no rule (usd_cost_status unknown)"

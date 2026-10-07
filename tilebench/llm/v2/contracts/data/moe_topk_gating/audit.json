@@ -1,0 +1,157 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "moe_topk_gating",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/moe_topk_gating/impl_triton.py",
+      "functions": [
+        {
+          "name": "moe_topk_gating_kernel",
+          "lines": [
+            8,
+            44
+          ]
+        },
+        {
+          "name": "_moe_topk_gating_kernel_autotuned",
+          "lines": [
+            47,
+            55
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            58,
+            84
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            87,
+            91
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/moe_topk_gating/impl_cutile.py",
+      "functions": [
+        {
+          "name": "moe_topk_gating_kernel",
+          "lines": [
+            15,
+            63
+          ]
+        },
+        {
+          "name": "_next_pow2",
+          "lines": [
+            69,
+            70
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            73,
+            108
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            111,
+            112
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/moe_topk_gating/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            20
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Per row of (M, E) logits: select the k largest values and their int32 column indices in descending order, softmax over the k values in float32, weights cast to logits dtype; returns (weights (M, k), indices (M, k) int32) (impl_triton.py 22-44, 60-61, 84).",
+      "cutile": "Identical: k largest per row in descending order, float32 softmax over the k values, weights cast to logits dtype, returns (weights, indices int32) (impl_cutile.py 31-63, 76-77, 108).",
+      "note": "Both realise the reference torch.topk(..., largest=True, sorted=True) followed by softmax(vals.float()).to(dtype) and idx.to(int32) (impl_torch.py 7-20)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One fused kernel, one program per row: load row padded with -inf and cast to float32; K rounds of max/argmax with -inf masking of the chosen lane; float32 softmax over the K slots; store weights and int32 indices (impl_triton.py 19-44).",
+      "cutile": "One fused kernel, one CTA per row with the same four phases: NEG_INF-padded load and float32 cast; K rounds of max/argmax with -inf masking; float32 softmax; cast and store (impl_cutile.py 31-63).",
+      "note": "Identical fused single-launch structure; K is a compile-time constant on both sides so the selection loop is static."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Rows are independent; within a row the K selection rounds are sequential (each depends on the previous mask) and the softmax depends on all K rounds (impl_triton.py 30-41).",
+      "cutile": "Same: independent rows, sequential K rounds, softmax after selection (impl_cutile.py 42-57).",
+      "note": "Same dependency chain."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Each round: full-row max and argmax over the padded row (tree reductions whose order is the DSL's); the DSL argmax default picks the leftmost maximal index per its API (not verified by running); softmax uses a max, exp and sum over the K-wide vector (impl_triton.py 31-32, 39-41).",
+      "cutile": "Each round: full-row max and argmax over the padded row; the argmax tie rule is not stated in the source; softmax uses max, exp, sum over the K lanes (impl_cutile.py 43-44, 54-57).",
+      "note": "Same iterative-argmax selection with descending output order on both sides. The tie rule is unspecified on both sides and in the reference (torch.topk); the generator makes every row's values distinct (tensors.py 225-227: a permutation of linspace(-3, 3, E) cast to dtype), so ties are never exercised. Listed as a non-blocking review item."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Row cast to float32 before selection; selection and softmax in float32; weights cast to the output pointer dtype on store; indices int32 (impl_triton.py 22, 40-41, 43-44).",
+      "cutile": "Row cast to float32 before selection; selection and softmax in float32; weights cast to the output dtype; indices int32 (impl_cutile.py 37, 54-57, 59, 63).",
+      "note": "Identical precision path; the fp16/bf16 to float32 upcast is exact so the selected set and order equal the reference's on the native dtype."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Allocate weights (M, k) in logits dtype and indices (M, k) int32; derive padded row/slot widths as the next powers of two of E and k; grid (M,) (impl_triton.py 60-65).",
+      "cutile": "Same allocations and the same next-power-of-two padding derivation; grid (M, 1, 1) (impl_cutile.py 76-82).",
+      "note": "No cast, copy or packing of logits on either side; the padded widths are shape-derived, not tunables."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None in global memory; the row and the K-wide value/index vectors are register tiles (impl_triton.py 22-28).",
+      "cutile": "None in global memory; all intermediates are register tiles (impl_cutile.py 31-40).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "logits is read-only (masking happens on the in-register copy); both outputs fresh per call (impl_triton.py 22, 37, 60-61).",
+      "cutile": "logits is read-only; both outputs fresh per call (impl_cutile.py 31, 51, 76-77).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "M * E * dtype_size + M * k * dtype_size + M * k * 4",
+    "flops_expr": "M * (4 * k * E + 3 * k)",
+    "consistent": "true",
+    "note": "Both timed run() bodies read the (M, E) logits once and write the (M, k) weights in the logits dtype and the (M, k) int32 indices once, with no preprocessing traffic and nothing prepacked; bytes_expr counts exactly those three terms (config.yaml 19). flops_expr is a nominal count modelling k full-row max/argmax/mask sweeps plus a small per-row softmax (config.yaml 18); it mirrors the iterative-argmax structure that both sides share."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Non-blocking: the tie-breaking rule among equal logits is unspecified by the reference (torch.topk) and by both implementations; the generator guarantees distinct values per row so it is never exercised. Decide whether the contract should mandate a rule (for example lowest column index first among equal values) or keep the current wording that ties are outside the verified input domain."
+  ],
+  "contract_sha256": "28354dc31611c1b6462855d1c95b09cfdbded3c930b3c20884962c4a70f7418a",
+  "previous_status_before_approval": "draft"
+}

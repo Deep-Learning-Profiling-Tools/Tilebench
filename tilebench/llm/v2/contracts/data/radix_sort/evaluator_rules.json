@@ -1,0 +1,42 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "radix_sort",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "working_copy_and_scratch", "description": "Copy input into a run-allocated key buffer (device work, counted), allocate a second key buffer and the per-pass histogram/scan scratch inside run()."},
+    {"id": "pass_count", "description": "Per digit pass: per-block exact counts of keys per digit value written to a histogram."},
+    {"id": "pass_scan", "description": "Per digit pass: exclusive prefix sum over the histogram yielding the global write base for each (digit value, block), completed before any scatter of that pass."},
+    {"id": "pass_stable_scatter", "description": "Per digit pass: each key written to base[digit, block] + its rank among same-digit keys preceding it in the block, into the other key buffer (stable partition)."},
+    {"id": "lsd_pass_loop", "description": "Passes run least-significant digit first and together cover all 32 key bits (digit width and pass count are implementation choices: no fixed 2-bit / 16-pass requirement), swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.sort\\(|torch\\.argsort\\(|torch\\.msort\\(|torch\\.topk\\(|torch\\.unique\\(", "message": "A PyTorch sort replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)\\.sort\\(|\\.argsort\\(|\\.msort\\(|\\.topk\\(", "message": "A tensor-method sort on the host replaces the whole computation.", "level": "suspicious", "scope": "host"},
+    {"pattern": "tl\\.sort\\(|ct\\.sort\\(|T\\.sort\\(|nl\\.sort\\(|bitonic|merge_sort|mergesort", "message": "A DSL comparison-sort primitive or network replaces the radix passes; it may not produce the final order.", "level": "suspicious", "scope": "any"},
+    {"pattern": "torch\\.cumsum\\(|torch\\.bincount\\(|torch\\.histc\\(|torch\\.histogram\\(|\\.cumsum\\(\\s*(dim\\s*=\\s*)?-?\\d\\s*\\)|\\.cumsum_\\(|\\.bincount\\(", "message": "Host-side histogram or scan (torch.cumsum/bincount/histc or a tensor-method cumsum) replaces a per-pass stage; in-kernel scans are required and not flagged.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+input\\b|input\\.sort_\\(|input\\[.*\\]\\s*=|input\\.copy_\\(|input\\.fill_\\(|input\\.zero_\\(", "message": "The input must never be written or returned.", "level": "suspicious", "scope": "host"},
+    {"pattern": "range\\(\\s*0\\s*,\\s*31\\b|range\\(\\s*31\\s*\\)|if\\s+.*all\\s*\\(.*digit|skip\\w*\\s+(the\\s+|this\\s+)?pass|pass(es)?\\s+(is|are|can be|may be)?\\s*skip", "message": "Possible data-dependent or incomplete pass coverage; all 32 bits must be processed.", "level": "suspicious", "scope": "host"},
+    {"pattern": "_cache\\b|functools\\.lru_cache|global\\s+_", "message": "Possible state cached across calls; everything must be recomputed inside run().", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.cumsum", "ct\\.cumsum", "T\\.cumsum", "nl\\.cumsum", "nisa\\.tensor_scan", "cumsum", "prefix", "scan"], "message": "No kernel-level prefix scan found; the per-pass scan and in-block rank must be computed in kernels.", "level": "suspicious"},
+    {"any_of": [">>", "shift", "digit", "radix"], "message": "No digit extraction (shift/mask) found.", "level": "suspicious"},
+    {"any_of": ["\\.clone\\(\\)", "torch\\.clone\\(", "copy"], "message": "No working copy of the input found; the input must not be sorted in place.", "level": "suspicious"},
+    {"any_of": ["for\\s+\\w+\\s+in\\s+range\\(\\s*0\\s*,\\s*32", "range\\(.*32", "32"], "message": "No evidence that the pass loop covers all 32 key bits.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.empty_like",
+    "torch.zeros",
+    "torch.zeros_like",
+    "torch.int32",
+    "torch.cuda.current_stream",
+    "Tensor.clone",
+    "Tensor.view",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none with respect to input; the returned (N,) int32 tensor is one of the key buffers allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes: the working copy (clone) of input, any zero-fill of scratch and every digit pass (count, scan, stable scatter); the allocation calls (two key buffers plus histogram/scan scratch) and the Python buffer swaps are host work, not GPU time. No cached state across calls, no untimed presort or prepacking. Scoring Q (decided 2026-10-06) is the compulsory-I/O override 2 * n * dtype_size (one read of the keys plus one write of the sorted result); config.yaml's 16-pass bytes_expr is not the formal denominator, and per-pass key traffic, the working copy and the histogram/scan scratch traffic are diagnostic only."},
+  "tolerance_source": "config.verify"
+}
