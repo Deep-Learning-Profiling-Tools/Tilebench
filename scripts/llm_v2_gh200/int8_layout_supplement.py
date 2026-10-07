@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import time
@@ -127,6 +128,9 @@ def main() -> int:
         env = environment.capture("cuda", 0)
         env["blas_stack_check"] = blas
         others = env.get("other_compute_processes")
+        if isinstance(others, list):          # as run.run_calibration: this process's own context is not "other"
+            others = [o for o in others if o.split(",")[0].strip() != str(os.getpid())]
+            env["other_compute_processes"] = others
         if isinstance(others, list) and others:
             raise SystemExit(f"other compute processes are on the device: {others}; calibration is exclusive")
         if env.get("device_properties", {}).get("uuid") != base_profile["scope"]["uuid"]:
