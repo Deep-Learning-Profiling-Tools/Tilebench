@@ -201,5 +201,13 @@ stayed at 3 per provider. Following §9/§21 the campaign was paused with the ST
 (`manifests/excluded_campaigns.yaml`); checker v4 and the scheduler fix were versioned, tested and smoke-tested, and the
 B200 formal Base restarted under a new identity (`docs/llm_v2/S_LLM.md`).
 
+Second launch `formal_b200_base_rev4_checkerv4_2026-10-07` (04:34-04:48, 20 rounds): the frozen TileLang 0.1.11 Reference
+stated `T.any_of(c1, c2, ...)` / `T.all_of(c1, c2, ...)` combine predicates (tilelang 0.1.11: `all_of(buffer)` / `any_of(buffer)`
+reduce one boolean buffer; scalar predicates use `T.And` / `T.Or` / `T.Not`), and the B200 Device Context listed tileiras as
+unknown although the installed compiler is 13.2 and the cuTile Reference documents APIs that need 13.3. Owner decision (Option A,
+minimal): both texts corrected (the Device Context states tileiras 13.2 and that APIs whose documented minimum tileiras version is
+13.3 or later are unavailable; the cuTile Reference is unchanged), verified locally (introspection, a compiled TileLang kernel, the
+tileiras version cuda-tile resolves), no paid smoke; the campaign was excluded and B200 restarted under a new identity.
+
 Formal campaigns run only from device branches brought to S_llm (`docs/llm_v2/S_LLM.md`): `exp/llm-b200`,
 `exp/llm-gh200`, `exp/llm-mi300x`, `exp/llm-trn2`.

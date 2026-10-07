@@ -4,6 +4,7 @@
   "kind": "device_context",
   "arch": "blackwell",
   "supersedes": "skills/device/B200/2026-10-05/SKILL.md",
+  "revision_2026-10-07": "study owner, 2026-10-07 instruction (Option A, minimal model-visible text correction): software snapshot states the installed tileiras 13.2 [S7] (was unknown) and one sentence that APIs whose documented minimum tileiras version is 13.3 or later are unavailable in this B200 environment; nothing else changed.",
   "revision_note": "2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §2): removed every statement that the legacy tilebench/data/peak_performance/B200.json defines the framework's Roofline or scoring ceiling (source S2 dropped); corrected the HGX B200 footnote interpretation (rows carrying the sparse footnote are halved for dense: FP8/FP6 4.5 PFLOP/s, INT8 4.5 POP/s, FP16/BF16 2.25 PFLOP/s, TF32 1.125 PFLOP/s per GPU; FP32 75 TFLOP/s; FP64 37 TFLOP/s; FP4 9 PFLOP/s dense per GPU); HBM bandwidth listed as the vendor specification only (8 TB/s per GPU derived from the DGX B200 total); no empirical TileBench calibration value appears in this model-visible text. Hardware facts, execution-model and memory tables unchanged from the 2026-10-05 capture.",
   "sources": [
     {"id": "S1", "description": "Runtime capture on host dgx003 (torch.cuda.get_device_properties + nvidia-smi; driver, torch, triton, cuda-tile, tilelang versions)", "path_or_url": "runtime capture dgx003 2026-10-05 (re-capture with skills/device/CAPTURE_CHECKLIST.md)", "accessed": "2026-10-05"},
@@ -13,7 +14,8 @@
     {"id": "S6-3", "description": "NVIDIA PTX ISA: Tensor Memory (512 columns x 128 lanes x 32-bit per CTA on sm_100a/sm_100f), tcgen05.mma kinds, TMEM allocation rules, cp.async.bulk.tensor target ISA notes", "path_or_url": "https://docs.nvidia.com/cuda/parallel-thread-execution/index.html", "accessed": "2026-10-05"},
     {"id": "S6-4", "description": "NVIDIA HGX platform page, HGX B200 column (8-GPU totals) with footnotes 1=sparse, 2=dense; FP4 shown sparse|dense, FP8/FP6, INT8, FP16/BF16 and TF32 rows carry the sparse footnote", "path_or_url": "https://www.nvidia.com/en-us/data-center/hgx/", "accessed": "2026-10-05"},
     {"id": "S6-5", "description": "NVIDIA DGX B200 page (1,440 GB total HBM3e, 64 TB/s total, 8 GPUs)", "path_or_url": "https://www.nvidia.com/en-us/data-center/dgx-b200/", "accessed": "2026-10-05"},
-    {"id": "S6-6", "description": "NVIDIA Blackwell architecture page (two dies, 10 TB/s C2C, 208 B transistors, FP4, 2nd-gen Transformer Engine, decompression engine)", "path_or_url": "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/", "accessed": "2026-10-05"}
+    {"id": "S6-6", "description": "NVIDIA Blackwell architecture page (two dies, 10 TB/s C2C, 208 B transistors, FP4, 2nd-gen Transformer Engine, decompression engine)", "path_or_url": "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/", "accessed": "2026-10-05"},
+    {"id": "S7", "description": "Installed CUDA Tile compiler used by cuda-tile (tileiras --version: release 13.2, V13.2.78; the version cuda-tile resolves is 13.2)", "path_or_url": "runtime check dgx003 2026-10-07", "accessed": "2026-10-07"}
   ],
   "excluded_sources": [
     {"id": "S2", "description": "tilebench/data/peak_performance/B200.json (legacy peak table: measured 2026-04-08 copy bandwidth + datasheet compute entries)", "reason": "not a hardware datasheet fact and no longer the scoring ceiling; the empirical calibration profile is scoring-only provenance and never model-visible"}
@@ -29,7 +31,7 @@
     "base/boost clock schedule under load",
     "Python version",
     "apache-tvm-ffi version",
-    "nvidia-cuda-tileiras / nvcc / nvvm versions",
+    "nvcc / nvvm versions",
     "OS and kernel version",
     "Proton backend"
   ],
