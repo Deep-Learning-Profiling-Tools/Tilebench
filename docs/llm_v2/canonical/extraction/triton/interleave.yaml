@@ -1,0 +1,150 @@
+operator: interleave
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/interleave/impl_triton.py
+    functions:
+      - name: interleave_kernel
+        lines: [8, 25]
+        role: kernel
+      - name: _interleave_kernel_autotuned
+        lines: [28, 38]
+        role: tuner
+      - name: run
+        lines: [41, 58]
+        role: host-driver
+      - name: get_last_config
+        lines: [61, 65]
+        role: helper
+  - path: tilebench/benchmarks/operators/interleave/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 8]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/interleave/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_interleave_inputs
+        lines: [340, 347]
+        role: helper
+      - name: infer_problem_size (generic "n" branch used for metrics)
+        lines: [631, 632]
+        role: helper
+functional_semantics: >
+  Element interleave of two equal-length 1-D tensors. Reference impl_torch.run
+  (lines 4-8): out = torch.empty(2*N, dtype=A.dtype); out[0::2] = A;
+  out[1::2] = B, i.e. out[2i] = A[i], out[2i+1] = B[i] for 0 <= i < N. Pure
+  data movement, no arithmetic, dtype preserved. No reference-side
+  preprocessing. Generator (tensors.py 340-347) produces A, B of length n in
+  the case dtype (randint in [-64, 64] for int8, randn otherwise) and passes
+  n as the third positional argument.
+run_signature:
+  text: |-
+    def run(A: torch.Tensor, B: torch.Tensor, N: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [A, B, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single 1-D tensor of length 2*N in A's dtype
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(N,)"
+    dtype: fp16 | bf16 | fp32 | int8 (config case_grid dtype)
+    layout: contiguous (flat offsets, no strides passed)
+    mutated_in_place: false
+    notes: loaded with mask offs < N and no `other` value (line 18).
+  - name: B
+    shape: "(N,)"
+    dtype: same as A
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded with mask offs < N and no `other` value (line 19).
+  - name: N
+    shape: scalar python int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: element count of A and B; also the autotune key (line 35).
+outputs:
+  - name: output
+    shape: "(2*N,)"
+    dtype: A.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output torch.empty(2*N, dtype=A.dtype)
+    lines: [43, 43]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: only host work besides the launch; block_size kwarg is ignored.
+stages:
+  - id: s1
+    description: >
+      1-D grid, each program owns BLOCK_SIZE consecutive indices of A and B
+      (same offsets for both, lines 12-13), loads both with mask < N, forms
+      the 2*BLOCK_SIZE register tile tl.interleave(a, b) (line 21) and stores
+      it to the contiguous output range [pid*2*BLOCK, pid*2*BLOCK + 2*BLOCK)
+      with mask < 2*N (lines 23-25).
+    kind: kernel
+    lines: [8, 25]
+    launches: "1 launch, grid ceil(N / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (2*N,) -- no intermediates
+algorithm_family: >
+  Single-pass element-wise data movement (gather two streams, write one
+  stream twice as long); in-register interleave via tl.interleave so every
+  output block is one contiguous store.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (no arithmetic)
+  output_dtype: input dtype
+  special_modes: none
+  masking_or_padding_values: "input loads masked (offs < N) without `other`, so masked lanes are unspecified but never stored; output store masked by offs < 2*N, which is exactly the image of the valid input lanes"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps x num_stages (key ["N"],
+  warmup=1, rep=3), lines 28-38; grid lambda on meta["BLOCK_SIZE"]. Default
+  path launches the undecorated kernel with _DEFAULT_CONFIG (lines 49-56).
+  get_last_config reads best_config (lines 61-65).
+implementation_freedoms_observed: >
+  Block size, warps, stages, vector width; whether to interleave in
+  registers (tl.interleave) and emit one contiguous store, or issue two
+  stride-2 masked stores; grid/program mapping.
+algorithm_constraints_observed: >
+  Keep: a single pass that reads A and B exactly once and writes the 2*N
+  output exactly once; out[2i] = A[i], out[2i+1] = B[i]; dtype preserved
+  (including int8); output is a fresh contiguous tensor of length 2*N; no
+  scratch.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 4"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation plus one kernel. The formula counts
+    reading A (n) and B (n) and writing out (2n) at dtype_size bytes each,
+    which is the kernel's compulsory traffic. No preprocessing or prepacking
+    is performed or assumed. flops_expr is nominal (there is no arithmetic).
+notes_for_review:
+  - block_size kwarg is accepted but ignored; the default path uses _DEFAULT_CONFIG.
+  - Input loads carry no `other`; correctness relies on the output mask discarding the lanes derived from masked inputs.
+  - int8 inputs are generated via randint(-64, 65) then .to(int8); the kernel treats all dtypes identically (pure copy).
+  - The output tile is 2*BLOCK_SIZE wide; any faithful tile choice must keep that factor-of-two relationship between input and output tiles.

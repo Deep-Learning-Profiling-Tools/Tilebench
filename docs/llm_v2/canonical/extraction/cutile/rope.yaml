@@ -1,0 +1,211 @@
+operator: rope
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/rope/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: rope_embedding
+        lines: [21, 53]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [56, 56]
+        role: tuner
+      - name: run
+        lines: [59, 109]
+        role: host-driver
+      - name: get_last_config
+        lines: [112, 113]
+        role: helper
+  - path: tilebench/benchmarks/operators/rope/impl_torch.py
+    functions:
+      - name: rotate_half
+        lines: [3, 6]
+        role: helper
+      - name: run
+        lines: [8, 21]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/rope/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_rope_inputs
+        lines: [213, 221]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Rotary position embedding in the half-split ("rotate_half" / NeoX)
+  layout. q has shape (B, S, H, D); cos and sin have shape (S, D/2) and are
+  broadcast over batch and heads (impl_torch.py lines 11-12 unsqueeze them
+  to (1, S, 1, D/2)). With q1 = q[..., :D/2] and q2 = q[..., D/2:]
+  (lines 15-16): out[..., :D/2] = q1*cos - q2*sin and out[..., D/2:] =
+  q2*cos + q1*sin (lines 18-21, concatenated along the last dim). The
+  arithmetic runs in the input dtype in the reference. rotate_half (lines
+  3-6) is defined but not called by run. Generator (tensors.py lines
+  213-221): q = randn(batch_size, seq_len, n_heads, head_dim), cos = randn(seq_len,
+  head_dim//2), sin = randn(seq_len, head_dim//2) -- the tables are random,
+  not trigonometric, so the operator is a generic per-position 2-channel
+  rotation with shared (S, D/2) tables. config.yaml fixes batch_size,
+  n_heads, head_dim via case_defaults and sweeps seq_len and dtype; verify
+  tolerances are relaxed (atol/rtol 5e-3, lines 1-3).
+run_signature:
+  text: "def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, block_size: int = None, autotune: bool = False):"
+  positional_inputs: [q, cos, sin]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `output` of shape (B, S, H, D) and dtype q.dtype (a clone of q that the kernel rotates in place)
+  get_last_config: present
+inputs:
+  - name: q
+    shape: "(batch_size, seq_len, n_heads, head_dim)"
+    dtype: "case dtype: fp16 | fp32"
+    layout: contiguous; run clones it (q.clone().contiguous(), line 63) and the kernel reads/writes the clone viewed as (B*S, H, 2, D/2) (line 68)
+    mutated_in_place: false
+    notes: the kernel never touches the caller's q; it mutates the clone.
+  - name: cos
+    shape: "(seq_len, head_dim/2)"
+    dtype: same as q
+    layout: contiguous; viewed as (seq_len, half_dim) (line 69)
+    mutated_in_place: false
+    notes: row seq_idx = row_id % seq_len is loaded per CTA as a (1, TILE_DIM) tile and reshaped to (1,1,1,TILE_DIM) for broadcasting (lines 33-37).
+  - name: sin
+    shape: "(seq_len, head_dim/2)"
+    dtype: same as q
+    layout: contiguous; viewed as (seq_len, half_dim) (line 70)
+    mutated_in_place: false
+    notes: same handling as cos (lines 38-39).
+outputs:
+  - name: output
+    shape: "(batch_size, seq_len, n_heads, head_dim)"
+    dtype: q.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = q.clone().contiguous() -- full device-to-device copy of q into the buffer the kernel then updates in place
+    lines: [63, 63]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: this copy reads and writes the whole q tensor before the kernel runs; it is the only way the in-place kernel can leave the caller's q untouched.
+  - description: 4D views output.view(B*S, H, 2, D/2), cos.view(S, D/2), sin.view(S, D/2)
+    lines: [65, 70]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: the "2" axis separates the first and second half of head_dim so the kernel can address q1/q2 with static indices.
+  - description: autotune path only -- tmp = output.clone() plus its 4D view, used as the tuner's scratch target
+    lines: [77, 78]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: executed on every run(autotune=True) call, even after the tuning result is cached, so the autotune path pays a second full clone per call.
+stages:
+  - id: s1
+    description: device-to-device clone of q into output
+    kind: memcpy
+    lines: [63, 63]
+    launches: "1 (torch clone)"
+    depends_on: []
+    fusable_with: [s2]
+    produces: output (initially equal to q)
+  - id: s2
+    description: >
+      rope_embedding kernel, grid = (B*S, ceil(H/GROUP_SIZE), 1) (lines
+      98-102). CTA (row_id, group_id) covers one (batch, position) row and a
+      group of GROUP_SIZE heads. It loads the cos/sin rows for position
+      seq_idx = row_id % SeqLen (lines 33-39), loads q1 = Q[row, group, 0, :]
+      and q2 = Q[row, group, 1, :] as (1, GROUP_SIZE, 1, TILE_DIM) tiles
+      with ZERO padding for heads past n_heads (lines 42-47), computes
+      out1 = q1*cos - q2*sin and out2 = q2*cos + q1*sin by broadcasting the
+      (1,1,1,TILE_DIM) tables (lines 49-50), and stores out1/out2 back to the
+      same locations of Q (lines 52-53). Arithmetic is in the tensor's dtype
+      (no fp32 upcast).
+    kind: kernel
+    lines: [21, 53]
+    launches: "1 (grid = B*S x ceil(H/GROUP_SIZE) CTAs)"
+    depends_on: [s1]
+    fusable_with: [s1]
+    produces: output (final result, rotated in place)
+algorithm_family: >
+  Elementwise rotary embedding, half-split pairing (channel d pairs with
+  d + D/2), computed as a 2x2 rotation per channel pair with position-indexed
+  tables; implemented as an in-place update of a cloned copy of q.
+reduction_scan_sort_structure: >
+  None; purely elementwise. Each output element depends on exactly two
+  input elements (q1, q2 at the same (b, s, h, d mod D/2)) and two table
+  entries.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: none; the two multiplies and the add/sub are evaluated in the input dtype (no explicit ct.astype in the kernel), matching the reference which also computes in the input dtype
+  output_dtype: q.dtype
+  special_modes: none
+  masking_or_padding_values: "ZERO padding on the q1/q2 loads along the head axis when n_heads is not a multiple of GROUP_SIZE (lines 44, 47); cos/sin loads have no padding_mode (TILE_DIM = half_dim exactly)"
+intermediate_storage: >
+  None beyond the output clone itself (which doubles as the kernel's
+  in/out buffer). The autotune path additionally allocates a second full
+  clone tmp (line 77) per call.
+mutation_rules: >
+  q, cos, sin are not modified. The kernel performs a read-modify-write on
+  the output buffer; every element is read and written by exactly one CTA,
+  so there is no cross-CTA hazard. Because run() re-clones q on every call,
+  repeated calls are idempotent. Tuning launches target the separate tmp
+  clone (line 89), never the returned output.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: group_size
+    role: tile size (number of heads per CTA; second grid dimension = ceil(H/group_size))
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over the
+  group_size x occupancy cartesian space (_SEARCH_SPACE, lines 14-18), keyed
+  by (batch, seq_len, n_heads, head_dim, dtype) (line 80), grid_fn/args_fn
+  rebuilt per candidate (lines 83-90), hints_fn applies occupancy; the
+  winner is applied through the memoised kernel_with_hints kernel (line 103).
+  The tuner runs on a scratch clone tmp so the real output is not corrupted.
+  get_last_config is written only on the autotune path (lines 93-94).
+  Audit only.
+implementation_freedoms_observed: >
+  Heads-per-CTA grouping and occupancy; whether to operate in place on a
+  clone (this implementation) or to read q and write a separate output
+  buffer; whether to upcast to fp32 (this implementation does not); tile
+  width along head_dim (here fixed to the full half_dim); grid layout.
+algorithm_constraints_observed: >
+  Keep: half-split pairing (d with d + D/2, not interleaved adjacent pairs),
+  the exact formulas out1 = q1*cos - q2*sin and out2 = q2*cos + q1*sin with
+  cos/sin indexed by sequence position only (shared across batch and heads),
+  table shape (S, D/2), output in the input dtype, caller's q left unchanged.
+  TILE_DIM = head_dim/2 is passed as a ConstInt tile dimension, so the
+  implementation implicitly requires head_dim/2 to be a legal (power-of-two)
+  tile size.
+fq_boundary:
+  bytes_expr: "2 * batch_size * seq_len * n_heads * head_dim * dtype_size"
+  flops_expr: "3 * batch_size * seq_len * n_heads * head_dim"
+  consistent_with_timed_boundary: false
+  notes: >
+    bytes_expr counts one read of q and one write of the output (cos/sin,
+    2*S*D/2 elements, are ignored). run() additionally performs
+    q.clone() (line 63), a full read of q plus a full write of output,
+    before the kernel, which then reads and writes output again; so the data
+    moved inside run() is about twice the formula. The formula therefore
+    assumes an implementation that reads q and writes output once, not the
+    clone-then-in-place scheme actually used. flops_expr = 3 per element
+    (two multiplies and one add/sub per output element) matches the kernel.
+notes_for_review:
+  - The clone at line 63 is inside run(); whether the benchmark's profiler scope attributes a device-to-device copy to the operator is a timer question outside the files read here.
+  - cos/sin come from torch.randn, so no trigonometric identity (cos^2+sin^2=1) holds; the operator is a generic shared-table rotation.
+  - No fp32 upcast in the kernel; fp16 cases rely on the relaxed verify tolerance (5e-3) rather than on fp32 arithmetic.
+  - block_size is accepted but ignored; the real tunable is group_size.
+  - rotate_half in impl_torch.py is dead code with respect to run().
+  - The autotune path clones q a second time on every call (line 77), not just on the first tuning call.
+  - cos/sin loads use shape (1, TILE_DIM) with TILE_DIM = half_dim, so head_dim/2 must be a legal static tile size (power of two per cuTile rules); the swept config uses head_dim = 128.

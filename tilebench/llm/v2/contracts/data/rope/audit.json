@@ -1,0 +1,157 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "rope",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/rope/impl_triton.py",
+      "functions": [
+        {
+          "name": "rope_embedding",
+          "lines": [
+            10,
+            48
+          ]
+        },
+        {
+          "name": "_rope_embedding_autotuned",
+          "lines": [
+            51,
+            62
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            65,
+            103
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            106,
+            114
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/rope/impl_cutile.py",
+      "functions": [
+        {
+          "name": "rope_embedding",
+          "lines": [
+            21,
+            53
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            59,
+            109
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            112,
+            113
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/rope/impl_torch.py",
+      "functions": [
+        {
+          "name": "rotate_half",
+          "lines": [
+            3,
+            6
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            8,
+            21
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Q1*cos - Q2*sin into the first half and Q2*cos + Q1*sin into the second half of each head, tables indexed by row % seqlen (impl_triton.py 29-32, 47-48).",
+      "cutile": "q1*cos - q2*sin and q2*cos + q1*sin on the (B*S, H, 2, D/2) view, tables indexed by row_id % SeqLen (impl_cutile.py 33-39, 49-53, 68).",
+      "note": "Both realise impl_torch.py 11-21 (half-split pairing, position-only table indexing); rotate_half (3-6) is dead code in the reference; BACKWARD_PASS is constant False on the Triton side (83, 96)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "clone of q into output (68) then one in-place rotation kernel, grid (B*S, ceil(H/group)) (75, 88-89).",
+      "cutile": "clone of q into output (63) then one in-place rotation kernel, grid (B*S, ceil(H/group), 1) (98-102).",
+      "note": "Identical clone-then-in-place structure; the contract permits out-of-place as an equivalent mapping since the clone is pure data movement."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Kernel depends only on the clone; every (row, head, pair) handled by exactly one program (37-48).",
+      "cutile": "Kernel depends only on the clone; every (row, head, pair) handled by exactly one CTA (42-53).",
+      "note": "Elementwise; no cross-program dependency on either side."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (whole kernel 10-48).",
+      "cutile": "None (whole kernel 21-53).",
+      "note": "Purely elementwise 2x2 rotation."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Q1/Q2 cast to sin1.dtype (= input dtype) and multiplied natively; no fp32 upcast (44-48).",
+      "cutile": "Loads and arithmetic in the tensor dtype; no ct.astype in the kernel (42-50).",
+      "note": "Both compute in the input dtype like the reference; config verify atol/rtol 5e-3 (config.yaml 1-3) covers fp16."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "output = q.clone().contiguous() inside run() (68); BLOCK derived from head_dim (71); strides passed (77-79).",
+      "cutile": "output = q.clone().contiguous() inside run() (63); 4-D views of output/cos/sin (68-70); autotune path clones a second scratch tmp per call (77).",
+      "note": "Both pay a full timed copy of q before the kernel; the extra tmp clone on the cuTile autotune path is tuner-only and does not affect the default-path boundary."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output clone, which is the kernel's in/out buffer (68).",
+      "cutile": "None beyond the output clone (63); tmp (77) exists only on the autotune path.",
+      "note": "No global scratch on either side."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "q, cos, sin untouched; the fresh clone is rotated in place (47-48); restore_value=['Q'] protects tuning trials (61).",
+      "cutile": "q, cos, sin untouched; the fresh clone is rotated in place (52-53); tuning targets tmp (89).",
+      "note": "Idempotent on both sides; the contract forbids input mutation and requires a non-aliasing output."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "2 * batch_size * seq_len * n_heads * head_dim * dtype_size",
+    "flops_expr": "3 * batch_size * seq_len * n_heads * head_dim",
+    "consistent": "false",
+    "note": "bytes_expr counts one read of q and one write of the output (config.yaml 24). Both timed run() bodies first clone q (read + write of the whole tensor, impl_triton.py 68 / impl_cutile.py 63) and then read and write the clone in the kernel, so the measured region moves about twice the counted bytes; the (S, D/2) table reads are also uncounted. The formula matches an out-of-place implementation, which the contract permits. flops_expr (3 per element) matches the arithmetic."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Both references clone q inside the timed run() and rotate the clone in place, moving ~2x the bytes_expr model; the contract requires a non-aliasing fresh output but permits an out-of-place mapping that meets the 2n model. Decide whether bytes_expr stays as the minimal 2n bound (generated out-of-place kernels may then outperform the references for non-algorithmic reasons) or whether the references should be re-measured out-of-place. Non-blocking for the contract text."
+  ],
+  "contract_sha256": "934d8d0a38a86e12dfc3e65c447431b64dad0d6178d9167fd8497138e5fcc588",
+  "previous_status_before_approval": "draft"
+}

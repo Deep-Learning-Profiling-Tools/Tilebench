@@ -1,0 +1,155 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "swiglu",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/swiglu/impl_triton.py",
+      "functions": [
+        {
+          "name": "swiglu_kernel",
+          "lines": [
+            8,
+            23
+          ]
+        },
+        {
+          "name": "_swiglu_kernel_autotuned",
+          "lines": [
+            26,
+            35
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            38,
+            57
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            60,
+            64
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/swiglu/impl_cutile.py",
+      "functions": [
+        {
+          "name": "swiglu_kernel",
+          "lines": [
+            21,
+            28
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            34,
+            64
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            67,
+            68
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/swiglu/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out = x_f32 * tl.sigmoid(x_f32) * y_f32 cast to x.dtype over the flattened tensors (impl_triton.py 18-23, 41-44, 57).",
+      "cutile": "out = x_tile * (1/(1+ct.exp(-x_tile))) * y_tile in fp32 cast to x.dtype over the flattened tensors (impl_cutile.py 24-28, 37-40, 64).",
+      "note": "Both realise F.silu(x) * y (impl_torch.py 5); the sigmoid builtin versus the explicit exp formula is a primitive choice within tolerance."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch, grid = ceil(M*N/block) (47, 51).",
+      "cutile": "One kernel, one launch, grid = (ceil(M*N/tile), 1, 1) (61).",
+      "note": "Identical single-stage elementwise map."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Blocks independent (14-23).",
+      "cutile": "Tiles independent (23-28).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (8-23).",
+      "cutile": "None (21-28).",
+      "note": "Purely elementwise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Both operands .to(tl.float32) (20-21), fp32 sigmoid and products (22), explicit .to(x.dtype) at the store (23).",
+      "cutile": "Both operands ct.astype(ct.float32) (24-25), fp32 exp/add/divide/products (26-27), one ct.astype to x.dtype (27).",
+      "note": "fp32 evaluation with a single downcast on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "assert shapes equal; x.contiguous().view(-1), y.contiguous().view(-1), torch.empty_like(x_flat), output.view(x.shape) (40-44, 57).",
+      "cutile": "assert shapes equal; same flattening views, torch.empty_like(x_flat), output.view(x.shape) (36-40, 64).",
+      "note": "Views plus one output allocation inside run() on both sides; no copy, cast or cached state."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None (whole file).",
+      "cutile": "None (whole file).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x, y read-only; fresh output each call (43).",
+      "cutile": "x, y read-only; fresh output each call (39); tuning launches overwrite output (49), rewritten by the final launch.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 3",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "n is engine-provided: infer_problem_size('swiglu') has no explicit branch and falls back to the product of all integer case params = M*N (tilebench/data/tensors.py 778-784, used via core/metrics.py 61), i.e. the element count. Both timed run() bodies perform only flattening views and one empty allocation besides the kernel, which reads x and y once and writes the output once, exactly what bytes_expr counts (config.yaml 18). flops_expr is the nominal one-operation-per-element convention."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "9976a43386ebee2d4856f559de997312eee68c9553cfd32b74b03bb811ed7e41",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "2b498a6322d5b60eca7aebc4cff0fae33a2f5c2c68e393e9d2f5bfa73a973b25",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

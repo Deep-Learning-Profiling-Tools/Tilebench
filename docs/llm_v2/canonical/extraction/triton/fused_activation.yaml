@@ -1,0 +1,156 @@
+operator: fused_activation
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/fused_activation/impl_triton.py
+    functions:
+      - name: fused_activation_kernel
+        lines: [9, 22]
+        role: kernel
+      - name: _fused_activation_kernel_autotuned
+        lines: [25, 34]
+        role: tuner
+      - name: run
+        lines: [37, 58]
+        role: host-driver
+      - name: get_last_config
+        lines: [61, 65]
+        role: helper
+  - path: tilebench/benchmarks/operators/fused_activation/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/fused_activation/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_fused_activation_inputs
+        lines: [167, 172]
+        role: helper
+      - name: infer_problem_size (generic "n" branch used for metrics)
+        lines: [631, 632]
+        role: helper
+functional_semantics: >
+  Fused gated activation. Reference impl_torch.run (lines 5-6):
+  out = torch.nn.functional.silu(x * gate + bias), i.e. with z = x*gate +
+  bias, out = z * sigmoid(z) = z / (1 + exp(-z)), element-wise over three
+  same-shape inputs. Computed in the input dtype by PyTorch (fp32 in
+  config). No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(x: torch.Tensor, gate: torch.Tensor, bias: torch.Tensor,
+            autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, gate, bias]
+  keyword_params: [autotune, "**kwargs (absorbs block_size, unused)"]
+  returns: single fp32 tensor with x's shape
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: fp32 (config case_defaults dtype "fp32"; no dtype sweep)
+    layout: contiguous (run() calls .contiguous(), line 41; flat offsets)
+    mutated_in_place: false
+    notes: cast to fp32 on load (line 17).
+  - name: gate
+    shape: "(n,)"
+    dtype: fp32
+    layout: contiguous (.contiguous(), line 42)
+    mutated_in_place: false
+    notes: cast to fp32 on load (line 18).
+  - name: bias
+    shape: "(n,)"
+    dtype: fp32
+    layout: contiguous (.contiguous(), line 43)
+    mutated_in_place: false
+    notes: full-size per-element bias (same shape as x), not a broadcast vector; cast to fp32 on load (line 19).
+outputs:
+  - name: out
+    shape: "x.shape (n,)"
+    dtype: "fp32 (fixed by torch.empty(..., dtype=torch.float32), line 44)"
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape-equality check of the three inputs
+    lines: [39, 40]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: raises ValueError on mismatch.
+  - description: x, gate, bias = .contiguous() on each input
+    lines: [41, 43]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: a no-op (returns the same tensor) for the generator's contiguous inputs; would be a timed copy for non-contiguous inputs.
+  - description: allocate fp32 output; n_elements = x.numel()
+    lines: [44, 45]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: torch.empty.
+stages:
+  - id: s1
+    description: >
+      1-D grid over n_elements in BLOCK_SIZE chunks. Load x, gate, bias
+      (mask offs < n, other 0.0) as fp32; z = x * gate + bias; out = z *
+      tl.sigmoid(z); masked fp32 store.
+    kind: kernel
+    lines: [9, 22]
+    launches: "1 launch, grid ceil(n / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: out (n,) fp32 -- no intermediates
+algorithm_family: >
+  Fused element-wise map (multiply-add followed by SiLU), three streams in,
+  one stream out; memory-bound.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 (explicit .to(tl.float32) on all three loads, lines 17-19)
+  output_dtype: fp32 (fixed regardless of input dtype)
+  special_modes: "silu written as z * tl.sigmoid(z) (Triton's sigmoid lowering) vs torch F.silu; no fast-math flags in source"
+  masking_or_padding_values: "0.0 for masked tail loads; masked store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps (key ["n_elements"], warmup=1,
+  rep=3), lines 25-34; grid lambda of meta["BLOCK_SIZE"]. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 50-57).
+  get_last_config returns BLOCK_SIZE and num_warps.
+implementation_freedoms_observed: >
+  Chunk size, warps, vector width, exact sigmoid formulation (tl.sigmoid vs
+  1/(1+exp(-z)) vs exp2-based), and whether the three loads are issued
+  together or interleaved.
+algorithm_constraints_observed: >
+  Keep: single fused pass computing silu(x*gate + bias) element-wise; fp32
+  arithmetic; fp32 output of x's shape; bias is a full tensor (not
+  broadcast); no scratch; inputs read exactly once.
+fq_boundary:
+  bytes_expr: "4 * n * dtype_size"
+  flops_expr: "5 * n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is the shape check, three (no-op) .contiguous() calls,
+    one allocation and one kernel. The formula counts three input reads and
+    one output write at dtype_size bytes each. Because config pins dtype to
+    fp32 and the output is fp32, this equals the kernel's compulsory traffic.
+    If a non-fp32 dtype were ever swept, the output would still be written
+    as fp32 (4 B) and the formula's output term would be off. The
+    .contiguous() calls are not counted and perform no work for the
+    generator's inputs. No prepacking assumed.
+notes_for_review:
+  - Output dtype is hard-wired to fp32 (line 44) while the torch reference returns the input dtype; identical under the fp32-only config but a divergence for any other dtype.
+  - config.yaml verify atol=rtol=1e-4 covers the difference between tl.sigmoid and torch's silu implementation.
+  - The three .contiguous() calls inside run() are no-ops for contiguous inputs but would silently add timed copies otherwise.

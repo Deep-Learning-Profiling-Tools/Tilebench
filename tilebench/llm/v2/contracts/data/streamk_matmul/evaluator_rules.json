@@ -1,0 +1,48 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "streamk_matmul",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "zero_fill_accumulator", "description": "Every call, inside run(), zero-fill the fp32 (M, N) accumulation target before the Stream-K wave (the output itself for fp32 inputs, a separate fp32 buffer for fp16/bf16)."},
+    {"id": "streamk_wave", "description": "A persistent launch of one program per SM covering the Stream-K region (remainder tiles plus one extra full wave when at least two full waves remain): the region's K-iterations are split into equal contiguous ranges, each segment is reduced in a local fp32 accumulator and added into the zeroed accumulator with fp32 atomic adds; no fixup kernel, semaphores or partials workspace."},
+    {"id": "data_parallel_tiles", "description": "The remaining full tiles, each reduced over the full K range by a single program (one or several tiles per program), fp32 accumulation and ordinary (non-atomic) stores into the accumulation target; launched only when such tiles exist. May be merged with the wave into one persistent launch."},
+    {"id": "final_cast", "description": "For fp16/bf16 inputs only, one rounding of the fp32 accumulation target into the output tensor after both regions have completed."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.matmul\\(|torch\\.mm\\(|torch\\.bmm\\(|torch\\.addmm\\(|torch\\.einsum\\(|torch\\.nn\\.functional\\.linear\\(|F\\.linear\\(|torch\\.linalg\\.matmul\\(|\\.matmul\\(|\\.mm\\(", "message": "The whole GEMM is performed by a PyTorch / library matmul.", "level": "confirmed", "scope": "host"},
+    {"pattern": "[A-Za-z0-9_\\)\\]]\\s*@\\s*[A-Za-z_\\(]", "message": "The @ operator on tensors performs the GEMM in PyTorch.", "level": "suspicious", "scope": "host"},
+    {"pattern": "cublas|cutlass|hipblas|rocblas|torch\\.backends\\.cuda\\.matmul", "message": "A BLAS library or a global matmul-mode switch replaces or alters the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|_cache\\[\\s*b\\s*\\]|_cache\\.get\\(\\s*b\\b|functools\\.lru_cache|data_ptr\\(\\)\\s*\\]|data_ptr\\(\\)\\s*(in|not in|==)|id\\(\\s*b\\s*\\)|_cache\\b|\\bcache\\b", "message": "Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().", "level": "suspicious", "scope": "host"},
+    {"pattern": "b\\.t\\(\\)|b\\.T\\b|b\\.transpose\\(|torch\\.transpose\\(\\s*b|b\\.permute\\(|b\\.mT\\b", "message": "Transposing B: permitted only if performed inside run() on every call and never cached.", "level": "suspicious", "scope": "host"},
+    {"pattern": "semaphore|flag|lock|spin|cuda\\.synchronize|partials?\\b|workspace", "message": "Semaphores, flags or a partials workspace indicate a non-canonical Stream-K fixup or a split-K scheme.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*atomic|atomic_add\\([^\\n]*(float16|bfloat16|half)", "message": "Half-precision atomic combination: partials must be combined in fp32 and rounded once at the end.", "level": "suspicious", "scope": "any"},
+    {"pattern": "allow_tf32\\s*=\\s*False|input_precision\\s*=\\s*['\"](ieee|hf32)['\"]", "message": "Disabling TF32 for fp32 operands is a different numeric mode from the canonical behaviour.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+(a|b)\\b|return\\s+(a|b)\\.|\\b(a|b)\\.copy_\\(|\\b(a|b)\\.zero_\\(", "message": "Mutating or returning an input violates the no-mutation / fresh-output rules.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nl\\.matmul", "nisa\\.nc_matmul", "\\bmma\\b", "\\bdot\\b"], "message": "No tensor-core / matrix-multiply primitive found.", "level": "suspicious"},
+    {"any_of": ["atomic_add", "atomic"], "message": "No atomic-add fixup found; the Stream-K region must combine segments with fp32 atomic adds into the zeroed accumulator.", "level": "suspicious"},
+    {"any_of": ["zero_\\(\\)", "torch\\.zeros", "zeros\\("], "message": "No per-call zero-fill of the fp32 accumulation target found.", "level": "suspicious"},
+    {"any_of": ["multi_processor_count", "num_sms", "NUM_SMS", "sm_count", "get_device_properties"], "message": "No SM-count query found; the Stream-K partition must derive from the device's SM count.", "level": "suspicious"},
+    {"any_of": ["%\\s*NUM_SMS", "%\\s*num_sms", "%\\s*P\\b", "streamk_tiles", "iters_per_tile", "start_iter", "last_iter"], "message": "No evidence of the Stream-K partition (remainder tiles, per-program iteration ranges).", "level": "suspicious"},
+    {"any_of": ["tf32", "tfloat32", "input_precision"], "message": "No TF32 evidence for fp32 operands.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 accumulator evidence.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.zeros",
+    "torch.cuda.current_stream",
+    "torch.cuda.current_device",
+    "torch.cuda.get_device_properties",
+    "Tensor.zero_",
+    "Tensor.copy_",
+    "Tensor.contiguous",
+    "Tensor.t",
+    "Tensor.is_contiguous",
+    "Tensor.stride"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (M, N) tensor of the input dtype must be freshly allocated inside run() and must not share storage with a or b (for fp32 it may be the fp32 accumulation target itself)"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() on every call is counted: the zero-fill of the fp32 accumulation target, any operand re-layout copy, the Stream-K and data-parallel launch(es) and the final half-dtype cast. The SM-count query, the output allocation call and descriptor/metadata construction are host-side work and not GPU time. Decided rule: A and B are delivered row-major and may be consumed as delivered or through a transposed/repacked copy rebuilt by device work inside every run() (its time counted); cross-call caches of a transformed operand, descriptor or output keyed on input identity, data pointer, shape or contents are forbidden; no prepacked operand may be assumed. The Stream-K decomposition and the atomic-add global accumulation into the zero-filled fp32 target are the fixed structure. bytes_expr counts A, B and C once (lower-bound model); zero-fill, atomic read-modify-write, the half-dtype fp32 round trip and repack traffic are diagnostic. The manual Triton reference caches B^T untimed and is not comparable; the cuTile reference does not repack."},
+  "tolerance_source": "config.verify"
+}

@@ -1,0 +1,148 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "interleave",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/interleave/impl_triton.py",
+      "functions": [
+        {
+          "name": "interleave_kernel",
+          "lines": [
+            8,
+            25
+          ]
+        },
+        {
+          "name": "_interleave_kernel_autotuned",
+          "lines": [
+            28,
+            38
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            41,
+            58
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            61,
+            65
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/interleave/impl_cutile.py",
+      "functions": [
+        {
+          "name": "interleave_kernel",
+          "lines": [
+            21,
+            27
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            33,
+            59
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            62,
+            63
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/interleave/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            8
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[2i]=A[i], out[2i+1]=B[i] via tl.interleave of equal input blocks (impl_triton.py:18-25); dtype preserved, int8 served by the same kernel.",
+      "cutile": "same placement via reshape/cat/flatten of the two input tiles (impl_cutile.py:24-27); dtype preserved.",
+      "note": "Both match impl_torch.py:5-7 (empty(2N) + two stride-2 slice assignments). Generator tensors.py:340-347 returns (a, b, n) in the case dtype."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "allocation (impl_triton.py:43) then one kernel launch, grid ceil(N/block) (46-56).",
+      "cutile": "allocation (impl_cutile.py:35) then one launch, grid ceil(N/tile) (55-57).",
+      "note": "Identical two-stage structure: timed output allocation + single-pass copy."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends only on the allocated output (impl_triton.py:43-47).",
+      "cutile": "kernel depends only on the allocated output (impl_cutile.py:35-57).",
+      "note": "No intermediates on either side."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "none (impl_triton.py:8-25).",
+      "cutile": "none (impl_cutile.py:21-27).",
+      "note": "Pure data movement."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "no arithmetic, no cast; store in the pointer dtype (impl_triton.py:21-25).",
+      "cutile": "no arithmetic, no cast (impl_cutile.py:26-27).",
+      "note": "Bit-exact copy on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "only torch.empty(2N) inside run (impl_triton.py:43); block_size kwarg ignored.",
+      "cutile": "only torch.empty(2N) inside run (impl_cutile.py:35); block_size kwarg ignored.",
+      "note": "No casts, copies, layout changes or caches on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none; interleaved tile is register resident (impl_triton.py:21).",
+      "cutile": "none; stacked (TILE,2) tile is register resident (impl_cutile.py:26).",
+      "note": "No global scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "A, B never written; fresh output per call (impl_triton.py:43).",
+      "cutile": "A, B never written; fresh output per call (impl_cutile.py:35).",
+      "note": "Idempotent on both sides; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches.",
+      "cutile": "no dispatch branches.",
+      "note": "Tail handling differs only in mechanism (masked load/store impl_triton.py:15-25 vs zero-padded load + clipped store impl_cutile.py:24-27)."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 4",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "n is the case parameter (tensors.py:631-632). Formula = read A (n) + read B (n) + write OUT (2n) at dtype_size bytes, which is exactly the single kernel's compulsory traffic on both sides. The only host work (output allocation) is inside run() and timed; nothing is cached or prepacked. flops_expr is nominal (no arithmetic)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "bb72e97e296bb44e486f818aadb6773173b703c16969bb9db3b3eea9476637e4",
+  "previous_status_before_approval": "draft"
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "flash_attention",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "s1", "description": "Per (batch, head, query block), in the program that owns it: query tile loaded; running max (-inf or the first visited tile's max), running sum 0 and fp32 output accumulator 0 held on chip."},
+    {"id": "s2", "description": "Single logical pass over the key/value tiles up to the diagonal, each visited once in any order (fully masked tiles not visited): fp32 QK^T, -inf mask on key > query (and overhang), online rescale (alpha = exp(m_old - m_new)) when more than one tile is processed, P rounded to fp16 before the fp32-accumulated PV product."},
+    {"id": "s3", "description": "Final normalisation O / l, rounded to the output dtype and stored; no global intermediate (scores, probabilities, statistics or partial outputs) and no cross-program combine; the launch count is not fixed."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "scaled_dot_product_attention|torch\\.nn\\.functional\\.multi_head_attention_forward|torch\\.nn\\.MultiheadAttention|flash_attn", "message": "library attention replaces the whole computation", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(matmul|bmm|baddbmm|einsum|mm)\\(|\\.softmax\\(|torch\\.softmax|F\\.softmax|torch\\.log_softmax", "message": "host-side matmul/softmax performs an attention stage", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(zeros|zeros_like|full|empty)\\(", "message": "extra buffer; no global scratch or materialised score matrix is permitted (only the output via torch.empty_like)", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(exp|max|amax|sum|tril|triu|ones)\\(", "message": "host-side softmax statistics or mask materialisation", "level": "suspicious", "scope": "host"},
+    {"pattern": "lse|logsumexp|log_sum_exp", "message": "log-sum-exp side output or split-key combine is not part of this operator", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "matmul", "\\bdot\\("], "message": "tile matmul for QK^T and PV", "level": "suspicious"},
+    {"any_of": ["exp2", "\\bexp\\(", "nl\\.exp", "T\\.exp"], "message": "exponentiation in the online softmax", "level": "suspicious"},
+    {"any_of": ["tl\\.max", "ct\\.max", "T\\.reduce_max", "nl\\.max", "nisa\\.tensor_reduce", "maximum", "\\bmax\\("], "message": "running row max", "level": "suspicious"},
+    {"any_of": ["-inf", "float\\(['\\\"]-inf['\\\"]\\)", "NEG_INF", "-float", "finfo", "-1e"], "message": "-inf masking of causal positions", "level": "suspicious"},
+    {"any_of": ["float16", "fp16", "\\.to\\(tl\\.float16\\)", "astype\\(Q\\.dtype\\)", "astype\\(q\\.dtype\\)", "\\.dtype\\)"], "message": "P rounded to fp16 before the PV product", "level": "suspicious"},
+    {"any_of": ["causal", "CAUSAL"], "message": "causal flag honoured", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty_like", "torch.empty", "torch.cuda.current_stream"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; a freshly allocated tensor with q's shape and dtype on every call"},
+  "timing_boundary": {"includes_preprocessing": false, "notes": "Measured: GPU time of all device work run() causes (the attention kernel); host scalars, the output allocation call and descriptor metadata are host work, not GPU time. No casts, copies or re-layouts of q/k/v; .contiguous() must be a no-op; no state across calls. flops_expr is the dense count while causal is fixed true (metric review item), bytes_expr is compulsory traffic."},
+  "tolerance_source": "config.verify"
+}

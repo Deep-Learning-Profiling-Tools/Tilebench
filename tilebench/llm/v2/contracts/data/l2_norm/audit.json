@@ -1,0 +1,148 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "l2_norm",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/l2_norm/impl_triton.py",
+      "functions": [
+        {
+          "name": "_l2_norm_fwd_kernel",
+          "lines": [
+            8,
+            35
+          ]
+        },
+        {
+          "name": "_l2_norm_fwd_kernel_autotuned",
+          "lines": [
+            38,
+            48
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            51,
+            78
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            81,
+            85
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/l2_norm/impl_cutile.py",
+      "functions": [
+        {
+          "name": "l2_norm_kernel",
+          "lines": [
+            23,
+            49
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            55,
+            89
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            92,
+            93
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/l2_norm/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            7
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "y = x * (1/sqrt(sum x^2 + eps)) per row, fp32 statistics, cast back to x dtype (impl_triton.py:22-35).",
+      "cutile": "y = x * rsqrt(sum x^2 + eps) per row, fp32, cast back (impl_cutile.py:28-49).",
+      "note": "Both match impl_torch.py:5-7 (vector_norm in fp32, squared, rsqrt(norm_sq + eps), cast). Generator tensors.py:461-463 returns (x, eps) with eps from case_defaults."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "reshape view (impl_triton.py:53-55), empty_like (56), one launch grid (M,) (60-77), return reshape view (78).",
+      "cutile": "reshape view (impl_cutile.py:61), empty_like (62-63), one launch grid (batch_M,1,1) (85-87).",
+      "note": "Both fuse statistics and apply in one kernel with one program per row."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "pass 2 depends on rstd from pass 1 of the same row (impl_triton.py:27,34).",
+      "cutile": "pass 2 depends on rstd from pass 1 (impl_cutile.py:38,48).",
+      "note": "Rows independent on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "lane-wise fp32 accumulation over chunks then one tl.sum (impl_triton.py:22-27).",
+      "cutile": "lane-wise fp32 accumulation over tiles then one ct.sum (impl_cutile.py:28-38).",
+      "note": "Same structure; row re-read in pass 2 on both sides (impl_triton.py:30-35, impl_cutile.py:41-49)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 upcast on load, fp32 acc, rstd = 1/tl.sqrt(...) fp32, explicit cast to X dtype at store (impl_triton.py:25-27,33-35).",
+      "cutile": "fp32 upcast, fp32 acc, ct.rsqrt fp32, ct.astype to x.dtype (impl_cutile.py:30-38,42-48).",
+      "note": "1/sqrt vs rsqrt intrinsic is a primitive choice within tolerance; contract permits either."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "reshape (view) + contiguous only if inner stride != 1 (impl_triton.py:53-55).",
+      "cutile": "x.contiguous().reshape (no-op view for contiguous x) (impl_cutile.py:61).",
+      "note": "Both are views for the generator's contiguous inputs; nothing cached; output allocated per call."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none (rstd in registers).",
+      "cutile": "none.",
+      "note": "No global scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x never written; y fresh (impl_triton.py:56).",
+      "cutile": "x never written; out fresh (impl_cutile.py:62).",
+      "note": "Idempotent."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches; row length is a constexpr (impl_triton.py:13).",
+      "cutile": "no dispatch branches; row length is ConstInt (impl_cutile.py:23).",
+      "note": "Compile-time row length on both sides is an audit observation, not a contract requirement."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "2 * batch * M * K * dtype_size",
+    "flops_expr": "3 * batch * M * K",
+    "consistent": "true",
+    "note": "Compulsory-traffic model: X read once + Y written once. Both implementations re-read each row in the apply pass, so the formula is a lower bound on issued traffic (the second read is partly L2-served). Nothing is untimed or prepacked; the view/alloc are inside run(). Convention differs from layernorm's config, which counts the re-read (3n); the contract pins neither."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "f0602446053a5ca2ecc0b3136680138af0559bf6b70d58bd0526bb78562cbbe7",
+  "previous_status_before_approval": "draft"
+}

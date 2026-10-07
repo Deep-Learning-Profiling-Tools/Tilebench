@@ -1,0 +1,142 @@
+operator: matrix_transpose
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matrix_transpose/impl_cutile.py
+    functions:
+      - name: transpose_kernel
+        lines: [21, 26]
+        role: kernel
+      - name: run
+        lines: [32, 58]
+        role: host-driver
+      - name: get_last_config
+        lines: [61, 62]
+        role: helper
+  - path: tilebench/benchmarks/operators/matrix_transpose/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 7]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matrix_transpose_inputs
+        lines: [199, 204]
+        role: helper
+functional_semantics: >
+  out = x.transpose(0, 1).contiguous() (impl_torch.py line 7): for a 2-D
+  input x of shape (m, n), out[j, i] = x[i, j], materialised as a new
+  row-major tensor of shape (n, m) with the same dtype. The reference
+  raises ValueError when x is not 2-D (lines 5-6). No other reference-side
+  preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (n, m), same dtype as x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(m, n)"
+    dtype: "one of fp16, bf16, fp32, int8 (case dtype; generator lines 199-204)"
+    layout: "contiguous row-major (generator output); run() does not call .contiguous(), the tensor is passed to ct.launch as-is (line 56)"
+    mutated_in_place: false
+    notes: "int8 inputs are drawn from [-64, 64]; other dtypes use randn. m is fixed by case_defaults, n is swept."
+outputs:
+  - name: output
+    shape: "(n, m)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "m, n = x.shape (read dims); allocate output = torch.empty((n, m), device, dtype)"
+    lines: [33, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one uninitialised allocation per call; no copy or re-layout of x.
+stages:
+  - id: s1
+    description: >
+      Square-tile transpose kernel on a 2-D grid of (ceil(m/TILE),
+      ceil(n/TILE)) CTAs (line 54). CTA (bid_m, bid_n) loads the
+      TILE x TILE tile of x at block coordinates (bid_m, bid_n) with a 2-D
+      ct.load (line 25, no explicit padding_mode), transposes it in
+      registers with ct.transpose, and stores the transposed tile at the
+      swapped block coordinates (bid_n, bid_m) of output (line 26). Reads
+      are tile-contiguous along n in x and writes are tile-contiguous along
+      m in output, so both sides are tile-coalesced in their own layout.
+    kind: kernel
+    lines: [21, 26]
+    launches: "1 launch of ceil(m/TILE) * ceil(n/TILE) CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Out-of-place tiled matrix transpose with square tiles: one register-level
+  tile transpose per CTA and swapped tile coordinates on store (classic
+  tiled transpose; any shared-memory staging is the compiler's choice, not
+  expressed in the source).
+reduction_scan_sort_structure: >
+  None (pure data movement with an index permutation).
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (values are moved unchanged)
+  output_dtype: same as input
+  special_modes: none
+  masking_or_padding_values: >
+    No explicit padding_mode or mask; the grid uses ceil so partial edge
+    tiles are possible in general and would rely on library default load
+    padding and bounds-clipped stores. For the sweep m and n are multiples
+    of 1024, so every tile length in the search space divides both dims
+    and no partial tiles occur.
+intermediate_storage: >
+  None beyond the output buffer; no scratch buffers.
+mutation_rules: >
+  x is never written. run() allocates a new output on every call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (square tile side used for both axes, ConstInt TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE (impl_cutile.py lines 14-18):
+  ct.tune.exhaustive_search keyed on (m, n, dtype) (lines 38-45), winner
+  cached per shape key; kernel_with_hints memoises replace_hints
+  (line 55). The default path uses _DEFAULT_CONFIG (line 12). The winner is
+  recorded in _last_autotune_config (lines 46-50). The block_size keyword
+  is accepted but unused.
+implementation_freedoms_observed: >
+  Tile side length and occupancy; square versus rectangular tiles (the
+  source uses one TILE for both axes); grid axis ordering (axis 0 walks
+  rows of x here); whether the in-tile transpose goes through shared
+  memory or TMA is left to the compiler.
+algorithm_constraints_observed: >
+  Single pass: each element read once and written once; output is a fresh
+  row-major (n, m) buffer, not a view; no dtype change; no scratch memory;
+  no host-side re-layout of the input.
+fq_boundary:
+  bytes_expr: "m * n * dtype_size * 2"
+  flops_expr: "0"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read of x and one write of output, exactly the
+    kernel's traffic; there is no preprocessing copy and nothing is
+    prepacked. flops_expr = 0 correctly reflects the absence of
+    arithmetic.
+notes_for_review:
+  - "run() never calls x.contiguous(); a non-contiguous input would be handed to ct.launch directly and its handling is unclear from the source (the generator always supplies a contiguous tensor)."
+  - "ct.load at line 25 has no explicit padding_mode; edge-tile behaviour is the library default and is not exercised by the sweep."
+  - "The 2-D grid is (rows of x, cols of x); any contract should allow either grid orientation."

@@ -1,0 +1,279 @@
+operator: batched_matmul
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/batched_matmul/impl_triton.py
+    functions:
+      - name: _default_config
+        lines: [27, 35]
+        role: helper
+      - name: _b_transposed
+        lines: [44, 51]
+        role: helper
+      - name: _tma_set_block_size_hook
+        lines: [54, 60]
+        role: tuner
+      - name: bmm_kernel
+        lines: [63, 97]
+        role: kernel
+      - name: _bmm_kernel_autotuned
+        lines: [100, 120]
+        role: tuner
+      - name: _descriptors
+        lines: [123, 127]
+        role: helper
+      - name: run
+        lines: [130, 164]
+        role: host-driver
+      - name: get_last_config
+        lines: [167, 178]
+        role: helper
+  - path: tilebench/benchmarks/operators/batched_matmul/impl_torch.py
+    functions:
+      - name: run
+        lines: [7, 12]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/batched_matmul/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_batched_matmul_inputs
+        lines: [86, 94]
+        role: helper
+  - path: tilebench/hardware.py
+    functions:
+      - name: device_info
+        lines: [57, 70]
+        role: helper
+      - name: detect_arch
+        lines: [73, 82]
+        role: helper
+functional_semantics: >
+  Batched dense matrix multiplication. The reference (impl_torch.py lines
+  7-12) views the flat A as (BATCH, M, K) and the flat B as (BATCH, K, N),
+  computes C = torch.matmul(A3, B3) of shape (BATCH, M, N) and returns it
+  flattened to 1-D. The reference module enables TF32 for fp32 matmul at
+  import (torch.backends.cuda.matmul.allow_tf32 = True, line 4). The generator
+  (tensors.py 86-94) uses N = K = M (square) and torch.randn flat vectors of
+  BATCH*M*K and BATCH*K*N elements, passing BATCH, M, N, K positionally.
+run_signature:
+  text: |
+    def run(A: torch.Tensor, B: torch.Tensor,
+            BATCH: int, M: int, N: int, K: int,
+            block_size: int = None, autotune: bool = False, **kwargs):
+  positional_inputs: [A, B, BATCH, M, N, K]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single flat tensor c of BATCH*M*N elements (row-major (BATCH, M, N)), dtype of A
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(BATCH*M*K,) flat, viewed as (BATCH, M, K) at line 133"
+    dtype: case dtype (fp16, bf16 or fp32)
+    layout: contiguous (K innermost); consumed through a 3-D TMA TensorDescriptor (line 124)
+    mutated_in_place: false
+    notes: null
+  - name: B
+    shape: "(BATCH*K*N,) flat, logically (BATCH, K, N)"
+    dtype: same as A
+    layout: contiguous (N innermost) as given; the kernel consumes a materialised transposed copy (BATCH, N, K) with K innermost (lines 44-51)
+    mutated_in_place: false
+    notes: the transposed copy is cached per B tensor object (see preprocessing)
+  - name: BATCH
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: third grid axis
+  - name: M
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: null
+  - name: N
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: equal to M in the sweep
+  - name: K
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: equal to M in the sweep
+outputs:
+  - name: c
+    shape: "(BATCH*M*N,) flat; written through a (BATCH, M, N) view and descriptor"
+    dtype: A.dtype (line 134)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: view A as (BATCH, M, K) without copy
+    lines: [133, 133]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: allocate flat output c with torch.empty and view it as (BATCH, M, N)
+    lines: [134, 135]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: >
+      _b_transposed: materialise B^T = B.view(BATCH, K, N).transpose(1, 2).contiguous(),
+      a device copy of B into (BATCH, N, K) layout, memoised in a
+      WeakTensorKeyDictionary keyed by the B tensor object.
+    lines: [44, 51]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: true
+    notes: >
+      Called at line 136 on every run(); the copy executes only on the first
+      call for a given B object, so warmup and timed repeats hit the cache.
+      The reference consumes B in (K, N) layout without any transpose. The
+      cache is keyed by identity, so a B mutated in place would be served
+      stale.
+  - description: dtype id lookup for the autotune cache key
+    lines: [137, 137]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: DT_ID is only an autotune key, no algorithmic effect
+  - description: >
+      Host-side TMA TensorDescriptor construction for A, B^T and C with
+      3-D block shapes (lines 123-127); in the autotune path the descriptors
+      are built with placeholder block shapes (line 141) and each candidate
+      Config's pre_hook rewrites block_shape (lines 54-60, 107).
+    lines: [123, 127]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host-only work, rebuilt on every call (lines 141, 153)
+stages:
+  - id: s1
+    description: >
+      Batched GEMM kernel. Grid axes 0 and 1 tile M and N, axis 2 is the batch
+      index (lines 73-75, 142-146, 154). The (pid_m, pid_n) pair is remapped
+      with tl.swizzle2d for grouped rasterisation (lines 77-79). The program
+      zero-initialises an fp32 accumulator (line 84) and loops over K in
+      BLOCK_K steps (line 86), loading an A tile [1, BM, BK] and a B^T tile
+      [1, BN, BK] through the descriptors (lines 88-89, TMA zero-fills out of
+      range), reshaping to 2-D (lines 90-91) and accumulating
+      acc = dot(a, b^T, acc) (line 94). The accumulator is cast to the output
+      dtype, reshaped to 3-D and stored through the C descriptor (lines
+      96-97, store clips out of range). Launched at lines 139-162.
+    kind: kernel
+    lines: [63, 97]
+    launches: "1 launch; ceil(M/BLOCK_M) x ceil(N/BLOCK_N) x BATCH programs"
+    depends_on: []
+    fusable_with: none
+    produces: c
+algorithm_family: >
+  Batched dense GEMM (one independent C_b = A_b @ B_b per batch index on a
+  grid axis) with classic 2-D output tiling, a sequential K loop, TMA
+  tensor-descriptor loads of A and of a pre-transposed B so both operands are
+  K-contiguous ("NT" operand layout), fp32 accumulation, and grouped
+  (swizzled) tile rasterisation.
+reduction_scan_sort_structure: >
+  K is reduced sequentially in increasing order in BLOCK_K-wide chunks, each
+  folded into the fp32 accumulator by tl.dot with the accumulator operand
+  (line 94). No split-K, no atomics; intra-chunk order is the MMA hardware's.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 (tl.zeros float32 at line 84; tl.dot accumulate operand)
+  output_dtype: input dtype (cast at line 96)
+  special_modes: "tl.dot(..., input_precision=\"tf32\") at line 94: fp32 operands rounded to TF32 inside the MMA, matching the reference's allow_tf32 = True; fp16/bf16 used natively"
+  masking_or_padding_values: "no explicit masks; TMA descriptor loads zero-fill out-of-range tiles and the descriptor store clips them"
+intermediate_storage: >
+  B^T buffer of shape (BATCH, N, K) in the input dtype, allocated by
+  _b_transposed and kept alive by the weak-key cache for as long as the
+  caller's B tensor exists (lines 41-51). The output c. Accumulator in
+  registers.
+mutation_rules: >
+  No input is modified. The output is freshly allocated per call; repeated
+  calls are idempotent. Because B^T is memoised by tensor identity, run() is
+  only correct across calls if B's contents are not mutated in place between
+  calls.
+hardware_dispatch_branches:
+  - condition: "_DEFAULT_CONFIG is _BUILTIN_DEFAULT_CONFIG and detect_arch() == 'cdna3' (line 33)"
+    lines: [17, 35]
+    changes: >
+      The non-autotuned path takes _CDNA3_DEFAULT_CONFIG, which copies
+      _DEFAULT_CONFIG and lowers only the pipeline depth so the default tile's
+      LDS footprint fits gfx942 (comment lines 17-22). The autotune space
+      (lines 100-120) is unchanged on every architecture, and the override is
+      skipped when a profiler harness has replaced _DEFAULT_CONFIG. Used at
+      line 150.
+    algorithmic: false
+  - condition: "host-side TensorDescriptor / TMA used unconditionally (lines 123-127), no code branch"
+    lines: [123, 127]
+    changes: >
+      Not a branch: the descriptor path is taken on every architecture. On a
+      GPU without TMA the behaviour depends on Triton's own lowering, which
+      is outside this file.
+    algorithmic: false
+tunable_parameters:
+  - name: BLOCK_SIZE_M
+    role: tile size (M)
+    default_present: true
+  - name: BLOCK_SIZE_N
+    role: tile size (N)
+    default_present: true
+  - name: BLOCK_SIZE_K
+    role: tile size (K chunk)
+    default_present: true
+  - name: GROUPSIZE
+    role: raster grouping (tl.swizzle2d group width)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 100-120) over BLOCK_M x BLOCK_N x BLOCK_K x
+  GROUPSIZE x num_warps x num_stages filtered by a shared-memory footprint
+  bound (line 115), each Config carrying pre_hook=_tma_set_block_size_hook
+  (lines 54-60) to resize the descriptors' block shapes; keyed on M, N, K and
+  DT_ID (dtype id, lines 38, 117), warmup=1, rep=3. The non-autotuned path
+  uses _default_config() (lines 27-35, 150) and the undecorated kernel.
+  get_last_config reads best_config (lines 167-178). Audit only.
+implementation_freedoms_observed: >
+  Tile sizes, warps, pipeline depth; raster order / grouping; load mechanism
+  (descriptor/TMA vs pointer loads vs block pointers); whether B is consumed
+  in its given (K, N) layout or pre-transposed to (N, K) (the pre-transpose
+  is a layout choice of this implementation, not of the operator); where and
+  how often descriptors are built.
+algorithm_constraints_observed: >
+  Independent per-batch GEMMs with the batch index on a grid axis; sequential
+  full-K reduction into an fp32 accumulator; TF32 operand precision for fp32
+  inputs (the reference enables TF32 and the verify tolerance atol 1.0 / rtol
+  1e-2 in config.yaml lines 1-3 is sized for it), native fp16/bf16 otherwise;
+  output in the input dtype as a flat row-major (BATCH, M, N) buffer; out of
+  range M/N/K handled by zero-fill / clipping rather than by requiring
+  tile-multiple shapes. Whether split-K would be admissible is unclear from
+  this source (it is not used).
+fq_boundary:
+  bytes_expr: "3 * BATCH * M * M * dtype_size"
+  flops_expr: "2 * BATCH * M * M * M"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula assumes square M = N = K (the generator guarantees it) and
+    counts one read of A and B and one write of C, plus 2*BATCH*M^3 flops,
+    which is what the single kernel performs (reading B^T moves the same
+    bytes as reading B). In steady state the timed boundary contains the
+    kernel plus host-only descriptor construction, so it matches. The caveat
+    is the B -> B^T transpose copy performed inside run() on the first call
+    for a given B tensor and then cached: it is an extra read+write of B that
+    the formula does not count and that the reference does not perform, so
+    after the first call the Triton path effectively consumes a prepacked
+    (transposed) operand that the benchmark never times.
+notes_for_review:
+  - The cached B^T pre-transpose means the measured Triton latency excludes a transpose that the reference's torch.matmul does not need; the comparison implicitly grants Triton a prepacked NT layout.
+  - The WeakTensorKeyDictionary cache is keyed by tensor identity, so in-place mutation of B between calls would silently reuse a stale B^T.
+  - TensorDescriptors are rebuilt on every call inside run() (host overhead inside the timed region when not CUDA-graph replayed).
+  - The block_size keyword is accepted but unused; DT_ID exists only to separate autotune cache entries per dtype.
+  - The CDNA3 default-config fallback changes only the pipeline depth of the non-autotuned path; it is a resource-fit (legality) branch, not an algorithmic one.

@@ -1,0 +1,171 @@
+operator: weight_dequant
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/weight_dequant/impl_triton.py
+    functions:
+      - name: dequant_kernel
+        lines: [8, 28]
+        role: kernel
+      - name: _dequant_kernel_autotuned
+        lines: [31, 40]
+        role: tuner
+      - name: run
+        lines: [43, 61]
+        role: host-driver
+      - name: get_last_config
+        lines: [64, 68]
+        role: helper
+  - path: tilebench/benchmarks/operators/weight_dequant/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 8]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/weight_dequant/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_weight_dequant_inputs
+        lines: [492, 499]
+        role: helper
+functional_semantics: >
+  Block-wise dequantisation: Y[i, j] = X[i, j] * S[i // TILE_SIZE,
+  j // TILE_SIZE] for X of shape (M, N) and a scale matrix S of shape
+  (ceil(M/TILE_SIZE), ceil(N/TILE_SIZE)), i.e. one scalar scale per
+  TILE_SIZE x TILE_SIZE tile of X. The reference (impl_torch.py lines 5-8)
+  builds row_idx = arange(M) // TILE_SIZE and col_idx = arange(N) //
+  TILE_SIZE, materialises the full (M, N) scale map by advanced indexing
+  S[row_idx[:, None], col_idx[None, :]], and multiplies X * scale in the
+  input dtype. That gather materialisation is reference-side only. The
+  generator uses N = M (tensors.py lines 493-494) and S of the same dtype
+  as X.
+run_signature:
+  text: |
+    def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [X, S, M, N, TILE_SIZE]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor of shape (M, N) and dtype X.dtype (fresh allocation)
+  get_last_config: present
+inputs:
+  - name: X
+    shape: "(M, N)"
+    dtype: "fp16 | bf16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous row-major (generator torch.randn, tensors.py line 495); addressed as a flat array with constexpr N
+    mutated_in_place: false
+    notes: The quantised weight matrix.
+  - name: S
+    shape: "(ceil(M/TILE_SIZE), ceil(N/TILE_SIZE))"
+    dtype: same as X
+    layout: contiguous row-major; row stride S_COLS = cdiv(N, TILE_SIZE) is recomputed in run() (line 46)
+    mutated_in_place: false
+    notes: Per-tile scale factors.
+  - name: M
+    shape: scalar
+    dtype: python int (becomes a tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: Rows of X.
+  - name: N
+    shape: scalar
+    dtype: python int (becomes a tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: Columns of X; equals M for the generator's cases.
+  - name: TILE_SIZE
+    shape: scalar
+    dtype: python int (becomes a tl.constexpr)
+    layout: n/a
+    mutated_in_place: false
+    notes: Side of the square scale tile.
+outputs:
+  - name: output
+    shape: "(M, N)"
+    dtype: same as X
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty(M, N, dtype=X.dtype); S_COLS = cdiv(N, TILE_SIZE); total = M * N
+    lines: [45, 47]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: Only host work before the launch.
+stages:
+  - id: s1
+    description: >
+      dequant_kernel over the flattened (M*N) index space, grid =
+      ceil(M*N / BLOCK_SIZE) (lines 50, 54). Each program takes BLOCK_SIZE
+      consecutive flat offsets (mask offsets < M*N), recovers row =
+      offset // N and col = offset % N using the constexpr N (lines 17-18),
+      derives the scale coordinates s_row = row // TILE_SIZE, s_col =
+      col // TILE_SIZE (lines 20-21), loads x and gathers the scale from
+      S + s_row * S_COLS + s_col (lines 23-24; many lanes read the same
+      scale address), multiplies in the native dtype (line 26) and stores
+      (line 28). M, N, S_COLS and TILE_SIZE are tl.constexpr, so the kernel
+      is specialised (recompiled) per problem shape.
+    kind: kernel
+    lines: [8, 28]
+    launches: "ceil(M*N/BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (final output)
+algorithm_family: >
+  Memory-bound 1-D flat elementwise multiply with a block-tiled scale
+  gather (per-tile dequantisation), one launch, no upcast.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "n/a; the multiply is performed in the input dtype (no fp32 upcast, line 26), matching the reference's X * scale"
+  output_dtype: same as X
+  special_modes: none
+  masking_or_padding_values: "none (tl.load without `other` for both X and S; masked lanes are never stored)"
+intermediate_storage: >
+  None. The reference materialises an (M, N) scale map, the Triton kernel
+  does not.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (flat elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 31-40) over BLOCK_SIZE x num_warps,
+  key=["M", "N"], warmup=1, rep=3; no num_stages. Default path launches
+  the undecorated kernel with _DEFAULT_CONFIG (lines 52-59). The
+  block_size keyword of run() is ignored. get_last_config() reads
+  best_config (lines 64-68). Audit only.
+implementation_freedoms_observed: >
+  Block size, warps, vectorisation; 1-D flat vs 2-D tiled grid (a 2-D
+  tiling aligned to TILE_SIZE would load each scale once per tile instead
+  of per element); whether M/N/TILE_SIZE are constexpr specialisations or
+  runtime arguments; computing in fp32 and casting back (within tolerance).
+algorithm_constraints_observed: >
+  Y = X * S[row // TILE_SIZE, col // TILE_SIZE] over all M*N elements with
+  the scale indexed by integer division of the row and column by TILE_SIZE
+  and S addressed with row stride ceil(N/TILE_SIZE); output dtype and
+  shape equal X's; one read of X, one write of Y, S read as a gather;
+  out-of-place; no input mutation.
+fq_boundary:
+  bytes_expr: "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size"
+  flops_expr: "M * M"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() only allocates the output and launches the kernel, so the timed
+    region is the kernel. The formula counts one read of X, one write of
+    Y and one read of S; the kernel re-reads each scale once per element
+    (TILE_SIZE^2 redundant loads per scale, cache-served), which the
+    formula idealises as a single read. The formula hard-codes N == M
+    (both terms use M*M and ceil(M/TILE_SIZE)^2), which holds for the
+    generator's square cases but would be wrong for rectangular inputs.
+notes_for_review:
+  - "M, N, S_COLS and TILE_SIZE are constexpr, so each shape compiles a separate kernel (JIT cost falls in warmup, not the timed region)."
+  - "bytes_expr assumes N == M; the generator guarantees this, config.yaml sweeps only M."
+  - "The per-element scale gather is redundant (TILE_SIZE^2 lanes share one value); a tile-aligned layout is a performance freedom, not an algorithmic change."
+  - "block_size keyword is accepted but ignored."
+  - "No upcast: fp16/bf16 multiply in the native dtype, as in the reference."

@@ -1,0 +1,181 @@
+operator: kl_divergence
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/kl_divergence/impl_cutile.py
+    functions:
+      - name: kl_divergence_kernel
+        lines: [25, 49]
+        role: kernel
+      - name: run
+        lines: [55, 78]
+        role: host-driver
+      - name: get_last_config
+        lines: [81, 82]
+        role: helper
+      - name: _HANG_CFGS / _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [13, 21]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [52, 52]
+        role: tuner
+  - path: tilebench/benchmarks/operators/kl_divergence/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/kl_divergence/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_kl_divergence_inputs
+        lines: [157, 164]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Row-wise KL divergence with the prediction given as log-probabilities:
+  loss[r] = sum_c y_true[r, c] * (log(y_true[r, c]) - log_y_pred[r, c]).
+  The reference (impl_torch.py line 5) is
+  (y_true * (torch.log(y_true) - log_y_pred)).sum(dim=-1), which returns a
+  (rows,) tensor in the input dtype. The generator (tensors.py lines
+  157-164) builds log_y_pred = log_softmax(randn) and y_true = softmax(randn)
+  over the last axis, both fp32 by default (config.yaml has no dtype in its
+  case_grid, so every case is fp32), and returns (y_pred, y_true).
+run_signature:
+  text: "def run(log_y_pred: torch.Tensor, y_true: torch.Tensor, autotune: bool = False, **kwargs) -> torch.Tensor:"
+  positional_inputs: [log_y_pred, y_true]
+  keyword_params: [autotune, kwargs]
+  returns: single tensor of shape (rows,) and dtype float32
+  get_last_config: present
+inputs:
+  - name: log_y_pred
+    shape: "(rows, cols)"
+    dtype: fp32 (generator default; the kernel upcasts whatever dtype arrives, line 41)
+    layout: contiguous row-major 2-D
+    mutated_in_place: false
+    notes: loaded as (1, TILE) row tiles with zero padding past cols (lines 32-35)
+  - name: y_true
+    shape: "(rows, cols)"
+    dtype: fp32 (generator default; upcast at line 42)
+    layout: contiguous row-major 2-D
+    mutated_in_place: false
+    notes: probabilities from softmax, so strictly positive in practice; loaded as (1, TILE) row tiles with zero padding (lines 36-39)
+outputs:
+  - name: loss
+    shape: "(rows,)"
+    dtype: float32 (hard-coded at line 59 regardless of the input dtype)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: read rows, cols from log_y_pred.shape and allocate loss = torch.empty(rows, dtype=float32)
+    lines: [58, 59]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no cast, copy or layout change of the inputs
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [58, 59]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: loss buffer (rows,) fp32 uninitialised
+  - id: s1
+    description: >
+      One program per row, grid (rows, 1, 1) launched at lines 76-77. The
+      program initialises a (1, TILE) fp32 accumulator (line 28), then loops
+      sequentially over ceil(cols/TILE) column tiles (loop count computed at
+      runtime from the n_cols argument, lines 29-31): it loads the matching
+      (1, TILE) tiles of log_y_pred and y_true with zero padding, upcasts
+      both to fp32 (lines 41-42), computes safe_log = log(y_true) where
+      y_true > 0 else 0 (line 45) and accumulates y_true * (safe_log -
+      log_pred) lane-wise (line 46). After the loop the TILE lanes are
+      reduced with ct.sum(axis=1) (line 48) and the scalar row result is
+      stored at loss[row] (line 49).
+    kind: kernel
+    lines: [25, 49]
+    launches: "rows (one program per row)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: loss (final result)
+algorithm_family: >
+  Row-wise fused elementwise-plus-reduction (map-reduce per row): one
+  program per row streams the row in column tiles, keeps lane-wise fp32
+  partial sums in registers, and finishes with one intra-program reduction.
+  No cross-program reduction, no two-pass or atomic scheme.
+reduction_scan_sort_structure: >
+  Per row: sequential accumulation over column tiles into a (1, TILE) fp32
+  lane vector (lane i holds the partial sum of all columns congruent to i
+  modulo TILE), followed by a single ct.sum over the TILE lanes whose
+  internal tree order is determined by cuTile (unclear). Zero-padded columns
+  contribute exactly 0 (y_true = 0 gives 0 * (0 - 0)). The reference sums
+  the full row with torch's reduction order.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 (explicit ct.astype to float32 of both tiles, lines 41-42; accumulator ct.full dtype float32, line 28)
+  output_dtype: float32 (fixed, line 59)
+  special_modes: >
+    guarded logarithm: log(y_true) is replaced by 0 where y_true <= 0 (line
+    45), so a zero probability contributes 0 instead of the reference's
+    0 * (-inf) = NaN
+  masking_or_padding_values: PaddingMode.ZERO on both input loads (lines 34, 38); no explicit column mask; the final store writes exactly one element per program (line 49)
+intermediate_storage: >
+  None. The (1, TILE) accumulator and the per-tile temporaries live in
+  registers; no global scratch.
+mutation_rules: >
+  Inputs are never written. loss is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (columns per loop iteration; ConstInt kernel argument)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 15-21, which filters
+  out the (tile, occupancy) pairs listed in _HANG_CFGS at line 13 and any
+  pair with tile * occupancy below a floor) using the closures at lines
+  63-70, cached per shape_key (rows, cols, dtype). The winner's occupancy is
+  applied via kernel_with_hints (line 76) and the tile is passed as a
+  ConstInt argument (line 77). Default path uses _DEFAULT_CONFIG (line 14).
+  get_last_config returns tile and occupancy (lines 71-72, 81-82). Audit
+  only.
+implementation_freedoms_observed: >
+  Column tile width and occupancy; whether the row loop count is a runtime
+  or compile-time value; whether the lane-wise partial sums are reduced
+  once at the end or per tile; grid-to-row mapping; whether several rows
+  are processed per program.
+algorithm_constraints_observed: >
+  One sequential pass over each row; the elementwise term
+  y_true * (log(y_true) - log_y_pred) is computed in fp32 and summed over
+  the row; the result is a (rows,) fp32 vector allocated inside run(); no
+  scratch, no host preprocessing. The guarded log is an observed deviation
+  from the reference only for exactly-zero probabilities.
+fq_boundary:
+  bytes_expr: "rows * cols * 4 * 2 + rows * 4"
+  flops_expr: "4 * rows * cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula hard-codes 4-byte elements (two fp32 inputs read once each
+    plus one fp32 output), which matches the fp32-only case set and the
+    kernel's single streaming pass. flops counts log, subtract, multiply and
+    add per element. run() performs no preprocessing other than the output
+    allocation (timed) and assumes no prepacked inputs.
+notes_for_review:
+  - The safe_log guard (line 45) changes semantics for y_true == 0 (reference would produce NaN); harmless for softmax-generated inputs.
+  - The column-tile loop bound ct.cdiv(n_cols, TILE) is a runtime value (n_cols is a plain kernel argument, not ConstInt), unlike some sibling row-wise operators.
+  - The output dtype is fixed to float32 inside run() while the reference returns the input dtype; identical for the fp32-only sweep.
+  - _SEARCH_SPACE excludes configurations recorded as hanging (_HANG_CFGS); this is a tuner-space workaround, not an algorithmic property.
+  - run() has no block_size keyword; it is swallowed by **kwargs if passed.

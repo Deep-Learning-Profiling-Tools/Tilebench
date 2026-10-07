@@ -1,0 +1,30 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "2d_max_pooling",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh flat (N*C*H_out*W_out,) output of input's dtype inside run()."},
+    {"id": "windowed_max", "description": "One logical pass with no global-memory intermediate (the output tiles may be spread over several launches): each output element is the max over its kernel_size x kernel_size window read in place from the NCHW input, with -inf for out-of-range taps, written exactly once with bounds masking."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?max_pool[123]d\\(|\\bF\\.max_pool[123]d\\(|torch\\.nn\\.MaxPool[123]d|torch\\.(nn\\.functional\\.)?adaptive_max_pool|torch\\.(nn\\.functional\\.)?lp_pool", "message": "A library pooling operation replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\.unfold\\(|torch\\.(nn\\.functional\\.)?unfold\\(|\\bF\\.unfold\\(|im2col", "message": "Window materialisation (unfold/im2col) is forbidden; the pooling must be a direct stencil.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.amax\\(|torch\\.max\\(|\\.amax\\(|torch\\.maximum\\(", "message": "Host-side tensor max over windows replaces the kernel reduction.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.(nn\\.functional\\.)?pad\\(|\\bF\\.pad\\(|torch\\.full\\(|torch\\.zeros\\(|torch\\.ones\\(", "message": "A padded or initialised copy of the input is forbidden; -inf padding must be realised inside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)", "message": "No host-side dtype conversion is part of this operator.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.maximum", "tl\\.max\\(", "ct\\.maximum", "ct\\.max\\(", "T\\.max", "reduce_max", "nl\\.maximum", "nl\\.max\\(", "nisa\\.tensor_reduce"], "message": "No elementwise/tile max primitive found; the window reduction must be done in the kernel.", "level": "suspicious"},
+    {"any_of": ["-inf", "float\\(\\\"-inf\\\"\\)", "float\\('-inf'\\)", "-float\\(", "NEG_INF", "neg_inf"], "message": "No -inf identity/fill found; out-of-range taps must behave as -inf.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.view",
+    "Tensor.reshape"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned flat (N*C*H_out*W_out,) tensor must be freshly allocated inside run() and must not share storage with input"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() is counted (here only the stencil kernel launch(es)); host-side H_out/W_out arithmetic, the output allocation call and zero-copy views are not GPU time. No padded copy, no unfold, no cast, no cached state across calls."},
+  "tolerance_source": "config.verify"
+}

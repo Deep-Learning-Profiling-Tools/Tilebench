@@ -1,0 +1,187 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "matmul_fp32_fp16_fp8",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py",
+      "functions": [
+        {
+          "name": "_tma_set_block_size_hook",
+          "lines": [
+            23,
+            29
+          ]
+        },
+        {
+          "name": "_bt_cache / _b_transposed",
+          "lines": [
+            32,
+            39
+          ]
+        },
+        {
+          "name": "matmul_kernel",
+          "lines": [
+            42,
+            79
+          ]
+        },
+        {
+          "name": "matmul_kernel_autotuned",
+          "lines": [
+            82,
+            118
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            124,
+            165
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            168,
+            179
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_cutile.py",
+      "functions": [
+        {
+          "name": "matmul_kernel",
+          "lines": [
+            35,
+            68
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            74,
+            122
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            125,
+            126
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_torch.py",
+      "functions": [
+        {
+          "name": "allow_tf32 = True (module level)",
+          "lines": [
+            4,
+            4
+          ]
+        },
+        {
+          "name": "_fp8_cache / _fp8_args",
+          "lines": [
+            7,
+            18
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            21,
+            27
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "C = A @ B, fp32 accumulator, cast to c dtype at the store (impl_triton.py:67-79).",
+      "cutile": "C = A @ B, fp32 accumulator, cast to C.dtype at the store (impl_cutile.py:55-68).",
+      "note": "Both match impl_torch.py:21-27 (torch.matmul under allow_tf32=True; fp8 via _scaled_mm with unit scales then cast to e4m3fn). Generator tensors.py:416-436 scales both operands by K**-0.5 and returns row-major (a, b)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "allocation + descriptor construction + one GEMM launch (impl_triton.py:131-164).",
+      "cutile": "allocation + one GEMM launch (impl_cutile.py:82-121).",
+      "note": "Single-kernel blocked GEMM with grouped tile ordering on both sides (impl_triton.py:54-62, impl_cutile.py:43-53)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends on c and on bt (impl_triton.py:132,137-139).",
+      "cutile": "kernel depends only on c (impl_cutile.py:82,118-121).",
+      "note": "No intermediates besides the Triton-side bt (see preprocessing)."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "sequential K loop in BLOCK_K chunks via tl.range, MMA accumulation (impl_triton.py:69-76).",
+      "cutile": "sequential K loop with compile-time trip count, MMA accumulation (impl_cutile.py:56-66).",
+      "note": "Same ascending-k sequential reduction; no split-K on either side."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "input_precision='tf32' passed for every dtype (impl_triton.py:76): TF32 operands for fp32, native fp16/fp8 operands otherwise; fp32 accumulation; single cast at the store (79).",
+      "cutile": "mma_dtype = tfloat32 only when A is fp32, else native dtype (impl_cutile.py:59,63,65); fp32 accumulation; single cast at the store (68).",
+      "note": "Effectively the same precision path on both sides (the tf32 flag is a no-op for non-fp32 operands). fp8 is consumed unscaled on both sides, consistent with the reference's unit scales. Both round the fp32 accumulator once to e4m3fn whereas the reference rounds via bf16 (impl_torch.py:24-26); config.verify atol 5.0 / rtol 0.1 covers it."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "bt = b.t().contiguous() (N, K) cached in the module-level plain dict _bt_cache keyed by (b.data_ptr(), shape, dtype), never evicted (impl_triton.py:32-39), looked up on every run (132): the transpose copy executes once per distinct B (warmup) and is untimed thereafter.",
+      "cutile": "B consumed row-major as (TK, TN) tiles directly (impl_cutile.py:64-65); no cache, no transpose, no descriptors.",
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): B is delivered row-major and no prepacked input may be assumed; consuming it directly (cuTile side) or through a K-major copy rebuilt by device work inside every run() is a mapping choice, so the layout divergence is mapping-only. Any cross-call cache of a transformed operand is forbidden, so the manual Triton kernel's steady-state cached bt (impl_triton.py:32-39, 132) does not conform to the decided rule and its column is recorded as not comparable (human_reference_comparable = false); this is a reference-measurement caveat, not a contract ambiguity. The reference's fp8-only cached repack (impl_torch.py:10-18) is reference-side work."
+    },
+    "intermediate_storage": {
+      "status": "mapping-only",
+      "triton": "bt (N, K) retained for the process lifetime per (data_ptr, shape, dtype) key (impl_triton.py:32-39); unbounded growth across the 60-case sweep.",
+      "cutile": "none (impl_cutile.py:55-68).",
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): a per-call K-major copy of B is a permitted, counted mapping-level intermediate; a copy that outlives the call via a cross-call cache is forbidden. The Triton side's persistent, address-keyed bt (also a stale-address hazard) is the non-conforming case covered by human_reference_comparable = false."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "a, b never written; fresh c per call (impl_triton.py:131).",
+      "cutile": "a, b never written; fresh c per call (impl_cutile.py:82).",
+      "note": "Idempotent for a fixed B object; see the stale-address hazard above."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches (host TMA descriptor path only, impl_triton.py:137-139,150-152).",
+      "cutile": "no dispatch branches; per-dtype default configs (impl_cutile.py:13-17).",
+      "note": "Descriptor-based vs tile loads and compile-time K (impl_cutile.py:39) are mapping details."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(M * K + K * N + M * N) * dtype_size",
+    "flops_expr": "2 * M * N * K",
+    "consistent": "false",
+    "note": "The formula counts A once, B once and C once in the input dtype. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): it stays the declared lower-bound / compulsory-I/O model for scoring; the 2*K*N*dtype_size of traffic that a per-call K-major copy of B adds is counted in the measured time but is diagnostic, not part of Q. The cuTile path matches the formula with B consumed in its delivered (K, N) layout and no cache. The Triton path matches it in steady state only because the K-major copy is executed once per distinct B address and cached in _bt_cache (impl_triton.py:32-39,132), i.e. never timed after warmup, which the decided rule forbids; the Triton column is therefore not comparable to contract-conforming implementations. The reference's fp8 path (impl_torch.py:10-18) caches an analogous repack by data_ptr; its fp32/fp16 paths do not."
+  },
+  "human_reference_comparable": false,
+  "review_items": [
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the K-major repack of B, if an implementation uses one, is inside the timed algorithm: per call, uncached, rebuilt by device work inside every run(); no prepacked-input assumption. The manual Triton timing excludes it (bt cached in _bt_cache, impl_triton.py:32-39,132), so the Triton column stays human_reference_not_comparable (human_reference_comparable = false); the cuTile column (direct (K, N) consumption, impl_cutile.py:64-65) is comparable. The open review item is removed from the contract (revision 2 retained).",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the manual Triton _bt_cache (impl_triton.py:32-39; plain dict keyed by (data_ptr, shape, dtype), never evicted, stale-address hazard) is a property of the manual reference and is not fixed here; it is the reason the Triton column is marked not comparable. Candidates are forbidden from any cross-call cache of a transformed operand (contract Forbidden substitutions; evaluator_rules cache rule).",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the documented precision class is preserved (TF32-class products permitted for fp32 with fp32 accumulation; fp16/fp8 native input products with fp32 accumulation). Process-wide precision flags (torch.backends.*, torch.set_float32_matmul_precision, allow_tf32) are evaluator state, not candidate-controlled state: the evaluator owns the reference's TF32 setting at verification time (impl_torch.py:4 sets allow_tf32 = True at import; matmul_int8's reference sets it False inside run()), and a candidate that reads or changes them is a confirmed violation (evaluator_rules forbidden_substitutions, confirmed, scope host)."
+  ],
+  "contract_sha256": "7d777b9c79174883c16d974ccd66f338f82435fc78c6ec1d1d8b2b34e2fcf693",
+  "previous_status_before_approval": "needs-review",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "eb74f1661babcc3e658dd3ead2c0100599a2fac32ad22e81736c45655660eadb",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

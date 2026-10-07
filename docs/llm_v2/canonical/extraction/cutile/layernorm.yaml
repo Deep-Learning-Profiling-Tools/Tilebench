@@ -1,0 +1,216 @@
+operator: layernorm
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/layernorm/impl_cutile.py
+    functions:
+      - name: layernorm_kernel
+        lines: [22, 64]
+        role: kernel
+      - name: run
+        lines: [70, 112]
+        role: host-driver
+      - name: get_last_config
+        lines: [115, 116]
+        role: helper
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [67, 67]
+        role: tuner
+  - path: tilebench/benchmarks/operators/layernorm/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 6]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/layernorm/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_layernorm_inputs
+        lines: [403, 407]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Layer normalisation over the last axis with affine parameters:
+  y[..., k] = (x[..., k] - mean) * rsqrt(var + eps) * weight[k] + bias[k],
+  where mean and var are the mean and biased (population) variance of the
+  row. The reference (impl_torch.py line 6) is
+  torch.nn.functional.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+  with eps defaulting to 1e-5; the reference-side internal statistics
+  precision is whatever F.layer_norm uses (not visible in the file). The
+  generator (tensors.py lines 403-407) draws x = randn(batch, M, K),
+  weight = randn(K), bias = randn(K), all in the case dtype, and returns
+  (x, weight, bias); config.yaml fixes batch = 1, M = 2048 and sweeps K and
+  dtype. eps is not supplied by the generator or config, so both sides use
+  their 1e-5 default.
+run_signature:
+  text: "def run(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor, eps: float = 1e-5, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x, weight, bias]
+  keyword_params: [eps, autotune]
+  returns: single tensor with the shape and dtype of x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(batch, M, K); viewed as (batch*M, K) inside run (line 82)"
+    dtype: "T in {fp16, bf16, fp32}"
+    layout: contiguous row-major (x.contiguous() at line 82 is a no-op for generator tensors)
+    mutated_in_place: false
+    notes: K is passed to the kernel as the ConstInt parameter N (lines 22, 97, 110)
+  - name: weight
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous 1-D (weight.contiguous() at line 85)
+    mutated_in_place: false
+    notes: loaded per column tile as a (TILE_SIZE,) 1-D tile and upcast to fp32 (lines 51-56)
+  - name: bias
+    shape: "(K,)"
+    dtype: same as x
+    layout: contiguous 1-D (bias.contiguous() at line 86)
+    mutated_in_place: false
+    notes: loaded per column tile as a (TILE_SIZE,) tile and upcast to fp32 (lines 57-62)
+  - name: eps
+    shape: scalar
+    dtype: python float, runtime kernel argument (line 22)
+    layout: n/a
+    mutated_in_place: false
+    notes: default 1e-5, matching the reference default
+outputs:
+  - name: out
+    shape: "(batch, M, K) (same as x)"
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: K = x.shape[-1]; batch_M = x.numel() // K; x_2d = x.contiguous().reshape(batch_M, K)
+    lines: [78, 82]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: view only for contiguous x
+  - description: out = torch.empty_like(x); out_2d = out.reshape(batch_M, K)
+    lines: [83, 84]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: fresh output every call
+  - description: weight_c = weight.contiguous(); bias_c = bias.contiguous()
+    lines: [85, 86]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no-ops for the generator's contiguous 1-D tensors; would copy otherwise
+stages:
+  - id: s0
+    description: views, contiguity checks and output allocation (see preprocessing)
+    kind: allocation
+    lines: [78, 86]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: out buffer uninitialised; 2-D views; contiguous weight/bias handles
+  - id: s1
+    description: >
+      One program per row, grid (batch*M, 1, 1) at line 89, launched at
+      lines 108-110. Pass 1 (lines 27-37): loop over ceil(N/TILE_SIZE)
+      column tiles (N ConstInt, compile-time trip count), load the
+      (1, TILE_SIZE) tile of x with zero padding, allow_tma=False,
+      latency=1, upcast to fp32, and accumulate lane-wise sum_x and sum_x2.
+      Statistics (lines 39-41): mean = sum(sum_x)/N, var = sum(sum_x2)/N -
+      mean*mean (single-pass E[x^2] - E[x]^2 formula, biased variance),
+      rstd = rsqrt(var + eps). Pass 2 (lines 44-64): re-load each x tile,
+      load the matching (TILE_SIZE,) tiles of weight and bias (zero padded),
+      upcast all three to fp32, compute (xj - mean) * rstd * wj + bj, cast
+      to x.dtype and store the (1, TILE_SIZE) tile of out with
+      allow_tma=False, latency=1.
+    kind: kernel
+    lines: [22, 64]
+    launches: "batch*M (one program per row)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: out (final result); no global intermediates
+algorithm_family: >
+  Row-wise two-pass layer normalisation in one kernel: a statistics pass
+  that streams the row accumulating fp32 sum and sum of squares, then a
+  second streaming pass that re-reads the row (and the weight/bias
+  vectors) and applies the affine normalisation. Variance uses the
+  single-pass E[x^2] - mean^2 formula rather than a centred second pass.
+reduction_scan_sort_structure: >
+  Pass 1 accumulates sum_x and sum_x2 sequentially over column tiles into
+  two (1, TILE_SIZE) fp32 lane vectors; each is then reduced once with
+  ct.sum over the lanes (internal tree order unclear) and divided by N.
+  Zero-padded columns contribute 0 to both sums and N is the true row
+  length, so padding does not bias the statistics.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 (ct.astype to float32 of x, weight and bias tiles; accumulators ct.full float32, lines 27-28)
+  output_dtype: x.dtype (ct.astype at line 63)
+  special_modes: >
+    biased variance via E[x^2] - mean^2 in fp32 (line 40), which is subject
+    to cancellation for rows with large mean relative to spread; rsqrt in
+    fp32 (line 41)
+  masking_or_padding_values: PaddingMode.ZERO on every load (x, weight, bias; lines 33, 48, 54, 60); stores clipped at K (line 64); no explicit masks
+intermediate_storage: >
+  None. Lane accumulators, mean and rstd are register resident; no global
+  scratch.
+mutation_rules: >
+  x, weight and bias are never written. out is freshly allocated per call;
+  repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_size
+    role: tile size (columns per loop iteration; ConstInt kernel argument)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 14-18) with the
+  closures at lines 92-99, cached per shape_key (batch_M, K, dtype). The
+  winner's occupancy is applied via kernel_with_hints (line 108) and the
+  tile size is passed as a ConstInt argument (line 110). Default path uses
+  _DEFAULT_CONFIG (line 12). get_last_config returns tile_size and
+  occupancy (lines 100-104, 115-116). The loads/stores carry fixed
+  (non-tuned) hints allow_tma=False and latency=1. Audit only.
+implementation_freedoms_observed: >
+  Column tile width and occupancy; TMA or non-TMA loads and latency hints;
+  whether the row is re-read or kept on chip between passes; the variance
+  formula (single-pass E[x^2]-mean^2 versus centred two-pass or Welford);
+  whether weight/bias are loaded per tile or hoisted; compile-time versus
+  runtime row length.
+algorithm_constraints_observed: >
+  Per-row mean and biased variance computed in fp32 over the full row;
+  eps added to the variance inside rsqrt; affine transform
+  (x - mean) * rstd * weight + bias in fp32 then cast to the input dtype;
+  output has the input's shape and dtype and is allocated inside run(); no
+  scratch; weight and bias consumed as 1-D contiguous vectors with no
+  host-side preprocessing.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "6 * n"
+  consistent_with_timed_boundary: unclear
+  notes: >
+    The expressions reference a symbol n that is not one of this operator's
+    case parameters (batch, M, K); how the metrics layer binds n could not
+    be verified from the files in scope. If n is the element count of x,
+    bytes = 3 passes of x (one read per pass plus the write), which matches
+    the kernel's read-twice/write-once pattern rather than the
+    compulsory read-once/write-once traffic used by sibling operators, and
+    the weight/bias reads are not counted. run() performs no preprocessing
+    beyond views and the output allocation, all inside the timed region,
+    and assumes no prepacked inputs.
+notes_for_review:
+  - run() has no **kwargs and no block_size keyword; an extra keyword from the engine would raise TypeError (not verified, engine not in scope).
+  - Variance is computed as E[x^2] - mean^2 in a single pass; numerically different from a centred reference for ill-conditioned rows.
+  - N (= K) is a ConstInt kernel parameter, so the kernel is specialised per swept K value (inferred from ct.Constant semantics).
+  - The second pass re-loads x; whether bytes_expr intends to count that re-read depends on the meaning of n (unclear).
+  - weight and bias are generated in the input dtype and upcast per tile inside the kernel; no host cast.

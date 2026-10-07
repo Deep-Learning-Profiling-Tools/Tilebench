@@ -1,0 +1,169 @@
+operator: moe_topk_gating
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/moe_topk_gating/impl_triton.py
+    functions:
+      - name: moe_topk_gating_kernel
+        lines: [8, 44]
+        role: kernel
+      - name: _moe_topk_gating_kernel_autotuned
+        lines: [47, 55]
+        role: tuner
+      - name: run
+        lines: [58, 84]
+        role: host-driver
+      - name: get_last_config
+        lines: [87, 91]
+        role: helper
+  - path: tilebench/benchmarks/operators/moe_topk_gating/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 20]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/moe_topk_gating/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_moe_topk_gating_inputs
+        lines: [224, 228]
+        role: helper
+functional_semantics: >
+  Reference (impl_torch.py lines 7-20): (vals, idxs) = torch.topk(logits, k=k,
+  dim=-1, largest=True, sorted=True) selects, per row of the (M, E) logits, the k
+  largest entries in descending order together with their column indices;
+  weights = torch.softmax(vals.to(float32), dim=-1).to(logits.dtype) normalises
+  those k values with a softmax computed in float32 and cast back to the logits
+  dtype; the function returns the tuple (weights, idxs.to(torch.int32)). The
+  softmax is taken only over the k selected values, not over all E experts.
+  The positional M, E, k are shape metadata; the reference ignores M and E.
+run_signature:
+  text: "def run(logits: torch.Tensor, M: int, E: int, k: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [logits, M, E, k]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: "tuple (topk_weights, topk_indices): topk_weights of shape (M, k) in logits.dtype, topk_indices of shape (M, k) in int32"
+  get_last_config: present
+inputs:
+  - name: logits
+    shape: "(M, E)"
+    dtype: "one of fp16, bf16, fp32 (config.yaml line 15)"
+    layout: "row-major contiguous; the kernel addresses row pid at logits_ptr + pid * E (line 22), so a row stride of exactly E is assumed"
+    mutated_in_place: false
+    notes: "each row is a random permutation of torch.linspace(-3, 3, E) cast to dtype (tensors.py 224-228), so all E values within a row are distinct and no ties occur; E and k come from case_defaults, M is swept (config.yaml 8-15)"
+  - name: M
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "number of rows; used for output allocation and grid = (M,) (lines 60-65)"
+  - name: E
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "number of experts (row length); runtime kernel argument used for the row mask and row stride; also determines the padded tile width BLOCK_SIZE_E = next_power_of_2(E) (line 63)"
+  - name: k
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "passed to the kernel as the tl.constexpr K (line 14), so the selection loop is statically unrolled; BLOCK_SIZE_K = next_power_of_2(k) (line 64)"
+outputs:
+  - name: topk_weights
+    shape: "(M, k)"
+    dtype: same as logits
+    allocated_by: run
+    aliasing: none
+  - name: topk_indices
+    shape: "(M, k)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "allocate topk_weights (M, k) in logits.dtype and topk_indices (M, k) in int32"
+    lines: [60, 61]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast or copy of logits"
+  - description: "derive the padded constexpr tile widths BLOCK_SIZE_E = next_power_of_2(E) and BLOCK_SIZE_K = next_power_of_2(k) and the grid (M,)"
+    lines: [63, 65]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: "these are shape-derived padding sizes, not tunables; the whole row of E logits must fit in one program's tile"
+stages:
+  - id: s1
+    description: "one program per row. (a) Load the row of E logits into a BLOCK_SIZE_E-wide tile, out-of-range lanes filled with -inf, and cast to float32 (lines 19-22). (b) Iterative selection, K static iterations: take tl.max and tl.argmax over the row, write the value and the int32 index into slot i of two BLOCK_SIZE_K-wide vectors via tl.where on the lane id (initialised to -inf and 0), then overwrite the selected lane of the row with -inf so it is excluded from later iterations (lines 27-37). Slots are filled in selection order, i.e. descending value, matching sorted=True. (c) Softmax over the K selected values in float32: subtract the max, exp, divide by the sum; padded slots hold -inf and contribute exp(-inf) = 0 to the sum (lines 39-41). (d) Store the weights cast to the output pointer's element dtype and the int32 indices at row pid, masked to the first k lanes (lines 43-44)"
+    kind: kernel
+    lines: [8, 44]
+    launches: "M programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "topk_weights and topk_indices (final outputs)"
+algorithm_family: >
+  Row-parallel iterative top-k by repeated max/argmax with masking (K rounds of
+  a full-row max), followed by a numerically stable softmax over the K selected
+  values, fused into a single kernel.
+reduction_scan_sort_structure: >
+  Each of the K rounds performs a full-row tl.max and tl.argmax over the
+  BLOCK_SIZE_E lanes (tree reductions whose internal order is defined by Triton,
+  not the source). Tie-breaking follows tl.argmax's default rule (the Triton API
+  default selects the leftmost maximal index; this is stated from the API, not
+  verified by running), whereas torch.topk leaves tie order unspecified; the
+  generator guarantees distinct values per row, so ties never arise in the
+  benchmark. Results are emitted in descending value order. The softmax uses a
+  max-subtraction, exp and a tl.sum over the K-wide vector.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "comparisons and softmax in float32 (row cast on line 22; exp and sum on lines 40-41); index arithmetic in int32"
+  output_dtype: "weights in logits.dtype (cast on store, line 43); indices int32"
+  special_modes: "none; the float32 upcast of fp16/bf16 is exact so the selected set and order equal those of topk on the native dtype"
+  masking_or_padding_values: "-inf for row lanes beyond E (line 22), for unfilled top-k slots (line 27) and for already-selected experts (line 37); 0 for unfilled index slots (line 28)"
+intermediate_storage: >
+  None. All intermediates (the row tile, the K-wide value/index vectors) live in
+  registers; no global scratch.
+mutation_rules: >
+  logits is read-only (the masking to -inf happens on the in-register copy).
+  Both outputs are freshly allocated per call; repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over num_warps only (lines 47-55), key=["E", "K"], warmup=1,
+  rep=3. autotune=True launches the autotuned wrapper (lines 68-73); otherwise the
+  raw kernel is launched with _DEFAULT_CONFIG (lines 75-82). get_last_config
+  reads best_config (87-91). BLOCK_SIZE_E and BLOCK_SIZE_K are shape-derived, not
+  searched. Audit only.
+implementation_freedoms_observed: >
+  Warp count; how many rows a program handles; whether the K rounds are unrolled
+  or looped; the internal reduction order of max/argmax; the exact exp
+  implementation; and whether a different top-k strategy (e.g. a partial sort or
+  threshold pass) replaces the K-round max/argmax, as long as the selected set,
+  the descending order and the float32 softmax are preserved.
+algorithm_constraints_observed: >
+  One read of logits; per row select the k largest values and their int32 column
+  indices in descending value order; softmax only over the k selected values,
+  computed in float32 with max subtraction, cast to the logits dtype on output;
+  outputs returned as a 2-tuple (weights, indices) with shapes (M, k); out-of-row
+  padding must use -inf so it can never be selected; selected experts must be
+  excluded from subsequent rounds.
+fq_boundary:
+  bytes_expr: "M * E * dtype_size + M * k * dtype_size + M * k * 4"
+  flops_expr: "M * (4 * k * E + 3 * k)"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads the (M, E) logits once and writes the (M, k) weights in
+    the logits dtype and the (M, k) int32 indices once; bytes_expr counts exactly
+    these three terms. flops_expr models k full-row max/argmax/mask sweeps (4
+    ops per element per round) plus a small per-row softmax; it is a nominal
+    count, not a measured one. No preprocessing traffic exists and no prepacked
+    inputs are assumed.
+notes_for_review:
+  - "The design holds an entire row (E experts, padded to a power of two) in one program's tile; it is correct for the benchmark's E but would need restructuring for very large E."
+  - "K is a tl.constexpr derived from the runtime k, so each distinct k compiles a separate kernel."
+  - "Tie-breaking differs in principle between tl.argmax and torch.topk; the generator's distinct-per-row values make this unobservable in the benchmark, but a contract should state the no-ties assumption or the required tie rule."
+  - "The block_size keyword is accepted but unused."
+  - "Only num_warps is autotuned; the autotune key includes K but not M, so the winner is shared across the M sweep (audit only)."

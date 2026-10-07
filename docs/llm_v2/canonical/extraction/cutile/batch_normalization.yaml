@@ -1,0 +1,260 @@
+operator: batch_normalization
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/batch_normalization/impl_cutile.py
+    functions:
+      - name: compute_block_sums_kernel
+        lines: [28, 55]
+        role: kernel
+      - name: compute_mean_invstd_kernel
+        lines: [58, 89]
+        role: kernel
+      - name: apply_batch_norm_kernel
+        lines: [92, 126]
+        role: kernel
+      - name: _next_pow2
+        lines: [24, 25]
+        role: helper
+      - name: run
+        lines: [132, 189]
+        role: host-driver
+      - name: get_last_config
+        lines: [192, 193]
+        role: helper
+      - name: _tuner (CutileAutotuner on apply_batch_norm_kernel) + _DEFAULT_CONFIG/_SEARCH_SPACE + fixed _STEP/_K1_BLOCK_N
+        lines: [11, 21]
+        role: tuner
+  - path: tilebench/benchmarks/operators/batch_normalization/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_batch_normalization_inputs
+        lines: [97, 102]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 5-14): training-mode batch norm over a 2-D input (N, C):
+  torch.nn.functional.batch_norm(input, running_mean=None, running_var=None,
+  weight=gamma.float(), bias=beta.float(), training=True, momentum=0.0, eps=eps).
+  Per channel c: mean_c = (1/N) sum_n x[n,c]; var_c = (1/N) sum_n (x[n,c] - mean_c)^2
+  (biased); y[n,c] = (x[n,c] - mean_c) / sqrt(var_c + eps) * gamma_c + beta_c, output in
+  the input dtype. Reference-side preprocessing: gamma/beta cast to fp32 (.float()).
+  Special case N == 1 returns beta broadcast to the input shape (lines 7-8); not reached
+  by the benchmark (N >= 1000). Generator (tensors.py 97-102) returns randn input (N, C),
+  gamma (C,), beta (C,) all in dtype, plus (N, C, eps). Config fixes C and eps, sweeps N
+  and dtype.
+run_signature:
+  text: "def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor, N: int, C: int, eps: float, block_size: int = 1024, autotune: bool = False, **kwargs)"
+  positional_inputs: [input, gamma, beta, N, C, eps]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor output of shape (N, C), dtype = input.dtype (torch.empty_like(input))
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N, C)"
+    dtype: fp16, bf16 or fp32 (config case_grid dtype)
+    layout: contiguous row-major (input.contiguous().view(N, C) at line 144 is a no-op for generator tensors)
+    mutated_in_place: false
+    notes: read twice (statistics pass and apply pass).
+  - name: gamma
+    shape: "(C,)"
+    dtype: same as input
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded in the apply kernel with ZERO padding to C_P2 and cast to fp32 in-kernel (lines 112-113).
+  - name: beta
+    shape: "(C,)"
+    dtype: same as input
+    layout: contiguous
+    mutated_in_place: false
+    notes: as gamma (lines 114-115).
+  - name: N, C
+    shape: scalar ints
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: C is a ConstInt in kernels 1 and 3 (lines 34, 101); N is a runtime int.
+  - name: eps
+    shape: scalar float
+    dtype: float
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument of compute_mean_invstd_kernel (line 68).
+outputs:
+  - name: output
+    shape: "(N, C)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output (empty_like input)
+    lines: [136, 136]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: compute NUM_BLOCKS = ceil(N / fixed block rows) and allocate fp32 scratch block_sum, block_sq_sum (NUM_BLOCKS, C), mean, inv_std (C,)
+    lines: [137, 142]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: four fp32 scratch tensors per call.
+  - description: 2-D / flat views of input, output and scratch (no copy)
+    lines: [144, 147]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: C_P2 = next power of two >= C; BLOCK_B = next power of two >= NUM_BLOCKS (host ints, passed as ConstInt)
+    lines: [152, 157]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: power-of-two padding widths for tile loads/gathers.
+stages:
+  - id: s1
+    description: allocate output and fp32 scratch (block partial sums, mean, inv_std)
+    kind: allocation
+    lines: [136, 142]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (N, C); block_sum, block_sq_sum (NUM_BLOCKS, C) fp32; mean, inv_std (C,) fp32
+  - id: s2
+    description: >
+      kernel 1 compute_block_sums_kernel (not autotuned; fixed block rows and sub-tile
+      STEP from module constants, lines 20-21). Grid (NUM_BLOCKS, 1, 1). Each program
+      owns a contiguous block of rows and iterates `for i in range(BLOCK_N // STEP)`
+      (both ConstInt, static trip count) loading (STEP, C_P2) tiles of input_2d at tile
+      index (block_id*tiles_per_block + i, 0) with ct.PaddingMode.ZERO (rows beyond N
+      and columns beyond C read as 0, lines 46-49), casting to fp32 (50), and accumulating
+      per-channel sum and sum-of-squares with ct.sum(axis=0) into (1, C_P2) fp32
+      accumulators (51-52). Stores the two (1, C_P2) partials at row block_id of
+      block_sum_2d / block_sq_sum_2d (54-55; ct.store clips columns >= C).
+    kind: kernel
+    lines: [28, 55]
+    launches: "NUM_BLOCKS programs, one launch (lines 153-154)"
+    depends_on: [s1]
+    fusable_with: "unclear"
+    produces: block_sum, block_sq_sum (NUM_BLOCKS, C) fp32 partials
+  - id: s3
+    description: >
+      kernel 2 compute_mean_invstd_kernel (not autotuned). Grid (C, 1, 1), one program per
+      channel. Gathers its channel's NUM_BLOCKS partial sums and partial sums of squares
+      from the flat partial buffers with a BLOCK_B-wide (power of two) index vector,
+      masked lanes redirected to index -1 with padding_value=0.0 (lines 72-78); reduces
+      with ct.sum (80-81); mean = total_sum / N; var = total_sq_sum / N - mean*mean
+      (one-pass E[x^2] - E[x]^2 formula), clamped with ct.maximum(var, 0.0);
+      inv_std = ct.rsqrt(var + eps) (83-86); stores mean and inv_std (88-89).
+    kind: kernel
+    lines: [58, 89]
+    launches: "C programs, one launch (lines 158-160)"
+    depends_on: [s2]
+    fusable_with: "unclear"
+    produces: mean, inv_std (C,) fp32
+  - id: s4
+    description: >
+      kernel 3 apply_batch_norm_kernel (the only autotuned kernel). Grid (ceil(N/ROWS),1,1).
+      Each program loads mean, inv_std, gamma, beta as (C_P2,) vectors with ZERO padding,
+      casts gamma/beta to fp32 (108-115), forms scale = inv_std*gamma and shift =
+      beta - mean*scale (116-117), then iterates `for i in range(ROWS // STEP)` (ConstInt,
+      static) loading (STEP, C_P2) input tiles with ZERO padding, casting to fp32,
+      computing y = x*scale + shift and storing cast to the output dtype (119-126;
+      ct.store clips rows >= N and columns >= C).
+    kind: kernel
+    lines: [92, 126]
+    launches: "ceil(N/ROWS) programs, one launch (lines 183-187)"
+    depends_on: [s3]
+    fusable_with: "none"
+    produces: output (N, C)
+algorithm_family: >
+  two-pass (statistics then apply) training-mode batch normalisation with a two-level
+  per-channel reduction: block-partial sums and sums of squares (kernel 1), per-channel
+  combine into mean / inverse std using the one-pass variance formula (kernel 2), and a
+  fused scale-and-shift elementwise pass (kernel 3).
+reduction_scan_sort_structure: >
+  Level 1: within a program, sequential accumulation over STEP-row sub-tiles in
+  increasing row order, each sub-tile reduced along rows by ct.sum(axis=0) (tree order
+  unspecified); level 2: per channel, ct.sum over the NUM_BLOCKS partials (tree order
+  unspecified). Variance = E[x^2] - mean^2 clamped at 0, not Welford and not a centred
+  second pass; this differs numerically from the reference's variance computation.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for all sums, mean, variance, inv_std, scale, shift and the normalised value (tiles cast to ct.float32 at lines 50, 112-115, 124)
+  output_dtype: input dtype (ct.astype(y, output_2d.dtype) line 126; output = empty_like(input))
+  special_modes: >
+    none beyond fp32 statistics; variance by the one-pass formula with clamp at 0;
+    eps added before rsqrt. config.yaml verify atol 1e-2 / rtol 1e-2 (lines 1-3).
+  masking_or_padding_values: "0 for rows beyond N and channels beyond C_P2 padding on every ct.load; partial-sum gather lanes beyond NUM_BLOCKS read 0 (padding_value=0.0 at index -1)"
+intermediate_storage: >
+  Four fp32 global scratch tensors allocated per call inside run(): block_sum and
+  block_sq_sum of shape (NUM_BLOCKS, C), mean and inv_std of shape (C,). They live for
+  the duration of the call (Python-scoped; freed after return).
+mutation_rules: >
+  No input is modified; output and scratch freshly allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: rows
+    role: tile size (rows per program of the apply kernel)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints (apply kernel only)
+    default_present: true
+  - name: _STEP
+    role: fixed module constant — rows per sub-tile load in kernels 1 and 3 (not tuned)
+    default_present: true
+  - name: _K1_BLOCK_N
+    role: fixed module constant — rows per program of kernel 1 (not tuned); determines NUM_BLOCKS
+    default_present: true
+  - name: C_P2 / BLOCK_B
+    role: derived power-of-two padding widths (ConstInt); not tunable
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner on apply_batch_norm_kernel only (line 129). tune_or_cached over
+  _SEARCH_SPACE (impl_cutile.py 12-16: rows in {8,16,32,64} x occupancy in {4,8,16}),
+  keyed by (N, C, dtype) (lines 163-174). Default at line 11 (rows=16, occupancy=8).
+  Kernels 1 and 2 use the fixed constants _STEP = 8 and _K1_BLOCK_N = 64 (lines 20-21)
+  and plain ct.launch without hints. Winner exported via _last_autotune_config (175-179)
+  and get_last_config (192-193); occupancy applied via kernel_with_hints (line 184).
+  The search-space rows values are all multiples of _STEP, which the static
+  `range(ROWS // STEP)` loop requires.
+implementation_freedoms_observed: >
+  Rows per program and occupancy of the apply kernel; the partial-block granularity and
+  sub-tile height of the statistics kernel; whether the three kernels are fused into
+  fewer launches; reduction tree shape inside tiles; padding widths. block_size keyword
+  unused.
+algorithm_constraints_observed: >
+  Input is read twice (statistics pass and apply pass); statistics reduced in fp32 via
+  block partials followed by a per-channel combine; variance from sums and sums of
+  squares (one-pass formula) clamped at zero; inv_std = rsqrt(var + eps); apply pass is
+  y = x*scale + shift with scale = inv_std*gamma, shift = beta - mean*scale in fp32;
+  output in the input dtype; fp32 scratch for partials, mean and inv_std; biased
+  (1/N) variance; no running statistics.
+fq_boundary:
+  bytes_expr: "3 * N * C * dtype_size + 2 * C * dtype_size"
+  flops_expr: "4 * N * C"
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 21-23. bytes = two reads of input (statistics
+    + apply) and one write of output plus gamma and beta — this matches the two-pass
+    structure that run() actually executes. It omits the fp32 scratch traffic
+    (block partials 2*NUM_BLOCKS*C*4 bytes written then read, mean/inv_std 2*C*4 bytes),
+    which is small relative to N*C for the sweep. run() has no cast/pack/copy of inputs,
+    so the timed boundary (allocations + three kernels) matches the formula up to the
+    scratch traffic.
+notes_for_review:
+  - Variance uses E[x^2] - mean^2 in fp32 (line 84) with a clamp at 0; the reference computes a centred variance, so results differ at the fp32 rounding level (config atol/rtol 1e-2 absorbs it).
+  - Only the apply kernel is autotuned; the statistics kernels use fixed module constants (lines 20-21), so the statistics pass's tiling is not explored (audit only).
+  - Kernel 2 relies on ct.gather returning padding_value for index -1 (lines 76-78).
+  - C is a ConstInt in kernels 1 and 3 (lines 34, 101) and C_P2/BLOCK_B are ConstInt (lines 35, 67, 102), so each distinct (C, NUM_BLOCKS) compiles separate specialisations; BLOCK_B grows with N (next pow2 of NUM_BLOCKS), so large N widens the per-channel gather in kernel 2.
+  - The reference N == 1 branch (impl_torch.py 7-8) is not mirrored in cuTile; with N == 1 the cuTile path would yield var = 0 and y = beta, which coincides with the reference, but it is not exercised (N >= 1000).
+  - Four scratch allocations happen inside the timed run() on every call.
+  - block_size keyword unused.

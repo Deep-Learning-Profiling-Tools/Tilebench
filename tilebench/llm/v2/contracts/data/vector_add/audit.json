@@ -1,0 +1,157 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "vector_add",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/vector_add/impl_triton.py",
+      "functions": [
+        {
+          "name": "add_kernel",
+          "lines": [
+            8,
+            16
+          ]
+        },
+        {
+          "name": "_add_kernel_autotuned",
+          "lines": [
+            19,
+            28
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            31,
+            45
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            48,
+            52
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/vector_add/impl_cutile.py",
+      "functions": [
+        {
+          "name": "add_kernel",
+          "lines": [
+            21,
+            26
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            32,
+            58
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            61,
+            62
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/vector_add/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "output[i] = x[i] + y[i] in the native dtype over n = x.numel() masked elements into a fresh empty_like(x) (impl_triton.py 13-16, 32-33).",
+      "cutile": "c[i] = a[i] + b[i] in the native dtype over ceil(n/tile) tiles into a fresh empty_like(x) (impl_cutile.py 24-26, 33-34).",
+      "note": "Both realise x + y (impl_torch.py 2) for fp16/bf16/fp32/int8; int8 inputs are generator-bounded to [-32, 32] so no wraparound occurs (tensors.py 59-62)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch, grid = ceil(n/block) (35, 39).",
+      "cutile": "One kernel, one launch, grid = (ceil(n/tile), 1, 1) (55).",
+      "note": "Identical single-stage elementwise map."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Blocks independent (10-16).",
+      "cutile": "Tiles independent (23-26).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (8-16).",
+      "cutile": "None (21-26).",
+      "note": "Purely elementwise."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "No upcast; a single native-dtype add (16).",
+      "cutile": "No upcast; a single native-dtype add (26).",
+      "note": "Native-dtype add on both sides, identical to the reference; int8 stays exact."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "n_elements = x.numel(); torch.empty_like(x) (32-33).",
+      "cutile": "torch.empty_like(x); n_elements = x.numel() (33-34).",
+      "note": "Only the output allocation inside run() on both sides; no copy, cast or cached state; neither validates y against x."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None (whole file).",
+      "cutile": "None (whole file).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x, y read-only; fresh output each call (33).",
+      "cutile": "x, y read-only; fresh output each call (33); tuning launches overwrite output (43), rewritten by the final launch.",
+      "note": "No input mutation; idempotent; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides. Tail handling differs (Triton masks, 13-16; cuTile loads/stores without padding_mode, 24-26, relying on the swept n being a multiple of the tile), a legality detail that the contract resolves by requiring correct handling of arbitrary n."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 3",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "n is the case parameter and equals x.numel() (generator tensors.py 58-66). Both timed run() bodies allocate the output and launch one kernel that reads x and y once and writes the output once, exactly what bytes_expr counts (config.yaml 15). flops_expr = n is exact (one add per element)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "The cuTile reference issues its loads and stores without a padding mode (impl_cutile.py 24-26) and is only correct because every swept n is a multiple of its tile; the contract requires correct bounds handling for arbitrary n. Decide whether the reference should be hardened to match (non-blocking: no swept case is affected)."
+  ],
+  "contract_sha256": "72c76e7852f716a0a853e1470aa0886422931c78a7371d400f66063907b8cf1b",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "c9f91cd5cbc91f509ba6ee3e18e8978cbc4ffbb98dd4cb8787a65852d8174f43",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

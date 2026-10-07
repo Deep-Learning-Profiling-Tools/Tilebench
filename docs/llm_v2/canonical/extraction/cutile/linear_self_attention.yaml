@@ -1,0 +1,352 @@
+operator: linear_self_attention
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/linear_self_attention/impl_cutile.py
+    functions:
+      - name: _phi_tile
+        lines: [39, 40]
+        role: helper
+      - name: phi_kernel
+        lines: [43, 53]
+        role: kernel
+      - name: kv_gemm_kernel
+        lines: [56, 92]
+        role: kernel
+      - name: z_kernel
+        lines: [95, 117]
+        role: kernel
+      - name: out_gemm_kernel
+        lines: [120, 169]
+        role: kernel
+      - name: _launch_z
+        lines: [176, 182]
+        role: host-driver
+      - name: run
+        lines: [185, 297]
+        role: host-driver
+      - name: get_last_config
+        lines: [300, 301]
+        role: helper
+      - name: _DEFAULT_KV_CONFIG / _DEFAULT_OUT_CONFIG / _GEMM_SEARCH_SPACE (module constants)
+        lines: [13, 36]
+        role: tuner
+      - name: _kv_tuner / _out_tuner (CutileAutotuner instances)
+        lines: [172, 173]
+        role: tuner
+  - path: tilebench/benchmarks/operators/linear_self_attention/impl_torch.py
+    functions:
+      - name: _phi
+        lines: [4, 7]
+        role: helper
+      - name: run
+        lines: [10, 30]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/linear_self_attention/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_linear_self_attention_inputs
+        lines: [500, 518]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Non-causal linear attention with the feature map phi(x) = x + 1 for
+  x > 0, exp(x) otherwise (impl_torch.py lines 4-7, torch.where). With
+  Q, K, V of shape (M, D) fp32 the reference (lines 10-30) does: make the
+  three inputs contiguous; phi_q = phi(Q), phi_k = phi(K); temporarily set
+  torch.backends.cuda.matmul.allow_tf32 = True; S = phi_k^T @ V (D, D);
+  Z = phi_k.sum(dim=0) (D,); result = (phi_q @ S) / ((phi_q @ Z)[:, None]
+  + eps) of shape (M, D); then restore the TF32 flag. Every matmul in the
+  reference is therefore allowed to use TF32, the sum for Z is an fp32
+  torch reduction, and eps is added to the per-row denominator after the
+  dot product. The generator (tensors.py lines 500-518) requires fp32,
+  draws Q, K, V uniform in [-3, 3] of shape (M, D), and returns
+  (q, k, v, float(eps)); config.yaml sweeps M and D with fp32 only and
+  eps = 1e-6, with a loosened verify tolerance.
+run_signature:
+  text: "def run(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, eps: float = 1e-6, block_size: int = None, autotune: bool = False, **kwargs):"
+  positional_inputs: [Q, K, V, eps]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor O of shape (M, D), dtype float32
+  get_last_config: present
+inputs:
+  - name: Q
+    shape: "(M, D)"
+    dtype: float32 (asserted at line 196)
+    layout: contiguous row-major (Q.contiguous() at line 198 is a no-op for generator tensors)
+    mutated_in_place: false
+    notes: consumed only by phi_kernel (line 211); never read by the GEMMs directly
+  - name: K
+    shape: "(M, D)"
+    dtype: float32
+    layout: contiguous row-major (line 199)
+    mutated_in_place: false
+    notes: consumed only by phi_kernel (line 212)
+  - name: V
+    shape: "(M, D)"
+    dtype: float32
+    layout: contiguous row-major (line 200)
+    mutated_in_place: false
+    notes: consumed by kv_gemm_kernel as the (BLOCK_K, BLOCK_N) right operand tile over the sequence axis (lines 78-83)
+  - name: eps
+    shape: scalar
+    dtype: python float, passed as ct.Constant[float] to out_gemm_kernel (line 124), i.e. a compile-time constant
+    layout: n/a
+    mutated_in_place: false
+    notes: added to the per-row denominator before the division (line 169)
+outputs:
+  - name: O
+    shape: "(M, D)"
+    dtype: float32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: Q, K, V = Q.contiguous(), K.contiguous(), V.contiguous()
+    lines: [198, 200]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no-ops for the generator's contiguous tensors; no transpose, cast or packing of any operand on the host
+  - description: allocate PhiQ (M, D), PhiK (M, D), S (D, D), Z (D,), O (M, D), all fp32, with torch.empty / empty_like
+    lines: [203, 207]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      allocated afresh on every call; nothing is keyed by tensor identity or
+      data_ptr; the only caches in the file are the CutileAutotuner
+      per-shape tuned-config caches and the memoised replace_hints kernels
+      (cutile_autotune.py lines 80-81), neither of which holds operand data
+stages:
+  - id: s0
+    description: contiguity no-ops and allocation of PhiQ, PhiK, S, Z, O (see preprocessing)
+    kind: allocation
+    lines: [198, 207]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: five uninitialised fp32 buffers PhiQ, PhiK, S, Z, O
+  - id: s1
+    description: >
+      phi_kernel on Q: 2-D grid over (M, D) tiles with fixed, non-tuned
+      tile constants hard-coded in run (lines 210-211); each program loads
+      its (BLOCK_M, BLOCK_D) tile of Q with zero padding, applies
+      where(x > 0, x + 1, exp(x)) (lines 39-40) and stores PhiQ. Zero
+      padding maps out-of-range elements to phi(0) = 1, but those positions
+      are clipped by the store.
+    kind: kernel
+    lines: [43, 53]
+    launches: "ceil(M/PHI_TILE_M) * ceil(D/PHI_TILE_D)"
+    depends_on: [s0]
+    fusable_with: [s5]
+    produces: PhiQ (M, D) fp32 global scratch
+  - id: s2
+    description: phi_kernel on K, same kernel and grid as s1 (line 212), producing PhiK.
+    kind: kernel
+    lines: [43, 53]
+    launches: "ceil(M/PHI_TILE_M) * ceil(D/PHI_TILE_D)"
+    depends_on: [s0]
+    fusable_with: [s3, s4]
+    produces: PhiK (M, D) fp32 global scratch
+  - id: s3
+    description: >
+      kv_gemm_kernel: S = PhiK^T @ V. 2-D grid over (D/BLOCK_M, D/BLOCK_N)
+      output tiles of S (lines 233-246). Each program keeps a (BLOCK_M,
+      BLOCK_N) fp32 accumulator and walks the sequence axis M in BLOCK_K
+      steps with a runtime-bounded while loop (lines 70-90): it loads the
+      (BLOCK_K, BLOCK_M) tile of PhiK (rows of M, columns of D) and the
+      (BLOCK_K, BLOCK_N) tile of V, both zero padded, casts both to
+      tfloat32, transposes the PhiK tile in registers (ct.transpose, line
+      86) and issues ct.mma. The accumulator is stored to S in fp32 (line
+      92). No host-side transpose of PhiK is performed.
+    kind: kernel
+    lines: [56, 92]
+    launches: "ceil(D/BLOCK_M) * ceil(D/BLOCK_N)"
+    depends_on: [s2]
+    fusable_with: [s4]
+    produces: S (D, D) fp32 global scratch
+  - id: s4
+    description: >
+      z_kernel: Z = column sums of PhiK over M. 1-D grid over D chunks with
+      fixed, non-tuned tile constants hard-coded in _launch_z (lines
+      176-182; call at line 248). Each program holds a (BLOCK_D,) fp32
+      accumulator and walks M in BLOCK_M steps with a runtime-bounded while
+      loop (lines 106-115), loading the (BLOCK_M, BLOCK_D) tile of PhiK
+      with zero padding and adding ct.sum(tile, axis=0). Stored to Z (line
+      117). Computed in full fp32 (no TF32), matching the reference's
+      torch sum.
+    kind: kernel
+    lines: [95, 117]
+    launches: "ceil(D/Z_TILE_D)"
+    depends_on: [s2]
+    fusable_with: [s3]
+    produces: Z (D,) fp32 global scratch
+  - id: s5
+    description: >
+      out_gemm_kernel: O = (PhiQ @ S) / (PhiQ . Z + eps). 2-D grid over
+      (M/BLOCK_M, D/BLOCK_N) output tiles (lines 282-295). Each program
+      keeps a (BLOCK_M, BLOCK_N) fp32 numerator accumulator and a
+      (BLOCK_M, 1) fp32 denominator accumulator and walks the feature axis
+      D in BLOCK_K steps with a runtime-bounded while loop (lines 136-167):
+      loads the (BLOCK_M, BLOCK_K) tile of PhiQ, the (BLOCK_K, BLOCK_N)
+      tile of S and the (BLOCK_K,) slice of Z (all zero padded); numer =
+      mma(q as tfloat32, s as tfloat32, numer); denom += sum over the
+      BLOCK_K axis of q * z (elementwise, full fp32, q NOT cast to TF32,
+      lines 162-166). Epilogue stores numer / (denom + eps) (line 169).
+      The denominator for a row block is recomputed by every N-block
+      program of that row block.
+    kind: kernel
+    lines: [120, 169]
+    launches: "ceil(M/BLOCK_M) * ceil(D/BLOCK_N)"
+    depends_on: [s1, s3, s4]
+    fusable_with: [s1]
+    produces: O (M, D) fp32 (final result)
+algorithm_family: >
+  Materialised-feature-map linear attention in five launches: two
+  elementwise phi kernels writing phi(Q) and phi(K) to global scratch; a
+  tiled TF32 tensor-core GEMM reducing over the sequence axis to form the
+  (D, D) state S = phi(K)^T V; a separate column-sum kernel for the
+  normaliser Z = sum_m phi(K); and a tiled TF32 GEMM over the feature axis
+  for phi(Q) S with the per-row denominator phi(Q) . Z accumulated in the
+  same loop and the division fused into the epilogue. The structure is
+  phi -> {kv, z} -> out.
+reduction_scan_sort_structure: >
+  s3 reduces over M sequentially in BLOCK_K-row tiles with ct.mma
+  accumulation (intra-tile order internal to the MMA). s4 reduces over M
+  sequentially per tile, with an intra-tile ct.sum over the BLOCK_M rows
+  (internal tree order unclear), chunked across programs by D only. s5
+  reduces over D sequentially in BLOCK_K steps for both the numerator
+  (mma) and the denominator (per-tile ct.sum over BLOCK_K then running
+  fp32 add). eps is added once after the full denominator reduction. No
+  atomics, no split-K, no cross-program reduction anywhere.
+precision:
+  input_dtypes: [fp32]
+  accumulation: >
+    fp32 everywhere: phi in fp32; S accumulated in fp32 from tfloat32
+    operands; Z in fp32 from fp32 operands; numerator in fp32 from
+    tfloat32 operands; denominator in fp32 from fp32 operands
+  output_dtype: float32
+  special_modes: >
+    TF32 operand rounding (ct.astype to ct.tfloat32 in registers) for both
+    GEMMs (lines 86-87, 158-159), mirroring the reference's allow_tf32 =
+    True; the denominator dot product is computed in full fp32 by
+    elementwise multiply and sum rather than through the tensor core,
+    whereas the reference computes phi_q @ Z as a matmul under
+    allow_tf32 (whether a GEMV actually uses TF32 there is unclear);
+    eps is a compile-time constant of out_gemm_kernel
+  masking_or_padding_values: >
+    PaddingMode.ZERO on every load in all four kernels (lines 51, 76, 82,
+    112, 142, 148, 154); zero rows/columns contribute nothing to the MMAs
+    and sums; phi of a zero-padded element is 1 but is never stored; all
+    stores are clipped to the buffer shapes
+intermediate_storage: >
+  Four global fp32 scratch buffers allocated inside run() on every call and
+  released when run() returns (Python lifetime): PhiQ (M, D), PhiK (M, D),
+  S (D, D), Z (D,). PhiK is read by two kernels (s3 and s4); PhiQ is read
+  once per N-block of s5; S is read once per M-block of s5.
+mutation_rules: >
+  Q, K, V are never written (contiguous() returns the same storage). All
+  scratch and the output are allocated per call, so repeated calls are
+  idempotent. In autotune mode the exhaustive search launches the real
+  kernels on the real buffers (S and O are overwritten repeatedly with the
+  same values) before the final launch; this is idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: kv_block_m
+    role: tile size (rows of S per program in s3; ConstInt)
+    default_present: true
+  - name: kv_block_n
+    role: tile size (columns of S per program in s3; ConstInt)
+    default_present: true
+  - name: kv_block_k
+    role: tile size (sequence rows per reduction step in s3; ConstInt)
+    default_present: true
+  - name: kv_occupancy
+    role: occupancy hint for s3 via replace_hints
+    default_present: true
+  - name: out_block_m
+    role: tile size (rows of O per program in s5; ConstInt)
+    default_present: true
+  - name: out_block_n
+    role: tile size (columns of O per program in s5; ConstInt)
+    default_present: true
+  - name: out_block_k
+    role: tile size (feature columns per reduction step in s5; ConstInt)
+    default_present: true
+  - name: out_occupancy
+    role: occupancy hint for s5 via replace_hints
+    default_present: true
+  - name: phi tile constants (BLOCK_M, BLOCK_D of phi_kernel)
+    role: fixed, non-tuned tile constants hard-coded at lines 210-212
+    default_present: true
+  - name: z tile constants (BLOCK_M, BLOCK_D of z_kernel)
+    role: fixed, non-tuned tile constants hard-coded in _launch_z lines 176-182
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused
+    default_present: true
+autotune_mechanism: >
+  Two independent CutileAutotuner instances (lines 172-173), one for
+  kv_gemm_kernel and one for out_gemm_kernel, each running
+  ct.tune.exhaustive_search (cutile_autotune.py lines 120-125) over the
+  shared _GEMM_SEARCH_SPACE (lines 30-36) with their own grid_fn/args_fn/
+  hints_fn closures (lines 215-229, 251-265), cached per shape_key
+  (M, D, dtype). The kv search runs after the phi launches and before the
+  z launch; the out search runs after S and Z exist. Winners are applied
+  via kernel_with_hints (lines 233, 282) and ConstInt tile arguments.
+  phi_kernel and z_kernel are never tuned and have no hints. Default path
+  copies _DEFAULT_KV_CONFIG / _DEFAULT_OUT_CONFIG (lines 231, 280).
+  get_last_config returns kv_* and out_* prefixed keys (lines 266-276,
+  300-301). A source comment (lines 28-29) states the tile shapes mirror
+  the Triton implementation's; that file was not opened. Audit only.
+implementation_freedoms_observed: >
+  Tile shapes and occupancy of both GEMMs; whether phi is materialised in
+  global scratch or fused into the GEMM/column-sum loads; whether Z is a
+  separate kernel or a by-product of the S GEMM mainloop; loop form
+  (runtime while versus compile-time trip count); whether the denominator
+  is recomputed per N-block or computed once per row block; whether the
+  PhiK transpose happens in registers or via a transposed load; grid
+  orders; whether eps is compile-time or runtime.
+algorithm_constraints_observed: >
+  Logical structure phi(Q), phi(K) -> S = phi(K)^T V and Z = colsum
+  phi(K) -> O = (phi(Q) S) / (phi(Q) . Z + eps); phi is exactly
+  where(x > 0, x + 1, exp(x)) in fp32; both GEMMs use TF32 operands with
+  fp32 accumulation; Z and the denominator are fp32 reductions; eps is
+  added once after the denominator reduction and the division is fp32;
+  output is a fresh fp32 (M, D) tensor; no operand is transposed, packed
+  or cached across calls on the host; all intermediates are produced and
+  consumed inside run().
+fq_boundary:
+  bytes_expr: "(4 * M * D + D * D + D) * dtype_size"
+  flops_expr: "4 * M * D * D + 3 * M * D"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed boundary contains everything: the five launches, the
+    allocations and the contiguous() no-ops; there is no untimed
+    preprocessing and no prepacked operand, so the boundary itself is
+    consistent. The formulas are the fused-ideal lower bound, not the
+    implementation's traffic: bytes counts Q, K, V read once and O written
+    once (4 M D) plus S and Z once each (D^2 + D), but the implementation
+    additionally writes PhiQ and PhiK (2 M D), reads PhiK twice (s3 and
+    s4), reads PhiQ once per N-block of s5 and re-reads S per M-block of
+    s5. flops counts 2 M D^2 for each GEMM plus 3 M D for phi(Q), phi(K)
+    and Z, and omits the per-row denominator dot product (2 M D) and the
+    final division (M D) that s5 performs.
+notes_for_review:
+  - No cache keyed by tensor identity or data_ptr exists in this file; the only cross-call state is the CutileAutotuner tuned-config and hint-kernel caches.
+  - phi(Q) and phi(K) are materialised in global scratch and re-read; the byte formula does not count that traffic.
+  - The kv and out K-loops are runtime-bounded while loops (num tiles from the plain M / D arguments), not compile-time range loops.
+  - The denominator is formed in full fp32 elementwise arithmetic, not TF32 tensor-core, while the numerator uses TF32; the reference computes phi_q @ Z under allow_tf32.
+  - eps is a ct.Constant[float] parameter of out_gemm_kernel, so that kernel is specialised per eps value.
+  - z_kernel parallelises only over D chunks (ceil(D / fixed tile)); the reduction over M is fully sequential per program.
+  - The denominator for a row block is recomputed redundantly by every N-block program of s5.
+  - The source comment at lines 28-29 refers to the Triton implementation's tile shapes; not verified here because impl_triton.py was not read.
+  - flops_expr omits the denominator GEMV and the division; bytes_expr omits scratch traffic.

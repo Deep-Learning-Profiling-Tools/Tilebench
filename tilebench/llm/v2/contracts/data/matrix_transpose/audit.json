@@ -1,0 +1,155 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "matrix_transpose",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/matrix_transpose/impl_triton.py",
+      "functions": [
+        {
+          "name": "transpose_kernel",
+          "lines": [
+            8,
+            31
+          ]
+        },
+        {
+          "name": "_transpose_kernel_autotuned",
+          "lines": [
+            34,
+            43
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            46,
+            66
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            69,
+            73
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/matrix_transpose/impl_cutile.py",
+      "functions": [
+        {
+          "name": "transpose_kernel",
+          "lines": [
+            21,
+            26
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            32,
+            58
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            61,
+            62
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/matrix_transpose/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            7
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "output[j, i] = x[i, j] into a fresh (n, m) buffer of x's dtype, one read and one write per element (impl_triton.py 27-31, 48).",
+      "cutile": "output[j, i] = x[i, j] into a fresh (n, m) buffer of x's dtype, one read and one write per element (impl_cutile.py 25-26, 34).",
+      "note": "Both realise the reference x.transpose(0, 1).contiguous() (impl_torch.py 7) as a materialised out-of-place transpose."
+    },
+    "stages": {
+      "status": "mapping-only",
+      "triton": "One kernel over a 2-D grid of square tiles; each program loads an element tile with explicit strides and masks and stores the same values with row/column pointer arithmetic swapped, leaving any on-chip re-layout to the compiler (impl_triton.py 23-31).",
+      "cutile": "One kernel over a 2-D grid of square tiles; each CTA loads a 2-D tile, transposes it in registers with the DSL transpose primitive and stores it at swapped block coordinates (impl_cutile.py 25-26).",
+      "note": "Same single-stage tiled transpose; the difference is only the primitive used for the in-tile re-layout (address swap vs explicit tile transpose). The contract pins neither."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Tiles are independent; no inter-program dependency (impl_triton.py 20-31).",
+      "cutile": "Tiles are independent; no inter-CTA dependency (impl_cutile.py 23-26).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None (impl_triton.py 8-31).",
+      "cutile": "None (impl_cutile.py 21-26).",
+      "note": "Pure index permutation."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "No arithmetic; bit-exact movement in the input dtype (impl_triton.py 28, 31).",
+      "cutile": "No arithmetic; bit-exact movement in the input dtype (impl_cutile.py 25-26).",
+      "note": "Same dtype in and out on both sides."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Reads m, n = x.shape, allocates output (n, m), passes strides of x and output as kernel arguments (impl_triton.py 47-48, 54, 62).",
+      "cutile": "Reads m, n = x.shape, allocates output (n, m), passes x as-is (impl_cutile.py 33-34, 56).",
+      "note": "Only the output allocation; no copy, cast or re-layout of x on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output (impl_triton.py 48).",
+      "cutile": "None beyond the output (impl_cutile.py 34).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x is read-only; fresh output every call (impl_triton.py 28, 48).",
+      "cutile": "x is read-only; fresh output every call (impl_cutile.py 25, 34).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "m * n * dtype_size * 2",
+    "flops_expr": "0",
+    "consistent": "true",
+    "note": "Both timed run() bodies read m*n elements once and write m*n elements once with no preprocessing traffic and nothing prepacked, exactly what bytes_expr counts (config.yaml 18). flops_expr is 0 (config.yaml 17), so no compute intensity is defined; this is correct for a pure data-movement operator."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "b3e0e9268025251e35d3ea31f72e1190ead86f30da5de3ffd5b1745fd3ec8578",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "e758844a0f0b38492fb50d5fc4273ec9a3aed55765ee895fa66f36b86c5c8a93",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

@@ -1,0 +1,270 @@
+operator: top_k_selection
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/top_k_selection/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _BLOCKS / _OCC_SPACE / _last_config / _autotune_cache (module constants)
+        lines: [10, 16]
+        role: tuner
+      - name: _next_pow2
+        lines: [19, 20]
+        role: helper
+      - name: _make_bitonic_stages
+        lines: [23, 31]
+        role: helper
+      - name: _STAGES_1024 / _STAGES_2048 / _STAGES_4096 (precomputed stage tables)
+        lines: [34, 36]
+        role: helper
+      - name: _sort_desc_1024
+        lines: [39, 57]
+        role: helper
+      - name: _sort_desc_2048
+        lines: [60, 78]
+        role: helper
+      - name: _sort_desc_4096
+        lines: [81, 99]
+        role: helper
+      - name: block_topk_kernel_b1024
+        lines: [102, 116]
+        role: kernel
+      - name: block_topk_kernel_b2048
+        lines: [119, 133]
+        role: kernel
+      - name: block_topk_kernel_b4096
+        lines: [136, 150]
+        role: kernel
+      - name: KERNELS (width -> kernel map)
+        lines: [153, 157]
+        role: helper
+      - name: _tuners (one CutileAutotuner per width)
+        lines: [159, 159]
+        role: tuner
+      - name: _resolve_block
+        lines: [162, 173]
+        role: helper
+      - name: _run_hierarchy
+        lines: [176, 193]
+        role: host-driver
+      - name: _tune
+        lines: [196, 238]
+        role: tuner
+      - name: run
+        lines: [241, 276]
+        role: host-driver
+      - name: get_last_config
+        lines: [279, 280]
+        role: helper
+  - path: tilebench/benchmarks/operators/top_k_selection/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/top_k_selection/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_top_k_selection_inputs
+        lines: [519, 533]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CRASH_ISOLATION_TIMEOUT_SEC
+        lines: [67, 67]
+        role: tuner
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+functional_semantics: >
+  Select the k largest values of a 1D fp32 vector of length N and return
+  them sorted in descending order; values only, no indices. Reference
+  (impl_torch.py lines 4-5): torch.topk(input.contiguous(), k, largest=True,
+  sorted=True).values. Generator (tensors.py lines 519-533): input =
+  torch.randn(N) in fp32 (any other dtype raises), returned with int N and
+  int k. config.yaml sweeps N over five sizes and k over four values with
+  dtype fp32 only; verify atol/rtol 1e-5 (lines 13-15).
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, k: int, block_size: int = None, autotune: bool = False, **kwargs):  # lines 241-248"
+  positional_inputs: [input, N, k]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: 1D fp32 tensor of shape (k,) -- the slice out[0, :k] of the final level's (1, K2) buffer (line 190), i.e. a view of a buffer allocated inside run, not a view of the input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: fp32 (asserted, line 252)
+    layout: contiguous (input.contiguous(), line 255; a no-op for the generator's tensor); must be on CUDA and 1D with input.shape[0] == N (asserts, lines 249-251)
+    mutated_in_place: false
+    notes: null
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: validated against input.shape[0]; the hierarchy itself uses x.numel() (lines 180, 202).
+  - name: k
+    shape: scalar
+    dtype: python int, 1 <= k <= N asserted (line 253)
+    layout: n/a
+    mutated_in_place: false
+    notes: rounded up to K2 = next power of two >= k (line 256) for the per-block candidate width; the final slice returns exactly k.
+outputs:
+  - name: result
+    shape: "(k,)"
+    dtype: fp32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: x = input.contiguous(); K2 = _next_pow2(k)
+    lines: [255, 256]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: K2 is passed to the kernels as a ConstInt, so kernels are specialised per K2 (and per block width, which selects one of three kernels).
+  - description: default path block-width resolution via _resolve_block (smallest supported width >= max(requested, 2*K2); ValueError if none)
+    lines: [162, 173]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: the width must be at least 2*K2 so that each level at least halves the candidate count.
+stages:
+  - id: s1
+    description: >
+      Level-1 block top-K2: block_topk_kernel_b<B> with grid = (nb, 1, 1),
+      nb = ceil(n/B) (lines 184-187). Each CTA loads a (B,) tile of the
+      current candidate vector with NEG_INF padding (lines 106-111),
+      fully sorts it in descending order with a static bitonic sorting
+      network (_sort_desc_<B>, lines 39-99: for every (G, j, ksz) stage the
+      tile is viewed as (G, 2, j), the two j-wide halves of each group are
+      compared with ct.minimum/ct.maximum, and the per-group direction mask
+      ((g*2j) & ksz) == 0 chooses hi-first (descending) or lo-first;
+      halves are re-concatenated and flattened), extracts the first K2
+      (largest) elements (line 115) and stores them as row bid of a
+      freshly allocated (nb, K2) fp32 buffer (lines 116, 185).
+    kind: kernel
+    lines: [176, 193]
+    launches: "1 per level (grid = ceil(n/B) CTAs)"
+    depends_on: []
+    fusable_with: none
+    produces: out level buffer (nb, K2) fp32, allocated per level inside run
+  - id: s2
+    description: >
+      Subsequent levels: the (nb, K2) buffer is flattened to (nb*K2,)
+      (line 192) and fed back to the same kernel (same B, same K2) until a
+      level has nb == 1 (lines 183-193); then out[0, :k] of that last
+      (1, K2) buffer is returned (line 190). Because B >= 2*K2, each level
+      shrinks the candidate count by at least 2x, so the recursion
+      terminates; the number of levels is the smallest L with
+      ceil(... ceil(N/B)*K2/B ...) reaching a single block.
+    kind: kernel
+    lines: [183, 193]
+    launches: "repeated until a single block remains (number of levels depends on N, B and K2)"
+    depends_on: [s1]
+    fusable_with: none
+    produces: one (nb_l, K2) fp32 buffer per level; the final (1, K2) buffer backs the returned slice
+algorithm_family: >
+  Hierarchical (tournament) top-k by block-wise bitonic sort and
+  truncation: each level fully sorts fixed-width blocks with a static
+  bitonic network, keeps each block's top K2 = next_pow2(k) candidates, and
+  recurses on the concatenated candidates until one block remains; the
+  final sorted block's first k entries are the answer. Exact, because the
+  top-k of a union is contained in the union of per-block top-k sets with
+  K2 >= k.
+reduction_scan_sort_structure: >
+  Sort network: standard bitonic sorter of width B (power of two) with
+  log2(B)*(log2(B)+1)/2 compare-exchange stages generated by
+  _make_bitonic_stages (lines 23-31): for kb = 1..log2(B) (merge size ksz =
+  2^kb) and j = 2^(kb-1), 2^(kb-2), ..., 1 (partner distance), G = B/(2j)
+  groups; element t of group g is compared with element t + j; direction per
+  group alternates with bit ksz of the group's base offset so that the
+  final stage (ksz = B) produces a fully descending block. The whole
+  network is unrolled at compile time via ct.static_iter over the
+  precomputed stage tuple. Selection: after the sort, the K2-prefix is the
+  block's top-K2 in descending order; levels are combined by re-sorting the
+  concatenated prefixes (no merge network, no heap). Tie handling: values
+  only, so ties are unobservable; ct.minimum/ct.maximum keep both copies of
+  equal values, so duplicates survive with their multiplicity. NEG_INF
+  padding (line 110) fills partial blocks and cannot outrank any finite
+  value; padded -inf candidates can propagate into intermediate levels but
+  never into the final top-k as long as k <= N. NaN behaviour is not
+  defined by the source (ct.minimum/ct.maximum semantics).
+precision:
+  input_dtypes: [fp32]
+  accumulation: n/a (comparisons and moves only; no arithmetic on values)
+  output_dtype: fp32
+  special_modes: exact selection; result is bitwise a subset of the input values
+  masking_or_padding_values: "NEG_INF padding on every block load (lines 110, 127, 144)"
+intermediate_storage: >
+  One fp32 (nb_l, K2) buffer per level, allocated with torch.empty inside
+  the hierarchy loop on every call (line 185); each is read by the next
+  level and dropped; the last one (shape (1, K2)) is kept alive by the
+  returned slice. Autotune path: one (nb, K2) scratch per candidate width
+  during tuning (line 211).
+mutation_rules: >
+  input is not modified. Every call allocates fresh level buffers, so
+  repeated calls are idempotent. The returned tensor is a view into a
+  run-allocated buffer (not into input).
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: block
+    role: tile size (block width B of the bitonic network; selects one of three width-specialised kernels; must be >= 2*K2)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  Custom _tune (lines 196-238) around ct.tune.exhaustive_search. For every
+  supported width B with B >= 2*K2 (lines 206-208) it allocates a
+  first-level scratch (nb, K2) (line 211) and calls
+  ct.tune.exhaustive_search directly (lines 213-221) with an
+  occupancy-only search space (_OCC_SPACE, line 13), grid (nb, 1, 1), the
+  raw kernel _tuners[B].kernel, args (x, scratch, K2), hints_fn applying
+  occupancy, and single_run_timeout_sec = CRASH_ISOLATION_TIMEOUT_SEC; the
+  width is thus chosen by the outer Python loop by comparing
+  result.best.mean_us across widths (lines 223-229), not by cuTile. Only
+  the first level's kernel time is measured, not the full multi-level
+  hierarchy. The winner (block, occupancy) is cached in _autotune_cache
+  keyed by (N, K2, dtype) (lines 197-200, 237). CutileAutotuner is used
+  only as the holder of the raw kernel and for the memoised
+  kernel_with_hints launch (line 178); tune_or_cached is not used. On the
+  default path the width comes from _resolve_block (honouring block_size
+  rounded up) and occupancy from _DEFAULT_CONFIG (lines 262-265).
+  get_last_config reports block, occupancy and K2 and is written on BOTH
+  paths (lines 267-274). Audit only.
+implementation_freedoms_observed: >
+  Block width and occupancy; the three width-specialised kernels and sort
+  helpers are hand-duplicated only because tile shapes must be static (a
+  single parametrised kernel would be equivalent); per-level buffer reuse
+  vs fresh allocation; the number of levels follows from N, B and K2; a
+  different exact selection scheme (e.g. radix select, per-block
+  partial-sort followed by a merge) would be a different algorithm family.
+algorithm_constraints_observed: >
+  Keep: exact top-k of a 1D fp32 vector, output sorted descending, values
+  only, length exactly k; candidate width K2 = next_pow2(k) with per-block
+  width >= 2*K2 so each level strictly shrinks; -inf padding for partial
+  blocks; a multi-level hierarchy of identical block kernels fed by the
+  previous level's concatenated top-K2 prefixes; the final level is a single
+  block whose sorted prefix is returned. Duplicates preserved with
+  multiplicity; no arithmetic on values.
+fq_boundary:
+  bytes_expr: "(N + k) * dtype_size"
+  flops_expr: "N"
+  consistent_with_timed_boundary: true
+  notes: >
+    Counts one read of the input and one write of the k results; run()
+    performs no extra preprocessing (contiguous() is a no-op, K2 is host
+    arithmetic). The hierarchical scheme additionally writes and re-reads
+    ceil(N/B)*K2 candidates at level 1 and geometrically fewer at later
+    levels, and allocates each level buffer inside run(); these are
+    properties of the algorithm, not uncounted preprocessing, and the
+    formula is the minimal-traffic bound. flops_expr = N is nominal (the
+    bitonic network performs far more compare-exchanges).
+notes_for_review:
+  - get_last_config returns a non-None dict on the default path as well (lines 267-274), unlike the convention used by other operators where it is written only after autotuning.
+  - The returned tensor is the slice out[0, :k] of a (1, K2) buffer, not an independently allocated (k,) tensor.
+  - A fresh (nb, K2) buffer is allocated with torch.empty at every level on every call (line 185).
+  - The tuner times only the first-level kernel; the cost of later levels (which depends on B and K2) is not part of the selection criterion.
+  - The three sort helpers and three kernels are copies that differ only in the static width; the stage tables are precomputed at import.
+  - block_size IS honoured on the default path (rounded up to a supported width and to >= 2*K2), which differs from most operators that ignore it.
+  - Supported k is bounded by the largest width: 2*next_pow2(k) must not exceed the largest supported block, else ValueError (lines 170-173, 231-235).
+  - Real -inf inputs are indistinguishable from padding; harmless for values-only output.

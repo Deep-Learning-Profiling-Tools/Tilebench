@@ -1,0 +1,169 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "argmax",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/argmax/impl_triton.py",
+      "functions": [
+        {
+          "name": "argmax_rowwise_kernel",
+          "lines": [
+            8,
+            29
+          ]
+        },
+        {
+          "name": "_argmax_rowwise_kernel_autotuned",
+          "lines": [
+            32,
+            42
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            45,
+            66
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            69,
+            77
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/argmax/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_DEFAULT_CONFIG/_SEARCH_SPACE_BASE",
+          "lines": [
+            10,
+            16
+          ]
+        },
+        {
+          "name": "argmax_rowwise_kernel",
+          "lines": [
+            19,
+            44
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            47,
+            47
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            50,
+            94
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            97,
+            98
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/argmax/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[row] = first index of the row maximum; int64 (M,) output; dim=1 path uses x.contiguous() (impl_triton.py 14-29, 48-54).",
+      "cutile": "Same: running (best_val, best_idx) per row, int64 (M,) output, x.contiguous() for dim=1 (impl_cutile.py 28-44, 54-61).",
+      "note": "Both realise torch.argmax(x, dim=1) (impl_torch.py 5); the generator always passes dim=1 (tensors.py 456-458). Both also carry a dim != 1 transpose-copy branch (impl_triton.py 51, impl_cutile.py 57) that the benchmark never takes."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "torch.empty int64 output (54) then one launch with grid (M,) (impl_triton.py 56-65).",
+      "cutile": "torch.empty int64 output (61), host-computed chunk count passed as a compile-time constant (85-88), one launch with grid (M,1,1) (impl_cutile.py 90-92).",
+      "note": "Identical single-kernel, one-program-per-row structure; the compile-time chunk count on one side is a mapping choice."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Rows independent; sequential chunk loop inside a program (impl_triton.py 17-27).",
+      "cutile": "Same (impl_cutile.py 31-42).",
+      "note": "No cross-program merge on either side."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Chunks in increasing column order; tl.max + tl.argmax per chunk (Triton default tie_break_left gives the lowest index); cross-chunk merge with strict tile_max > best_val so the earlier chunk wins ties; best_idx = start + tile_arg in int64 (impl_triton.py 17-27).",
+      "cutile": "Chunks in increasing column order; ct.max + ct.argmax per chunk; identical strict > merge; best_idx = start + tile_arg in int64 (impl_cutile.py 31-42).",
+      "note": "Same scan structure and merge rule. The in-chunk tie-breaking of ct.argmax is not stated in source; the contract requires the reference's first-occurrence rule, which the strict cross-chunk merge satisfies whenever the in-chunk primitive returns the lowest index. Not a divergence in algorithmic content; randn inputs make exact ties essentially unobservable."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Each chunk loaded with other=-inf and cast to fp32 before comparison; best_val fp32; indices int64 (impl_triton.py 14-15, 20-23).",
+      "cutile": "Chunk loaded with PaddingMode.NEG_INF and cast to fp32; best_val fp32; indices int64 (impl_cutile.py 28-29, 33-38).",
+      "note": "Same: exact fp32 upcast for comparisons, -inf padding, int64 indices."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "x.contiguous() (no-op for the generator's input) and an output allocation; the dim != 1 transpose copy is inside run() but unreached (impl_triton.py 46-54).",
+      "cutile": "Same (impl_cutile.py 52-61), plus host arithmetic for the chunk count (85-88).",
+      "note": "No device-side preprocessing for the benchmark path; nothing cached."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None; running pair in registers (impl_triton.py 14-15).",
+      "cutile": "None; running pair in tile scalars (impl_cutile.py 28-29).",
+      "note": "No scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output freshly allocated (impl_triton.py 54).",
+      "cutile": "No input written; output freshly allocated (impl_cutile.py 61).",
+      "note": "Idempotent; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branch.",
+      "cutile": "No architecture branch.",
+      "note": "None on either side."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "M * N * dtype_size",
+    "flops_expr": "M * N",
+    "consistent": "true",
+    "note": "config.yaml 17-18. Counts one read of x and one compare per element, which is exactly the single kernel's work; the 8*M-byte int64 output write is omitted and negligible for N >= 1024. Neither run() copies x on the dim=1 path, so the timed boundary matches on both sides."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "c1d30c8503742396b1704fe35e6dc6c3bf0471008f2e721666771d239184ec75",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "3d5cd312dc544ede6cfa34187f15134633476b1d3e7aa786deede1d92d9224d4",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

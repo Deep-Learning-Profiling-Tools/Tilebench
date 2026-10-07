@@ -1,0 +1,28 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "mul2",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh (n,) output of x's dtype inside run()."},
+    {"id": "elementwise_double", "description": "One logical pass (any split across programs or launches, no global intermediate) that reads each element of x once, doubles it, and stores it once at the same position of the output, with edge handling wherever n is not a multiple of the chosen tile."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.mul\\(|torch\\.multiply\\(|torch\\.add\\(|torch\\.lerp\\(|\\.mul\\(|\\.mul_\\(|\\.add_\\(|\\.copy_\\(", "message": "The doubling must be performed by the kernel, not by a PyTorch arithmetic op or copy.", "level": "confirmed", "scope": "host"},
+    {"pattern": "return\\s+x\\b|return\\s+x\\s*\\*|return\\s+x\\s*\\+|return\\s+2\\s*\\*\\s*x\\b", "message": "Returning the input or a host-side expression on it replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|\\.bfloat16\\(\\)|\\.int\\(\\)", "message": "No dtype conversion is allowed anywhere in mul2.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros|torch\\.ones|torch\\.full\\(|\\.clone\\(\\)|torch\\.clone\\(", "message": "No initialised scratch or host-side copy is part of this operator.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["\\*\\s*2\\b", "2\\s*\\*", "\\+\\s*x", "<<\\s*1", "\\*\\s*2\\.0"], "message": "No doubling arithmetic found inside the kernel.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty_like",
+    "torch.cuda.current_stream",
+    "Tensor.numel"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (n,) tensor must be freshly allocated inside run() and must not share storage with x"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no host-side copy or conversion of x; no second logical pass."},
+  "tolerance_source": "config.verify"
+}

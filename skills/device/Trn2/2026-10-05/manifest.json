@@ -1,0 +1,36 @@
+{
+  "device": "Trn2",
+  "snapshot": "2026-10-05",
+  "kind": "device_context",
+  "arch": "trainium2",
+  "sources": [
+    {"id": "S5", "description": "Framework architecture helpers: detect_arch()/device_info() return None on a host without CUDA/HIP (Trainium); supports_tma/supports_tmem False", "path_or_url": "tilebench/hardware.py @ ea04fb36", "accessed": "2026-10-05"},
+    {"id": "S6-15", "description": "AWS Neuron 'Trainium2 Architecture' (8 NeuronCore-v3 per chip, 96 GiB HBM at 2.9 TB/s, 224 MiB SBUF per chip, dense/sparse TFLOPS, NeuronLink-v3 1.28 TB/s, 3.5 TB/s DMA bandwidth, 16 CC-Cores, LNC)", "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trainium2.html", "accessed": "2026-10-05"},
+    {"id": "S6-16", "description": "AWS Neuron 'NeuronCore-v3 Architecture' (28 MB on-chip SRAM per core; Tensor/Vector/Scalar engine dtypes and TFLOPS; GpSimd 8 x 512-bit processors)", "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/neuron-core-v3.html", "accessed": "2026-10-05"},
+    {"id": "S6-17", "description": "AWS Neuron NKI 'Trainium2 Architecture Guide' (SBUF 28 MiB = 128 partitions x 224 KiB, PSUM 2 MiB, 128x128 PE tensor engine, engine widths, 128 DMA engines / 16 per core, 20 CC-Cores, 4 NeuronLink-v3, 4 HBM stacks 96 GiB 3 TB/s)", "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/nki/arch/trainium2_arch.html", "accessed": "2026-10-05"},
+    {"id": "S6-18", "description": "AWS Neuron 'Trn2 Architecture' (16 chips per trn2.48xlarge, 1,536 GiB HBM, 46.4 TB/s, NeuronLink-v3 1,024 GB/s per chip, instance PFLOPS, UltraServer)", "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/trn2-arch.html", "accessed": "2026-10-05"},
+    {"id": "S6-19", "description": "Amazon EC2 accelerated computing instance specifications, Trn2 rows (vCPUs, host memory, accelerator count; accelerator-memory column conflicts with Neuron docs)", "path_or_url": "https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html", "accessed": "2026-10-05"}
+  ],
+  "failed_fetches": [
+    {"url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/arch/neuron-hardware/neuroncores-arch.html", "result": "HTTP 404 (neuron-core-v3.html used instead)"}
+  ],
+  "unknown_fields": [
+    "engine clock frequencies",
+    "PSUM bank count and bytes per bank",
+    "register file / cache levels (none stated by vendor)",
+    "INT8 support on the Tensor Engine",
+    "FP64 support (not stated)",
+    "MXFP4/6/8 support on NeuronCore-v3",
+    "available Logical NeuronCore (LNC) configuration values",
+    "instruction issue model and per-instruction tensor-size limits",
+    "entire software snapshot: Neuron SDK release, neuronx-cc, aws-neuronx-runtime-lib, aws-neuronx-dkms, aws-neuronx-tools/neuron-profile, torch-neuronx, torch, neuronx-distributed, nki package, Python, OS/kernel, instance type, LNC setting"
+  ],
+  "vendor_inconsistencies": [
+    "CC-Cores per chip: 16 (trainium2.html) vs 20 (nki/arch/trainium2_arch.html)",
+    "HBM bandwidth per chip: 2.9 TB/s (trainium2.html, trn2-arch.html) vs 3 TB/s (nki/arch/trainium2_arch.html)",
+    "EC2 instance page lists trn2.48xlarge accelerator memory as 8192 GiB (16 x 512 GiB) vs 96 GiB per chip in Neuron docs"
+  ],
+  "permission": "public",
+  "status": "draft",
+  "verified_on_device": false
+}

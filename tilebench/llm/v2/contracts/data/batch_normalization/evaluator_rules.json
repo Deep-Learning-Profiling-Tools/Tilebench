@@ -1,0 +1,37 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "batch_normalization",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate", "description": "Allocate the (N, C) output (empty_like) and the fp32 scratch: per-block partial sums and sums of squares (num_blocks, C) and mean / inv_std (C,)."},
+    {"id": "block_partials", "description": "First logical traversal of input: each program reduces a block of rows (contiguous or strided) to per-channel fp32 partial sum and sum of squares (or equivalent single-pass moments) written to scratch."},
+    {"id": "channel_finalize", "description": "Per channel, combine the block partials in fp32 into mean and inv_std = rsqrt(max(sumsq/N - mean^2, 0) + eps); may be its own launch or folded into the apply prologue."},
+    {"id": "apply", "description": "Second logical traversal of input: y = x*scale + shift with scale = inv_std*gamma, shift = beta - mean*scale in fp32, stored in the input dtype."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(nn\\.functional\\.)?batch_norm\\(|\\bF\\.batch_norm\\(|torch\\.nn\\.BatchNorm[123]d|torch\\.(nn\\.functional\\.)?(layer_norm|instance_norm|group_norm)\\(|\\bF\\.(layer_norm|instance_norm|group_norm)\\(", "message": "A library normalisation replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(var_mean|var|std|mean|sum)\\(", "message": "A host-side tensor reduction replaces the statistics stages.", "level": "confirmed", "scope": "host"},
+    {"pattern": "(?<!tl)(?<!ct)(?<!nl)(?<!isa)\\.(mean|var|std|sum)\\(", "message": "A tensor-method reduction on the host replaces a required device stage.", "level": "suspicious", "scope": "host"},
+    {"pattern": "atomic_add|tl\\.atomic|ct\\.atomic|T\\.atomic|nl\\.atomic", "message": "Atomic accumulation of channel totals replaces the deterministic two-level reduction.", "level": "suspicious", "scope": "any"},
+    {"pattern": "\\.float\\(\\)|\\.to\\(torch\\.float32\\)|\\.to\\(dtype=torch\\.float32\\)", "message": "Host-side upcast copies of input/gamma/beta are forbidden; upcast inside the kernels.", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.zeros\\(|torch\\.zeros_like\\(|torch\\.full\\(", "message": "Scratch is fully written before it is read; zero-filled buffers are not part of this operator.", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b", "message": "Caching statistics or scratch across calls is forbidden.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.sum", "ct\\.sum", "T\\.reduce_sum", "reduce_sum", "nl\\.sum", "nisa\\.tensor_reduce", "nisa\\.bn_stats"], "message": "No sum-reduction primitive found; the statistics must be reduced in the kernels.", "level": "suspicious"},
+    {"any_of": ["rsqrt", "sqrt"], "message": "No rsqrt/sqrt found; inv_std = rsqrt(var + eps) is required.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 statistics evidence found.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.empty_like",
+    "torch.cuda.current_stream",
+    "Tensor.view",
+    "Tensor.reshape",
+    "Tensor.contiguous"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned (N, C) tensor must be freshly allocated inside run() and must not share storage with input, gamma or beta"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "All device work launched by run() is counted: the partial-statistics launch, the per-channel combine (own launch or folded into apply) and the apply launch. Host-side work (the output and four fp32 scratch allocation calls, zero-copy views, metadata reads) is not GPU time. No host-side casts or copies of the inputs; nothing cached across calls."},
+  "tolerance_source": "config.verify"
+}

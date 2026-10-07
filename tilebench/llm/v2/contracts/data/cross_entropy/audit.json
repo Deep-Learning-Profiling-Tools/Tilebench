@@ -1,0 +1,155 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "cross_entropy",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/cross_entropy/impl_triton.py",
+      "functions": [
+        {
+          "name": "cross_entropy_kernel",
+          "lines": [
+            8,
+            37
+          ]
+        },
+        {
+          "name": "_cross_entropy_kernel_autotuned",
+          "lines": [
+            40,
+            48
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            51,
+            78
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            81,
+            85
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/cross_entropy/impl_cutile.py",
+      "functions": [
+        {
+          "name": "cross_entropy_kernel",
+          "lines": [
+            17,
+            42
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            45,
+            45
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            48,
+            86
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            89,
+            90
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/cross_entropy/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            5,
+            14
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "loss = -(target_logit - row_max - log(row_sum)) per row with row_max/row_sum over the full class axis (impl_triton.py L25-36); matches F.cross_entropy(reduction='none') (impl_torch.py L14).",
+      "cutile": "Identical formula per row (impl_cutile.py L28-41); output (batch_size,) in logits.dtype (L42, L62).",
+      "note": "Both compute the unreduced per-row stable log-sum-exp cross-entropy; out-of-range targets yield +inf on both sides (L30-34 / L35-39) where torch would raise, never exercised by the generator (tensors.py L392 draws targets in [0, num_classes))."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one program per row: masked row load as fp32 (L22-23), max (L25), sum of exp (L26-27), target gather (L29-34), loss + store (L36-37); grid (batch_size,) (L59).",
+      "cutile": "One kernel, one program per row: NEG_INF-padded (1, BLOCK_CLASSES) load (L22-25), max (L28), sum of exp (L30), target gather (L32-39), loss + store (L41-42); grid (batch_size, 1, 1) (L64).",
+      "note": "Same three logical steps fused in one launch; no global intermediates on either side."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Row statistics (L25-27) and target gather (L29-34) are independent; loss (L36) depends on both.",
+      "cutile": "Row statistics (L28-30) and target gather (L32-39) are independent; loss (L41) depends on both.",
+      "note": "Identical dependency graph; no cross-program dependency."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "tl.max then tl.sum over one BLOCK_CLASSES = next_power_of_2(num_classes) tile (L25, L27, L60); padding lanes are -inf (L23).",
+      "cutile": "ct.max then ct.sum over one (1, BLOCK_CLASSES) tile with BLOCK_CLASSES the next power of two (L28, L30, L57-59); padding lanes are -inf via PaddingMode.NEG_INF (L24).",
+      "note": "Both hold the whole class axis in one tile (num_classes fixed at 512 by config); the intra-tile tree order is library-defined on both sides. A chunked/online formulation is a reduction-order mapping the contract permits because the result is the same stable log-sum-exp."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Row and target logit cast to fp32 before compute (L23, L32-34); natural tl.exp/tl.log (L26, L36); fp32 loss implicitly cast to logits.dtype at tl.store (L37, output allocated in logits.dtype L58).",
+      "cutile": "ct.astype float32 on row and target logit (L26, L38); natural ct.exp/ct.log (L30, L41); explicit ct.astype(loss, output.dtype) (L42).",
+      "note": "Same fp32 path, same stable (max-subtracted) form, single rounding to the output dtype."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "Output allocation torch.empty (L58); block_classes host arithmetic (L60); strides passed to the kernel (L65, L73); no copies.",
+      "cutile": "logits.contiguous() (L61, a no-op for generator inputs), output allocation (L62), block_classes host loop (L57-59).",
+      "note": "Only difference is a no-op contiguous() call versus honouring strides; neither side casts, copies or caches anything."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None; row tile and scalars live in the program (L22-36).",
+      "cutile": "None (L22-41).",
+      "note": "No global scratch on either side."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; fresh output per call (L58).",
+      "cutile": "No input written; fresh output per call (L62).",
+      "note": "Idempotent on both sides; contract forbids input mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches (whole file).",
+      "cutile": "No architecture branches (whole file).",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "batch_size * num_classes * dtype_size + batch_size * 8 + batch_size * dtype_size",
+    "flops_expr": "batch_size * num_classes * 4",
+    "consistent": "true",
+    "note": "Counts one read of logits, one read of the int64 targets and one write of the output in logits dtype, which is the compulsory traffic of the single kernel on both sides. The one-element-per-row target re-read (impl_triton.py L32 / impl_cutile.py L37) is not counted and is negligible. No preprocessing or prepacked input exists on either side."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "896e72b664762fbea72a6220eb4e4a8095c9d6123815e8f2300144579c743f5c",
+  "previous_status_before_approval": "draft"
+}

@@ -1,0 +1,164 @@
+operator: l2_norm
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/l2_norm/impl_triton.py
+    functions:
+      - name: _l2_norm_fwd_kernel
+        lines: [8, 35]
+        role: kernel
+      - name: _l2_norm_fwd_kernel_autotuned
+        lines: [38, 48]
+        role: tuner
+      - name: run
+        lines: [51, 78]
+        role: host-driver
+      - name: get_last_config
+        lines: [81, 85]
+        role: helper
+  - path: tilebench/benchmarks/operators/l2_norm/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 7]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/l2_norm/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_l2_norm_inputs
+        lines: [461, 463]
+        role: helper
+      - name: infer_problem_size (l2_norm branch, batch*M*K)
+        lines: [709, 710]
+        role: helper
+functional_semantics: >
+  L2 normalisation over the last dimension. Reference impl_torch.run (lines
+  4-7): norm_sq = torch.linalg.vector_norm(x, 2, dim=-1, keepdim=True,
+  dtype=float32).square(); y = (x * torch.rsqrt(norm_sq + eps)).to(x.dtype).
+  So for every row vector r of x (batch, M, K): y = r / sqrt(sum_k r_k^2 +
+  eps), with the sum of squares formed in fp32 and the result cast back to
+  the input dtype. Generator (tensors.py 461-463) returns (x, eps) with x =
+  randn(batch, M, K) in the case dtype and eps from case_defaults (1e-6).
+  No reference-side preprocessing.
+run_signature:
+  text: |-
+    def run(x: torch.Tensor, eps: float = 1e-6, autotune: bool = False, **kwargs) -> torch.Tensor:
+  positional_inputs: [x, eps]
+  keyword_params: [autotune, "**kwargs (absorbs block_size, unused)"]
+  returns: single tensor with x's shape and dtype
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(batch, M, K), viewed as (batch*M, K)"
+    dtype: fp16 | bf16 | fp32 (config case_grid dtype)
+    layout: contiguous; run() reshapes to 2-D (line 53) and forces .contiguous() if the inner stride is not 1 (lines 54-55)
+    mutated_in_place: false
+    notes: read twice by the kernel (pass 1 squares, pass 2 scale), cast to fp32 on load (lines 25, 33).
+  - name: eps
+    shape: scalar python float
+    dtype: float
+    layout: n/a
+    mutated_in_place: false
+    notes: passed positionally by the generator; added inside the sqrt (line 27).
+outputs:
+  - name: y
+    shape: "x.shape"
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none (y_2d = empty_like(x_2d), line 56; returned as reshape view, line 78)
+preprocessing:
+  - description: reshape x to (-1, K) and make it contiguous if the inner stride is not 1
+    lines: [52, 55]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: a view (no copy) for the generator's contiguous inputs; would be a timed copy otherwise.
+  - description: allocate y_2d = torch.empty_like(x_2d); read N = K and M = batch*M
+    lines: [56, 58]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: the kernel indexes y with x's row stride (line 19), valid because y_2d mirrors x_2d's layout.
+stages:
+  - id: s1
+    description: >
+      One program per row (grid (M,) with M = batch*M rows). Pass 1 (lines
+      22-27): loop over the row in BLOCK_N chunks, load x (mask, other=0.0)
+      as fp32, acc += x*x into a BLOCK_N-lane fp32 vector; rstd = 1 /
+      sqrt(tl.sum(acc) + eps). Pass 2 (lines 30-35): re-load the same
+      chunks, y = x * rstd in fp32, cast to x's element type, masked store.
+      Both passes are inside one kernel; the row is re-read from
+      global/L2, not kept in registers.
+    kind: kernel
+    lines: [8, 35]
+    launches: "1 launch, grid (batch*M,)"
+    depends_on: []
+    fusable_with: "none"
+    produces: y (batch*M, K) -- no intermediates (rstd stays in registers)
+algorithm_family: >
+  Row-wise two-pass normalisation in a single kernel: pass 1 chunked sum of
+  squares with a lane-wise fp32 accumulator and one tree reduction; pass 2
+  re-read and scale by the reciprocal root.
+reduction_scan_sort_structure: >
+  Per row: sequential chunk loop accumulating x*x lane-wise, then one
+  tl.sum over BLOCK_N lanes (tree order defined by Triton); rstd formed as
+  1 / tl.sqrt(sum + eps) rather than an rsqrt intrinsic. The reference
+  computes sqrt(sum x^2) via vector_norm and squares it back before adding
+  eps, a slightly different rounding path.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 (explicit .to(tl.float32) on both loads)
+  output_dtype: input dtype (explicit .to(X.dtype.element_ty) before store, line 35)
+  special_modes: "N (row length K) is a tl.constexpr argument (line 13), so the kernel is specialised and recompiled per distinct K"
+  masking_or_padding_values: "other=0.0 for tail loads in both passes (zeros add nothing to the sum of squares); masked store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x is never written (a contiguous copy would be a fresh tensor); fresh
+  output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_N
+    role: tile size (column chunk)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_N x num_warps x num_stages (key ["N"],
+  warmup=1, rep=3), lines 38-48. Default path launches the undecorated
+  kernel with _DEFAULT_CONFIG (lines 68-77). Both launches are wrapped in
+  torch.cuda.device(x.device.index). get_last_config reads best_config
+  (lines 81-85).
+implementation_freedoms_observed: >
+  Chunk size, warps, stages, vector width; keeping the row resident in
+  registers between the two passes versus re-reading it; rsqrt intrinsic
+  versus 1/sqrt; splitting a row across programs with a two-level
+  reduction; whether K is a constexpr.
+algorithm_constraints_observed: >
+  Keep: normalisation over the last dimension, independently per row; sum
+  of squares accumulated in fp32; eps added under the square root; y = x *
+  rstd (multiply by the reciprocal, as in the reference's rsqrt form);
+  output cast back to the input dtype with the same shape; x read-only;
+  no scratch.
+fq_boundary:
+  bytes_expr: "2 * batch * M * K * dtype_size"
+  flops_expr: "3 * batch * M * K"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is a view/alloc and one kernel; nothing is prepacked or
+    cached. The formula counts one read of x and one write of y, the
+    compulsory traffic. The implementation actually reads x twice (second
+    pass), so the timed region carries up to one extra K-sized read per
+    row that the formula does not count (partly served from L2). Note the
+    convention differs from layernorm's config, which counts three passes
+    for the same two-pass structure.
+notes_for_review:
+  - The second pass re-reads x from memory; bytes_expr counts a single read (minimal-traffic model), unlike layernorm's bytes_expr which counts the re-read.
+  - N (= K) is a tl.constexpr, so every sweep point compiles a new kernel variant; this is an audit observation, not an algorithm property.
+  - y is indexed with x's row stride (line 19); valid only because y_2d = empty_like(x_2d) of a contiguous x_2d.
+  - eps arrives positionally from the generator (case_defaults 1e-6) and matches the run() default.
+  - rstd uses 1 / tl.sqrt rather than rsqrt; reference uses torch.rsqrt of the squared norm.

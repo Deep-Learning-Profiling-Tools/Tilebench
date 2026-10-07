@@ -1,0 +1,54 @@
+# Campaigns that must never be used as formal Base results, paired Enhanced
+# results or Optimization-Skill distillation sources. Enforced in code:
+# distillation.access refuses every trajectory of a listed campaign (evaluation
+# AND release modes), devtools.recompute_metrics labels its curves `excluded`
+# (never formal E(B)), and campaign preparation / review-resolve / re-evaluate
+# refuse to extend or modify it.
+# Their artifacts are kept unchanged (raw requests, responses, usage,
+# evaluations); they may serve only the listed `allowed_uses`.
+schema: tilebench-llm-excluded-campaigns/1
+campaigns:
+  formal_b200_base_2026-10-06:
+    role: protocol/infrastructure engineering pilot (superseded)
+    superseded_on: "2026-10-06"
+    superseded_by_protocol: "study.yaml revision 3 (1 representative dtype/operator, 5 rounds, 1 generation/round, checker v2)"
+    decided_by: "study owner, protocol revision 3 instruction (2026-10-06) §0"
+    protocol: "revision 2: 10 rounds, up to 3 generations per round, checker contract_checks/2026-10-05.2"
+    S_llm: 81001678aa901402009d5706074ccef1e6984ea0
+    location: "exp/llm-b200 worktree llm_b200_wt: outputs/llm_v2/formal_b200_base_2026-10-06 (git-ignored); acceptance export committed in 993b0033"
+    state_at_supersession: "paused 2026-10-06 14:57; 51/440 trajectories complete, 563 closed rounds, 16 review_required (never resolved)"
+    allowed_uses: [checker v2 offline regression, infrastructure/debug evidence]
+    forbidden_uses: [main paper Base result, Enhanced paired result, evaluation Optimization Skill distillation, release-skill source selection]
+  formal_b200_base_1dtype5r_2026-10-06:
+    role: protocol/infrastructure engineering pilot (superseded)
+    superseded_on: "2026-10-07"
+    superseded_by_protocol: "study.yaml revision 4 (all 20 configured cases per candidate, Claude Code compliance adjudication, PrecisionGuard and checker fixes)"
+    decided_by: "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §0 / §14"
+    protocol: "revision 3: 5 rounds, 1 generation/round, one largest case per task, checker contract_checks/2026-10-06.v2"
+    S_llm: 38a925d87e97a5f5951c474d9d10a78bda0e40a9
+    location: "exp/llm-b200-5r worktree llm_b200_5r_wt: outputs/llm_v2/formal_b200_base_1dtype5r_2026-10-06 (git-ignored, local)"
+    state_at_supersession: "gracefully paused 2026-10-07 00:20 (STOP); 32/270 trajectories complete, 631 closed rounds, 16 review_required (never resolved); 16 rounds wrongly closed as contract_violation by the evaluator precision guard"
+    allowed_uses: [checker / precision-guard offline regression, infrastructure/debug evidence, cost and scheduling telemetry]
+    forbidden_uses: [main paper Base result, Enhanced paired result, evaluation Optimization Skill distillation, release-skill source selection]
+  formal_b200_base_rev4_20case_2026-10-07:
+    role: aborted formal launch (superseded within 35 minutes)
+    superseded_on: "2026-10-07"
+    superseded_by_protocol: "study.yaml revision 4 with checker contract_checks/2026-10-07.v4 (frozen run() input kinds) and the scheduler ramp-gate fix"
+    decided_by: "Claude Code session under FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §9/§21: a checker bug found during review pauses the campaign and is versioned; a frozen identity is never patched in place"
+    protocol: "revision 4, checker contract_checks/2026-10-07.v3: every run() parameter not annotated as a scalar was a tensor seed, so a per-call config dict holding a launch grid computed from scalar inputs (N, C, H, W, ...) went to review (4 of the first 19 candidates; 25 of 45 interfaces pass scalars); the concurrency ramp read the evaluation-budget reservations and stayed at 3 per provider"
+    S_llm: "PR #320 head 62fe810f7ecf00a489ef8990a4bda9fdc93bf8a0 (exp/llm-b200 c5912ad6e0096704db562d2c5dd85866cc0f383a)"
+    location: "exp/llm-b200 worktree llm_b200_wt: outputs/llm_v2/formal_b200_base_rev4_20case_2026-10-07 (git-ignored, local)"
+    state_at_supersession: "launched 2026-10-07 03:35, gracefully paused (STOP) 04:00, drained 04:10; 270 trajectories, 19 generations (18 rounds closed: 10 valid, 5 compile_error, 2 format_error, 1 review_required; 1 round pending after a stream cut with unknown charge); 3 reviews resolved compliant by claude-code; USD 12.12 over closed attempts"
+    allowed_uses: [checker v4 offline regression, infrastructure/debug evidence, cost and scheduling telemetry]
+    forbidden_uses: [main paper Base result, Enhanced paired result, evaluation Optimization Skill distillation, release-skill source selection]
+  formal_b200_base_rev4_checkerv4_2026-10-07:
+    role: paused formal launch (superseded by a model-visible text correction)
+    superseded_on: "2026-10-07"
+    superseded_by_protocol: "revision 4 with the corrected TileLang 0.1.11 Reference (all_of/any_of) and the B200 Device Context stating tileiras 13.2"
+    decided_by: "study owner, 2026-10-07 instruction (Option A: minimal correction of model-visible facts, new campaign identity)"
+    protocol: "revision 4, checker contract_checks/2026-10-07.v4; the TileLang Reference documented T.any_of/T.all_of(c1, c2, ...) (tilelang 0.1.11: all_of(buffer)) and the Device Context listed tileiras as unknown (installed 13.2) while the cuTile Reference documents tileiras-13.3 APIs"
+    S_llm: "PR #320 head f0bcf89ba9ec359918c0be25d1b50b983b7f73bd (exp/llm-b200 f929e1c2)"
+    location: "exp/llm-b200 worktree llm_b200_wt: outputs/llm_v2/formal_b200_base_rev4_checkerv4_2026-10-07 (git-ignored, local)"
+    state_at_supersession: "launched 2026-10-07 04:34, gracefully paused (STOP) 04:48, drained 05:12; 270 trajectories, 20 closed rounds (11 valid, 7 compile_error incl. 3 TileLang all_of TypeErrors and 2 cuTile tileiras-13.3 errors, 1 numerical_error, 1 format_error); no review; USD 9.98"
+    allowed_uses: [infrastructure/debug evidence, cost and scheduling telemetry]
+    forbidden_uses: [main paper Base result, Enhanced paired result, evaluation Optimization Skill distillation, release-skill source selection]

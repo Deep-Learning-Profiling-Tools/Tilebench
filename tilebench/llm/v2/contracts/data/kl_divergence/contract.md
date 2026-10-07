@@ -1,0 +1,79 @@
+# kl_divergence: canonical algorithm contract
+
+## Functional semantics
+Row-wise Kullback-Leibler divergence of a target distribution Y against a
+prediction LOG_P given as log-probabilities, not reduced over rows. For
+inputs of shape (rows, cols):
+
+    LOSS[r] = sum_{c} Y[r, c] * ( log(Y[r, c]) - LOG_P[r, c] )
+
+with the natural logarithm. Convention 0 * log(0) = 0: where Y[r, c] <= 0
+the log term is replaced by 0 so that the element contributes 0. (The
+benchmark data are softmax outputs and strictly positive, so this guard only
+matters for exact zeros, but it must be present.)
+
+## Inputs and outputs
+- LOG_P: shape (rows, cols), fp32, row-major with unit column stride (the
+  row stride may be read from the tensor). Read-only.
+- Y: shape (rows, cols), fp32, same layout. Read-only.
+- LOSS: a freshly allocated fp32 tensor of shape (rows,), allocated inside
+  the entry point. No aliasing.
+- The entry point takes (LOG_P, Y) positionally; no keyword arguments are
+  passed.
+
+## Required logical stages
+1. Output allocation of LOSS.
+2. Row map-reduce: for each row, traverse the columns once, form the
+   elementwise term in fp32, accumulate it over the full row and write one
+   scalar.
+Stage 2 depends on stage 1. The elementwise map and the row reduction are
+one logical stage: the natural realisation is one program per row in a
+single launch. Splitting a row across several programs with a second-level
+combine is permitted provided LOSS[r] is still written exactly once, any
+partial-sum scratch is allocated inside the entry point on every call (its
+traffic is device work and is counted) and the combine reads only the
+partials, adding no further traversal of the inputs.
+
+## Algorithm family and structure
+Fused elementwise map plus full-row sum reduction. Every input element is
+consumed in exactly one logical traversal (a property of the algorithm, not
+a guarantee about physical DRAM transactions, which caches, TMA and the
+compiler may change). The accumulation order within a row is free
+(sequential column chunks into lane-wise partials followed by a tree, or any
+other order); the verification tolerance (config.verify) absorbs ordering
+differences. Columns beyond cols (masked or zero-padded tails) must
+contribute exactly 0.
+
+## Precision and accumulation
+The elementwise term and the accumulator are fp32; LOSS is fp32. The
+logarithm is the natural log evaluated at fp32 precision. An approximate
+logarithm intrinsic whose error stays within the verification tolerance is
+acceptable. The guard for non-positive Y
+must be applied before the multiplication so that no NaN or infinity is
+produced.
+
+## Preprocessing and timing boundary
+
+The measured quantity is the GPU time of all device work that `run()` causes on every call: every kernel, fill, copy, cast or repack launched inside `run()` is counted. Host-side work inside `run()` (allocation calls, shape, stride and metadata reads, Python control flow) is not GPU time and is not part of the measured number.
+
+Besides the launch, the entry point reads the shapes and allocates LOSS. No
+host-side casts, copies or layout changes of the inputs; no cross-call
+caching of anything.
+
+## Permitted implementation mappings
+Column chunk width, launch parameters, number of rows per program, runtime
+versus compile-time column count, reducing lane partials per chunk or once
+at the end, masked loads versus zero-padded loads, explicit tail masks
+versus padding.
+
+## Forbidden substitutions
+torch.nn.functional.kl_div / torch.kl_div; torch.log, torch.sum, Tensor.sum,
+torch.xlogy or any PyTorch arithmetic computing the term or the row sum;
+accumulating in a precision lower than fp32; omitting the non-positive guard.
+
+## Permitted PyTorch operations
+- torch.empty for LOSS (shape (rows,), fp32, device of LOG_P) and, only in a
+  split-row design, one fp32 partial-sum buffer allocated per call.
+- Reads of shape / stride / dtype / device metadata.
+- torch.cuda.current_stream() to obtain the launch stream.
+Everything else is forbidden.

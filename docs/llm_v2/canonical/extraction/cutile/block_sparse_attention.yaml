@@ -1,0 +1,248 @@
+operator: block_sparse_attention
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/block_sparse_attention/impl_cutile.py
+    functions:
+      - name: block_sparse_attention_kernel
+        lines: [18, 148]
+        role: kernel
+      - name: run
+        lines: [154, 205]
+        role: host-driver
+      - name: get_last_config
+        lines: [208, 209]
+        role: helper
+      - name: _tuner (CutileAutotuner instance) + _DEFAULT_CONFIG/_SEARCH_SPACE
+        lines: [12, 15]
+        role: tuner
+  - path: tilebench/benchmarks/operators/block_sparse_attention/impl_torch.py
+    functions:
+      - name: _build_block_mask
+        lines: [16, 42]
+        role: helper
+      - name: run
+        lines: [45, 61]
+        role: host-driver
+      - name: module-level torch.compile(flex_attention) and mask cache
+        lines: [9, 13]
+        role: helper
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_block_sparse_attention_inputs
+        lines: [265, 326]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 45-61): scaled-dot-product attention restricted to a
+  block-sparse pattern given in CSR form, combined with a causal mask, with grouped
+  query attention. _build_block_mask (16-42) decodes the CSR layout (row pointers
+  layout_csr_row_indices, column indices layout_csr_col_indices, per-layout strides,
+  num_layout layouts shared across heads via h % num_layout) into a boolean
+  (num_layout, num_rows, num_cols) block selection sel, and defines
+  mask_mod(b, h, q, kv) = sel[h % num_layout, q // BLOCK_M, kv // BLOCK_N] & (q >= kv);
+  it is compiled into a flex_attention BlockMask (cached per col-index tensor in a
+  WeakTensorKeyDictionary, line 13, 52-58) and torch.compile'd flex_attention (line 11)
+  is called with scale=softmax_scale and enable_gqa=True (60-61). Semantics:
+  O[b,h,q,:] = softmax_kv(scale * Q[b,h,q,:] . K[b,h//(H/H_kv),kv,:] over allowed kv) @
+  V[b,h//(H/H_kv),kv,:], where allowed kv satisfy the block selection and kv <= q.
+  Generator (tensors.py 265-326): Q (B,H,M,D), K,V (B,H_kv,M,D) in fp16; a single layout
+  (num_layout = 1) that is a causal local window: row block r selects column blocks
+  max(0, r-2)..r (window_blocks = 2, lines 295-311); col_indices padded with zeros to
+  num_rows*num_cols; softmax_scale = 1/sqrt(D); BLOCK_M/BLOCK_N/BLOCK_D/NUM_D_BLOCKS
+  are layout parameters returned with the inputs. Config fixes B, H, H_kv, D, BLOCK_M,
+  BLOCK_N, BLOCK_D and sweeps M (= sequence length) with dtype fp16 only.
+run_signature:
+  text: "def run(Q, K, V, layout_csr_row_indices, layout_csr_col_indices, layout_csr_row_stride_h, layout_csr_col_stride_h, num_layout, softmax_scale, num_heads, num_kv_heads, total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS, block_size: int = None, autotune: bool = False)"
+  positional_inputs: [Q, K, V, layout_csr_row_indices, layout_csr_col_indices, layout_csr_row_stride_h, layout_csr_col_stride_h, num_layout, softmax_scale, num_heads, num_kv_heads, total_seq_len, BLOCK_M, EVEN_M, BLOCK_N, EVEN_N, BLOCK_D, NUM_D_BLOCKS]
+  keyword_params: [block_size, autotune]
+  returns: single tensor out of shape (B, H, M, D), dtype = Q.dtype (torch.empty_like(Q))
+  get_last_config: present
+inputs:
+  - name: Q
+    shape: "(B, H, M, D)"
+    dtype: fp16 (config case_grid dtype)
+    layout: contiguous (generator randn); loaded by 4-D tile index
+    mutated_in_place: false
+    notes: D must equal BLOCK_D * NUM_D_BLOCKS (assert line 166); NUM_D_BLOCKS in {1, 2} (assert line 170).
+  - name: K
+    shape: "(B, H_kv, M, D)"
+    dtype: fp16
+    layout: contiguous
+    mutated_in_place: false
+    notes: GQA — head h reads kv head h // (H // H_kv) (kernel lines 33-34).
+  - name: V
+    shape: "(B, H_kv, M, D)"
+    dtype: fp16
+    layout: contiguous
+    mutated_in_place: false
+    notes: ""
+  - name: layout_csr_row_indices
+    shape: "(num_layout * (num_rows + 1),) int32"
+    dtype: int32
+    layout: contiguous
+    mutated_in_place: false
+    notes: row pointers per layout, stride layout_csr_row_stride_h; read as scalars (kernel lines 59-60).
+  - name: layout_csr_col_indices
+    shape: "(num_layout * num_rows * num_cols,) int32 (zero padded)"
+    dtype: int32
+    layout: contiguous
+    mutated_in_place: false
+    notes: column block ids, stride layout_csr_col_stride_h; read one scalar per visited block (kernel line 71).
+  - name: layout_csr_row_stride_h, layout_csr_col_stride_h, num_layout, num_heads, num_kv_heads, total_seq_len, BLOCK_M, BLOCK_N, BLOCK_D, NUM_D_BLOCKS
+    shape: scalar ints
+    dtype: int (ConstInt kernel arguments, lines 22-26)
+    layout: n/a
+    mutated_in_place: false
+    notes: BLOCK_M/BLOCK_N are the CSR block granularity and therefore fix the kernel's query/key tile sizes — they are problem parameters, not tunables.
+  - name: softmax_scale
+    shape: scalar float
+    dtype: float (ct.Constant[float], line 23; passed as float(softmax_scale), line 182)
+    layout: n/a
+    mutated_in_place: false
+    notes: applied to the fp32 QK^T scores (kernel line 95).
+  - name: EVEN_M, EVEN_N
+    shape: scalar bools
+    dtype: bool
+    layout: n/a
+    mutated_in_place: false
+    notes: accepted by run() but not passed to the kernel; unused.
+outputs:
+  - name: out
+    shape: "(B, H, M, D)"
+    dtype: Q.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape consistency asserts (D == BLOCK_D*NUM_D_BLOCKS, NUM_D_BLOCKS in {1,2}, K/V last dim, total_seq_len == Q.shape[2], H % H_kv == 0)
+    lines: [162, 173]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: allocate out = torch.empty_like(Q)
+    lines: [175, 175]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: grid computation and argument tuple (softmax_scale cast to Python float)
+    lines: [176, 185]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no tensor cast, transpose, repack or CSR decoding on the host; the CSR arrays are consumed raw by the kernel.
+stages:
+  - id: s1
+    description: allocate out
+    kind: allocation
+    lines: [175, 175]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: out (B, H, M, D)
+  - id: s2
+    description: >
+      single kernel block_sparse_attention_kernel. Grid (ceil(M/BLOCK_M), B*H, 1) (line
+      176): program = one query block start_m of one (batch, head) pair (28-34; kv head =
+      h // (H/H_kv)). Loads the query block as one or two (BLOCK_M, BLOCK_D) tiles along D
+      (d-block index 0 and, when NUM_D_BLOCKS >= 2, index 1; static ConstInt branch,
+      lines 37-49) with ZERO padding beyond M. Online-softmax state m_i = -inf, l_i = 0,
+      acc (and acc2 for the second d-block) = 0, all fp32 (51-55). Reads the CSR row range
+      [start_l, end_l) for (layout_h = h % num_layout, start_m) (57-60) and iterates
+      `while l < end_l` — a runtime, data-dependent trip count (68-136). Per visited
+      column block col_idx (70-72): K tile(s) (BLOCK_N, BLOCK_D) loaded with ZERO padding
+      (74-79, 87-92); S = Q . K^T accumulated in fp32 from a zero init across the d-blocks
+      via ct.mma with ct.transpose(k) (80-84, 93); S *= softmax_scale (95); mask =
+      (q_pos >= kv_pos) & q_pos < M & kv_pos < M applied on every block, masked entries
+      set to -inf (97-103); m_new = max(m_i, rowmax(S)); m_safe = max(m_new, -1e30) guards
+      fully masked rows; alpha = exp(m_i - m_safe); P = exp(S - m_safe); l_new = l_i*alpha
+      + rowsum(P) (106-110); acc *= alpha (112-114); P cast to Q.dtype (116); V tile(s)
+      loaded with ZERO padding and acc = ct.mma(P, V, acc) per d-block (117-132); state
+      update (134-136). Epilogue: l_safe = l_i if l_i > 0 else 1 (rows with no attended
+      keys produce 0), out = acc / l_safe cast to Out.dtype, stored per d-block at tile
+      index (b, h, start_m, d-block) (138-148).
+    kind: kernel
+    lines: [18, 148]
+    launches: "ceil(M/BLOCK_M) x B*H programs, one launch (lines 203-204)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: out (written directly, no scratch)
+algorithm_family: >
+  online-softmax (flash-attention style) block-sparse attention driven by a CSR block
+  layout, with causal masking inside each visited block, grouped-query head mapping,
+  and head dimension split into up to two D-blocks.
+reduction_scan_sort_structure: >
+  Per query block: sequential pass over the CSR column list in stored order (increasing l),
+  maintaining running row-max m_i and row-sum l_i with rescaling (alpha) — standard
+  online softmax; the QK^T contraction over D is accumulated across the d-blocks in fp32;
+  row max / row sum inside a block via ct.max / ct.sum (tree order unspecified);
+  normalisation by l_i once at the end. Natural exp (ct.exp), scale applied to S after the
+  contraction rather than folded into Q.
+precision:
+  input_dtypes: [fp16]
+  accumulation: fp32 for S = QK^T, the softmax statistics (m_i, l_i), alpha, P and the output accumulator; P is cast to Q.dtype (fp16) before the PV MMA (line 116)
+  output_dtype: Q.dtype (fp16)
+  special_modes: >
+    m_safe clamp at -1e30 (line 107) to avoid exp(-inf - (-inf)) on fully masked rows;
+    l_safe fallback to 1 (line 138) yields 0 output for rows with no attended keys.
+    config.yaml verify atol 5e-2 / rtol 5e-3 (lines 22-24).
+  masking_or_padding_values: "-inf for masked scores (non-causal or beyond M positions); 0 (ct.PaddingMode.ZERO) for Q/K/V tile rows beyond M"
+intermediate_storage: >
+  None. All state (m_i, l_i, acc, acc2) in tile/register space; output written once.
+mutation_rules: >
+  No input is modified; out freshly allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints (the only tunable; tile sizes are fixed by the layout's BLOCK_M/BLOCK_N/BLOCK_D inputs)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py 98-128) over _SEARCH_SPACE
+  (impl_cutile.py 15: occupancy in {4,8,16,32}), keyed by (B, H, M, BLOCK_M, BLOCK_N,
+  BLOCK_D, NUM_D_BLOCKS, dtype) (lines 187-197); grid and args are identical for every
+  candidate. Default at line 14 (occupancy=16). Winner exported via _last_autotune_config
+  (198-199) and get_last_config (208-209); applied via kernel_with_hints (line 203).
+implementation_freedoms_observed: >
+  Occupancy; whether the causal mask is specialised for diagonal vs fully-visible blocks;
+  whether the two d-blocks are processed as one wider tile; exp vs exp2 formulation and
+  where the scale is folded; pipelining of K/V loads across the data-dependent loop.
+  Query/key tile sizes are not free: they must equal the CSR block sizes BLOCK_M/BLOCK_N
+  supplied as inputs. block_size keyword unused.
+algorithm_constraints_observed: >
+  Single kernel; one program per (query block, batch, head); CSR row range read from
+  layout_csr_row_indices and visited in stored order; every visited block is masked with
+  the causal condition q >= kv plus sequence-length bounds; online softmax in fp32 with
+  P cast to the input dtype for PV; GQA mapping h // (H/H_kv); output = acc / l in
+  Q.dtype; no scratch; D handled as BLOCK_D-wide d-blocks (1 or 2); softmax_scale applied
+  to scores.
+fq_boundary:
+  bytes_expr: "2 * B * (H + H_kv) * M * D * dtype_size"
+  flops_expr: "12 * B * H * BLOCK_N * D * (M - BLOCK_M)"
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 26-28. bytes = read Q + write O (2*B*H*M*D) plus
+    read K and V (2*B*H_kv*M*D): compulsory traffic, matching the kernel which reads each
+    Q block once and each K/V block once per visiting query block (re-reads treated as
+    cache-absorbed). flops is hard-wired to the generator's layout (each row block visits
+    its own block plus the two previous ones, window_blocks = 2): per visited block the
+    kernel does 4*BLOCK_M*BLOCK_N*D flops (QK^T and PV), and summing over row blocks with
+    the two-row ramp-up gives exactly 12*B*H*BLOCK_N*D*(M - BLOCK_M); it counts full
+    blocks (the kernel computes the masked half of diagonal blocks too), so it matches
+    executed work. It is not derived from the CSR arrays, so any other layout would make
+    it wrong. run() has no host preprocessing beyond allocation, so the timed boundary is
+    the kernel alone.
+notes_for_review:
+  - The K/V loop is a runtime `while l < end_l` over the CSR column list (line 69); the trip count is data-dependent so this is inherent, but it means no static trip count for pipelining (mapping detail).
+  - BLOCK_M, BLOCK_N, BLOCK_D, NUM_D_BLOCKS are inputs from the generator/config (case_defaults lines 8-15), not tunables; the kernel tile equals the CSR block size by construction.
+  - EVEN_M and EVEN_N are accepted by run() but never used (line 159).
+  - softmax_scale is a ct.Constant[float] (line 23), so a different scale compiles a new specialisation.
+  - The causal mask is applied to every visited block, including fully-visible ones (lines 97-103), which costs nothing algorithmically but is a specialisation opportunity.
+  - flops_expr encodes the generator's fixed window of two previous blocks; it would not match a different CSR pattern.
+  - The reference's BlockMask build and torch.compile happen on the reference side and are cached across calls (impl_torch.py 13, 52-58); nothing comparable exists in the cuTile path.
+  - Only fp16 is benchmarked (config case_grid dtype).
+  - block_size keyword unused.

@@ -1,0 +1,34 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "sigmoid",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_output", "description": "Allocate a fresh output of X's shape and dtype inside run()."},
+    {"id": "elementwise_sigmoid", "description": "One logical pass over exactly N elements (any split across programs or launches, no global intermediate): load, upcast to fp32, evaluate 1/(1+exp(-x)) (any equivalent formulation), downcast once, store with edge handling wherever N is not a multiple of the chosen tile."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.sigmoid\\(|torch\\.nn\\.functional\\.sigmoid\\(|F\\.sigmoid\\(|torch\\.special\\.expit\\(|nn\\.Sigmoid\\(|\\.sigmoid\\(\\s*\\)|\\.sigmoid_\\(", "message": "The whole operator is performed by a PyTorch sigmoid routine.", "level": "confirmed", "scope": "host"},
+    {"pattern": "torch\\.(exp|tanh|reciprocal|neg|div|add|mul)\\(|torch\\.special\\.", "message": "Host-side PyTorch elementwise arithmetic computing the sigmoid outside the kernel.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half|bf16|fp16)\\b[^\\n]*exp|exp\\([^\\n]*\\.(to|astype)\\(\\s*(tl|ct|T|nl)?\\.?(float16|bfloat16|half)", "message": "The exponential appears to be evaluated in half precision; it must be fp32.", "level": "suspicious", "scope": "host"},
+    {"pattern": "return\\s+X\\b|return\\s+X\\.|X\\.copy_\\(|X\\.sigmoid_\\(|X\\[.*\\]\\s*=", "message": "Writing into or returning the input violates the fresh-output / no-mutation rules.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.cpu\\(\\)|\\.numpy\\(\\)|\\.tolist\\(\\)", "message": "Host round-trip of the data.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.store", "ct\\.store", "store_offset", "T\\.copy", "nl\\.store", "nisa\\.dma_copy"], "message": "No kernel-level store found; the map must be done by a kernel.", "level": "suspicious"},
+    {"any_of": ["tl\\.sigmoid", "tl\\.exp", "tl\\.exp2", "ct\\.exp", "ct\\.exp2", "T\\.exp", "T\\.exp2", "nl\\.exp", "nl\\.sigmoid", "nisa\\.activation", "sigmoid", "exp"], "message": "No exponential / sigmoid primitive found in the kernel.", "level": "suspicious"},
+    {"any_of": ["float32", "fp32", "f32"], "message": "No fp32 upcast evidence; the sigmoid must be evaluated in fp32.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty_like",
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.view",
+    "Tensor.numel",
+    "Tensor.stride"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none; the returned tensor must be freshly allocated inside run() with X's shape and dtype and must not share storage with X"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: the GPU time of all device work run() launches on every call (kernels, fills, copies, casts, repacks). Host-side work in run() (the output allocation, metadata reads, Python) is not GPU time. No cached state, no copy or cast of X, no second logical pass."},
+  "tolerance_source": "config.verify"
+}

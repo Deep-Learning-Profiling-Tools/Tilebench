@@ -1,0 +1,194 @@
+operator: weight_dequant
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/weight_dequant/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: dequant_kernel
+        lines: [21, 41]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [44, 44]
+        role: tuner
+      - name: run
+        lines: [47, 77]
+        role: host-driver
+      - name: get_last_config
+        lines: [80, 81]
+        role: helper
+  - path: tilebench/benchmarks/operators/weight_dequant/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 8]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/weight_dequant/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_weight_dequant_inputs
+        lines: [492, 499]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Block-wise scale multiplication ("dequantisation" with a per-(TILE_SIZE x
+  TILE_SIZE)-block scale): out[i, j] = X[i, j] * S[i // TILE_SIZE,
+  j // TILE_SIZE] for X (M, N) and S (ceil(M/TILE_SIZE), ceil(N/TILE_SIZE)),
+  all in the same floating dtype (X is not an integer tensor). Reference
+  (impl_torch.py lines 4-8): builds row_idx = arange(M)//TILE_SIZE and
+  col_idx = arange(N)//TILE_SIZE, gathers a full (M, N) scale matrix by
+  advanced indexing S[row_idx[:, None], col_idx[None, :]] (reference-side
+  materialisation of the expanded scale), and returns X * scale. Generator
+  (tensors.py lines 492-499): X = randn(M, N) with N defaulting to M, S =
+  randn(ceil(M/T), ceil(N/T)), returned with ints M, N, TILE_SIZE.
+  config.yaml fixes TILE_SIZE via case_defaults and sweeps M and dtype in
+  {fp16, bf16, fp32} (N is not swept, so N = M).
+run_signature:
+  text: "def run(X: torch.Tensor, S: torch.Tensor, M: int, N: int, TILE_SIZE: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [X, S, M, N, TILE_SIZE]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor `output` of shape (M, N) and dtype X.dtype (allocated by run)
+  get_last_config: present
+inputs:
+  - name: X
+    shape: "(M, N)"
+    dtype: "case dtype: fp16 | bf16 | fp32"
+    layout: contiguous; flattened to a 1D view X.contiguous().view(-1) (line 50)
+    mutated_in_place: false
+    notes: null
+  - name: S
+    shape: "(ceil(M/TILE_SIZE), ceil(N/TILE_SIZE))"
+    dtype: same as X
+    layout: contiguous 2D (passed as-is; read through ct.gather with 2D indices, line 37)
+    mutated_in_place: false
+    notes: null
+  - name: M
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: used only to size the output and total = M*N (lines 49, 52); not passed to the kernel.
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: passed as ConstInt N (line 22) for the flat-index -> (row, col) division/modulo; kernels are specialised per N.
+  - name: TILE_SIZE
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: the scale-block side length, a problem parameter (ConstInt, line 22), not a tunable.
+outputs:
+  - name: output
+    shape: "(M, N)"
+    dtype: X.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty(M, N, dtype=X.dtype)
+    lines: [49, 49]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: 1D views X_flat = X.contiguous().view(-1), out_flat = output.view(-1); total = M*N
+    lines: [50, 52]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no copy for the generator's contiguous X.
+stages:
+  - id: s1
+    description: >
+      dequant_kernel, grid = (ceil(M*N/TILE), 1, 1) (line 72), flat 1D
+      tiling over the flattened matrix. Each CTA computes the flat offsets
+      of its tile (lines 24-25), loads the (TILE,) slice of X_flat with
+      ZERO padding (line 28), recovers (row, col) = (offset // N,
+      offset % N) and the scale-block coordinates (row // TILE_SIZE,
+      col // TILE_SIZE) elementwise (lines 31-34), gathers one scale per
+      element from S with ct.gather(S, (s_row, s_col), padding_value=0)
+      (line 37), multiplies x_tile * scale_tile in the native dtype (line
+      39) and stores the tile to out_flat (line 41).
+    kind: kernel
+    lines: [21, 41]
+    launches: "1 (grid = ceil(M*N/TILE) CTAs)"
+    depends_on: []
+    fusable_with: none
+    produces: output (final result)
+algorithm_family: >
+  Elementwise multiply with a block-constant broadcast scale, implemented
+  as a flat 1D map with per-element integer division/modulo to recover the
+  scale-block index and a per-element gather of the scale (no 2D tiling,
+  no per-tile scale hoisting).
+reduction_scan_sort_structure: >
+  None; purely elementwise.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: n/a; the single multiply is performed in the native input dtype (no fp32 upcast), identical to the reference X * scale
+  output_dtype: X.dtype
+  special_modes: none
+  masking_or_padding_values: "ZERO padding on the X load (line 28) and padding_value=0 on the scale gather (line 37) for the tail tile; padded lanes multiply 0*0 and lie outside the stored range"
+intermediate_storage: >
+  None (the reference materialises an (M, N) scale matrix; the cuTile
+  implementation does not).
+mutation_rules: >
+  X and S are not modified; output is fully overwritten; idempotent.
+  Tuning launches write into the real out_flat buffer (args_fn, line 61),
+  which the final launch overwrites.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per CTA)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over
+  the tile x occupancy cartesian space (_SEARCH_SPACE, lines 14-18), keyed
+  by (M, N, TILE_SIZE, dtype) (line 57); winner applied via the memoised
+  kernel_with_hints kernel (line 73). get_last_config written only on the
+  autotune path (lines 64-68). Audit only.
+implementation_freedoms_observed: >
+  Tile size and occupancy; 1D flat tiling with per-element gather (this
+  implementation) vs 2D tiling aligned to the scale blocks so that one
+  scale is loaded per block; whether to upcast to fp32 (this implementation
+  does not); whether N and TILE_SIZE are compile-time constants.
+algorithm_constraints_observed: >
+  Keep: out[i, j] = X[i, j] * S[i // TILE_SIZE, j // TILE_SIZE] with
+  floor-division block indexing (partial edge blocks map to the last scale
+  row/column, which is why S has ceil-sized dims), native-dtype multiply,
+  output in a fresh (M, N) buffer of X's dtype, no materialised expanded
+  scale required.
+fq_boundary:
+  bytes_expr: "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size"
+  flops_expr: "M * M"
+  consistent_with_timed_boundary: true
+  notes: >
+    Read X, write output and read S once, written for the square case
+    N = M that the generator produces (run() supports general N but the
+    formula does not). run() performs no extra data movement (one
+    allocation, views). The kernel gathers a scale per element rather than
+    per block, so S is requested M*N times at the gather level; the formula
+    counts it once, i.e. it assumes those repeated requests are served
+    from cache. Unlike the reference, the cuTile path never materialises
+    the (M, N) scale matrix, so the formula matches the kernel's intended
+    traffic.
+notes_for_review:
+  - N and TILE_SIZE are ConstInt kernel arguments, so every swept M (with N = M) compiles a new specialisation.
+  - The per-element integer division and modulo (flat index to 2D) plus the per-element 2D gather are a mapping choice; a 2D-tiled variant would load one scale per scale block.
+  - M is never passed to the kernel; the grid is derived from total = M*N and out-of-range lanes are handled by padding.
+  - block_size is accepted but ignored; the default path uses _DEFAULT_CONFIG.tile.
+  - The operator name suggests integer-weight dequantisation but X is a float tensor of the same dtype as S; semantically it is a block-scaled multiply.
+  - bytes_expr hardcodes the square shape (M * M) while run() and the generator accept a distinct N.
