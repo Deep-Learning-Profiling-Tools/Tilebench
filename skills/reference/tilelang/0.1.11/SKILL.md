@@ -352,7 +352,7 @@ T.vectorized(start, stop=None, *, annotations=None)
 
 - `if` / `elif` / `else` with device conditions (`i < N`); conditions on plain Python values are folded at compile time. Ternary `a if c else b` is supported.
 - `while cond:` with a device condition; `break` and `continue` inside `T.serial` / `T.unroll` / `T.Parallel` / `while`.
-- `T.any_of(c1, c2, ...)` / `T.all_of(c1, c2, ...)` combine predicates.
+- `T.all_of(buf)` / `T.any_of(buf)` reduce a single boolean buffer (or buffer region) to one predicate (all / any element true); combine scalar predicates with `T.And(a, b)`, `T.Or(a, b)`, `T.Not(a)`.
 - `T.ceildiv(a, b)` (alias `T.cdiv`) is ceiling division, used for grid extents and trip counts.
 - Not supported inside kernels: iterating over Python lists, `enumerate`, `zip`, chained assignment `a = b = c`, `len()` (use `buf.shape[d]`), `isinstance`, defining functions or classes (use `T.macro`, section 14).
 - A plain Python name assigned inside the kernel (`base = k * BK`) is a scalar binding, not storage; use `T.alloc_var` for a mutable per-thread scalar.

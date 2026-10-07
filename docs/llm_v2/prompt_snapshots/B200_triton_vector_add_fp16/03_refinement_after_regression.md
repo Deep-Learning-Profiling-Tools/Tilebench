@@ -797,9 +797,12 @@ Framework facts [S5]: `last_level_cache_bytes()` returns the runtime `L2_cache_s
 | tilelang | 0.1.11 |
 | Python | unknown |
 | apache-tvm-ffi | unknown |
-| nvidia-cuda-tileiras / nvcc / nvvm | unknown |
+| tileiras (CUDA Tile compiler used by cuda-tile) | 13.2 [S7] |
+| nvcc / nvvm | unknown |
 | OS / kernel | unknown |
 | Proton backend | unknown |
+
+APIs whose documented minimum tileiras version is 13.3 or later are unavailable in this B200 environment.
 
 ## Sources
 
@@ -811,6 +814,7 @@ Framework facts [S5]: `last_level_cache_bytes()` returns the runtime `L2_cache_s
 6. **[S6-4]** NVIDIA HGX platform page, HGX B200 column and footnotes ("1. Sparse specification. 2. Dense specification.") — https://www.nvidia.com/en-us/data-center/hgx/ (accessed 2026-10-05).
 7. **[S6-5]** NVIDIA DGX B200 page ("1,440 GB total, 64 TB/s HBM3e bandwidth", 8 GPUs) — https://www.nvidia.com/en-us/data-center/dgx-b200/ (accessed 2026-10-05).
 8. **[S6-6]** NVIDIA Blackwell architecture page — https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/ (accessed 2026-10-05).
+9. **[S7]** `tileiras --version` on dgx003, 2026-10-07: "Cuda compilation tools, release 13.2, V13.2.78" (the compiler cuda-tile uses on this host).
 
 
 

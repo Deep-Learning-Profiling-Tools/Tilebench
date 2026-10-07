@@ -344,7 +344,7 @@ T.vectorized(start, stop=None, *, annotations=None)
 
 - `if` / `elif` / `else` with device conditions (`i < N`); conditions on plain Python values are folded at compile time. Ternary `a if c else b` is supported.
 - `while cond:` with a device condition; `break` and `continue` inside `T.serial` / `T.unroll` / `T.Parallel` / `while`.
-- `T.any_of(c1, c2, ...)` / `T.all_of(c1, c2, ...)` combine predicates.
+- `T.all_of(buf)` / `T.any_of(buf)` reduce a single boolean buffer (or buffer region) to one predicate (all / any element true); combine scalar predicates with `T.And(a, b)`, `T.Or(a, b)`, `T.Not(a)`.
 - `T.ceildiv(a, b)` (alias `T.cdiv`) is ceiling division, used for grid extents and trip counts.
 - Not supported inside kernels: iterating over Python lists, `enumerate`, `zip`, chained assignment `a = b = c`, `len()` (use `buf.shape[d]`), `isinstance`, defining functions or classes (use `T.macro`, section 14).
 - A plain Python name assigned inside the kernel (`base = k * BK`) is a scalar binding, not storage; use `T.alloc_var` for a mutable per-thread scalar.
@@ -895,9 +895,12 @@ Framework facts [S5]: `last_level_cache_bytes()` returns the runtime `L2_cache_s
 | tilelang | 0.1.11 |
 | Python | unknown |
 | apache-tvm-ffi | unknown |
-| nvidia-cuda-tileiras / nvcc / nvvm | unknown |
+| tileiras (CUDA Tile compiler used by cuda-tile) | 13.2 [S7] |
+| nvcc / nvvm | unknown |
 | OS / kernel | unknown |
 | Proton backend | unknown |
+
+APIs whose documented minimum tileiras version is 13.3 or later are unavailable in this B200 environment.
 
 ## Sources
 
@@ -909,6 +912,7 @@ Framework facts [S5]: `last_level_cache_bytes()` returns the runtime `L2_cache_s
 6. **[S6-4]** NVIDIA HGX platform page, HGX B200 column and footnotes ("1. Sparse specification. 2. Dense specification.") — https://www.nvidia.com/en-us/data-center/hgx/ (accessed 2026-10-05).
 7. **[S6-5]** NVIDIA DGX B200 page ("1,440 GB total, 64 TB/s HBM3e bandwidth", 8 GPUs) — https://www.nvidia.com/en-us/data-center/dgx-b200/ (accessed 2026-10-05).
 8. **[S6-6]** NVIDIA Blackwell architecture page — https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/ (accessed 2026-10-05).
+9. **[S7]** `tileiras --version` on dgx003, 2026-10-07: "Cuda compilation tools, release 13.2, V13.2.78" (the compiler cuda-tile uses on this host).
 
 
 
