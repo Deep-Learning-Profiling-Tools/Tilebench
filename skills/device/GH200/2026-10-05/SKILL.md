@@ -13,8 +13,8 @@ Sourced hardware and environment facts only. Every number carries a unit, a scop
 source tag `[S<n>]` (see Sources). `unknown` means no allowed source states the value.
 Whether a DSL (Triton, cuTile, TileLang) exposes a mechanism listed here is NOT asserted in
 this file; confirm it in the backend Reference Skill. No benchmark-derived guidance.
-The device facts below were captured on the campaign host (not on the host that wrote this
-file): `verified_on_device: false`.
+The device facts below were captured on the campaign host and re-checked there on 2026-10-07
+[S1]: `verified_on_device: true`.
 
 ## Identity
 
@@ -36,8 +36,8 @@ file): `verified_on_device: false`.
 | Max block dimensions (x, y, z) | 1024, 1024, 64 | per block | [S6-1] |
 | Max grid dimensions (x; y or z) | 2^31-1; 65535 | per grid | [S6-1] |
 | Thread block cluster | portable max 8; "nonportable cluster size of 16" on H100 | per cluster | [S6-7] |
-| SM clock (max) | unknown | whole device | — |
-| Memory clock / bus width | unknown | whole device | — |
+| SM clock (max) | 1980 MHz | whole device | [S1] |
+| Memory clock / bus width | 2619 MHz / 6144 bit | whole device | [S1] |
 
 ## Compute capabilities by dtype (capability only; DSL support to be confirmed per Reference Skill)
 
@@ -54,7 +54,7 @@ file): `verified_on_device: false`.
 | 32-bit registers | 64 K | per SM | [S6-1] |
 | Max 32-bit registers | 255 | per thread | [S6-1][S6-7] |
 | Max 32-bit registers | 64 K | per thread block | [S6-1] |
-| Shared memory, default limit | unknown (runtime `shared_memory_per_block` not captured) | per block | — |
+| Shared memory, default limit | 49,152 B (48 KiB) | per block | [S1] |
 | Shared memory, opt-in max | "227 KB" ("CUDA reserves 1 KB per block") | per block | [S6-1][S6-7] |
 | Shared memory | "228 KB" | per SM | [S6-1][S6-7] |
 | Shared memory banks | 32 | per SM | [S6-1] |
@@ -82,7 +82,7 @@ Framework facts: `last_level_cache_bytes()` returns the runtime L2 on Hopper (no
 
 - 1024 threads per block; 2048 threads, 64 warps, 32 blocks per SM; 255 registers per thread; 64 K registers per block and per SM; 227 KB opt-in shared memory per block; 228 KB shared memory per SM [S6-1][S6-7].
 - Cluster size: 8 portable, 16 non-portable [S6-7].
-- Clocks (SM, memory): unknown.
+- Max SM clock 1980 MHz; memory clock 2619 MHz [S1]. Base/boost clock schedule under load: unknown.
 
 ## Software snapshot (host "gracehopper", captured 2026-10-02) [S3]
 
@@ -108,6 +108,7 @@ Framework setting at capture: `cutile_crash_isolation_timeout_sec_at_capture: 60
 
 ## Sources
 
+0. **[S1]** Runtime capture on gracehopper, 2026-10-07: `torch.cuda.get_device_properties(0)` + `nvidia-smi` (clock_rate, memory_clock_rate, memory_bus_width, shared_memory_per_block; device name, driver, compute capability, multi_processor_count, L2_cache_size, total_memory and the software versions above re-checked unchanged).
 1. **[S3]** GH200 environment capture `results/GH200/logs/metadata/environment.json` and provenance sidecar `results/GH200/logs/provenance/mul2_default_triton-cutile-tilelang.json`, read with `git show origin/archive/tilebenchpp-2026-10:<path>` (accessed 2026-10-05).
 2. **[S5]** `tilebench/hardware.py` @ ea04fb36 (worktree `/projects/kzhou6/bcui2/research/tilebench/llm_wt`).
 3. **[S6-1]** NVIDIA CUDA C Programming Guide v12.9.0 (archived single page), "Technical Specifications per Compute Capability", column 9.0 — https://docs.nvidia.com/cuda/archive/12.9.0/cuda-c-programming-guide/index.html#features-and-technical-specifications (accessed 2026-10-05). The current v13.4.2 split page `05-appendices/compute-capabilities.html` returned HTTP 404 on 2026-10-05.
