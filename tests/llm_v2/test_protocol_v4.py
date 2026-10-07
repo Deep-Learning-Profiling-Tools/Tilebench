@@ -309,6 +309,45 @@ def test_compiled_kernel_cache_is_not_a_tensor_cache_but_an_output_cache_still_i
     assert any("holds tensor data" in i for i in _verdict(out_cache, "tilelang", "gaussian_blur").review_items())
 
 
+POOL_CONFIG = ("import torch\nimport triton\nimport triton.language as tl\n_last_config = {}\n\n@triton.jit\n"
+               "def _k(X, Y, n, BLOCK: tl.constexpr):\n    o = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)\n"
+               "    tl.store(Y + o, tl.load(X + o, mask=o < n), mask=o < n)\n\n"
+               "def run(input, N, C, H, W, kernel_size, stride, padding, **kwargs):\n    global _last_config\n"
+               "    oh = (H + 2 * padding - kernel_size) // stride + 1\n    ow = (W + 2 * padding - kernel_size) // stride + 1\n"
+               "    total = N * C * oh * ow\n    out = torch.empty(total, dtype=input.dtype, device=input.device)\n"
+               "    grid = (triton.cdiv(total, 256),)\n    _last_config = {'BLOCK': 256, 'grid': grid}\n"
+               "    _k[grid](input, out, total, BLOCK=256)\n    return out\n\ndef get_last_config():\n    return dict(_last_config)\n")
+
+
+def test_scalar_run_inputs_are_configuration_but_tensor_and_output_caches_stay_review():
+    from tilebench.llm.v2.tasks.input_kinds import scalar_positions
+    rules = load_contract("2d_max_pooling").rules
+    pos = scalar_positions("2d_max_pooling")
+    assert pos == frozenset(range(1, 8))                       # input, N, C, H, W, kernel_size, stride, padding
+    # a launch grid computed from the scalar inputs, kept for get_last_config(): configuration (checker v3 flagged it)
+    assert any("holds tensor data" in i for i in check_compliance(POOL_CONFIG, "triton", rules).review_items())
+    assert not any("holds tensor data" in i for i in check_compliance(POOL_CONFIG, "triton", rules, scalar_positions=pos).review_items())
+    # the tensor input or the output in persistent state stays a possible result cache
+    keeps_input = POOL_CONFIG.replace("_last_config = {'BLOCK': 256, 'grid': grid}", "_last_config = {'BLOCK': 256, 'x': input}")
+    keyed_out = POOL_CONFIG.replace("    return out\n\ndef get", "    _last_config[(N, C, H, W)] = out\n    return out\n\ndef get")
+    for src in (keeps_input, keyed_out):
+        assert any("holds tensor data" in i for i in check_compliance(src, "triton", rules, scalar_positions=pos).review_items())
+    # only the positions the task passes as numbers: a scalar position never covers a tensor input
+    assert 0 not in pos and scalar_positions("vector_add") == frozenset()
+
+
+def test_input_kinds_manifest_matches_the_case_sets_and_the_generators():
+    from tilebench.llm.v2.tasks import input_kinds
+    m = input_kinds.load_manifest()
+    cs = ms.load_case_sets()["operators"]
+    assert set(m["operators"]) == set(cs) and len(cs) == 45
+    assert all(e["kinds"][0] == "tensor" for e in m["operators"].values())
+    if not torch.cuda.is_available():
+        pytest.skip("generators need the GPU")
+    for op, e in sorted(m["operators"].items()):                 # first case of every task, as the evaluator builds it
+        assert input_kinds.derive(op, {**cs[op], "cases": cs[op]["cases"][:1]}) == e["kinds"], op
+
+
 # ----------------------------------------------------------------------------- Claude Code adjudication
 def _formal_review_state(study, folds, tmp_path):
     ctx, job, _ = synthetic_context("vector_add", "fp16", "B200", "triton", "base", study, folds)
@@ -442,6 +481,48 @@ def test_generation_overlaps_other_evaluations_same_trajectory_waits_and_backlog
     gens = [e for evs in log.values() for e in evs if e[0] == "gen"]
     evals = [e for evs in log.values() for e in evs if e[0] == "eval"]
     assert any(g[2] < v[3] and v[2] < g[3] for g in gens for v in evals)       # other trajectories generate meanwhile
+
+
+def test_concurrency_ramp_is_gated_on_the_evaluation_backlog_not_on_budget_reservations(study, folds, tmp_path, monkeypatch):
+    """With more trajectories than budget slots, every slot is reserved by a trajectory waiting to send; the limiter
+    must still ramp while few candidates wait for the device (the B200 formal launch stayed at 3 otherwise)."""
+    from tilebench.llm.v2.orchestration import campaign, scheduler
+    from tilebench.llm.v2.orchestration.campaign import CampaignSpec, Preflight
+    monkeypatch.setattr(campaign, "preflight", lambda *a, **k: Preflight(device="B200", dsl=k.get("dsl", "triton"), condition="base",
+                                                                         ok=True, run_type="validation"))
+    seen = {}
+    real_limiter, real_tracker = scheduler.AdaptiveLimiter, scheduler.EvalTracker
+
+    class Lim(real_limiter):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            seen.setdefault("pending_fns", []).append(k["pending_fn"])
+
+    class Tracker(real_tracker):
+        def __init__(self, inner):
+            super().__init__(inner)
+            seen["tracker"] = self
+
+    class Budget(scheduler.EvalBudget):
+        def __init__(self, cap):
+            super().__init__(cap)
+            seen["budget"] = self
+    monkeypatch.setattr(scheduler, "AdaptiveLimiter", Lim)
+    monkeypatch.setattr(scheduler, "EvalTracker", Tracker)
+    monkeypatch.setattr(scheduler, "EvalBudget", Budget)
+    spec = CampaignSpec(name="unit_ramp_gate", run_type="validation", device="B200", dsl="triton", condition="base", model="gpt",
+                        operators=["vector_add"], out_root=tmp_path, resume=True, isolation="none")
+    good = scripted_text("impl_triton.py", "# MOCK: valid 1.0\ndef run(*a): pass\ndef get_last_config(): return {}")
+
+    class Ev(MockEvaluator):
+        report, timeout_s = {"backend": "bwrap"}, 3600
+    scheduler.run_scheduled(spec, ["triton"], models=["gpt"], max_pending=4, log=lambda s: None,
+                            providers={"gpt": MockProvider([{"text": good}] * 5)}, evaluator=Ev(), telemetry_interval_s=0.2)
+    fn, tracker, budget = seen["pending_fns"][0], seen["tracker"], seen["budget"]
+    budget.used, tracker.pending = 4, 1                     # every slot reserved, one candidate at the device
+    assert fn() == 1 < 4 / 2
+    tracker.pending = 3
+    assert fn() == 3
 
 
 def test_scheduler_continues_a_trajectory_after_the_adjudicator_resolves_its_review(study, folds, tmp_path, monkeypatch):

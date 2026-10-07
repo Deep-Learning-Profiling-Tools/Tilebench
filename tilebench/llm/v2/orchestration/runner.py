@@ -53,6 +53,7 @@ from tilebench.llm.v2.metrics.cost import combine as combine_usd, pricing_sha256
 from tilebench.llm.v2.providers.base import (GenerationRequest, GenerationResult, ProviderConfigError, StopRequested,
                                              TransportError, retry_after_seconds)
 from tilebench.llm.v2.providers.ledger import append_jsonl, archive_response, read_jsonl
+from tilebench.llm.v2.tasks.input_kinds import scalar_positions
 from tilebench.llm.v2.validation.contract_checks import check_compliance
 from tilebench.llm.v2.validation.parser import FormatError, parse_single_file
 
@@ -332,7 +333,7 @@ class TrajectoryRunner:
                 return stored                              # resume: the first verdict stands; no silent re-check
             raise ConfigMismatch(f"{cpath} belongs to a different candidate ({stored.get('candidate_sha256')} != {cand_sha})")
         from tilebench.llm.v2.evaluation.fingerprint import checker_fingerprint
-        comp = check_compliance(source, self.ctx.dsl, self.rules)
+        comp = check_compliance(source, self.ctx.dsl, self.rules, scalar_positions=scalar_positions(self.job.operator))
         comp_d = comp.to_dict()
         comp_d["diagnostics"] = comp.diagnostics()
         comp_d["candidate_sha256"] = cand_sha

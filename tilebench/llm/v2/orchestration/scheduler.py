@@ -12,7 +12,8 @@ API generation concurrency is adaptive and per provider (AdaptiveLimiter):
   latest headers leave >= 50 % of every reported limit, no 429 and at most one
   overloaded failure happened since the last change, enough requests completed
   at the current level, the host has memory/CPU headroom, and the evaluation
-  backlog is below half its cap;
+  backlog (candidates waiting for or in evaluation, EvalTracker.pending; not the
+  budget reservations of trajectories still waiting to send) is below half its cap;
 - an HTTP 429 halves the concurrency and pauses new requests of that provider
   until the provider's Retry-After / reset time;
 - generic overloaded / 5xx failures are recorded by the transport protocol;
@@ -377,7 +378,7 @@ def run_scheduled(base_spec, dsls: list[str], *, models: list[str] | None = None
             build_provider(gen, timeout_s=float(models_cfg.get("transport", {}).get("timeout_s", 3600)))
         stop_m = (lambda m=m: stop_all.exists() or (cdir / f"STOP_{m}").exists())
         lim = AdaptiveLimiter(gen.provider, initial=initial, max_limit=max_limit, max_pending=max_pending,
-                              pending_fn=lambda: budget.used, events_path=tdir / f"concurrency_events_{m}.jsonl",
+                              pending_fn=lambda: ev.pending, events_path=tdir / f"concurrency_events_{m}.jsonl",
                               log=log, stop_fn=stop_m)
         limiters[m] = lim
         gated[m] = GatedProvider(inner, lim, telemetry, budget=budget, stop_fn=stop_m)

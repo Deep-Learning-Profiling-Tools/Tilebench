@@ -27,7 +27,8 @@ from tilebench.llm.v2.manifests.schema import canonical_json, sha256_text
 V2_ROOT = Path(__file__).resolve().parents[1]
 CORE_ROOT = V2_ROOT.parents[1] / "core"
 
-CHECKER_SOURCES = ("validation/static_checks.py", "validation/contract_checks.py", "validation/parser.py")
+CHECKER_SOURCES = ("validation/static_checks.py", "validation/contract_checks.py", "validation/parser.py",
+                   "tasks/input_kinds.py", "manifests/input_kinds.yaml")
 EVALUATION_SOURCES = ("evaluation/worker.py", "evaluation/timing.py", "evaluation/anticache.py",
                       "evaluation/launcher.py", "evaluation/job.py")
 CORE_SOURCES = ("timer.py", "verifier.py")

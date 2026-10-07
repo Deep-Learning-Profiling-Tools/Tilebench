@@ -65,7 +65,7 @@ from tilebench.llm.v2.validation.static_checks import (AUDIT, CONFIRMED, REVIEW,
                                                        hidden_search_evidence)
 
 RULE_SCOPES = ("host", "kernel", "any")
-CHECKER_VERSION = "contract_checks/2026-10-07.v3"
+CHECKER_VERSION = "contract_checks/2026-10-07.v4"
 _CACHE_MATCH = re.compile(r"data_ptr|cache|WeakTensorKeyDictionary|WeakKeyDictionary|lru_cache", re.I)
 _IDENTIFIER = re.compile(r"[A-Za-z_]")
 
@@ -159,9 +159,12 @@ def _classify_suspicious(matched: str, line: int, static: StaticReport) -> tuple
     return REVIEW, None
 
 
-def check_compliance(source: str, dsl: str, rules: dict) -> ComplianceResult:
+def check_compliance(source: str, dsl: str, rules: dict, *, scalar_positions=frozenset()) -> ComplianceResult:
+    """`scalar_positions`: positions of the task's `run()` inputs that are Python numbers
+    (`tasks.input_kinds.scalar_positions(operator)`); such a parameter is configuration, not a tensor argument,
+    for the cache data-flow."""
     allowed = tuple(rules.get("allowed_torch_calls", ()))
-    static = analyze(source, dsl, allowed_torch_calls=allowed)
+    static = analyze(source, dsl, allowed_torch_calls=allowed, scalar_positions=scalar_positions)
     static.evidence.extend(hidden_search_evidence(source, static.aliases))
     code = static.code_text
     ev: list[Evidence] = []
