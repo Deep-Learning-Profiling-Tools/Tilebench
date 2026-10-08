@@ -1,0 +1,222 @@
+operator: matmul_fp32_fp16_fp8
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_cutile.py
+    functions:
+      - name: matmul_kernel
+        lines: [35, 68]
+        role: kernel
+      - name: run
+        lines: [74, 122]
+        role: host-driver
+      - name: get_last_config
+        lines: [125, 126]
+        role: helper
+      - name: _DEFAULT_CONFIGS / _SEARCH_SPACE (module constants)
+        lines: [13, 32]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [71, 71]
+        role: tuner
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_torch.py
+    functions:
+      - name: _fp8_args
+        lines: [10, 18]
+        role: helper
+      - name: run
+        lines: [21, 27]
+        role: host-driver
+      - name: module-level allow_tf32 = True and _fp8_cache
+        lines: [4, 7]
+        role: helper
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matmul_fp32_fp16_fp8_inputs
+        lines: [416, 436]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Plain GEMM C = A @ B with A (M, K) and B (K, N) of the same dtype and C
+  in that dtype. The reference (impl_torch.py) sets
+  torch.backends.cuda.matmul.allow_tf32 = True at import (line 4), so the
+  fp32 case is TF32 cuBLAS; fp32 and fp16 use torch.matmul(a, b) (line
+  27). For a.dtype == float8_e4m3fn (lines 22-26) it calls
+  torch._scaled_mm(a, b_col, scale_a, scale_b, out_dtype=bfloat16) and
+  casts the bf16 result back to fp8_e4m3fn, where _fp8_args (lines 10-18)
+  returns a column-major copy of B (b.t().contiguous().t()) and all-ones
+  fp32 per-row / per-column scale vectors, cached in the module dict
+  _fp8_cache keyed by (a.data_ptr(), b.data_ptr(), a.shape, b.shape). Thus
+  the reference's fp8 path is unit-scaled (mathematically a plain GEMM),
+  double-rounds fp32 -> bf16 -> fp8 on output, and performs an
+  operand-repacking step that is cached across calls on the reference
+  side. The generator (tensors.py lines 416-436) scales both operands by
+  1/sqrt(K); fp8 operands are drawn in fp32 and cast; both are returned
+  row-major as (a, b). config.yaml fixes M = N and sweeps K over fp32,
+  fp16 and fp8_e4m3fn with a loose verify tolerance.
+run_signature:
+  text: "def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [a, b]
+  keyword_params: [block_size, autotune]
+  returns: single tensor C of shape (M, N) and dtype a.dtype
+  get_last_config: present
+inputs:
+  - name: a
+    shape: "(M, K)"
+    dtype: "T in {fp32, fp16, fp8_e4m3fn} (asserted equal to b.dtype, line 78)"
+    layout: contiguous row-major
+    mutated_in_place: false
+    notes: loaded as (TM, TK) tiles by block index with zero padding (lines 62-63); K is a ConstInt kernel parameter (line 39)
+  - name: b
+    shape: "(K, N)"
+    dtype: same as a
+    layout: contiguous row-major, consumed as-is (no transpose, no column-major copy)
+    mutated_in_place: false
+    notes: loaded as (TK, TN) tiles by block index with zero padding (lines 64-65)
+outputs:
+  - name: c
+    shape: "(M, N)"
+    dtype: a.dtype (including fp8_e4m3fn for the fp8 case, line 82)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape/dtype asserts, M K N extraction, c = torch.empty((M, N), dtype=a.dtype)
+    lines: [77, 82]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      no operand cast, transpose, packing or scale computation; there is no
+      cache keyed by tensor identity or data_ptr in this file (the only
+      cross-call state is the CutileAutotuner tuned-config and hint-kernel
+      caches, cutile_autotune.py lines 80-81)
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [77, 82]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: c buffer (M, N) uninitialised
+  - id: s1
+    description: >
+      Single GEMM kernel on a 1-D grid of ceil(M/TM) * ceil(N/TN) programs
+      (lines 113-121). The program id is remapped to (pid_m, pid_n) with a
+      grouped (super-grouping along M) ordering controlled by GROUP_SIZE_M
+      (lines 43-53). It keeps a (TM, TN) fp32 accumulator (line 55) and
+      loops over ceil(K/TK) K-tiles with a compile-time trip count (K is
+      ConstInt, lines 56, 61): loads the (TM, TK) tile of A and the
+      (TK, TN) tile of B with zero padding, casts both to mma_dtype
+      (tfloat32 when A is fp32, otherwise the input dtype, line 59) and
+      issues ct.mma (line 66). Epilogue casts the fp32 accumulator to
+      C.dtype and stores the (TM, TN) tile (line 68; clipped at M, N).
+    kind: kernel
+    lines: [35, 68]
+    launches: "ceil(M/TM) * ceil(N/TN)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: c (final result)
+algorithm_family: >
+  Classic tiled tensor-core GEMM: one program per (TM, TN) output tile,
+  sequential K loop with fp32 accumulation, grouped program ordering for
+  L2 locality, direct row-major operand tiles (B is consumed as (K, N)
+  without transposition), no split-K, no persistence, no scratch.
+reduction_scan_sort_structure: >
+  Reduction over K is sequential in TK-wide steps inside one program; the
+  intra-step order is internal to ct.mma. Zero-padded K tails contribute
+  0. No cross-program reduction.
+precision:
+  input_dtypes: [fp32, fp16, fp8_e4m3fn]
+  accumulation: fp32 for every dtype (ct.zeros dtype float32, line 55)
+  output_dtype: >
+    a.dtype: fp32 -> fp32, fp16 -> fp16, fp8_e4m3fn -> fp8_e4m3fn by a
+    direct ct.astype of the fp32 accumulator at store (line 68)
+  special_modes: >
+    tf32: fp32 operands are rounded to ct.tfloat32 in registers before
+    ct.mma (line 59, 63, 65), matching the reference's allow_tf32 = True;
+    fp16: operands used as-is; fp8: e4m3 operands are fed to ct.mma
+    unchanged with no scaling factors (the reference applies all-ones
+    scales, so the products agree); output rounding differs from the
+    reference for fp8 (direct fp32 -> fp8 here versus fp32 -> bf16 -> fp8
+    there)
+  masking_or_padding_values: PaddingMode.ZERO on both operand loads (lines 63, 65); store clipped at (M, N) (line 68); no explicit masks
+intermediate_storage: >
+  None. The accumulator is register/TMEM resident as lowered by cuTile; no
+  global scratch.
+mutation_rules: >
+  a and b are never written. c is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tm
+    role: tile size (rows of C per program; ConstInt)
+    default_present: true
+  - name: tn
+    role: tile size (columns of C per program; ConstInt)
+    default_present: true
+  - name: tk
+    role: tile size (K elements per reduction step; ConstInt)
+    default_present: true
+  - name: group_size_m
+    role: grouped program ordering width (L2 swizzle; ConstInt)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 20-32) with the
+  closures at lines 87-98, cached per shape_key (M, N, K, dtype). The
+  winner's occupancy is applied via kernel_with_hints (line 117) and the
+  tile shape plus group size are passed as ConstInt arguments (lines
+  118-121). The default path selects a per-dtype entry of
+  _DEFAULT_CONFIGS (lines 13-17, 109-111) and raises ValueError for a dtype
+  without an entry. get_last_config returns tm, tn, tk, group_size_m,
+  occupancy (lines 100-107, 125-126). Audit only.
+implementation_freedoms_observed: >
+  Tile shape, K step, grouping width and occupancy; program-to-tile
+  ordering; whether K is a compile-time or runtime parameter; loop form;
+  operand staging (TMA or not) as chosen by cuTile; the accumulator's
+  physical placement.
+algorithm_constraints_observed: >
+  One kernel, one pass over the K axis per output tile with fp32
+  accumulation; fp32 inputs rounded to TF32 for the MMA; fp16 and fp8 e4m3
+  operands used natively with no scaling; output cast to the input dtype
+  (fp8 output for the fp8 case) and allocated inside run(); B consumed
+  row-major without transposition; no operand prepacking, no caching
+  across calls, no scratch.
+fq_boundary:
+  bytes_expr: "(M * K + K * N + M * N) * dtype_size"
+  flops_expr: "2 * M * N * K"
+  consistent_with_timed_boundary: true
+  notes: >
+    One read of A, one read of B and one write of C in the input dtype,
+    which matches the single kernel's compulsory traffic; run() performs
+    no operand preprocessing (B is consumed as given) and assumes no
+    prepacked inputs. The formula ignores tile re-reads of A and B across
+    programs, as usual for GEMM. Note the asymmetry on the reference side:
+    the torch fp8 path builds a column-major copy of B and scale vectors
+    once and reuses them from a data_ptr-keyed cache, so that work is
+    outside the reference's steady-state time but has no counterpart in
+    the cuTile path.
+notes_for_review:
+  - The cuTile fp8 path applies no scaling at all; equivalent to the reference's unit scales but any future non-unit scaling would need an explicit epilogue.
+  - For fp8 the output is produced by a direct fp32 -> fp8_e4m3fn cast, while the reference rounds through bf16 first; differences are absorbed by the loose verify tolerance.
+  - K is a ConstInt kernel parameter, so the kernel is specialised for every swept K value (inferred from ct.Constant semantics).
+  - run() has no **kwargs; an unexpected keyword would raise TypeError.
+  - fp8_e5m2 is handled by the generator but has no default config entry here (ValueError in the default path); config.yaml does not sweep it.
+  - The mma_dtype selection on A.dtype (line 59) is a precision mapping, not a hardware branch.
+  - The reference-side _fp8_cache keyed by data_ptr is not mirrored in the cuTile file; nothing is kept across calls here except tuned configs.

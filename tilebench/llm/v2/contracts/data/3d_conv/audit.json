@@ -1,0 +1,169 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "3d_conv",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/3d_conv/impl_triton.py",
+      "functions": [
+        {
+          "name": "conv3d_kernel",
+          "lines": [
+            14,
+            130
+          ]
+        },
+        {
+          "name": "_conv3d_kernel_autotuned",
+          "lines": [
+            133,
+            156
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            159,
+            249
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            252,
+            262
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/3d_conv/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_DEFAULT_CONFIG/_SEARCH_SPACE",
+          "lines": [
+            12,
+            20
+          ]
+        },
+        {
+          "name": "conv3d_kernel",
+          "lines": [
+            23,
+            171
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            174,
+            174
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            177,
+            256
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            259,
+            260
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/3d_conv/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            5,
+            14
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Grouped 3-D cross-correlation, no bias, isotropic stride/padding passed as d/h/w triples (197-202), zero padding by masking, floor formulas for out_D/out_H/out_W (impl_triton.py 44-51, 69-91, 174-176).",
+      "cutile": "Same semantics: flattened (ic_local, kd, kh, kw) reduction, clamp+mask zero padding, same output shape (impl_cutile.py 59-64, 81-124, 193-195, 213-214).",
+      "note": "Both realise F.conv3d(input, weight, bias=None, stride, padding, groups) (impl_torch.py 7-14); output (batch, out_channels, out_D, out_H, out_W) in the input dtype."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "torch.empty output (179-180) then one implicit-GEMM kernel launch over (ceil(batch*out_DHW/rows), ceil(Cout_g/cols), groups) (impl_triton.py 223-247).",
+      "cutile": "torch.empty output (198-199), flat views (201-203), one implicit-GEMM kernel launch with the same 3-axis grid (impl_cutile.py 246-255).",
+      "note": "Identical single-kernel structure; no im2col, no padded copy, no second pass."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Output tiles independent; only the in-program sequential reduction loop (impl_triton.py 65-118).",
+      "cutile": "Same (impl_cutile.py 77-147).",
+      "note": "No inter-program dependency on either side."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Sequential loop over Cin_g*kD*kH*kW flattened channel-major, then kd, kh, kw; chunks folded by tl.dot into one fp32 accumulator; no split-K/atomics (impl_triton.py 62-74, 118).",
+      "cutile": "Same flattening (81-86) and sequential chunk loop folded by ct.mma into one fp32 accumulator; no split-K/atomics (impl_cutile.py 77-86, 146-147).",
+      "note": "Same reduction structure and enumeration order."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 accumulator (59); tl.dot(..., input_precision=\"tf32\") (118); cast to output dtype at store (130).",
+      "cutile": "fp32 accumulator (72); operands cast to ct.tfloat32 for fp32 inputs, else native (75, 146-147); cast before scatter (170).",
+      "note": "Same precision class: TF32 operands for fp32, fp32 accumulation, output in input dtype. config.yaml verify atol 5e-1 / rtol 1e-2 (lines 1-3), looser than 1-D/2-D for the longer reduction."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "Contiguity asserts and scalar metadata only (169-177); no cast/transpose/pack; nothing cached (impl_triton.py 169-221).",
+      "cutile": "Contiguity asserts, scalar metadata, zero-copy .view(-1) (188-203); nothing cached (impl_cutile.py 188-220).",
+      "note": "Neither side performs device-side preprocessing."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None; accumulator in registers (impl_triton.py 59, 130).",
+      "cutile": "None; accumulator in tile space, output written once via scatter (impl_cutile.py 72, 171).",
+      "note": "No global scratch on either side."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No input written; output freshly allocated per call (impl_triton.py 179-180).",
+      "cutile": "No input written; output freshly allocated per call (impl_cutile.py 198-199).",
+      "note": "Idempotent on both sides; contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branch in impl_triton.py.",
+      "cutile": "No architecture branch in impl_cutile.py.",
+      "note": "Neither side dispatches on hardware."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "batch * in_channels * D * H * H * dtype_size + out_channels * (in_channels // groups) * kernel_size ** 3 * dtype_size + batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
+    "flops_expr": "2 * batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 3",
+    "consistent": "true",
+    "note": "config.yaml 28-38. Assumes W = H and a cubic kernel as the generator guarantees (tensors.py 355-361). Counts one read of input and weight, one write of output and 2 flops per MAC; both run() bodies contain only metadata, an uninitialised output allocation and one kernel. Cache re-reads of overlapping windows are uncounted on both sides equally."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "2bed50bcefc7fbeeddf4b8b0ed55073e1460da4080459f6e4c7ca592c52adb2a",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "e6aa5c5255dc5f0270f0b32bef113c4b31bbc5f1d3fd2c52dfb0494223b8d2b2",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

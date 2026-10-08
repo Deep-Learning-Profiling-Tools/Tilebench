@@ -1,0 +1,174 @@
+operator: cross_entropy
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/cross_entropy/impl_triton.py
+    functions:
+      - name: cross_entropy_kernel
+        lines: [8, 37]
+        role: kernel
+      - name: _cross_entropy_kernel_autotuned
+        lines: [40, 48]
+        role: tuner
+      - name: run
+        lines: [51, 78]
+        role: host-driver
+      - name: get_last_config
+        lines: [81, 85]
+        role: helper
+  - path: tilebench/benchmarks/operators/cross_entropy/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/cross_entropy/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_cross_entropy_inputs
+        lines: [390, 393]
+        role: helper
+functional_semantics: >
+  Per-row (unreduced) softmax cross-entropy. Reference: impl_torch.run
+  (lines 5-14) validates that logits is 2-D [batch_size, num_classes] and
+  targets is 1-D [batch_size] with matching batch size, then returns
+  torch.nn.functional.cross_entropy(logits, targets, reduction="none").
+  Mathematically, for every row i:
+  loss[i] = -(logits[i, targets[i]] - logsumexp_j(logits[i, j]))
+  = -(logits[i, t] - max_j logits[i, j] - log(sum_j exp(logits[i, j] - max_j))).
+  No reference-side preprocessing; no label smoothing, no ignore_index
+  handling, no weights.
+run_signature:
+  text: |-
+    def run(
+        logits: torch.Tensor,
+        targets: torch.Tensor,
+        block_size: int = 1024,
+        autotune: bool = False,
+    ) -> torch.Tensor:
+  positional_inputs: [logits, targets]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (batch_size,) holding one loss per row
+  get_last_config: present
+inputs:
+  - name: logits
+    shape: "(batch_size, num_classes)"
+    dtype: "fp16 or fp32 (config case_grid dtype); generator torch.randn"
+    layout: row-major; the kernel receives stride(0)/stride(1) explicitly so any 2-D strided layout is accepted
+    mutated_in_place: false
+    notes: >
+      Loaded as one full row per program with BLOCK_CLASSES =
+      triton.next_power_of_2(num_classes) lanes and cast to fp32 in-kernel
+      (line 23). Out-of-range lanes are filled with -inf.
+  - name: targets
+    shape: "(batch_size,)"
+    dtype: int64 (torch.randint default) in the generator; cast to int32 in-kernel (line 29)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: >
+      Values in [0, num_classes). The kernel masks targets outside
+      [0, num_classes) and substitutes -inf for the gathered logit (lines
+      30-34), which makes the loss +inf for such rows; the torch reference
+      would instead raise. Not exercised by the generator.
+outputs:
+  - name: output
+    shape: "(batch_size,)"
+    dtype: same as logits.dtype (torch.empty(..., dtype=logits.dtype), line 58); the fp32 loss is stored through an implicit cast at tl.store (line 37)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate the (batch_size,) output tensor
+    lines: [58, 58]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: torch.empty, no initialisation needed since every row is written.
+  - description: compute block_classes = triton.next_power_of_2(num_classes) and grid = (batch_size,)
+    lines: [59, 60]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host scalar arithmetic only.
+stages:
+  - id: s1
+    description: >
+      One program per row. Load the whole row (masked to num_classes, other
+      -inf) as fp32; row_max = tl.max over classes; exp_shifted = exp(logits -
+      row_max); row_sum = tl.sum over classes; gather the target logit by a
+      second scalar load at logits[row, target]; loss = -(target_logit -
+      row_max - log(row_sum)); store one scalar.
+    kind: kernel
+    lines: [8, 37]
+    launches: "1 launch with grid (batch_size,) -- one program per row"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (batch_size,) -- no intermediates
+algorithm_family: >
+  Row-wise fused log-softmax + gather ("single-pass, whole-row-in-registers
+  cross-entropy"): per row, a max-reduction, a shifted-exp sum-reduction and a
+  single gathered logit, all within one program. Not an online/chunked
+  logsumexp: the entire class axis is held in one tile.
+reduction_scan_sort_structure: >
+  Two independent reductions per row over the class axis, both over a single
+  tile of BLOCK_CLASSES = next_power_of_2(num_classes) lanes: tl.max(axis=0)
+  then tl.sum(axis=0) of exp(x - max). The intra-tile reduction tree order is
+  left to Triton's lowering (not specified by the source). Padding lanes hold
+  -inf, so they contribute exp(-inf)=0 to the sum and never win the max. No
+  scan, no sort, no tie-breaking concerns (max is only used as a shift).
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 for both dtypes (explicit .to(tl.float32) on loads, lines 23 and 32-34)
+  output_dtype: logits.dtype (fp32 result implicitly cast on store)
+  special_modes: natural-base tl.exp / tl.log (no exp2 rescaling); max-subtracted (numerically stable) logsumexp
+  masking_or_padding_values: "-inf for class lanes >= num_classes and for an out-of-range target gather; targets cast int64->int32"
+intermediate_storage: >
+  None in global memory. All per-row state (row tile, max, sum) lives in
+  registers/shared memory of one program.
+mutation_rules: >
+  No input is modified. run() allocates a fresh output every call, so repeated
+  calls are idempotent and independent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over num_warps only (configs with empty kwargs; key
+  ["num_classes"], warmup=1, rep=3), lines 40-48. Default path launches the
+  undecorated kernel with _DEFAULT_CONFIG (lines 68-77). get_last_config reads
+  best_config.num_warps from the autotuned object. BLOCK_CLASSES is derived
+  from num_classes (next power of two), not tuned. The block_size keyword is
+  accepted but never used.
+implementation_freedoms_observed: >
+  Row-to-program mapping (here one row per program; several rows per program
+  would also be legal), warp count, pipelining depth, whether the target logit
+  is re-loaded from global memory (as here) or extracted from the already
+  loaded row tile, and the intra-tile reduction tree order. Whether the class
+  axis may be chunked with an online max/sum instead of a single tile is a
+  reduction-order question for reconciliation; this source keeps one tile.
+algorithm_constraints_observed: >
+  Keep: fp32 computation regardless of input dtype; max-subtracted
+  log-sum-exp (stable form); -inf padding for lanes beyond num_classes; one
+  output scalar per row stored in the input dtype; output shape
+  (batch_size,); no reduction across rows; no global scratch.
+fq_boundary:
+  bytes_expr: "batch_size * num_classes * dtype_size + batch_size * 8 + batch_size * dtype_size"
+  flops_expr: "batch_size * num_classes * 4"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() consists of one output allocation and one kernel. The
+    bytes formula counts one read of logits, one read of int64 targets (8 B
+    each) and one write of the output in logits dtype, which is exactly the
+    kernel's compulsory traffic; the extra one-element-per-row gather of the
+    target logit (line 32) is not counted but is negligible and cache-resident.
+    No preprocessing or prepacking is assumed. dtype_size in the formula
+    refers to the logits dtype (fp16: 2, fp32: 4).
+notes_for_review:
+  - The source at this SHA does not use tl.histogram, block_size, or any chunked reduction; the whole class axis is one tile of next_power_of_2(num_classes) lanes, which caps supportable num_classes by register/shared capacity (config fixes num_classes=512).
+  - Out-of-range target handling (loss=+inf, lines 30-34) diverges from the torch reference, which raises; not exercised by the generator.
+  - The fp32 loss is stored into an fp16 output for the fp16 cases via an implicit cast at tl.store (line 37); the torch reference also returns fp16 there.
+  - The autotune sweep varies only num_warps; num_stages in _DEFAULT_CONFIG is not swept, and get_last_config reports only num_warps.
+  - config.yaml verify section is absent, so per-dtype default tolerances apply.

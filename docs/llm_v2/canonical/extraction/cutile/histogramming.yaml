@@ -1,0 +1,221 @@
+operator: histogramming
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/histogramming/impl_cutile.py
+    functions:
+      - name: histogram_partial_kernel
+        lines: [34, 64]
+        role: kernel
+      - name: histogram_reduce_kernel
+        lines: [67, 90]
+        role: kernel
+      - name: run
+        lines: [97, 185]
+        role: host-driver
+      - name: get_last_config
+        lines: [188, 189]
+        role: helper
+      - name: _partial_tuner / _reduce_tuner (CutileAutotuner instances)
+        lines: [93, 94]
+        role: tuner
+  - path: tilebench/benchmarks/operators/histogramming/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 9]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/histogramming/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_histogramming_inputs
+        lines: [534, 558]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Integer histogram. Reference (impl_torch.py line 9):
+  torch.bincount(input.to(int64), minlength=num_bins).to(int32), i.e. hist[b] = |{i : input[i] == b}|
+  for b in [0, num_bins). Input (tensors.py 534-558) is int32 of length N with values
+  arange(N) % num_bins (deterministic, all in range, near-uniform), passed with the ints N and
+  num_bins. Output is an int32 vector of length num_bins (bincount's length equals num_bins
+  because max(input) = num_bins - 1). Verification is exact (atol = rtol = 0).
+run_signature:
+  text: |
+    def run(input: torch.Tensor, N: int, num_bins: int,
+            block_size: int = None, autotune: bool = False, **kwargs):
+  positional_inputs: [input, N, num_bins]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor `histogram` of shape (num_bins,), dtype int32
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: int32 (asserted, line 103)
+    layout: contiguous (run() calls .contiguous(), line 106)
+    mutated_in_place: false
+    notes: read in (BLOCK_SIZE,) tiles with PaddingMode.ZERO (lines 47-52)
+  - name: N
+    shape: scalar
+    dtype: Python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument; also sizes num_partials on the host
+  - name: num_bins
+    shape: scalar
+    dtype: Python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime kernel argument; width of the partial buffer and of the output
+outputs:
+  - name: histogram
+    shape: "(num_bins,)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: input = input.contiguous() (no-op for generator input)
+    lines: [106, 106]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: histogram = torch.empty((num_bins,), int32)
+    lines: [107, 107]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: fully overwritten by the reduce kernel
+  - description: num_partials = min(_NUM_PARTIAL, ceil(N / default_block_size)) where default_block_size is the block_size kwarg or the default partial block size (NOT the autotuned block size)
+    lines: [110, 113]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: fixes the number of private partial histograms (grid of the partial kernel) independently of tuning
+  - description: partial = torch.zeros((num_partials, num_bins), int32) -- scratch allocated AND zero-filled on every call
+    lines: [116, 116]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: the zero-fill is a device memset inside run() and is therefore inside the timed boundary; it is required because the partial kernel accumulates with atomics
+  - description: autotune only - scratch = torch.empty_like(partial) used as the tuning target so the sweep does not pollute `partial`
+    lines: [124, 124]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: only on the autotune path and only until tune_or_cached hits its cache
+stages:
+  - id: s1
+    description: >
+      Partial histograms. Grid (num_partials, 1, 1) (lines 142-145). Program pid owns ROW pid of the
+      global (num_partials, num_bins) int32 buffer `partial`. It iterates chunk_idx = pid, pid+num_partials,
+      ... < ceil(N/BLOCK_SIZE) (grid-stride loop over BLOCK_SIZE-element chunks, lines 45-46). Per chunk:
+      load (BLOCK_SIZE,) values with zero padding; valid = (offs < N) & (0 <= vals < num_bins)
+      (lines 54-57); row_idx = full(pid); bin_idx = where(valid, vals, 0); update = int32(valid)
+      (lines 60-62); ct.atomic_add(partial_ptr, (row_idx, bin_idx), update) (line 64). So each element
+      is counted by a GLOBAL-MEMORY atomic add of 0 or 1 into the program's private row; invalid/padded
+      lanes add 0 to bin 0. There is no register/shared-memory private histogram and no intra-tile
+      pre-aggregation of equal bins: contention exists only among lanes of the same program (same row);
+      different programs never touch the same row.
+    kind: kernel
+    lines: [34, 64]
+    launches: "1 (num_partials programs, num_partials = min(256, ceil(N/default_block_size)))"
+    depends_on: []
+    fusable_with: "none"
+    produces: partial (num_partials, num_bins) int32 in global memory
+  - id: s2
+    description: >
+      Reduce across partials. Grid (ceil(num_bins / BLOCK_BINS), 1, 1) (lines 168-173). Program pid_b
+      owns a column slab of BLOCK_BINS bins: acc = zeros (BLOCK_BINS,) int32 (line 78); for row_tile in
+      range(ceil(num_partials / BLOCK_ROWS)) (runtime trip count, lines 80-88): load a (BLOCK_ROWS, BLOCK_BINS)
+      tile of partial at (row_tile, pid_b) with zero padding and acc += ct.sum(tile, axis=0). Store acc to
+      histogram at (pid_b,) (line 90); bins beyond num_bins are clipped by ct.store.
+    kind: kernel
+    lines: [67, 90]
+    launches: "1 (ceil(num_bins/BLOCK_BINS) programs)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: histogram
+algorithm_family: >
+  Two-pass histogram: (1) per-program private partial histograms kept in GLOBAL memory, one row
+  per program, filled with global atomic adds in a grid-stride loop over the input; (2) a column-wise
+  tiled sum over the partial rows into the final histogram. The partial count is capped
+  (_NUM_PARTIAL) so pass 1 is persistent-style with a bounded grid.
+reduction_scan_sort_structure: >
+  Pass 1: order-free integer atomic accumulation (exact, commutative). Pass 2: per bin, sequential
+  sum over row tiles in increasing row_tile order, each tile reduced along axis 0 by ct.sum
+  (library-defined tree); int32 sums are exact so order is irrelevant. No sort, no scan.
+precision:
+  input_dtypes: [int32]
+  accumulation: int32 throughout (atomic_add of int32 updates; int32 acc in reduce)
+  output_dtype: int32
+  special_modes: exact integer arithmetic; verify atol = rtol = 0
+  masking_or_padding_values: "input padded with 0 beyond N (PaddingMode.ZERO) and excluded via offs < N; values outside [0, num_bins) are dropped (update = 0) rather than raising as torch.bincount would for negatives; partial tiles zero-padded in the reduce"
+intermediate_storage: >
+  `partial`: global int32 scratch of shape (num_partials, num_bins), allocated and zeroed on every
+  call (line 116), written by s1 with atomics, read by s2, freed after run() returns. On the autotune
+  path an extra uninitialised `scratch` of the same shape (line 124) is the target of the tuning
+  sweep for s1; the reduce sweep tunes directly on `partial`/`histogram`.
+mutation_rules: >
+  No input is modified; fresh output and scratch each call; idempotent. The two kernels are
+  serialised on the current stream; s2 must not start before s1 completes (same stream guarantees it).
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: partial_block_size
+    role: tile size (elements per chunk in s1); the default/kwarg value also sets num_partials on the host
+    default_present: true
+  - name: partial_occupancy
+    role: occupancy hint for s1
+    default_present: true
+  - name: reduce_block_rows
+    role: tile size (partial rows per reduce tile in s2)
+    default_present: true
+  - name: reduce_block_bins
+    role: tile size (bins per program in s2; sets the s2 grid)
+    default_present: true
+  - name: reduce_occupancy
+    role: occupancy hint for s2
+    default_present: true
+  - name: _NUM_PARTIAL
+    role: cap on the number of partial histograms / s1 grid size (module constant, not swept)
+    default_present: true
+autotune_mechanism: >
+  Two independent CutileAutotuner instances: s1 tuned over (block_size, occupancy) keyed by
+  (N, num_bins, num_partials, dtype) against a throwaway scratch buffer; s2 tuned over
+  (block_rows, block_bins, occupancy) keyed by (num_partials, num_bins, dtype). get_last_config
+  reports prefixed keys partial_*/reduce_* matching _DEFAULT_CONFIG. Audit only.
+implementation_freedoms_observed: >
+  Chunk/tile sizes, occupancy, the number of partials (cap), whether s1 uses global atomics into a
+  private row (as here) versus some other private-histogram mechanism, and the reduce tiling.
+  `block_size` (kwarg) overrides the default chunk size used to derive num_partials but not the
+  tuned chunk size.
+algorithm_constraints_observed: >
+  Exact int32 counting of in-range values; two-kernel structure with a global (num_partials,
+  num_bins) int32 scratch that must be zeroed before s1 (the zeroing is part of run()); s1 is a
+  bounded-grid grid-stride pass with each program writing only its own partial row; s2 is a plain
+  column sum; output (num_bins,) int32; out-of-range values are silently ignored.
+fq_boundary:
+  bytes_expr: "(N + num_bins) * dtype_size"
+  flops_expr: "N"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts one read of the N int32 inputs and one write of the num_bins int32 output
+    (dtype_size = 4). The timed run() additionally zero-fills, atomically updates and re-reads the
+    (num_partials, num_bins) int32 scratch (about 3 * num_partials * num_bins * 4 bytes of traffic
+    plus atomic RMW cost); this is not counted. For the smallest N and largest num_bins in the sweep
+    (N = 262144, num_bins = 4096, num_partials = 256) that scratch traffic exceeds the nominal
+    bytes, so reported bandwidth is a lower bound on actual traffic. No prepacking is assumed and no
+    other preprocessing exists (contiguous() is a no-op).
+notes_for_review:
+  - cuTile has no histogram primitive; s1 builds per-program partial histograms with ct.atomic_add into a private row of a global (num_partials, num_bins) buffer -- no shared-memory/register private histogram, no in-tile aggregation of equal bins. This is the candidate Triton/cuTile approach difference to reconcile.
+  - The scratch zero-fill (torch.zeros) and its allocation happen inside run() on every call and are inside the timed region but outside bytes_expr.
+  - num_partials is derived from the default (or kwarg) block size, not the autotuned one, so the s1 grid is fixed across tuning candidates while chunk size varies.
+  - Padded or invalid lanes still issue an atomic add of 0 to bin 0 of the program's row.
+  - The default reduce block_bins value in _DEFAULT_CONFIG is not among the values in _REDUCE_SEARCH_SPACE (audit observation only).
+  - Out-of-range values (negative or >= num_bins) are dropped, whereas torch.bincount raises on negatives and would extend the output for values >= num_bins; the generator never produces either.

@@ -1,0 +1,173 @@
+operator: argmax
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/argmax/impl_cutile.py
+    functions:
+      - name: argmax_rowwise_kernel
+        lines: [19, 44]
+        role: kernel
+      - name: run
+        lines: [50, 94]
+        role: host-driver
+      - name: get_last_config
+        lines: [97, 98]
+        role: helper
+      - name: _tuner (CutileAutotuner instance) + _DEFAULT_CONFIG/_SEARCH_SPACE_BASE
+        lines: [10, 16]
+        role: tuner
+  - path: tilebench/benchmarks/operators/argmax/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_argmax_inputs
+        lines: [456, 458]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 4-5): torch.argmax(x, dim=dim). The generator (tensors.py
+  456-458) returns (x, 1) with x of shape (M, N), so the benchmark always computes the
+  row-wise argmax: out[m] = argmax_n x[m, n], an int64 index per row. Ties resolve
+  according to torch.argmax (documented as the first maximal index). No reference-side
+  preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor"
+  positional_inputs: [x, dim]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single int64 tensor of shape (M,) (one index per row of the reduced view)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: fp16 or fp32 (config case_grid dtype)
+    layout: contiguous (generator torch.randn); x.contiguous() at line 55 is a no-op for the benchmark
+    mutated_in_place: false
+    notes: must be on CUDA (assert line 52).
+  - name: dim
+    shape: scalar int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: always 1 in the benchmark; dim != 1 triggers a transpose(0,1).contiguous() copy (line 57) which is inside run() but unreached.
+outputs:
+  - name: output
+    shape: "(M,)"
+    dtype: int64
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: select reduction layout — x.contiguous() for dim == 1, else transpose(0,1).contiguous()
+    lines: [54, 57]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: false
+    notes: for the benchmark (dim=1, contiguous input) this is a no-op view; the transpose copy path is never exercised.
+  - description: allocate int64 output of shape (M,)
+    lines: [61, 61]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: compute n_tiles = ceil(N / block_n) on the host and pass it as a ConstInt
+    lines: [85, 88]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: makes the per-row loop trip count a compile-time constant (one kernel specialisation per N).
+stages:
+  - id: s1
+    description: allocate output
+    kind: allocation
+    lines: [61, 61]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (M,) int64
+  - id: s2
+    description: >
+      single kernel argmax_rowwise_kernel, one program per row (grid (M,1,1), line 91).
+      Running state best_val = -inf (fp32 scalar) and best_idx = 0 (int64 scalar)
+      (lines 28-29). Loop `for i in range(N_TILES)` with N_TILES a ConstInt (ConstInt +
+      range; line 31): chunk = ct.load(input_2d, index=(row, i), shape=(1, BLOCK_N),
+      padding_mode=ct.PaddingMode.NEG_INF) so columns beyond N read as -inf (lines
+      33-34); chunk is reshaped to 1-D and cast to fp32 (line 35); tile_max = ct.max(chunk),
+      tile_arg = ct.argmax(chunk) cast to int64 (lines 37-38); the running best is
+      replaced only when tile_max > best_val strictly (lines 40-42), so an earlier chunk
+      wins ties across chunks and best_idx = i*BLOCK_N + tile_arg. Final best_idx stored
+      to output_flat[row] (line 44).
+    kind: kernel
+    lines: [19, 44]
+    launches: "M programs, one launch (lines 90-92)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: output (written directly)
+algorithm_family: >
+  row-wise chunked argmax: per row, sequential scan over column chunks keeping a
+  (max value, index) pair; per-chunk tree max/argmax provided by ct.max / ct.argmax,
+  cross-chunk merge by strict greater-than.
+reduction_scan_sort_structure: >
+  Per row: chunks are visited in increasing column order; within a chunk the reduction
+  tree and intra-chunk tie-breaking are those of ct.max / ct.argmax (not specified in
+  source; presumably lowest index); across chunks the earlier chunk keeps the win on
+  ties (strict `>` at line 40). An all -inf row yields index 0 (initial best_idx).
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: comparisons in fp32 (chunk cast to ct.float32 at line 35; best_val fp32); exact for fp16 inputs
+  output_dtype: int64
+  special_modes: none
+  masking_or_padding_values: "-inf for columns beyond N (ct.PaddingMode.NEG_INF on ct.load), so padding never wins"
+intermediate_storage: >
+  None. Running (value, index) pair held in tile scalars; output written once.
+mutation_rules: >
+  No input is modified; output freshly allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: block_n
+    role: tile size (columns per chunk)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints
+    default_present: true
+  - name: n_tiles
+    role: derived ConstInt = ceil(N / block_n); not independently tunable
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py 98-128) over a search space derived
+  from _SEARCH_SPACE_BASE (impl_cutile.py 11-15: block_n in {256,512,1024,2048} x
+  occupancy in {4,8,16,32}) with n_tiles attached per candidate (lines 66-71), keyed by
+  (M, N, dtype) (lines 72-79). Default at line 10 (block_n=256, occupancy=8). Winner
+  exported via _last_autotune_config (80-84) and get_last_config (97-98); occupancy applied
+  via kernel_with_hints (line 90).
+implementation_freedoms_observed: >
+  Chunk width, occupancy, whether the loop trip count is compile-time, whether the
+  intra-chunk argmax is a tree or a sequential scan, rows-per-program grouping (here one
+  row per program, so no cross-program reduction is needed).
+algorithm_constraints_observed: >
+  Single kernel, no scratch, one row reduced entirely by one program; -inf padding; strict
+  greater-than merge so the lowest-index maximum is preferred across chunks; comparisons
+  at fp32 or better; int64 output; input must be contiguous row-major with the reduced
+  axis innermost (run() transposes otherwise).
+fq_boundary:
+  bytes_expr: "M * N * dtype_size"
+  flops_expr: "M * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 16-18. Counts one read of x and one compare per
+    element; it omits the M*8-byte int64 output write (negligible for the sweep, N >=
+    1024). run() performs no copy for dim=1 contiguous inputs, so the timed boundary
+    matches; if dim != 1 were used the transpose copy inside run() would be timed but not
+    counted (not exercised).
+notes_for_review:
+  - N_TILES is a ConstInt computed on the host (lines 68, 88), so every distinct N compiles a separate kernel specialisation (mapping detail, not algorithmic).
+  - Intra-chunk tie-breaking of ct.argmax is not specified in source; cross-chunk ties favour the earlier chunk via strict `>` (line 40). Reference torch.argmax returns the first maximal index, so the two agree only if ct.argmax also returns the lowest index.
+  - NaN rows: torch.argmax treats NaN as maximal; ct comparisons with NaN are false, so a NaN row would yield a different index. Not exercised by randn inputs.
+  - The dim != 1 path (line 57) performs a transpose copy inside run(); unused by the benchmark.
+  - bytes_expr omits the int64 output write.
+  - block_size keyword unused.

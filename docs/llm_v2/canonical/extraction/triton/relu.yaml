@@ -1,0 +1,122 @@
+operator: relu
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/relu/impl_triton.py
+    functions:
+      - name: relu_kernel
+        lines: [8, 16]
+        role: kernel
+      - name: _relu_kernel_autotuned
+        lines: [19, 28]
+        role: tuner
+      - name: run
+        lines: [31, 46]
+        role: host-driver
+      - name: get_last_config
+        lines: [49, 53]
+        role: helper
+  - path: tilebench/benchmarks/operators/relu/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/relu/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_relu_inputs
+        lines: [78, 83]
+        role: helper
+functional_semantics: >
+  y = torch.relu(x) (impl_torch.py lines 4-5): element-wise y[i] = max(x[i], 0)
+  in the dtype of x, returning a new tensor of the same shape (torch.relu is
+  defined for the integer dtype int8 as well as the floating dtypes). No
+  reference-side preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of the same shape and dtype as x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "one of fp16, bf16, fp32, int8 (config.yaml line 11)"
+    layout: "1-D contiguous from the generator; the kernel addresses x as a flat buffer of x.numel() elements"
+    mutated_in_place: false
+    notes: "int8 from randint(-64, 65), other dtypes from randn (tensors.py 78-83); no NaN or -0.0 in practice"
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "n_elements = x.numel() and output = torch.empty_like(x)"
+    lines: [32, 33]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast, copy or packing"
+stages:
+  - id: s1
+    description: "flat element-wise kernel: each program loads BLOCK_SIZE consecutive elements (mask offsets < n_elements), computes y = tl.where(x >= 0, x, 0) with the zero built by tl.zeros_like(x) so it has x's dtype, and stores y at the same offsets of output"
+    kind: kernel
+    lines: [8, 16]
+    launches: "ceil(n_elements / BLOCK_SIZE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "output (final result)"
+algorithm_family: >
+  Flat 1-D streaming element-wise map (compare-and-select against zero) with a
+  tail mask.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: "none; a single comparison and select per element in x's dtype"
+  output_dtype: same as input
+  special_modes: "exact (no rounding is introduced). Semantic corner: the select x >= 0 ? x : 0 returns 0 for NaN inputs whereas torch.relu propagates NaN; the generator never produces NaN"
+  masking_or_padding_values: "tail lanes masked on load (tl.load default fill) and store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x is read-only. A fresh output is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true (in _DEFAULT_CONFIG and forwarded on the default path; not varied by the autotuner)
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps (lines 19-28), key=["n_elements"],
+  warmup=1, rep=3; num_stages is not part of the search space. autotune=True
+  launches the wrapper with a meta-dependent grid (lines 35-36); otherwise the
+  raw kernel is launched with _DEFAULT_CONFIG including num_stages (lines 38-45).
+  get_last_config (49-53) reports BLOCK_SIZE and num_warps. Audit only.
+implementation_freedoms_observed: >
+  Tile size, warp count, vector width, elements per program and the choice
+  between a select (tl.where) and a maximum (tl.maximum) formulation, which
+  differ only for NaN inputs.
+algorithm_constraints_observed: >
+  One read and one write per element; output equals max(x, 0) in the input
+  dtype for all finite inputs; new output buffer; correct tail masking.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads n elements once and writes n elements once, exactly
+    what bytes_expr counts; flops_expr counts one compare/select per element.
+    No preprocessing traffic and no prepacked inputs.
+notes_for_review:
+  - "The block_size keyword is accepted but unused."
+  - "tl.where(x >= 0, x, 0) and torch.relu differ on NaN (0 vs NaN); the benchmark never exercises it, but a contract should either forbid NaN inputs or specify the required behaviour."
+  - "num_stages is present in _DEFAULT_CONFIG and forwarded on the default path but not searched by the autotuner nor reported by get_last_config (audit only)."

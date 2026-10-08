@@ -1,0 +1,120 @@
+operator: mul2
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/mul2/impl_triton.py
+    functions:
+      - name: mul2_kernel
+        lines: [8, 16]
+        role: kernel
+      - name: _mul2_kernel_autotuned
+        lines: [19, 28]
+        role: tuner
+      - name: run
+        lines: [31, 45]
+        role: host-driver
+      - name: get_last_config
+        lines: [48, 52]
+        role: helper
+  - path: tilebench/benchmarks/operators/mul2/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/mul2/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_mul2_inputs
+        lines: [69, 75]
+        role: helper
+functional_semantics: >
+  y = x * 2 (impl_torch.py lines 4-5): element-wise multiplication of every
+  element of x by the Python scalar 2, producing a new tensor of the same shape
+  and dtype (torch keeps the tensor dtype for a scalar multiplier; for int8 the
+  product is int8 with wraparound on overflow, which the generator avoids by
+  bounding int8 inputs to [-32, 32]). No reference-side preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of the same shape and dtype as x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "one of fp16, bf16, fp32, int8 (config.yaml line 11)"
+    layout: "1-D contiguous from the generator; the kernel addresses x as a flat buffer of x.numel() elements"
+    mutated_in_place: false
+    notes: "int8 from randint(-32, 33) so that x*2 stays in range; other dtypes from randn (tensors.py 69-75)"
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "n_elements = x.numel() and output = torch.empty_like(x)"
+    lines: [32, 33]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast, copy or packing"
+stages:
+  - id: s1
+    description: "flat element-wise kernel: each program loads BLOCK_SIZE consecutive elements (mask offsets < n_elements), computes y = x * 2 and stores y at the same offsets of output"
+    kind: kernel
+    lines: [8, 16]
+    launches: "ceil(n_elements / BLOCK_SIZE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "output (final result)"
+algorithm_family: >
+  Flat 1-D streaming element-wise map (one load, one multiply by a constant, one
+  store per element) with a tail mask.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: "none; a single multiply per element in the dtype chosen by Triton's tensor-times-Python-scalar promotion for x's dtype, then cast to the output pointer's element type on store"
+  output_dtype: same as input
+  special_modes: "multiplication by 2 is exact for every floating dtype (exponent increment) and exact for int8 within the generator's range; whether Triton widens the int8 multiply before the store is not determinable from the source alone (unclear) but does not affect in-range results"
+  masking_or_padding_values: "tail lanes masked on load (tl.load default fill) and store"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x is read-only. A fresh output is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps (lines 19-28), key=["n_elements"],
+  warmup=1, rep=3. autotune=True launches the wrapper with a meta-dependent grid
+  (lines 35-36); otherwise the raw kernel is launched with _DEFAULT_CONFIG (lines
+  38-44). get_last_config reads best_config directly without getattr guarding
+  (lines 48-52). Audit only.
+implementation_freedoms_observed: >
+  Tile size, warp count, vector width, number of elements per program and
+  whether the multiply is expressed as x * 2, x + x or a shift (for int8) are all
+  open.
+algorithm_constraints_observed: >
+  One read and one write per element, output in the input dtype equal to 2*x,
+  new output buffer, correct tail masking.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads n elements once and writes n elements once, which is
+    exactly what bytes_expr counts; flops_expr counts the one multiply per
+    element. No preprocessing traffic and no prepacked inputs.
+notes_for_review:
+  - "The block_size keyword is accepted but unused."
+  - "get_last_config dereferences _mul2_kernel_autotuned.best_config without a getattr default, unlike the other operators in this batch; harmless but inconsistent (audit only)."
+  - "The exact intermediate width of the int8 multiply is left to Triton's promotion rules; the generator's value range makes the stored int8 result identical either way."

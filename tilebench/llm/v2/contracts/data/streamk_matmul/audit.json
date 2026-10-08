@@ -1,0 +1,250 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "streamk_matmul",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/streamk_matmul/impl_triton.py",
+      "functions": [
+        {
+          "name": "_default_config",
+          "lines": [
+            43,
+            56
+          ]
+        },
+        {
+          "name": "_b_transposed",
+          "lines": [
+            66,
+            71
+          ]
+        },
+        {
+          "name": "_swizzle_tile",
+          "lines": [
+            74,
+            85
+          ]
+        },
+        {
+          "name": "first_wave",
+          "lines": [
+            88,
+            135
+          ]
+        },
+        {
+          "name": "full_tiles",
+          "lines": [
+            138,
+            165
+          ]
+        },
+        {
+          "name": "_device_sm_count",
+          "lines": [
+            168,
+            169
+          ]
+        },
+        {
+          "name": "_streamk_partition",
+          "lines": [
+            172,
+            177
+          ]
+        },
+        {
+          "name": "_launch_full_tiles",
+          "lines": [
+            180,
+            191
+          ]
+        },
+        {
+          "name": "_launch_first_wave",
+          "lines": [
+            194,
+            204
+          ]
+        },
+        {
+          "name": "_tune_pipeline",
+          "lines": [
+            207,
+            243
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            246,
+            286
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            289,
+            292
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/streamk_matmul/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_swizzle_tile_coords",
+          "lines": [
+            28,
+            36
+          ]
+        },
+        {
+          "name": "_streamk_partition",
+          "lines": [
+            39,
+            44
+          ]
+        },
+        {
+          "name": "first_wave",
+          "lines": [
+            47,
+            103
+          ]
+        },
+        {
+          "name": "full_tiles",
+          "lines": [
+            106,
+            143
+          ]
+        },
+        {
+          "name": "_tune_pipeline",
+          "lines": [
+            153,
+            189
+          ]
+        },
+        {
+          "name": "_device_sm_count",
+          "lines": [
+            192,
+            193
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            196,
+            246
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            249,
+            250
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/streamk_matmul/impl_torch.py",
+      "functions": [
+        {
+          "name": "allow_tf32 = True (module level)",
+          "lines": [
+            3,
+            3
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            6,
+            7
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "C = A @ B into a fresh (M, N) tensor of a.dtype, fp32 accumulation, TF32 dot for fp32, half dtypes cast at the end by out.copy_(c) (impl_triton.py 124, 162, 257-262, 284-285).",
+      "cutile": "C = A @ B into a fresh (M, N) tensor of a.dtype, fp32 accumulation, operands cast to tfloat32 for fp32, half dtypes cast at the end by out.copy_(c) (impl_cutile.py 73, 89-92, 130, 205-212, 244-245).",
+      "note": "Both realise torch.matmul(a, b) under allow_tf32 = True (impl_torch.py 3, 7); verify atol 1.0 / rtol 1e-2 (config.yaml 1-3)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "zero-fill of fp32 c (258-262); first_wave grid (NUM_SMS,) with atomic-add fixup (88-135, 197); full_tiles grid (blocking_tiles,) with TMA store, launched only when > 0 (138-165, 278-282); out.copy_(c) for half dtypes (284-285).",
+      "cutile": "zero-fill of fp32 c (208-212); first_wave grid (NUM_SMS,1,1) with ct.atomic_add fixup (47-103, 226); full_tiles grid (blocking_tiles,1,1) with ct.store, launched only when > 0 (106-143, 230-235); out.copy_(c) for half dtypes (244-245).",
+      "note": "Identical four-stage hybrid Stream-K pipeline with the same partition rule (streamk_tiles = total mod NUM_SMS, + NUM_SMS when total - streamk_tiles > NUM_SMS: Triton 96-100 / 172-177, cuTile 58-64 / 39-44) and the same even iteration split with leading programs taking the remainder (Triton 101-107, cuTile 65-71)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "first_wave and full_tiles both require the zeroed c and write disjoint tiles (tile_id < streamk_tiles vs >= streamk_tiles, 110 / 150); copy_ after both (284).",
+      "cutile": "Same disjoint tile ownership (79 vs 124); copy_ after both (244).",
+      "note": "Same dependency graph: zero-fill -> {Stream-K wave, data-parallel tiles} -> final cast."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "K reduced in slabs via tl.dot into an fp32 accumulator; Stream-K segments combined by fp32 tl.atomic_add into zeroed c (118-133); full tiles sequential over tl.range(cdiv(K, BLOCK_K)) (158-162); grouped swizzle (74-85).",
+      "cutile": "K reduced in chunks via ct.mma into an fp32 accumulator; segments combined by fp32 ct.atomic_add into zeroed c (82-101); full tiles sequential over range(num_tiles_k) (132-140); grouped swizzle (28-36).",
+      "note": "Same per-tile fp32 slab reduction, same atomic combination (non-deterministic order for split tiles), same grouped-M swizzle arithmetic on both sides."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "ACC_TYPE=tl.float32 (189, 202); tl.dot(..., input_precision='tf32') on both kernels (124, 162); c always fp32; single downcast via out.copy_ (285).",
+      "cutile": "ct.full(..., ct.float32) accumulators (82, 132); operands astype(ct.tfloat32) when A is fp32, else native (73, 89-91, 130, 137-139); c always fp32; single downcast via out.copy_ (245).",
+      "note": "fp32 accumulation, TF32 operand rounding for fp32 inputs, one final rounding for half dtypes on both sides. The Triton tf32 flag is presumed a no-op for half operands (standard semantics, not verified here)."
+    },
+    "preprocessing": {
+      "status": "mapping-only",
+      "triton": "bt = _b_transposed(b): b.t().contiguous() cached per b tensor identity in a WeakTensorKeyDictionary (63-71, 264), so the (N, K) transpose copy runs once per input tensor and is untimed in steady state; host TensorDescriptors for a, bt (and c) rebuilt per launch (182-184, 195-196); NUM_SMS query (253); out allocation and zero-fill (257-262).",
+      "cutile": "No repack: B consumed as the given (K, N) row-major tensor with (TK, TN) loads (90-91, 138-139); NUM_SMS query (203); out allocation and zero-fill (205-212); autotune-path scratch (219).",
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): B is delivered row-major; consuming it as given (cuTile side) or through a transposed copy rebuilt by device work inside every run() is a mapping choice, so the layout divergence is mapping-only. A B repack, if used, is per call and timed; no cross-call derived cache is permitted, so the manual Triton kernel's identity-cached, untimed B^T (impl_triton.py 63-71, 264) does not conform to the decided rule and its column is recorded as not comparable (human_reference_comparable = false); this is a reference-measurement caveat, not a contract ambiguity. The Stream-K decomposition / global accumulation structure is preserved on both sides."
+    },
+    "intermediate_storage": {
+      "status": "mapping-only",
+      "triton": "c: fp32 (M, N) accumulation buffer (out itself for fp32, torch.zeros for half dtypes, 258-262) plus the module-level cross-call cache holding an (N, K) copy of every b seen (63-71).",
+      "cutile": "c: fp32 (M, N) accumulation buffer (out itself for fp32, torch.zeros for half dtypes, 208-212); no cross-call storage.",
+      "note": "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the per-call fp32 accumulation buffer is the canonical (aligned) intermediate; a per-call transposed operand copy is a permitted, counted mapping-level intermediate; a copy that outlives the call via a cross-call cache is forbidden. The Triton side's persistent (N, K) copy is the non-conforming case covered by human_reference_comparable = false."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "a, b read-only; out fresh and zeroed/overwritten each call (257-262, 285); the B^T cache keys on identity so in-place edits of b between calls would be ignored (63-71).",
+      "cutile": "a, b read-only; out fresh and zeroed/overwritten each call (205-212, 245).",
+      "note": "No input mutation; idempotent outputs on both sides. The stale-cache hazard is a consequence of the preprocessing divergence, not a mutation."
+    },
+    "hardware_dispatch": {
+      "status": "mapping-only",
+      "triton": "detect_arch() selects a smaller K tile for the non-autotuned path on cdna3 and on hopper+fp32 (43-56, legality only; members of the unchanged search space); TMA TensorDescriptor loads (182-183, 195-196); NUM_SMS from the device (168-169).",
+      "cutile": "NUM_SMS from the device as a ConstInt (192-193, 51, 110); dtype branch to tfloat32 inside the kernels (73, 130); no architecture branches.",
+      "note": "All branches are legality/mapping (tile fallback, TMA vs tile loads) or dtype dispatch; the SM-count-dependent partition changes which program computes what, not the result. No algorithmic divergence."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "(m * k + k * n + m * n) * dtype_size",
+    "flops_expr": "2 * m * n * k",
+    "consistent": "false",
+    "note": "flops_expr = 2mnk matches the GEMM. bytes_expr (config.yaml 21) counts one read of A and B and one write of C in the input dtype. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): Q for scoring remains this explicitly declared lower-bound / compulsory-I/O model; the scratch traffic, the atomic read-modify-write of the Stream-K tiles, the per-call zero-fill of the fp32 accumulation buffer (m*n*4 bytes), the fp16/bf16 fp32 round trip (zero + write + read back + half write via copy_) and any per-call operand repack are extra implementation traffic that is counted in the measured time but is diagnostic, not part of Q. Both timed run() bodies pay the zero-fill, atomics and half-dtype round trip. On the Triton side the (N, K) transpose of B is paid only on the first call per tensor (cached, impl_triton.py 63-71, 264), which the decided rule forbids, so the Triton column is not comparable to contract-conforming implementations; the cuTile side has no repack and is comparable."
+  },
+  "human_reference_comparable": false,
+  "review_items": [
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the Stream-K decomposition / global accumulation structure that defines this operator is preserved as the fixed algorithm. A B repack, if used, is per call and timed (device work inside every run()); no cross-call derived cache. A generated implementation may not prepare an operand copy outside the timed region. The Triton reference's identity-cached, untimed B^T (impl_triton.py 63-71, 264) does not conform, so the Triton column stays human_reference_not_comparable (human_reference_comparable = false); the cuTile reference consumes B as given (impl_cutile.py 90-91, 138-139) and is comparable. The open review item is removed from the contract (revision 2 retained).",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): Q for scoring remains the explicitly declared lower-bound / compulsory-I/O model bytes_expr = (m*k + k*n + m*n) * dtype_size; the per-call zero-fill, the atomic read-modify-write of Stream-K tiles, the fp16/bf16 fp32 scratch round trip and any repack traffic are diagnostic implementation traffic, not part of Q. The contract itself does not discuss scoring.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the fp32 atomic-add combination of Stream-K segments, and the resulting run-to-run non-bitwise reproducibility of split tiles within atol 1.0 / rtol 1e-2, is an accepted property of the canonical family (the contract states it), not something a generated implementation must avoid; replacing it with semaphores, flags, an owner program or a partials workspace remains forbidden."
+  ],
+  "contract_sha256": "374213c03ec40b9dca884feb732e1f7dd9cbf3f17eccd22e33b1b602df74441d",
+  "previous_status_before_approval": "needs-review"
+}

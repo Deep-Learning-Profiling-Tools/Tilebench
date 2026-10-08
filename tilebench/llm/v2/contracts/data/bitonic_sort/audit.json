@@ -1,0 +1,193 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "bitonic_sort",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/bitonic_sort/impl_triton.py",
+      "functions": [
+        {
+          "name": "_PAD_BLOCK",
+          "lines": [
+            7,
+            9
+          ]
+        },
+        {
+          "name": "pad_kernel",
+          "lines": [
+            12,
+            16
+          ]
+        },
+        {
+          "name": "bitonic_step_kernel",
+          "lines": [
+            19,
+            33
+          ]
+        },
+        {
+          "name": "_bitonic_step_kernel_autotuned",
+          "lines": [
+            36,
+            45
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            48,
+            85
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            88,
+            95
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/bitonic_sort/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_DEFAULT_CONFIG/_SEARCH_SPACE",
+          "lines": [
+            10,
+            16
+          ]
+        },
+        {
+          "name": "_next_pow2",
+          "lines": [
+            19,
+            20
+          ]
+        },
+        {
+          "name": "pad_kernel",
+          "lines": [
+            23,
+            31
+          ]
+        },
+        {
+          "name": "bitonic_step_kernel",
+          "lines": [
+            34,
+            57
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            60,
+            60
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            63,
+            109
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            112,
+            113
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/bitonic_sort/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            40
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "Ascending sort via a bitonic network on a +inf-padded buffer of M = next_power_of_2(N); returns work[:N].contiguous(); N <= 1 returns data.clone() (impl_triton.py 50-54, 85).",
+      "cutile": "Same: M = _next_pow2(N), +inf pad, network, work[:N].contiguous(); N <= 1 clone (impl_cutile.py 66-70, 109).",
+      "note": "Both reproduce the reference's explicit network (impl_torch.py 8-40), which also pads with +inf and returns work[:N]."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "torch.empty work (54); pad_kernel launch with a fixed untuned block (58-59); one bitonic_step_kernel launch per (k, j) stage via the host double loop (64-70 / 73-83); zero-copy slice (85).",
+      "cutile": "torch.empty work (70); pad_kernel launch with the default tile (74-76); one launch per (k, j) stage (101-107); zero-copy slice (109).",
+      "note": "Identical: pad pass + L(L+1)/2 stage launches, all in place in global memory, no in-tile sub-sort. The contract pins the stage set and dependencies, not the launch count (see review_items)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Each stage launch is a grid-wide barrier; stage (k, j) reads the previous stage's work for i and i XOR j (impl_triton.py 23-33, 64-83).",
+      "cutile": "Same (impl_cutile.py 37-57, 101-107).",
+      "note": "Same dependency structure."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "k = 2..M ascending, j = k/2..1 descending; partner = offs ^ j; active iff partner > i and both < M; ascending iff (i & k) == 0; swap on strict a > b / a < b; both elements stored by the lower-index lane (impl_triton.py 21-33).",
+      "cutile": "Identical schedule and rules; partner values gathered; inactive lanes redirected to the out-of-range index M so their scatters are dropped (impl_cutile.py 37-57).",
+      "note": "Same comparator network and tie rule as the reference (impl_torch.py 14-38)."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Comparisons and moves in the data dtype; +inf pad (impl_triton.py 15, 29-31).",
+      "cutile": "Comparisons and moves in the data dtype; +inf pad via PaddingMode.POS_INF (impl_cutile.py 28-29, 48-50).",
+      "note": "No arithmetic; inactive-lane fill values (0.0) are never stored on either side."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "N <= 1 clone (unreached), M arithmetic, work allocation, pad launch (impl_triton.py 50-59).",
+      "cutile": "Same (impl_cutile.py 66-76).",
+      "note": "All inside run() and timed; nothing cached."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "work (M,) in the data dtype, allocated per call, sorted in place, backing the returned view (impl_triton.py 54, 85).",
+      "cutile": "Same (impl_cutile.py 70, 109).",
+      "note": "Identical scratch; the output is a view of it on both sides (and in the reference)."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "data never written; work mutated in place but private to the call (impl_triton.py 15-16, 32-33).",
+      "cutile": "Same (impl_cutile.py 31, 56-57).",
+      "note": "Idempotent with respect to data; the contract forbids writing data."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branch.",
+      "cutile": "No architecture branch.",
+      "note": "None on either side."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "unclear",
+    "note": "config.yaml 14-15. Both expressions are nominal (one read plus one write of n elements; n 'flops'). The timed region on both sides also contains the pad pass (read n, write M) and L(L+1)/2 in-place passes over M >= n elements (M up to 2n), none of which the formula counts, so the reported bandwidth is an algorithmic figure of merit, not achieved traffic. The boundary is the same on both sides, so the two manual columns are mutually comparable."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Confirm that bytes_expr = 2 * n * dtype_size (compulsory traffic) is the intended figure of merit for a multi-pass in-place sort whose timed work is the pad pass plus L(L+1)/2 passes over M = next_power_of_2(n) elements (impl_triton.py 58-83, impl_cutile.py 74-107); the formula is identical for both manual implementations, so it does not affect their comparison, but it understates executed traffic by a factor that grows with log^2 n.",
+    "Both manual implementations launch one kernel per (k, j) stage with every exchange in global memory; the contract follows the guide's dependency-based rule and permits consecutive stages whose partner distances fit inside one program's slice to be fused into one launch (a register/shared-memory local phase). Decide whether that fusion freedom is acceptable or whether, for parity with the manual implementations, the contract should require one global synchronisation per stage."
+  ],
+  "contract_sha256": "efd637a4fc9272602a9c1896d34645bb81553f68a78cb9f2456235baf530d89d",
+  "previous_status_before_approval": "draft"
+}

@@ -1,0 +1,143 @@
+operator: reverse_array
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/reverse_array/impl_cutile.py
+    functions:
+      - name: reverse_kernel
+        lines: [21, 27]
+        role: kernel
+      - name: run
+        lines: [33, 59]
+        role: host-driver
+      - name: get_last_config
+        lines: [62, 63]
+        role: helper
+  - path: tilebench/benchmarks/operators/reverse_array/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_reverse_array_inputs
+        lines: [328, 333]
+        role: helper
+functional_semantics: >
+  out = input.flip(0).contiguous() (impl_torch.py line 5): out[i] =
+  input[N - 1 - i] for a 1-D tensor of length N, returned as a new
+  contiguous tensor in the input dtype (torch.flip materialises a copy).
+  No reference-side preprocessing. The generator (tensors.py lines
+  328-333) draws int8 inputs from [-64, 64] and randn for the floating
+  dtypes and returns (x, n).
+run_signature:
+  text: "def run(input: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [input, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor of shape (N,), same dtype as input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: "one of fp16, bf16, fp32, int8 (case dtype)"
+    layout: "contiguous 1-D (generator output); passed to ct.launch as-is, no .contiguous() call"
+    mutated_in_place: false
+    notes: "read only through per-element ct.gather."
+  - name: N
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "runtime kernel argument (not ConstInt); used for the mirrored index N - 1 - i and for the grid size."
+outputs:
+  - name: output
+    shape: "(N,)"
+    dtype: same as input
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output = torch.empty_like(input)
+    lines: [35, 35]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one allocation per call.
+stages:
+  - id: s1
+    description: >
+      Output-tile-aligned reversal kernel. CTA bid owns output elements
+      offsets = bid * TILE + arange(TILE) (line 24), computes the mirrored
+      source indices rev = N - 1 - offsets (line 25), reads them with a
+      per-element ct.gather(x, rev, padding_value=0) (line 26; the
+      addresses within a tile descend) and stores the gathered tile
+      contiguously at block index bid of output (line 27). Lanes past N
+      have negative rev and take the gather padding value; their store is
+      clipped by the output bounds. Grid = ceil(N / TILE) CTAs
+      (lines 55-57).
+    kind: kernel
+    lines: [21, 27]
+    launches: "1 launch of ceil(N / TILE) CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Single-pass out-of-place array reversal with contiguous output tiles and
+  a mirrored-index gather on the input side (the source does not load a
+  contiguous input tile and flip it in registers).
+reduction_scan_sort_structure: >
+  None (pure index permutation i -> N - 1 - i).
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (values are moved unchanged)
+  output_dtype: same as input
+  special_modes: none
+  masking_or_padding_values: "ct.gather padding_value 0 for out-of-range (negative) source indices in the last tile; the corresponding output lanes lie beyond N and are dropped by the bounds-clipped store (library behaviour). The sweep sizes n = 1e6 * i are not multiples of the tile lengths, so the tail path is exercised."
+intermediate_storage: >
+  None beyond the output buffer.
+mutation_rules: >
+  input is never written. A new output is allocated on every call;
+  repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (1-D tile length, ConstInt TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE (impl_cutile.py lines 14-18):
+  ct.tune.exhaustive_search keyed on (N, dtype) (lines 39-46), winner
+  cached per shape key; kernel_with_hints memoises replace_hints
+  (line 56). Default path uses _DEFAULT_CONFIG (line 12). Winner recorded
+  in _last_autotune_config (lines 47-51). block_size is accepted but
+  unused.
+implementation_freedoms_observed: >
+  Tile length and occupancy; the read strategy (mirrored gather here
+  versus a contiguous tiled load followed by an in-register flip; both move
+  each element once); grid shape; whether N is a runtime or compile-time
+  argument.
+algorithm_constraints_observed: >
+  Single pass: each element read once and written once; output is a fresh
+  buffer with out[i] = input[N - 1 - i]; no dtype change; no scratch
+  memory; the input is not modified.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read and one write of n elements, exactly the
+    kernel's traffic (the gather reads each element once); nothing is
+    prepacked and run() performs no copies. flops_expr counts one nominal
+    op per element for a pure data movement.
+notes_for_review:
+  - "The input side is a per-element gather at descending addresses rather than a contiguous tile load; the traffic is identical but the access pattern differs, so the contract should not mandate either form."
+  - "Tail handling (n not a multiple of the tile) relies on gather padding_value and bounds-clipped stores; no explicit mask appears in the source."

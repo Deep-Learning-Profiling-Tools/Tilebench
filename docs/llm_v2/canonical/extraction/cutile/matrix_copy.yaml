@@ -1,0 +1,150 @@
+operator: matrix_copy
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matrix_copy/impl_cutile.py
+    functions:
+      - name: matrix_copy_kernel
+        lines: [15, 19]
+        role: kernel
+      - name: run
+        lines: [32, 66]
+        role: host-driver
+      - name: get_last_config
+        lines: [69, 70]
+        role: helper
+  - path: tilebench/benchmarks/operators/matrix_copy/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 6]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matrix_copy_inputs
+        lines: [334, 339]
+        role: helper
+functional_semantics: >
+  B = A + 0 (impl_torch.py line 5): an element-wise identity copy of the
+  N x N matrix A into a freshly allocated tensor of the same shape and
+  dtype. The reference uses the tensor plus operator with a Python int 0,
+  which preserves the input dtype (fp16, bf16, fp32 and int8 all stay
+  as-is). There is no reference-side preprocessing. The second positional
+  argument N is the matrix side length (A.shape == (N, N)).
+run_signature:
+  text: "def run(A: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [A, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor B of shape (N, N) with the same dtype as A
+  get_last_config: present
+inputs:
+  - name: A
+    shape: "(N, N)"
+    dtype: "one of fp16, bf16, fp32, int8 (case dtype; generator lines 334-339)"
+    layout: "contiguous row-major (generator output); run() calls A.contiguous() (line 38), a no-op for this input"
+    mutated_in_place: false
+    notes: "int8 inputs are drawn from [-64, 64]; the other dtypes use randn."
+  - name: N
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "used only to compute total = N * N (line 35); A.shape is not re-read by run()."
+outputs:
+  - name: B
+    shape: "(N, N)"
+    dtype: same as A
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate the output B = torch.empty_like(A)
+    lines: [34, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one uninitialised allocation per call.
+  - description: "A_flat = A.contiguous().view(-1); B_flat = B.view(-1): flatten both matrices to 1-D views"
+    lines: [38, 39]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: ".contiguous() is a no-op for the contiguous generator input, so no copy is made; both views alias the originals."
+stages:
+  - id: s1
+    description: >
+      1-D element-wise copy kernel. Each CTA loads one contiguous tile of
+      TILE elements from the flattened A at block index bid (ct.load with
+      no explicit padding_mode, line 18) and stores it unchanged at the
+      same block index of the flattened B (ct.store, line 19). The grid is
+      one-dimensional with ceil(N*N / TILE) CTAs (lines 59-64).
+    kind: kernel
+    lines: [15, 19]
+    launches: "1 launch of ceil(N*N / TILE) CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: B (final output)
+algorithm_family: >
+  Flat 1-D tiled memory copy: the 2-D matrix is treated as a contiguous
+  vector of N*N elements, one load and one store per tile, no arithmetic.
+reduction_scan_sort_structure: >
+  None (pure element-wise copy).
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (values are moved unchanged)
+  output_dtype: same as input
+  special_modes: none
+  masking_or_padding_values: >
+    No explicit padding_mode or mask in the source; a tail tile (N*N not a
+    multiple of TILE) would rely on the library default load padding and on
+    cuTile bounds-clipped stores. For the sweep N is a multiple of 256, so
+    N*N is a multiple of every tile length in the search space.
+intermediate_storage: >
+  None beyond the output buffer; no scratch buffers.
+mutation_rules: >
+  A is never written. run() allocates a new B on every call; repeated calls
+  are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (1-D tile length, passed to the kernel as ConstInt TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner (tilebench/core/cutile_autotune.py) over _SEARCH_SPACE
+  (impl_cutile.py lines 22-26): ct.tune.exhaustive_search keyed on
+  (N, dtype) (lines 42-49), winner cached per shape key; kernel_with_hints
+  memoises replace_hints(occupancy=...) (line 58). The default path uses
+  _DEFAULT_CONFIG (line 12). The winner is recorded in _last_autotune_config
+  (lines 50-54) for get_last_config(). The block_size keyword is accepted
+  but unused.
+implementation_freedoms_observed: >
+  Tile length and occupancy hint; whether the matrix is flattened to 1-D
+  (as here) or copied with 2-D tiles; the load/store lowering (TMA or not)
+  is left to the compiler, nothing is forced in the source; grid shape.
+algorithm_constraints_observed: >
+  Single pass: every element is read exactly once and written exactly once;
+  no dtype change; the output is a fresh buffer that does not alias A; no
+  scratch memory; no host-side copies.
+fq_boundary:
+  bytes_expr: "N * N * dtype_size * 2"
+  flops_expr: "N * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read and one write of N*N elements, which is
+    exactly what the single kernel moves; the host-side contiguous()/view()
+    calls move no bytes and nothing is prepacked. flops_expr credits one
+    nominal op per element even though the kernel performs no arithmetic
+    (the reference A + 0 has the same nominal cost).
+notes_for_review:
+  - "The kernel flattens the matrix to a 1-D vector; a 2-D tiled copy would be equally faithful, so tile dimensionality should not be part of any contract."
+  - "ct.load at line 18 has no explicit padding_mode; tail-tile behaviour is the library default and is not visible in the source (not exercised by the sweep)."
+  - "flops_expr = N * N is nominal for a copy with zero arithmetic."

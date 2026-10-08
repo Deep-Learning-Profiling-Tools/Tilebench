@@ -1,0 +1,209 @@
+operator: top_k_selection
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/top_k_selection/impl_triton.py
+    functions:
+      - name: block_topk_kernel
+        lines: [23, 36]
+        role: kernel
+      - name: _run_hierarchy
+        lines: [39, 49]
+        role: host-driver
+      - name: _tune_pipeline
+        lines: [52, 65]
+        role: tuner
+      - name: run
+        lines: [68, 90]
+        role: host-driver
+      - name: get_last_config
+        lines: [93, 96]
+        role: helper
+  - path: tilebench/benchmarks/operators/top_k_selection/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/top_k_selection/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_top_k_selection_inputs
+        lines: [519, 533]
+        role: helper
+functional_semantics: >
+  Return the k largest values of a 1-D fp32 tensor of length N, sorted in
+  descending order, values only (indices discarded), via
+  torch.topk(input.contiguous(), k, largest=True, sorted=True).values
+  (impl_torch.py line 5). N is passed but unused by the reference. No
+  reference-side preprocessing beyond the no-op .contiguous().
+run_signature:
+  text: |
+    def run(input: torch.Tensor, N: int, k: int,
+            block_size: int = None, autotune: bool = False, **kwargs):
+  positional_inputs: [input, N, k]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single 1-D fp32 tensor of shape (k,) - a slice view out[0, :k] of the final level's (1, K2) buffer
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N,)"
+    dtype: fp32 only (asserted at line 73; generator rejects other dtypes, tensors.py lines 529-530)
+    layout: contiguous (asserted 1-D at line 71; .contiguous() at line 76 is a no-op)
+    mutated_in_place: false
+    notes: Must be a CUDA tensor (line 70) with shape[0] == N (line 72).
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: Only asserted against input.shape[0]; the hierarchy uses input.numel().
+  - name: k
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: 1 <= k <= N asserted (line 74); K2 = next_power_of_2(k) is the per-block candidate count (line 77).
+outputs:
+  - name: values
+    shape: "(k,)"
+    dtype: fp32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: input = input.contiguous(); K2 = triton.next_power_of_2(k)
+    lines: [76, 77]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: No copy for the contiguous generator input.
+  - description: non-autotuned path clamps BLOCK_SIZE to at least 2*K2 so that every level shrinks the candidate set by a factor >= 2
+    lines: [84, 88]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: This is the only operator in the batch whose block_size keyword is honoured (line 85-86).
+stages:
+  - id: s1
+    description: >
+      Level 0 of the hierarchy (_run_hierarchy, lines 42-46, first
+      iteration): nb = ceil(N / BLOCK_SIZE) programs of block_topk_kernel.
+      Program pid loads BLOCK_SIZE contiguous elements with -inf padding
+      beyond n (line 31); if K2 == 1 it stores the block maximum tl.max(x)
+      to out[pid] (lines 32-33), otherwise it stores tl.topk(x, K2) - the
+      K2 largest values of the block as produced by Triton's built-in
+      block-local top-k - to out[pid, 0:K2] (lines 35-36). The (nb, K2)
+      fp32 output buffer is allocated with torch.empty immediately before
+      the launch (line 44).
+    kind: kernel
+    lines: [23, 36]
+    launches: "1 (grid = ceil(N/BLOCK_SIZE))"
+    depends_on: []
+    fusable_with: "none"
+    produces: fp32 buffer (ceil(N/BLOCK_SIZE), K2) of per-block candidates
+  - id: s2
+    description: >
+      Levels 1..L-1: while the previous level produced nb > 1 blocks, the
+      previous (nb, K2) buffer is viewed flat as n = nb*K2 candidates
+      (line 49) and the same kernel is launched again with
+      nb' = ceil(n / BLOCK_SIZE) programs, each emitting K2 candidates into
+      a new torch.empty (nb', K2) buffer (lines 43-46). Candidate lists are
+      concatenated in block order, so each level merges BLOCK_SIZE / K2
+      consecutive lists. The loop stops when a level has exactly one block
+      (line 47) and returns out[0, :k] (line 48).
+    kind: kernel
+    lines: [39, 49]
+    launches: "L-1 launches, one per level, where L is the smallest depth at which ceil(n_l / BLOCK_SIZE) == 1 (n_0 = N, n_l = nb_{l-1} * K2)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: one fp32 (nb_l, K2) buffer per level; the last is (1, K2) and backs the returned view
+algorithm_family: >
+  Hierarchical block top-k selection: every block keeps its K2 largest
+  values (K2 = next power of two >= k) using Triton's built-in tl.topk (or
+  tl.max when K2 == 1), and the candidate lists are re-blocked and reduced
+  level by level until a single block remains; values only. The
+  block-local algorithm inside tl.topk is not visible in this source
+  (unclear; presumably a sorting-network based selection). It is not a
+  radix select and has no global histogram, threshold or counting pass.
+reduction_scan_sort_structure: >
+  A tournament tree over candidate sets with fan-in BLOCK_SIZE / K2 (>= 2
+  by construction, lines 59 and 88); leaves are the input blocks in
+  address order and each internal node is the top-K2 of the concatenation
+  of its children's top-K2 lists. Exactness: since K2 >= k, the k largest
+  elements of any set are among the K2 largest of each block, so the
+  hierarchy is exact for values. Ordering: the returned slice out[0, :k]
+  assumes tl.topk emits its K2 values in descending order (the reference
+  is sorted=True); that guarantee lives inside tl.topk and is not
+  verifiable from this file (unclear). Ties: only values are returned, so
+  ties are indistinguishable in the output; whether duplicates are kept
+  with multiplicity through the levels is a property of tl.topk (expected
+  multiset semantics; unclear). -inf padding cannot displace real values;
+  a real -inf input is indistinguishable from padding but the value
+  result is still correct. NaN behaviour is unclear.
+precision:
+  input_dtypes: [fp32]
+  accumulation: "n/a (comparison-only selection, no arithmetic)"
+  output_dtype: fp32
+  special_modes: exact comparison on fp32 values
+  masking_or_padding_values: "-inf for out-of-range loads at every level (line 31)"
+intermediate_storage: >
+  One fp32 buffer of shape (nb_l, K2) per level, allocated with torch.empty
+  inside _run_hierarchy (line 44) during the timed run(); each is released
+  when the Python reference moves to the next level (line 49), except the
+  final (1, K2) buffer, which stays alive as the storage of the returned
+  (k,) view (its K2 - k trailing elements are not returned).
+mutation_rules: >
+  The input is not modified; every call allocates fresh level buffers;
+  repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program; also the per-level fan-in together with K2)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  Custom tuner, not triton.autotune: _tune_pipeline (lines 52-65) times
+  the complete multi-level hierarchy with triton.testing.do_bench
+  (warmup=1, rep=3) for every _SEARCH_SPACE candidate whose BLOCK_SIZE is
+  at least 2*K2, caches the winner per (N, k) in _autotune_cache and
+  copies it into the mutable dict _last_autotune_config (lines 79-82),
+  which get_last_config() returns (lines 93-96). In the non-autotuned
+  path the block_size keyword overrides the default BLOCK_SIZE and is then
+  clamped to >= 2*K2 (lines 84-88). Audit only.
+implementation_freedoms_observed: >
+  Block size / fan-in and warps (hence the number of levels), reusing one
+  scratch buffer instead of allocating per level, the block-local
+  selection algorithm (bitonic network, sort-then-slice, etc.), whether
+  to use a single-kernel path when ceil(N/BLOCK_SIZE) == 1, and carrying
+  indices alongside values (not required by the reference).
+algorithm_constraints_observed: >
+  Exact (non-approximate) selection of the k largest fp32 values; output
+  of length exactly k in descending order, values only; per-level
+  candidate width K2 >= k so the hierarchy stays exact; the levels form a
+  tree ending in one block; -inf as the padding value; no input mutation;
+  level buffers are run-allocated; input must be fp32, 1-D, CUDA.
+fq_boundary:
+  bytes_expr: "(N + k) * dtype_size"
+  flops_expr: "N"
+  consistent_with_timed_boundary: false
+  notes: >
+    The formula counts one read of the N inputs and one write of the k
+    outputs. The timed run() also writes and re-reads every intermediate
+    candidate buffer: level 0 alone writes ceil(N/BLOCK_SIZE)*K2 elements
+    (up to N/2 when BLOCK_SIZE equals its lower bound 2*K2), and each
+    subsequent level reads and writes shrinking buffers; it also performs
+    one torch.empty allocation per level. For large N with small k the
+    uncounted traffic is a small fraction, but for small N with large k
+    (e.g. N = 4096, k = 1024 in the case grid) it is comparable to N.
+    No prepacking is assumed. The flop count N is nominal (comparisons
+    inside tl.topk are not modelled).
+notes_for_review:
+  - "Descending output order and tie/duplicate semantics depend on Triton's tl.topk builtin, which is not visible in the source."
+  - "The returned (k,) tensor is a view into a (1, K2) buffer with K2 - k unused trailing elements."
+  - "Per-level torch.empty allocations happen inside the timed run() (normally served by the caching allocator)."
+  - "block_size is honoured in the non-autotuned path but not validated as a power of two, which tl.arange requires."
+  - "K2 == 1 (k == 1) takes a different kernel branch (block max via tl.max)."
+  - "Real -inf inputs are indistinguishable from padding; NaN handling is unclear."
+  - "Only fp32 is supported and swept; the generator rejects other dtypes."

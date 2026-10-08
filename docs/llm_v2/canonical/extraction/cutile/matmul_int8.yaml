@@ -1,0 +1,220 @@
+operator: matmul_int8
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matmul_int8/impl_cutile.py
+    functions:
+      - name: matmul_kernel
+        lines: [25, 68]
+        role: kernel
+      - name: run
+        lines: [74, 120]
+        role: host-driver
+      - name: get_last_config
+        lines: [123, 124]
+        role: helper
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 22]
+        role: tuner
+      - name: _tuner (CutileAutotuner instance)
+        lines: [71, 71]
+        role: tuner
+  - path: tilebench/benchmarks/operators/matmul_int8/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 19]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/matmul_int8/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matmul_int8_inputs
+        lines: [439, 448]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Integer GEMM between an int8 matrix A (M, K) and a 2-bit-packed weight
+  matrix B (K_b, N) of uint8 with K = 4 * K_b, producing int32 C (M, N).
+  The reference (impl_torch.py lines 4-19) unpacks B on the host: for
+  field i in 0..3, b_val = ((b.int32 & (3 << 2i)) >> 2i).int8 - 1, i.e.
+  each 2-bit field is mapped to {-1, 0, 1, 2}, and the field-i values of
+  packed row r are placed at unpacked row i * K_b + r (lines 10-14). It
+  then disables TF32 and computes torch.matmul(a.float32,
+  b_unpacked.float32).to(int32) (lines 17-19); with |a| <= 64 and
+  |b| <= 2 the fp32 products and sums are exact for the swept K. The
+  generator (tensors.py lines 439-448) draws a = randint(-64, 65) int8
+  (M, K) and b = randint(0, 256) uint8 (K_b, N) (the dtype kwarg is
+  ignored) and returns (a, b); config.yaml fixes M = N and sweeps K with
+  dtype int8 only.
+run_signature:
+  text: "def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [a, b]
+  keyword_params: [block_size, autotune]
+  returns: single tensor C of shape (M, N) and dtype int32
+  get_last_config: present
+inputs:
+  - name: a
+    shape: "(M, K)"
+    dtype: int8
+    layout: contiguous row-major
+    mutated_in_place: false
+    notes: loaded as (TM, TK) int8 tiles by block index with zero padding (lines 58-61); the column block index is k_a = i * num_tiles_kb + j (line 57), which addresses field i's slab of A
+  - name: b
+    shape: "(K_b, N) with K_b = K / 4"
+    dtype: uint8, four 2-bit fields per byte
+    layout: contiguous row-major, consumed packed (no host unpack)
+    mutated_in_place: false
+    notes: loaded once per K_b tile as a (TK, TN) tile with zero padding (lines 51-54), widened to int32 (line 55) and unpacked four times in registers (line 65); K_b is a ConstInt kernel parameter (line 29)
+outputs:
+  - name: c
+    shape: "(M, N)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape assert (a.shape[1] == 4 * b.shape[0]), M K N K_b extraction, c = torch.empty((M, N), dtype=int32)
+    lines: [77, 82]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      no operand cast, unpack, transpose or packing on the host; there is
+      no cache keyed by tensor identity or data_ptr (the only cross-call
+      state is the CutileAutotuner tuned-config and hint-kernel caches)
+stages:
+  - id: s0
+    description: output allocation (see preprocessing)
+    kind: allocation
+    lines: [77, 82]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: c buffer (M, N) int32 uninitialised
+  - id: s1
+    description: >
+      Single GEMM kernel on a 1-D grid of ceil(M/TM) * ceil(N/TN) programs
+      (lines 111-119) with grouped (GROUP_SIZE_M) program-to-tile ordering
+      (lines 35-44). The program keeps a (TM, TN) int32 accumulator (line
+      46) and loops over ceil(K_b/TK) packed-row tiles with a compile-time
+      trip count (K_b ConstInt, lines 47, 50). Per packed tile j it loads
+      the (TK, TN) uint8 tile of B once (lines 51-54), widens it to int32
+      (line 55), then for each field i in 0..3 (static inner loop, line
+      56): loads the (TM, TK) int8 tile of A at column block
+      k_a = i * num_tiles_kb + j (lines 57-61), unpacks field i as
+      ((B_int32 & (3 << 2i)) >> 2i) - 1 cast to int8 (lines 62-65), and
+      issues an int8 x int8 -> int32 ct.mma (line 66). Epilogue stores the
+      int32 accumulator (line 68; clipped at M, N).
+    kind: kernel
+    lines: [25, 68]
+    launches: "ceil(M/TM) * ceil(N/TN)"
+    depends_on: [s0]
+    fusable_with: "none"
+    produces: c (final result)
+algorithm_family: >
+  Tiled integer tensor-core GEMM with in-mainloop weight dequantisation:
+  the packed uint8 B tile is loaded once per K_b step and expanded in
+  registers into four int8 {-1, 0, 1, 2} operand tiles, each multiplied
+  against the matching slab of A with int32 accumulation. No host-side
+  unpack, no scratch, no split-K, grouped program ordering for L2
+  locality.
+reduction_scan_sort_structure: >
+  The K reduction is ordered as an outer sequential loop over packed-row
+  tiles j and an inner static loop over fields i, so the accumulation
+  visits A columns in the order (field 0 of tile 0, field 1 of tile 0,
+  ..., field 3 of tile 0, field 0 of tile 1, ...), interleaving the four
+  K slabs rather than walking K linearly; the result is exact in int32 so
+  the order does not affect the value. Intra-step order is internal to
+  ct.mma. No cross-program reduction.
+precision:
+  input_dtypes: [int8 (A), uint8 packed 2-bit (B)]
+  accumulation: int32 (ct.zeros dtype int32, line 46), exact integer arithmetic
+  output_dtype: int32 (line 82)
+  special_modes: >
+    exact integer: int8 x int8 products accumulated in int32 on the tensor
+    core; the 2-bit field decode subtracts 1 so fields map to
+    {-1, 0, 1, 2}; no TF32, no scaling
+  masking_or_padding_values: >
+    PaddingMode.ZERO on both loads (lines 53, 60). A zero-padded B byte
+    decodes to field value -1 (not 0), so correctness of padded K_b tails
+    relies on the paired A columns also being zero; with the swept shapes
+    K_b is a multiple of TK and no K tail padding occurs. Stores are
+    clipped at (M, N).
+intermediate_storage: >
+  None. The widened B tile, the four unpacked operand tiles and the int32
+  accumulator are register/TMEM resident as lowered by cuTile; no global
+  scratch and no unpacked copy of B.
+mutation_rules: >
+  a and b are never written. c is freshly allocated per call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tm
+    role: tile size (rows of C per program; ConstInt)
+    default_present: true
+  - name: tn
+    role: tile size (columns of C per program; ConstInt)
+    default_present: true
+  - name: tk
+    role: tile size (packed rows of B, equivalently A columns per field, per reduction step; ConstInt)
+    default_present: true
+  - name: group_size_m
+    role: grouped program ordering width (fixed in the search space; ConstInt)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint applied via replace_hints
+    default_present: true
+  - name: block_size
+    role: run() keyword accepted but unused
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py lines 98-128) running
+  ct.tune.exhaustive_search over _SEARCH_SPACE (lines 16-22) with the
+  closures at lines 87-98, cached per shape_key (M, N, K, dtype). The
+  winner's occupancy is applied via kernel_with_hints (line 115) and the
+  tile shape plus group size are passed as ConstInt arguments (lines
+  116-119). Default path uses _DEFAULT_CONFIG (lines 12-14).
+  get_last_config returns tm, tn, tk, group_size_m, occupancy (lines
+  100-107, 123-124). Audit only.
+implementation_freedoms_observed: >
+  Tile shape, K step, grouping width and occupancy; program ordering;
+  whether B is widened to int32 before masking or decoded with narrower
+  arithmetic; whether the four fields are processed as four MMAs per B
+  tile (as here) or the four A slabs are concatenated; compile-time versus
+  runtime K_b; operand staging as chosen by cuTile.
+algorithm_constraints_observed: >
+  One kernel, B consumed in its packed uint8 form with the 2-bit decode
+  ((byte >> 2i) & 3) - 1 performed inside the mainloop; field i of packed
+  row r pairs with A column i * K_b + r; int8 x int8 products accumulated
+  exactly in int32; int32 (M, N) output allocated inside run(); no host
+  unpack, no cached or prepacked operand, no scratch. The index arithmetic
+  k_a = i * num_tiles_kb + j is only correct when K_b is a multiple of TK
+  (so that num_tiles_kb * TK == K_b); a faithful re-implementation must
+  preserve the slab mapping, not this specific index formula.
+fq_boundary:
+  bytes_expr: "M * K + K * N // 4 + 4 * M * N"
+  flops_expr: "2 * M * N * K"
+  consistent_with_timed_boundary: true
+  notes: >
+    Counts A once in bytes (int8), B once in its packed form (K * N / 4
+    bytes = K_b * N) and C once as int32, with the element sizes
+    hard-coded rather than via dtype_size. This matches the cuTile kernel,
+    which reads the packed B directly and performs the decode in
+    registers; run() performs no preprocessing beyond the output
+    allocation and assumes no pre-unpacked operand. The reference, by
+    contrast, materialises an unpacked int8 B and an fp32 GEMM inside its
+    own run(), which is extra reference-side work rather than an F/Q
+    boundary issue for cuTile.
+notes_for_review:
+  - Correctness of the A-column addressing requires K_b % TK == 0 (true for every swept K with the tile sizes in the search space); a tail tile would silently misalign the slabs because num_tiles_kb * TK != K_b.
+  - A zero-padded B byte decodes to -1, not 0, so padding on the N or K_b edges yields non-zero operand values that are only harmless because the corresponding C columns are clipped or the paired A columns are zero.
+  - K_b is a ConstInt kernel parameter, so the kernel is specialised per swept K value (inferred from ct.Constant semantics).
+  - The B tile is loaded once and reused for the four field decodes; the four A slab tiles are loaded separately per packed tile.
+  - run() has no **kwargs; an unexpected keyword would raise TypeError.
+  - The reference computes in fp32 (TF32 disabled) and casts to int32; results are exact for the generated magnitudes, so the verify tolerance of 0.1 is effectively an exact-match check.

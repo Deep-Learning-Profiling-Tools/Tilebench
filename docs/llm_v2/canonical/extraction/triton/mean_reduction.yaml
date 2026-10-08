@@ -1,0 +1,156 @@
+operator: mean_reduction
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/mean_reduction/impl_triton.py
+    functions:
+      - name: mean_rowwise_kernel
+        lines: [9, 30]
+        role: kernel
+      - name: _mean_rowwise_kernel_autotuned
+        lines: [33, 43]
+        role: tuner
+      - name: run
+        lines: [46, 73]
+        role: host-driver
+      - name: get_last_config
+        lines: [76, 84]
+        role: helper
+  - path: tilebench/benchmarks/operators/mean_reduction/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/mean_reduction/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_mean_reduction_inputs
+        lines: [451, 453]
+        role: helper
+functional_semantics: >
+  out = x.mean(dim=dim, dtype=torch.float32) (impl_torch.py lines 4-5): the
+  arithmetic mean along dimension dim, with the reduction and the result in
+  float32 regardless of the input dtype. The generator always supplies a 2-D x of
+  shape (M, N) and dim = 1 (tensors.py 451-453), so out[r] = (1/N) * sum_c x[r, c]
+  with out of shape (M,) in float32. No reference-side preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:"
+  positional_inputs: [x, dim]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single float32 tensor of shape (M,) holding one mean per row
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: "one of fp16, bf16, fp32 (config.yaml line 14)"
+    layout: "row-major contiguous from the generator; the kernel assumes row stride N and element stride 1 after the contiguous() call on line 50"
+    mutated_in_place: false
+    notes: "M fixed by case_defaults, N swept (config.yaml lines 8-13); values from randn"
+  - name: dim
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: "always 1 from the generator; other values take the generic permute path on lines 52-55, which is not exercised by the benchmark"
+outputs:
+  - name: out
+    shape: "(M,)"
+    dtype: float32 (fixed, independent of input dtype)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "when x is 2-D and dim == 1, x2d = x.contiguous() (a no-op view for contiguous input); otherwise the reduced dim is permuted last, made contiguous and reshaped to (-1, x.shape[dim]), which copies"
+    lines: [49, 55]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: "the copying branch (lines 52-55) is never taken for benchmark inputs; the benchmark path performs no data movement here"
+  - description: "allocate out = torch.empty(M, dtype=torch.float32)"
+    lines: [57, 58]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "M, N read from x2d.shape on the host; N is passed to the kernel as a tl.constexpr (line 10), so the kernel is specialised per distinct N"
+stages:
+  - id: s1
+    description: "row-wise mean: a 1-D grid of ceil(M/BLOCK_M) programs; each program owns BLOCK_M rows, keeps a [BLOCK_M, BLOCK_N] float32 accumulator, walks the N columns in BLOCK_N-wide chunks (static loop, N constexpr), loads each chunk masked by row < M and col < N with other=0.0, casts it to float32 and adds it lane-wise into the accumulator; after the loop it reduces the accumulator over the column axis with tl.sum, divides by N, and stores one float32 per row masked by row < M"
+    kind: kernel
+    lines: [9, 30]
+    launches: "ceil(M / BLOCK_M) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "out (final result)"
+algorithm_family: >
+  Single-kernel row-wise reduction (one or a few rows per program, strip-mined
+  over the columns), lane-wise partial sums followed by an in-program tree
+  reduction and a final scalar divide.
+reduction_scan_sort_structure: >
+  Two-level sum per row. Level 1 (lines 20-26): sequential over column chunks in
+  increasing column order; lane j of the accumulator holds the float32 sum of all
+  columns c with c mod BLOCK_N == j (chunk contributions added in order). Level
+  2 (line 28): tl.sum over the BLOCK_N lanes, whose internal combination order is
+  defined by Triton's reduction lowering and not by the source. The mean is
+  row_sum / N (true division, line 29), not multiplication by a precomputed
+  reciprocal. Masked (out-of-range) columns contribute 0.0. The reference
+  torch.mean uses its own float32 summation order, so results agree to float32
+  rounding but need not be bit-identical.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: float32 for every input dtype (explicit .to(tl.float32) on line 25; accumulator created with tl.zeros(..., tl.float32) on line 18)
+  output_dtype: float32
+  special_modes: "none; the divide by N is a float32 division"
+  masking_or_padding_values: "0.0 for masked loads (line 25); row mask on the store (line 30)"
+intermediate_storage: >
+  None in the benchmark path. The generic-dim branch (lines 52-55) would
+  materialise a permuted contiguous copy of x for the kernel's lifetime.
+mutation_rules: >
+  x is read-only. A fresh out is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_M
+    role: tile size (rows per program)
+    default_present: true
+  - name: BLOCK_N
+    role: tile size (columns per chunk / accumulator width)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 33-43) over BLOCK_N x num_warps x num_stages with BLOCK_M
+  held at a single value in every config, key=["M", "N"], warmup=1, rep=3.
+  autotune=True launches the wrapper with a meta-dependent grid (lines 61-62);
+  otherwise the raw kernel is launched with _DEFAULT_CONFIG (lines 64-72).
+  get_last_config (76-84) reports BLOCK_M, BLOCK_N and num_warps but omits
+  num_stages even though the search varies it. Audit only.
+implementation_freedoms_observed: >
+  Rows per program, column chunk width, warp count, pipelining depth, the exact
+  order in which partial sums are combined (any float32 order is acceptable to
+  the reference tolerance), whether N is a compile-time or runtime value, and
+  whether the final divide is replaced by a multiply by 1/N (a rounding-level
+  change) are left open.
+algorithm_constraints_observed: >
+  One read of every element of x; per-row sum accumulated in float32 for all
+  input dtypes; division by N performed in float32; one float32 output per row in
+  a newly allocated (M,) buffer; masked columns must contribute exactly zero;
+  input is 2-D row-major with the reduced axis contiguous.
+fq_boundary:
+  bytes_expr: "M * N * dtype_size"
+  flops_expr: "M * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads M*N input elements once (counted) and writes M float32
+    outputs (not counted; a factor of about 4/(N*dtype_size) smaller). The
+    contiguous() call on the benchmark path is a no-op, so no preprocessing
+    traffic is hidden. flops_expr counts one add per element and ignores the M
+    divides. No prepacked inputs are assumed.
+notes_for_review:
+  - "N is declared tl.constexpr, so the column loop is specialised and the kernel recompiled for every distinct N in the sweep; a re-implementation with runtime N is algorithmically equivalent."
+  - "get_last_config omits num_stages although the autotune space varies it; the logged winner is therefore incomplete (audit only)."
+  - "The block_size keyword is accepted but unused."
+  - "The generic dim path (lines 52-55) copies x and is untested by the benchmark; a contract should state that the reduced axis is the contiguous last axis of a 2-D tensor."

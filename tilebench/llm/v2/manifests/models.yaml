@@ -1,0 +1,76 @@
+# Model configuration. Every live role needs an explicit model_id. Status:
+#   unset      nothing chosen; every live run type is blocked
+#   candidate  set by an explicit instruction for engineering validation runs
+#              (run_type=validation, unscored); formal Base/Enhanced runs stay
+#              blocked until `approved`
+#   approved   study-owner decision; `approved_by` cites the instruction and
+#              `approved_evidence` the live responses that confirmed the settings.
+#              The generator settings were decided by the owner (xhigh for both
+#              models, 128000 cap) and are not re-opened as a question.
+# Keys are never written here: `api_key_env` names the environment variable
+# the adapter reads on the server at request time.
+providers:
+  openai:
+    api: responses
+    usage_schema: openai_responses_v1
+    sdk_package: openai
+    sdk_version_checked: "2.37.0"
+    endpoint: client.responses.stream
+    api_key_env: OPENAI_API_KEY
+  anthropic:
+    api: messages
+    usage_schema: anthropic_messages_v1
+    sdk_package: anthropic
+    sdk_version_checked: "0.103.1"
+    endpoint: client.messages.stream
+    api_key_env: CLAUDE_API_KEY
+
+roles:
+  generator:
+    gpt:
+      provider: openai
+      model_id: gpt-6.1-sol
+      reasoning_effort: xhigh
+      max_output_tokens: 128000      # standard streaming endpoint cap; the model may finish earlier
+      temperature: null              # Responses API with reasoning ignores it; recorded as given
+      api_key_env: OPENAI_API_KEY
+      status: approved
+      approved_by: "study owner, NEXT_STEP_CLAUDE.md 2026-10-05 §一 and the freeze-round instruction (gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000)"
+      approved_evidence: "artifacts/llm_v2/validation_b200_2026-10-05/evidence/probes/gpt_probe.json; 60 responses of the validation campaign echo gpt-6.1-sol with these settings"
+      set_by: "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000"
+    claude:
+      provider: anthropic
+      model_id: claude-opus-5-5
+      thinking: {type: adaptive}
+      output_effort: xhigh           # fixed by the owner's latest correction: xhigh, not max
+      max_output_tokens: 128000      # Messages API streaming cap (300K is the Batches beta path, not used)
+      api_key_env: CLAUDE_API_KEY
+      status: approved
+      approved_by: "study owner, NEXT_STEP_CLAUDE.md 2026-10-05 §一 and the freeze-round instruction (claude-opus-5-5, output_config.effort=xhigh NOT max, adaptive thinking, max_tokens=128000)"
+      approved_evidence: "artifacts/llm_v2/validation_b200_2026-10-05/evidence/probes/claude_probe.json; 60 responses of the validation campaign echo claude-opus-5-5 with these settings"
+      set_by: "owner instruction NEXT_STEP_CLAUDE.md (2026-10-05): claude-opus-5-5, output_config.effort=xhigh, adaptive thinking, max_tokens=128000"
+  distiller:                         # owner decision FINAL_FREEZE_AND_START_B200.md §5 (2026-10-06); unused until a source-device Base is complete
+    provider: openai
+    model_id: gpt-6.1-sol
+    reasoning_effort: xhigh
+    max_output_tokens: 128000        # for both the distillation map (extraction) and reduce (synthesis) requests
+    temperature: null
+    api_key_env: OPENAI_API_KEY
+    status: approved
+    approved_by: "study owner, FINAL_FREEZE_AND_START_B200.md §5 (2026-10-06): gpt-6.1-sol, reasoning.effort=xhigh, max_output_tokens=128000 for both map and reduce"
+    set_by: "owner instruction FINAL_FREEZE_AND_START_B200.md (2026-10-06)"
+  reviewer:                          # optional LLM compliance reviewer
+    enabled: false
+    provider: null
+    model_id: null
+    status: unset
+
+transport:
+  timeout_s: 3600                    # per request; streaming keeps the connection alive
+  max_transport_retries: 3           # recorded separately from candidate attempts
+  max_rate_limit_retries: 12         # HTTP 429 (charged "no"), each after the provider's Retry-After / reset
+  retry_backoff_s: 30
+
+pricing:                             # money is a separate axis (E_usd); never mixed with tokens, never in a prompt
+  manifest: api_pricing.yaml         # frozen public list prices; campaigns pin its sha256 (metrics.cost.pricing_binding)
+  currency: USD

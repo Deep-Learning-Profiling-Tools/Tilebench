@@ -1,0 +1,148 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "kl_divergence",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/kl_divergence/impl_triton.py",
+      "functions": [
+        {
+          "name": "kl_divergence_kernel",
+          "lines": [
+            9,
+            34
+          ]
+        },
+        {
+          "name": "_kl_divergence_kernel_autotuned",
+          "lines": [
+            37,
+            49
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            52,
+            76
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            79,
+            87
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/kl_divergence/impl_cutile.py",
+      "functions": [
+        {
+          "name": "kl_divergence_kernel",
+          "lines": [
+            25,
+            49
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            55,
+            78
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            81,
+            82
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/kl_divergence/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "loss[r] = sum_c y*(where(y>0, log y, 0) - log_p) in fp32, one scalar per row (impl_triton.py:22-34).",
+      "cutile": "same term with the same guard (impl_cutile.py:31-49).",
+      "note": "Both match impl_torch.py:5 except at y == 0, where both give 0 and the reference gives NaN; the guard is unreachable for the softmax-generated inputs (tensors.py:157-164) and the contract pins the 0*log0 = 0 convention that both share."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "fp32 loss allocation (impl_triton.py:55) + one launch, grid (rows,) (56-75).",
+      "cutile": "fp32 loss allocation (impl_cutile.py:59) + one launch, grid (rows,1,1) (76-77).",
+      "note": "One program per row, fused map + reduce on both sides."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "kernel depends only on the output buffer.",
+      "cutile": "kernel depends only on the output buffer.",
+      "note": "No intermediates."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "sequential column chunks into a lane-wise fp32 accumulator, one tl.sum at the end (impl_triton.py:21-33).",
+      "cutile": "sequential column tiles into a (1,TILE) fp32 accumulator, one ct.sum at the end (impl_cutile.py:28-48).",
+      "note": "Same lane-partial-then-tree structure; config.verify atol/rtol 1e-4 absorbs ordering."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "explicit .to(tl.float32) on both loads, fp32 accumulator, fp32 output (impl_triton.py:21,25-26,55).",
+      "cutile": "explicit ct.astype float32, fp32 accumulator, fp32 output (impl_cutile.py:28,41-42,59).",
+      "note": "fp32 throughout on both sides; the sweep is fp32-only."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "shape read + loss allocation only (impl_triton.py:54-56); row stride passed (60,68).",
+      "cutile": "shape read + loss allocation only (impl_cutile.py:58-59).",
+      "note": "No casts, copies or caches on either side."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none.",
+      "cutile": "none.",
+      "note": "Lane accumulators are register resident."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "inputs never written; fresh loss per call.",
+      "cutile": "inputs never written; fresh loss per call.",
+      "note": "Idempotent."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches.",
+      "cutile": "no dispatch branches.",
+      "note": "Masked loads with other=0.0 (impl_triton.py:25-26,31) vs zero-padded loads (impl_cutile.py:32-39) are mapping choices; both make tails contribute 0."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "rows * cols * 4 * 2 + rows * 4",
+    "flops_expr": "4 * rows * cols",
+    "consistent": "true",
+    "note": "Two fp32 inputs read once each plus the fp32 row vector written once, with 4-byte elements hard-coded (correct for the fp32-only case grid; would be wrong if a dtype axis were added). Matches the single streaming kernel on both sides; the allocation is inside run() and timed; nothing cached or prepacked."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "75e1e6055bf7fc07673909ba5c6853f574e4feeba69f14924e7d436d02b29284",
+  "previous_status_before_approval": "draft"
+}

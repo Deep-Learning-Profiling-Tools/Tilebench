@@ -1,0 +1,141 @@
+operator: vector_add
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/vector_add/impl_cutile.py
+    functions:
+      - name: _DEFAULT_CONFIG / _SEARCH_SPACE (module constants)
+        lines: [12, 18]
+        role: tuner
+      - name: add_kernel
+        lines: [21, 26]
+        role: kernel
+      - name: _tuner (CutileAutotuner instance)
+        lines: [29, 29]
+        role: tuner
+      - name: run
+        lines: [32, 58]
+        role: host-driver
+      - name: get_last_config
+        lines: [61, 62]
+        role: helper
+  - path: tilebench/benchmarks/operators/vector_add/impl_torch.py
+    functions:
+      - name: run
+        lines: [1, 2]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/vector_add/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_vector_add_inputs
+        lines: [58, 66]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Elementwise addition of two 1D vectors: c[i] = x[i] + y[i]. Reference
+  (impl_torch.py lines 1-2): x + y. Generator (tensors.py lines 58-66):
+  for int8 both inputs are torch.randint in [-32, 32] cast to int8 so the
+  sum cannot overflow; otherwise torch.randn(n) in the case dtype.
+  config.yaml sweeps n and dtype in {fp16, bf16, fp32, int8}.
+run_signature:
+  text: "def run(x: torch.Tensor, y: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x, y]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `output`, same shape and dtype as x (allocated by run)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "case dtype: fp16 | bf16 | fp32 | int8"
+    layout: contiguous (passed directly; no view or copy)
+    mutated_in_place: false
+    notes: null
+  - name: y
+    shape: "(n,)"
+    dtype: same as x (assumed; nothing is checked)
+    layout: contiguous (passed directly)
+    mutated_in_place: false
+    notes: no shape or dtype assertion between x and y.
+outputs:
+  - name: output
+    shape: x.shape
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(x)
+    lines: [33, 33]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      add_kernel, grid = (ceil(n_elements/TILE), 1, 1) (line 55). Each CTA
+      loads one (TILE,) tile of a and of b (no padding_mode given, lines
+      24-25), adds them in the tensors' native dtype and stores the sum
+      (line 26). No type conversion anywhere.
+    kind: kernel
+    lines: [21, 26]
+    launches: "1 (grid = ceil(n/TILE) CTAs)"
+    depends_on: []
+    fusable_with: none
+    produces: output (final result)
+algorithm_family: >
+  Elementwise binary map with flat 1D tiling.
+reduction_scan_sort_structure: >
+  None; purely elementwise.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: n/a; the single add is performed in the native input dtype (no upcast), which matches the reference x + y in all four dtypes
+  output_dtype: x.dtype
+  special_modes: exact integer add for int8 (inputs bounded by the generator so no wraparound occurs)
+  masking_or_padding_values: "no padding_mode on either load; the swept sizes (multiples of 2^20) never produce a partial tile, so cuTile's default out-of-bounds value is never stored"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  x and y are not modified; output is fully overwritten; idempotent.
+  Tuning launches write into the real output buffer (args_fn, line 43),
+  which the final launch overwrites.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per CTA)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached wrapping ct.tune.exhaustive_search over
+  the tile x occupancy cartesian space (_SEARCH_SPACE, lines 14-18), keyed
+  by (n_elements, dtype) (line 39); winner applied via the memoised
+  kernel_with_hints kernel (line 54). get_last_config written only on the
+  autotune path (lines 46-50). Audit only.
+implementation_freedoms_observed: >
+  Tile size, occupancy, 1D vs multi-dimensional tiling, vector width; any
+  implementation that performs one native-dtype add per element is
+  equivalent.
+algorithm_constraints_observed: >
+  Keep: one add per element in the native dtype (int8 must stay exact; the
+  verifier uses exact comparison for integer dtypes), output in a fresh
+  buffer with x's shape and dtype.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    Read x, read y, write output; run() performs no other data movement
+    (one empty allocation). n is the case parameter itself.
+notes_for_review:
+  - block_size is accepted but ignored; the default path uses _DEFAULT_CONFIG.tile.
+  - No shape/dtype check between x and y; the kernel trusts the caller.
+  - Loads carry no padding_mode; sizes that are not a multiple of the tile would consume cuTile's default out-of-bounds value (not exercised by the config sweep).

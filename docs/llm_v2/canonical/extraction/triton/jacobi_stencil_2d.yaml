@@ -1,0 +1,164 @@
+operator: jacobi_stencil_2d
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/impl_triton.py
+    functions:
+      - name: jacobi_stencil_kernel
+        lines: [12, 54]
+        role: kernel
+      - name: _jacobi_stencil_kernel_autotuned
+        lines: [57, 70]
+        role: tuner
+      - name: run
+        lines: [73, 102]
+        role: host-driver
+      - name: get_last_config
+        lines: [105, 113]
+        role: helper
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/jacobi_stencil_2d/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_jacobi_stencil_2d_inputs
+        lines: [120, 125]
+        role: helper
+      - name: infer_problem_size (jacobi_stencil_2d branch, rows*cols)
+        lines: [691, 694]
+        role: helper
+functional_semantics: >
+  One Jacobi sweep of the 5-point 2-D stencil with fixed (copied) boundary.
+  Reference impl_torch.run (lines 7-13): output = input.clone();
+  output[1:rows-1, 1:cols-1] = 0.25 * (input[0:rows-2, 1:cols-1] +
+  input[2:rows, 1:cols-1] + input[1:rows-1, 0:cols-2] + input[1:rows-1,
+  2:cols]). So interior points get the average of their four axis
+  neighbours (up, down, left, right, summed in that left-to-right order,
+  then scaled by 0.25); first/last row and first/last column are copied
+  unchanged. Element-wise in the input dtype on the reference side. The
+  generator (tensors.py 120-125) returns (input, rows, cols) with cols
+  defaulting to rows; config sweeps rows only, so cases are square.
+run_signature:
+  text: |-
+    def run(input: torch.Tensor, rows: int, cols: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, rows, cols]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor (rows, cols) in input's dtype
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(rows, cols)"
+    dtype: fp16 | bf16 | fp32 (config case_grid dtype)
+    layout: strided (row and column strides are passed explicitly, lines 84/96; generator supplies contiguous row-major)
+    mutated_in_place: false
+    notes: read 5 times per interior element via separate masked loads (lines 40-47); no explicit dtype upcast.
+  - name: rows
+    shape: scalar python int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: autotune key together with cols.
+  - name: cols
+    shape: scalar python int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: equals rows for every config case.
+outputs:
+  - name: output
+    shape: "(rows, cols)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output = torch.empty_like(input)
+    lines: [75, 75]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: output strides (empty_like) are passed to the kernel separately from input strides (lines 85/97).
+stages:
+  - id: s1
+    description: >
+      2-D grid over (rows, cols) tiles of BLOCK_SIZE_R x BLOCK_SIZE_C. For
+      each tile: compute an interior mask mask_edge (1 <= r <= rows-2 and
+      1 <= c <= cols-2, lines 38-39); load top/bottom/left/right neighbours
+      under mask_edge with no `other` (lines 40-43); load the centre under
+      the in-bounds mask (lines 45-47); avg = 0.25 * (top + bottom + left +
+      right) (line 49); tile_out = where(mask_edge, avg, center) (line 50)
+      so boundary points pass the centre value through; masked store (lines
+      52-54). No shared-memory halo staging; neighbour values come from
+      separate global loads.
+    kind: kernel
+    lines: [12, 54]
+    launches: "1 launch, grid ceil(rows / BLOCK_SIZE_R) x ceil(cols / BLOCK_SIZE_C)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (rows, cols) -- no intermediates
+algorithm_family: >
+  Single-kernel, single-sweep 5-point Jacobi stencil (out-of-place) with
+  select-based boundary copy; gather of neighbours through five independent
+  masked loads rather than a halo tile.
+reduction_scan_sort_structure: >
+  None (no reduction). The four-term neighbour sum is evaluated as
+  ((top + bottom) + left) + right and then multiplied by 0.25, which is the
+  same association and scaling order as the reference expression.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "arithmetic on the loaded dtype with no explicit upcast; whether Triton evaluates 0.25 * (sum) in fp16/bf16 or promotes the python-float operand to fp32 is a Triton scalar-promotion detail -- unclear from this source"
+  output_dtype: input dtype
+  special_modes: none
+  masking_or_padding_values: "neighbour loads masked by the interior mask without `other` (unspecified lanes, discarded by tl.where); centre load masked by in-bounds without `other`; store masked by in-bounds"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  input is never written; output is a fresh tensor, so the sweep is a true
+  Jacobi (not Gauss-Seidel) update; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE_R
+    role: tile size (rows)
+    default_present: true
+  - name: BLOCK_SIZE_C
+    role: tile size (cols)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE_R x BLOCK_SIZE_C x num_warps (key ["rows",
+  "cols"], warmup=1, rep=3), lines 57-70; 2-D grid lambda on meta. Default
+  path launches the undecorated kernel with _DEFAULT_CONFIG (lines 88-100).
+  get_last_config reads best_config (lines 105-113).
+implementation_freedoms_observed: >
+  Tile shape and warps; whether neighbours are re-loaded from global/L1 (as
+  here) or staged once with a halo in shared memory; grid order; vector
+  width; whether to upcast to fp32 for the arithmetic.
+algorithm_constraints_observed: >
+  Keep: exactly one out-of-place sweep; interior = 0.25 * (up + down + left
+  + right); boundary row/column values copied verbatim from input; output
+  same shape/dtype as input; input read-only; no scratch. Bit-exactness
+  would additionally require the same summation association and dtype, but
+  verification is tolerance-based (per-dtype defaults; no verify section).
+fq_boundary:
+  bytes_expr: "2 * rows * rows * dtype_size"
+  flops_expr: "4 * rows * rows"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation and one kernel. The formula counts
+    one read of input and one write of output (the four extra neighbour
+    loads per element are cache hits in the minimal-traffic model). It
+    hard-codes cols == rows, which holds for every config case because the
+    generator defaults cols to rows; it would be wrong for non-square
+    inputs. No preprocessing or prepacking is performed or assumed.
+notes_for_review:
+  - bytes_expr/flops_expr use rows*rows rather than rows*cols; correct only because the config sweeps square grids.
+  - No explicit fp32 upcast; fp16/bf16 arithmetic precision depends on Triton's promotion of the 0.25 literal (unclear) and may differ from torch's per-op fp16 rounding; covered by default tolerances.
+  - Neighbour loads have no `other` value; correctness relies on tl.where discarding masked lanes.
+  - Each interior element is loaded five times from global memory (no halo tile); counts as an implementation choice, not a contract.
+  - block_size kwarg is accepted but ignored.

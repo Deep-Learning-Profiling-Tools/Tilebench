@@ -1,0 +1,132 @@
+# Declared arithmetic model per (operator, dtype) for the empirical Roofline
+# target   T_emp = max(F / P_emp[mode], Q / BW_emp)
+# (tilebench/llm/v2/metrics/empirical.py). P_emp and BW_emp come from the
+# device's frozen empirical profile (manifests/calibration.yaml); a mode is
+# looked up by its exact name (calibration/schema.py MODES) and the F unit
+# must equal the mode's unit. Nothing is substituted when a value is missing.
+#
+# Revision 2 (2026-10-06) replaces revision 1, whose dtype-wide defaults
+# mapped every fp16/bf16 task to a tensor-core peak and every fp32 task to
+# fp32_vector regardless of the operator. Modes are now declared per
+# operator from the operator's contract (Precision and accumulation): MMA
+# operators get the matrix mode of their operand format (fp32 inputs run as
+# TF32, as the contracts state); non-matrix operators whose contract
+# mandates fp32 arithmetic get fp32_fma_vector; non-matrix operators whose
+# contract allows input-dtype arithmetic get the packed vector mode of
+# their dtype. Operators whose F is an element/operation count without an
+# arithmetic-unit model are proposed as memory_only (decision M2).
+#
+# F and Q are the frozen config.yaml expressions (not rewritten here).
+# `f_kind` / `q_kind` state what they are. Proposed F/Q overrides are listed
+# under `decisions` and are applied only when their status is `approved`.
+schema: tilebench-arithmetic-modes/2
+revision: 2
+status: approved              # decision M1 (owner, FINAL_FREEZE_AND_START_B200.md §4, 2026-10-06)
+approved_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): per-operator declaration approved; no dtype-wide default"
+approved_on: "2026-10-06"
+
+f_kinds:
+  flop_count: {unit: FLOP, meaning: floating-point operations of the algorithm as configured (2 per multiply-add)}
+  dense_equivalent_flop: {unit: FLOP, meaning: floating-point operations of the dense problem, including masked work}
+  simplified_op_count: {unit: FLOP, meaning: a fixed per-element operation count; not the instruction count (exp, compare, reductions and conversions are not weighted)}
+  int_op_count: {unit: OP, meaning: integer operations (2 per int8 multiply-add)}
+  element_count: {unit: null, meaning: elements moved or compared; not an arithmetic count}
+  zero: {unit: null, meaning: F is 0}
+q_kinds:
+  compulsory_io: one read of every input element and one write of every output element (a lower bound; implementation clones, scratch and re-reads are not counted)
+  algorithm_specific: traffic of a fixed algorithm (for example a fixed number of passes)
+
+decisions:
+  M1_declaration_revision_2:
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06)"
+    question: approve this per-operator declaration (modes, f_kind, q_kind)
+  M2_memory_only_for_operation_counts:
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): the formal target of these tasks is an empirical compulsory-I/O lower bound T_emp = Q / BW_emp; F stays diagnostic; the paper must not describe them as a complete compute+memory Roofline and reports the memory-only subgroup beside the overall aggregate"
+    question: >
+      For operators whose F counts elements, comparisons, conversions or
+      integer operations with no calibrated arithmetic-unit model
+      (comparison/selection, layout/copy, integer and int8-elementwise
+      tasks), score against T_emp = Q / BW_emp (memory_only) and keep F as a
+      diagnostic. Alternative: register and calibrate integer/compare/convert
+      vector probes whose operation definition matches each F.
+  M3_flash_attention_causal_F:
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §4 (2026-10-06): causal F override applied; the dense count stays a diagnostic"
+    question: >
+      flash_attention fixes causal=true, but the frozen F = 4*B*H*S^2*D is the
+      dense count. Proposed override F_causal = 2*B*H*D*S*(S+1) (unmasked
+      query-key pairs, two GEMMs, 2 FLOP per MAC); the dense F stays as a
+      diagnostic. Not applied until approved.
+    override: {operator: flash_attention, F: "2 * batch_size * n_heads * head_dim * seq_len * (seq_len + 1)", f_kind: flop_count}
+  M4_radix_sort_Q:
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §3/§4 (2026-10-06): digit width and pass count are implementation choices, so the fixed-16-pass Q is not the formal denominator; Q override = 2 * n * dtype_size (input read + final output write, compulsory_io); pass/scratch traffic is diagnostic"
+    question: >
+      The frozen Q = 16 passes * 3 * n * 4 bytes is the 2-bit-digit LSD
+      algorithm of the human kernels. The contract (revision 2, owner
+      decision) leaves digit width and pass count free, so the scoring Q is
+      the task-level compulsory-I/O lower bound below; the frozen expression
+      stays a diagnostic.
+    override: {operator: radix_sort, Q: "2 * n * dtype_size", q_kind: compulsory_io}
+  C1_gaussian_blur_tap_precision:
+    status: approved
+    decided_by: "study owner, FINAL_FREEZE_AND_START_B200.md §3/§4 (2026-10-06): pixel and weight converted to fp32 before each multiply, fp32 accumulation, one cast at the output, for fp16 and fp32; mode fp32_fma_vector"
+    question: >
+      fp16 per-tap products in fp16 (fp16x2_fma_vector) or in fp32
+      (fp32_fma_vector); decided: fp32 for both dtypes.
+
+operators:
+  # ---- matrix (tensor-core) operators
+  batched_matmul:        {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, bf16: mma_bf16_f32acc, fp32: mma_tf32_f32acc}}
+  matmul_fp32_fp16_fp8:  {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, fp32: mma_tf32_f32acc, fp8_e4m3fn: mma_fp8_e4m3_f32acc}}
+  streamk_matmul:        {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, bf16: mma_bf16_f32acc, fp32: mma_tf32_f32acc}}
+  matmul_int8:           {f_kind: int_op_count, q_kind: compulsory_io, modes: {int8: mma_int8_i32acc}}
+  1d_conv:               {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, fp32: mma_tf32_f32acc}}
+  2d_conv:               {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, fp32: mma_tf32_f32acc}}
+  3d_conv:               {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc, fp32: mma_tf32_f32acc}}
+  flash_attention:       {f_kind: dense_equivalent_flop, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc}, decisions: [M3_flash_attention_causal_F]}
+  block_sparse_attention: {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: mma_fp16_f32acc}}
+  linear_self_attention: {f_kind: flop_count, q_kind: compulsory_io, modes: {fp32: mma_tf32_f32acc},
+                          note: "F = 4*M*D^2 (TF32 GEMMs) + 3*M*D (fp32 vector terms); the vector part is counted at the TF32 rate (3/(4*D) of F)"}
+  # ---- non-matrix operators whose contract mandates fp32 arithmetic
+  softmax:               {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  cross_entropy:         {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  kl_divergence:         {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp32: fp32_fma_vector}}
+  mean_reduction:        {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  l2_norm:               {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  layernorm:             {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  rmsnorm:               {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  batch_normalization:   {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  sigmoid:               {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  swiglu:                {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  fused_activation:      {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp32: fp32_fma_vector}}
+  dropout:               {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  dequantize_rowwise:    {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {int8: fp32_fma_vector}}
+  flash_decode:          {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp32: fp32_fma_vector}}
+  moe_topk_gating:       {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, bf16: fp32_fma_vector, fp32: fp32_fma_vector}}
+  gaussian_blur:         {f_kind: flop_count, q_kind: compulsory_io, modes: {fp16: fp32_fma_vector, fp32: fp32_fma_vector},
+                          decisions_by_dtype: {fp16: [C1_gaussian_blur_tap_precision]}}
+  # ---- non-matrix operators whose contract allows input-dtype arithmetic
+  leaky_relu:            {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, bf16: bf16x2_fma_vector, fp32: fp32_fma_vector}}
+  mul2:                  {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, bf16: bf16x2_fma_vector, fp32: fp32_fma_vector, int8: memory_only}}
+  vector_add:            {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, bf16: bf16x2_fma_vector, fp32: fp32_fma_vector, int8: memory_only}}
+  weight_dequant:        {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, bf16: bf16x2_fma_vector, fp32: fp32_fma_vector}}
+  rope:                  {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, fp32: fp32_fma_vector}}
+  jacobi_stencil_2d:     {f_kind: simplified_op_count, q_kind: compulsory_io, modes: {fp16: fp16x2_fma_vector, bf16: bf16x2_fma_vector, fp32: fp32_fma_vector}}
+  # ---- comparison / selection / conversion / integer / layout: F is an element or operation count (M2)
+  relu:                  {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
+  argmax:                {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, fp32: memory_only}}
+  2d_max_pooling:        {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only}}
+  bitonic_sort:          {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, fp32: memory_only}}
+  top_k_selection:       {f_kind: element_count, q_kind: compulsory_io, modes: {fp32: memory_only}}
+  quantize_global:       {f_kind: element_count, q_kind: compulsory_io, modes: {fp32: memory_only}}
+  histogramming:         {f_kind: element_count, q_kind: compulsory_io, modes: {int32: memory_only}}
+  radix_sort:            {f_kind: element_count, q_kind: algorithm_specific, modes: {int32: memory_only}, decisions: [M4_radix_sort_Q],
+                          note: "frozen config Q (16 passes) is diagnostic; the approved M4 override Q = 2*n*dtype_size (compulsory_io) is the scoring Q"}
+  matrix_copy:           {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
+  reverse_array:         {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
+  interleave:            {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
+  destindex:             {f_kind: element_count, q_kind: compulsory_io, modes: {fp16: memory_only, bf16: memory_only, fp32: memory_only, int8: memory_only}}
+  matrix_transpose:      {f_kind: zero, q_kind: compulsory_io, modes: {fp16: no_compute_term, bf16: no_compute_term, fp32: no_compute_term, int8: no_compute_term}}
