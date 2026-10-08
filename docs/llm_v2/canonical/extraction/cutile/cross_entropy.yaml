@@ -1,0 +1,170 @@
+operator: cross_entropy
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/cross_entropy/impl_cutile.py
+    functions:
+      - name: cross_entropy_kernel
+        lines: [17, 42]
+        role: kernel
+      - name: run
+        lines: [48, 86]
+        role: host-driver
+      - name: get_last_config
+        lines: [89, 90]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [45, 45]
+        role: tuner
+  - path: tilebench/benchmarks/operators/cross_entropy/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/cross_entropy/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_cross_entropy_inputs
+        lines: [390, 393]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Per-row (unreduced) cross-entropy loss. Reference: torch.nn.functional.cross_entropy(logits,
+  targets, reduction="none") on logits of shape (batch_size, num_classes) and integer targets
+  of shape (batch_size,). For each row b: loss[b] = -(logits[b, targets[b]] - max_c logits[b, c]
+  - log(sum_c exp(logits[b, c] - max_c logits[b, c]))). Output is a 1-D tensor of length
+  batch_size in the logits dtype. The reference does no preprocessing beyond shape checks
+  (impl_torch.py lines 6-13). Inputs from the generator (tensors.py 390-393): logits = randn
+  (batch_size, num_classes) in the case dtype; targets = randint(0, num_classes) of shape
+  (batch_size,), default integer dtype int64.
+run_signature:
+  text: |
+    def run(
+        logits: torch.Tensor,
+        targets: torch.Tensor,
+        block_size: int = 1024,
+        autotune: bool = False,
+    ) -> torch.Tensor:
+  positional_inputs: [logits, targets]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `output` of shape (batch_size,) in logits.dtype
+  get_last_config: present
+inputs:
+  - name: logits
+    shape: "(batch_size, num_classes)"
+    dtype: fp16 or fp32 (case dtype)
+    layout: row-major contiguous (run() calls logits.contiguous(), line 61)
+    mutated_in_place: false
+    notes: whole row is loaded as one (1, BLOCK_CLASSES) tile; BLOCK_CLASSES = next power of two >= num_classes (lines 57-59)
+  - name: targets
+    shape: "(batch_size,)"
+    dtype: int64 (generator default from torch.randint)
+    layout: contiguous
+    mutated_in_place: false
+    notes: loaded one scalar per program via ct.load(targets, index=(bid,), shape=()) (line 32)
+outputs:
+  - name: output
+    shape: "(batch_size,)"
+    dtype: logits.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: logits = logits.contiguous() (no-op for generator inputs)
+    lines: [61, 61]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: returns the same tensor when already contiguous, so no data movement in the benchmark
+  - description: compute block_classes = smallest power of two >= num_classes (host loop)
+    lines: [57, 59]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: passed as ConstInt BLOCK_CLASSES, so a different num_classes means a different kernel specialisation
+  - description: allocate output tensor torch.empty((batch_size,), dtype=logits.dtype)
+    lines: [62, 62]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      One program per row (grid = (batch_size, 1, 1), line 64). Load the full row as a
+      (1, BLOCK_CLASSES) tile with padding_mode=NEG_INF (lines 22-25), cast to fp32, compute
+      row_max = ct.max over axis 1, shifted = logits - row_max, row_sum = ct.sum(exp(shifted))
+      (lines 28-30). Load the scalar target (line 32), bounds-check it against [0, num_classes)
+      (line 35), clamp to 0 for the gather (line 36), gather the single target logit from the
+      logits array with check_bounds=False (line 37), cast to fp32, replace by -inf when the
+      target is out of range (line 39). loss = -(target_logit - row_max - log(row_sum))
+      (line 41), cast to output.dtype and store one element at index (bid,) (line 42).
+    kind: kernel
+    lines: [17, 42]
+    launches: "1 (grid = batch_size programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output
+algorithm_family: >
+  Single-pass per-row log-sum-exp with the entire class row resident in one tile: max reduction,
+  then sum of exp(x - max), then gather of the target logit; no chunked/online loop over classes.
+reduction_scan_sort_structure: >
+  Two in-tile reductions along axis 1 (ct.max then ct.sum) over a (1, BLOCK_CLASSES) tile; the
+  reduction tree order inside ct.max/ct.sum is library-defined (not visible in source). Padded
+  lanes hold -inf, so they do not affect the max and contribute exp(-inf) = 0 to the sum.
+  The row is loaded exactly once (plus a one-element gather of the target logit from global memory).
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 for max, exp, sum and log regardless of input dtype (ct.astype to float32 at line 26 and 38)
+  output_dtype: logits.dtype (ct.astype(loss, output.dtype) at line 42)
+  special_modes: none (plain ct.exp / ct.log; no exp2 rescaling, no fast-math flags)
+  masking_or_padding_values: "-inf for out-of-row padding (PaddingMode.NEG_INF); -inf substituted for an out-of-range target logit, giving loss = +inf"
+intermediate_storage: >
+  None. No global scratch; everything lives in the per-program tile.
+mutation_rules: >
+  No input is modified. run() allocates a fresh output each call; repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: occupancy
+    role: occupancy hint (replace_hints)
+    default_present: true
+  - name: BLOCK_CLASSES
+    role: tile size (derived from num_classes on the host, not swept)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (ct.tune.exhaustive_search with crash isolation) over a
+  search space that varies only the occupancy hint; keyed by (batch_size, num_classes, dtype).
+  kernel_with_hints memoises replace_hints. Audit only.
+implementation_freedoms_observed: >
+  Occupancy hint; the mapping of one row per program (a re-implementation could process several
+  rows per program or chunk the class axis); the order of the two reductions' internal trees;
+  whether the target logit is gathered from global memory or extracted from the resident tile.
+  The `block_size` keyword is accepted but unused (line 51).
+algorithm_constraints_observed: >
+  Numerically stable log-sum-exp (max subtraction before exp); fp32 arithmetic for the
+  reductions and the log; one read of the logits row; output in the logits dtype with shape
+  (batch_size,); targets consumed as int64 without a host-side cast; out-of-range targets
+  produce +inf rather than raising.
+fq_boundary:
+  bytes_expr: "batch_size * num_classes * dtype_size + batch_size * 8 + batch_size * dtype_size"
+  flops_expr: "batch_size * num_classes * 4"
+  consistent_with_timed_boundary: true
+  notes: >
+    Counts one read of logits, the int64 targets (8 bytes each) and the output write; this
+    matches what the single kernel does. The only extra traffic is a one-element gather of the
+    target logit per row. run() performs no preprocessing beyond a no-op contiguous() and the
+    output allocation, and assumes nothing prepacked. With num_classes = 512 (case_defaults)
+    BLOCK_CLASSES equals num_classes, so no padded lanes are loaded in the benchmark cases.
+notes_for_review:
+  - The whole class row must fit in one tile (BLOCK_CLASSES is a power of two >= num_classes); the implementation has no loop over class chunks, so very large vocabularies are out of scope of this code path.
+  - BLOCK_CLASSES is a ConstInt derived from num_classes, so the kernel is specialised per num_classes value.
+  - The target logit is re-read via ct.gather with check_bounds=False after a host-visible clamp, rather than selected from the already-loaded row tile.
+  - Out-of-range targets yield loss = +inf, whereas torch would raise (or apply ignore_index); the generator never produces such targets.
+  - The `block_size` parameter is accepted and ignored.

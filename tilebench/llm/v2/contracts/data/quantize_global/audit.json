@@ -1,0 +1,158 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "quantize_global",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/quantize_global/impl_triton.py",
+      "functions": [
+        {
+          "name": "quantize_kernel",
+          "lines": [
+            8,
+            14
+          ]
+        },
+        {
+          "name": "_quantize_kernel_autotuned",
+          "lines": [
+            17,
+            28
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            31,
+            46
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            49,
+            53
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/quantize_global/impl_cutile.py",
+      "functions": [
+        {
+          "name": "quantize_kernel",
+          "lines": [
+            21,
+            25
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            31,
+            56
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            59,
+            60
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/quantize_global/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out = float16(x) elementwise for a float32 1-D x, into a fresh float16 buffer; no absmax, no scale, no clamp, no integer output (impl_triton.py 13-14, 33).",
+      "cutile": "out = float16(x) elementwise via the DSL astype, into a fresh float16 buffer; no absmax, no scale, no clamp, no integer output (impl_cutile.py 24-25, 34).",
+      "note": "Both realise the reference x.to(torch.float16) (impl_torch.py 5). Verified: neither impl_torch.py nor either kernel file contains any reduction, scale factor or int8 path at this SHA; the operator is a plain fp32 -> fp16 cast despite its name. The generator always emits float32 (tensors.py 175-176) and config.yaml pins dtype to fp32 (line 9)."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "One kernel, one launch of ceil(n / tile) programs: load fp32, convert, store fp16 (impl_triton.py 8-14, 36-45).",
+      "cutile": "One kernel, one launch of ceil(n / tile) CTAs: load fp32, convert, store fp16 (impl_cutile.py 21-25, 53-54).",
+      "note": "Identical single-stage elementwise conversion; no reduction stage exists on either side."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "No inter-element dependencies (impl_triton.py 13-14).",
+      "cutile": "No inter-element dependencies (impl_cutile.py 24-25).",
+      "note": "Embarrassingly parallel on both sides."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None; explicitly no absmax pass (impl_triton.py 8-14 is the only kernel).",
+      "cutile": "None; explicitly no absmax pass (impl_cutile.py 21-25 is the only kernel).",
+      "note": "Elementwise only."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 -> fp16 narrowing via the DSL cast, whose documented default is round-to-nearest-even, matching torch's .to() (impl_triton.py 14).",
+      "cutile": "fp32 -> fp16 narrowing via the DSL astype; the rounding mode is not stated in the source and is the library default (impl_cutile.py 25).",
+      "note": "Same single conversion path on both sides; the contract requires the reference's round-to-nearest-even result within config.verify tolerance. Neither side scales or clamps."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "x = x.contiguous() (no-op for the generator input); out = empty(x.shape, float16); n = x.numel() (impl_triton.py 32-34).",
+      "cutile": "x = x.contiguous() (no-op); output = empty(x.shape, float16); n = x.numel() (impl_cutile.py 33-35).",
+      "note": "Identical; only the output allocation and a no-op contiguity guard."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None beyond the output (impl_triton.py 33).",
+      "cutile": "None beyond the output (impl_cutile.py 34).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x is read-only; fresh output every call (impl_triton.py 13, 33).",
+      "cutile": "x is read-only; fresh output every call (impl_cutile.py 24, 34).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches (whole file).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size + n * 2",
+    "flops_expr": "n",
+    "consistent": "true",
+    "note": "With the fixed fp32 input (dtype_size = 4) the formula counts the n * 4-byte read plus the n * 2-byte float16 write, exactly what both timed run() bodies move; the contiguous() guard is a no-op and nothing is prepacked. flops_expr counts one conversion per element (config.yaml 16-17)."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the S_main / PyTorch semantics are approved as the task: quantize_global is a plain fp32 -> fp16 conversion (x.to(torch.float16), impl_torch.py 5); no absmax reduction, no scale factor, no int8 or other integer output despite the historical name. The contract keeps a one-line note that the name is historical.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the approved semantics fix fp32 input (generator tensors.py 175-176, config.yaml dtype fp32) and the task has one fixed shape, so bytes_expr's dtype_size term is 4 and the single-dtype sweep is intended."
+  ],
+  "contract_sha256": "18b8f1248a14cc03c8a173beb560579c0d2ffd3f4d9ec186d65a070eaf0163dd",
+  "previous_status_before_approval": "needs-review",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "7b71fe00baaf4ad16f0abec47e43b7aaedac9f4bff88917fd87695171fe11437",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}

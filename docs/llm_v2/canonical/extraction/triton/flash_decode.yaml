@@ -1,0 +1,196 @@
+operator: flash_decode
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/flash_decode/impl_triton.py
+    functions:
+      - name: fwd_kernel_flash_decode_stage2
+        lines: [8, 55]
+        role: kernel
+      - name: _fwd_kernel_flash_decode_stage2_autotuned
+        lines: [58, 67]
+        role: tuner
+      - name: run
+        lines: [70, 137]
+        role: host-driver
+      - name: "__main__ standalone profiling script (not part of run(); not executed on import)"
+        lines: [140, 196]
+        role: helper
+      - name: get_last_config
+        lines: [198, 202]
+        role: helper
+  - path: tilebench/benchmarks/operators/flash_decode/impl_torch.py
+    functions:
+      - name: run
+        lines: [3, 47]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/flash_decode/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_flash_decode_stage2_inputs
+        lines: [252, 262]
+        role: helper
+functional_semantics: >
+  Flash-decoding STAGE 2 only: the split-KV combine. Given per-block partial
+  outputs mid_o[b,h,s,:] (s = KV block index) and per-block log-sum-exp
+  values mid_o_lse[b,h,s] produced by a (not benchmarked) stage 1, plus
+  per-batch sequence lengths b_seqlen[b] and the stage-1 block size
+  block_seq, the reference impl_torch.run (lines 3-47) computes, per (b,h):
+  nb = ceil(b_seqlen[b] / block_seq); valid blocks are s < nb; m = max over
+  valid s of lse[s]; w[s] = exp(lse[s] - m) for valid s, 0 otherwise;
+  out[b,h,:] = sum_s w[s] * mid_o[b,h,s,:] / (sum_s w[s] + 1e-10).
+  Reference ops: masked_fill, torch.max, torch.exp, broadcast mul, torch.sum,
+  division with a 1e-10 epsilon. The generator fills mid_o and mid_o_lse
+  with randn and sets every b_seqlen to seq_len (tensors.py lines 255-257),
+  with num_blocks = ceil(seq_len / block_seq) and block_seq passed as a CPU
+  int32 0-d tensor (line 260). Reference-side preprocessing: block_seq
+  .item() (line 7) and a clone of mid_o_lse for masking (line 25).
+run_signature:
+  text: |-
+    def run(mid_o, mid_o_lse, b_seqlen, block_seq_tensor, block_size: int = None, autotune: bool = False):
+  positional_inputs: [mid_o, mid_o_lse, b_seqlen, block_seq_tensor]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (batch, head_num, head_dim) in mid_o's dtype
+  get_last_config: present
+inputs:
+  - name: mid_o
+    shape: "(batch, heads, num_blocks, head_dim)"
+    dtype: fp32 (config case_grid dtype ["fp32"])
+    layout: strides for dims 0-3 are passed (lines 95-98) but the kernel adds offs_d directly, so the last dim must be unit-stride (stride_mid_od is unused)
+    mutated_in_place: false
+    notes: partial (unnormalised-by-global-softmax) outputs per KV block.
+  - name: mid_o_lse
+    shape: "(batch, heads, num_blocks)"
+    dtype: fp32
+    layout: strides passed (lines 99-101) but the block axis is indexed as offs_logic + block_seq_n (line 44), so the last dim must be unit-stride (stride_mid_o_es is unused)
+    mutated_in_place: false
+    notes: per-block log-sum-exp (random in the generator).
+  - name: b_seqlen
+    shape: "(batch,)"
+    dtype: int32
+    layout: contiguous
+    mutated_in_place: false
+    notes: per-batch valid sequence length; loaded as a scalar per program (line 32) and converted to a block count.
+  - name: block_seq_tensor
+    shape: 0-d scalar
+    dtype: int32 CPU tensor (or a Python int)
+    layout: n/a
+    mutated_in_place: false
+    notes: converted with .item() on the host (lines 72-75) and passed as the tl.constexpr BLOCK_SEQ, so each distinct block_seq recompiles.
+outputs:
+  - name: output
+    shape: "(batch, head_num, head_dim)"
+    dtype: mid_o.dtype (torch.empty(..., dtype=mid_o.dtype), line 81); the fp32 quotient is implicitly cast at tl.store (line 54)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: block_seq = block_seq_tensor.item() (CPU tensor, no device sync)
+    lines: [72, 75]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host-only.
+  - description: allocate output (batch, head_num, head_dim)
+    lines: [81, 81]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: torch.empty.
+  - description: BLOCK_DMODEL = triton.next_power_of_2(head_dim); grid = (batch, head_num)
+    lines: [84, 87]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: host scalar arithmetic.
+stages:
+  - id: s1
+    description: >
+      One program per (batch, head). Load seqlen = B_Seqlen[b]; nb =
+      where(seqlen <= 0, 0, seqlen + BLOCK_SEQ - 1) // BLOCK_SEQ (line 34).
+      Initialise sum_exp = 0, max_logic = -inf, acc = zeros[BLOCK_DMODEL]
+      fp32. Sequential loop s = 0 .. nb-1 (runtime, data-dependent trip
+      count, line 42): tv = mid_o[b,h,s,:] (masked to head_dim, other 0),
+      tlogic = lse[b,h,s]; new_max = max(tlogic, max_logic); old_scale =
+      exp(max_logic - new_max); acc *= old_scale; e = exp(tlogic - new_max);
+      acc += e * tv; sum_exp = sum_exp*old_scale + e; max_logic = new_max
+      (lines 43-52). Store acc / sum_exp to output[b,h,:] masked to head_dim
+      (line 54).
+    kind: kernel
+    lines: [8, 55]
+    launches: "1 launch, grid (batch, head_num)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output -- no global intermediates
+algorithm_family: >
+  Online (streaming) log-sum-exp weighted combine of split-KV partial
+  attention outputs (flash-decoding stage-2 reduce): a single-pass
+  running-max rescale over the block axis, one vector of head_dim per step.
+reduction_scan_sort_structure: >
+  Per (b,h): sequential reduction over KV blocks in increasing block index,
+  carrying (running max, running denominator, running numerator vector) and
+  rescaling by exp(old_max - new_max) at every step; only blocks s < nb are
+  visited (prefix semantics identical to the reference's mask). The
+  reference instead does a two-pass computation (global max over valid
+  blocks, then exp and sums with torch.sum's own order) and adds 1e-10 to
+  the denominator. Both are mathematically the same weighted average; fp32
+  rounding differs. No cross-program reduction, scan or sort.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 (acc tile is tl.float32; sum_exp / max_logic are fp32 scalars; tv is loaded in mid_o's dtype and promoted when multiplied by the fp32 weight)
+  output_dtype: mid_o.dtype (fp32 in config)
+  special_modes: "natural-base tl.exp online rescale; no epsilon in the final division (reference adds 1e-10)"
+  masking_or_padding_values: "offs_d >= head_dim lanes load 0 and are not stored; max initialised to -inf so the first block's old_scale = exp(-inf) = 0; invalid blocks are excluded by the loop bound rather than by masking"
+intermediate_storage: >
+  None in global memory; running statistics and the head_dim accumulator are
+  register-resident per program.
+mutation_rules: >
+  No input is modified (the reference clones mid_o_lse before masking; the
+  kernel reads it directly); fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over num_warps x num_stages with empty kwargs (key
+  ["head_dim"], warmup=1, rep=3), lines 58-67. Default path launches the
+  undecorated kernel with _DEFAULT_CONFIG (lines 109-135). get_last_config
+  returns num_warps and num_stages. BLOCK_SEQ is the problem's block_seq
+  (constexpr) and BLOCK_DMODEL = next_power_of_2(head_dim); neither is
+  tuned. The block_size keyword is accepted but unused.
+implementation_freedoms_observed: >
+  Warps / stages; whether the block loop is unrolled or software-pipelined;
+  one program per (b,h) (as here) versus splitting head_dim or batching
+  several heads per program; whether the max is found in a separate first
+  pass (reference) or online (this source); whether an epsilon is added to
+  the denominator.
+algorithm_constraints_observed: >
+  Keep: the weighted-average semantics out = sum_s exp(lse_s - m) mid_o_s /
+  sum_s exp(lse_s - m) over exactly the first ceil(b_seqlen[b]/block_seq)
+  blocks of each batch row (per-batch variable count read from b_seqlen on
+  device); fp32 arithmetic; output (batch, heads, head_dim) in mid_o's
+  dtype; mid_o and mid_o_lse read once; no scratch; stage 1 is NOT part of
+  the operator.
+fq_boundary:
+  bytes_expr: "batch * heads * (seq_len // block_seq) * head_dim * dtype_size"
+  flops_expr: "4 * batch * heads * (seq_len // block_seq) * head_dim"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is a host .item(), one allocation and one kernel. The
+    bytes formula counts one read of mid_o only; seq_len // block_seq equals
+    num_blocks for every config case (seq_len multiples of 2048, block_seq
+    128). Not counted: the read of mid_o_lse (1/head_dim of mid_o), the
+    b_seqlen read, and the output write (1/num_blocks of mid_o), all minor.
+    No preprocessing of inputs is performed or assumed; stage-1 work is
+    outside both the formula and the boundary.
+notes_for_review:
+  - stride_mid_od, stride_mid_o_es and stride_od are passed but unused (kernel indexes offs_d and block_seq_n with unit stride), so non-contiguous last dims of mid_o / mid_o_lse / output would be read incorrectly; generator inputs are contiguous.
+  - The kernel omits the reference's 1e-10 denominator epsilon; harmless since the denominator is >= 1 (the max block has weight exactly 1), but a batch with b_seqlen <= 0 would yield 0/0 = NaN where the reference yields 0.
+  - The loop trip count is data-dependent (loaded from b_seqlen on device), so the amount of work per program is not known at launch; CUDA-graph capture still works because the bound is read inside the kernel.
+  - BLOCK_SEQ is a constexpr taken from a CPU scalar tensor via .item(); a different block_seq value triggers recompilation.
+  - Lines 140-196 contain a standalone profiling script under `if __name__ == "__main__":` (its help text says "cuTile Kernel"); it is dead with respect to run() and get_last_config is defined after it (still at module level).
+  - config.yaml has no verify section, so the fp32 default tolerance (1e-5 / 1.3e-6) applies to the online-vs-two-pass rounding difference.

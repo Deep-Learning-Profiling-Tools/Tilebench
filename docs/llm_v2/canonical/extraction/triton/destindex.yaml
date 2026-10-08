@@ -1,0 +1,236 @@
+operator: destindex
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/destindex/impl_triton.py
+    functions:
+      - name: _cached_out
+        lines: [10, 15]
+        role: helper
+      - name: copy_by_dest_kernel
+        lines: [18, 42]
+        role: kernel
+      - name: _copy_by_dest_kernel_autotuned
+        lines: [45, 54]
+        role: tuner
+      - name: _launch_copy
+        lines: [57, 76]
+        role: host-driver
+      - name: run
+        lines: [79, 91]
+        role: host-driver
+      - name: get_last_config
+        lines: [94, 101]
+        role: helper
+  - path: tilebench/benchmarks/operators/destindex/impl_torch.py
+    functions:
+      - name: _cached_out
+        lines: [7, 12]
+        role: helper
+      - name: run
+        lines: [15, 27]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/destindex/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_destindex_inputs
+        lines: [128, 154]
+        role: helper
+      - name: infer_problem_size (destindex branch, defines n for metrics)
+        lines: [652, 656]
+        role: helper
+functional_semantics: >
+  KV-cache "copy to destination index" (MLA-style nope/rope split). Reference
+  impl_torch.run (lines 15-27): for each of the two tensor pairs, take a
+  cached clone of the initial output buffer (out_nope = clone(o_nope),
+  out_rope = clone(o_rope), cloned once per distinct input tensor object via
+  a WeakTensorKeyDictionary, lines 4-12) and perform
+  out.index_copy_(0, dest_loc, kv), i.e. out[dest_loc[t], :, :] = kv[t, :, :]
+  for every token t in [0, total_tokens). Rows of out not named by dest_loc
+  keep the values of o_*. Returns (out_nope, out_rope). The generator makes
+  dest_loc a random permutation of all tokens (torch.randperm, line 151), so
+  in practice every row is overwritten and the two outputs are row
+  permutations of kv_nope / kv_rope. Reference op: Tensor.index_copy_ with
+  int64 indices; asserts dest_loc.dtype == int64 (line 22).
+run_signature:
+  text: |-
+    def run(
+        kv_nope: torch.Tensor,
+        kv_rope: torch.Tensor,
+        dest_loc: torch.Tensor,
+        o_nope: torch.Tensor,
+        o_rope: torch.Tensor,
+        autotune: bool = False,
+    ):
+  positional_inputs: [kv_nope, kv_rope, dest_loc, o_nope, o_rope]
+  keyword_params: [autotune]
+  returns: tuple (out_nope, out_rope) of two tensors with the shapes/dtypes of o_nope and o_rope
+  get_last_config: present
+inputs:
+  - name: kv_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)  [T = batch_size * seq_len]"
+    dtype: "fp16 | bf16 | fp32 | int8 (config case_grid)"
+    layout: contiguous (asserted in _launch_copy line 59); kernel uses flat element offsets
+    mutated_in_place: false
+    notes: source rows for the nope scatter-copy.
+  - name: kv_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: same as kv_nope
+    layout: contiguous (asserted)
+    mutated_in_place: false
+    notes: source rows for the rope scatter-copy.
+  - name: dest_loc
+    shape: "(total_tokens,)"
+    dtype: int64 (generator randperm dtype=int64); cast to int32 in-kernel (line 38)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: >
+      Destination token index per source token. Generator guarantees a
+      permutation (unique, in range) so concurrent scatter writes never
+      collide. The kernel performs no bounds check on dest values.
+  - name: o_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)"
+    dtype: same as kv_nope
+    layout: contiguous
+    mutated_in_place: false
+    notes: >
+      Initial content of the nope output. Only used as the key and source of
+      the one-time clone in _cached_out (lines 10-15); never written.
+  - name: o_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: same as kv_nope
+    layout: contiguous
+    mutated_in_place: false
+    notes: same role as o_nope for the rope output.
+outputs:
+  - name: out_nope
+    shape: "(total_tokens, kv_nope_head_num, kv_nope_head_dim)"
+    dtype: same as o_nope
+    allocated_by: run
+    aliasing: none
+  - name: out_rope
+    shape: "(total_tokens, kv_rope_head_num, kv_rope_head_dim)"
+    dtype: same as o_rope
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: >
+      clone o_nope / o_rope into persistent output buffers, memoised per input
+      tensor object in a module-level WeakTensorKeyDictionary
+    lines: [7, 15]
+    kind: copy
+    inside_run: true
+    cached_across_calls: true
+    notes: >
+      The clone (allocation + device-to-device copy) runs only on the first
+      call for a given o_* tensor; later calls reuse the same buffer, so in
+      steady state (after warmup) no allocation or copy is timed. The clone
+      is what preserves the "rows not named by dest_loc keep o_* values"
+      semantics. Identical structure in impl_torch.py lines 4-12.
+  - description: per-launch metadata (shape unpack, total = kv.numel(), grid)
+    lines: [59, 61]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: contiguity asserts on kv and out.
+stages:
+  - id: s1
+    description: >
+      Scatter-copy of kv_nope into out_nope. 1-D grid over total =
+      kv_nope.numel() elements in BLOCK_SIZE chunks. Each lane decomposes its
+      flat offset into (token, head, d) using the constexpr head_num/head_dim
+      (lines 32-35), loads dest = dest_loc[token] (int64 -> int32), computes
+      dst_off = (dest * head_num + head) * head_dim + d, loads the source
+      element and stores it at dst_off (lines 38-42). Masked on offs < total.
+    kind: kernel
+    lines: [18, 42]
+    launches: "1 launch, grid ceil(total_nope / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: [s2]
+    produces: out_nope (persistent buffer, fully overwritten when dest_loc is a permutation)
+  - id: s2
+    description: >
+      Same kernel applied to kv_rope -> out_rope with its own
+      head_num/head_dim constexprs (separate compiled specialisation) and
+      total = kv_rope.numel().
+    kind: kernel
+    lines: [18, 42]
+    launches: "1 launch, grid ceil(total_rope / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: [s1]
+    produces: out_rope
+algorithm_family: >
+  Gather-index scatter copy (row permutation / index_copy along dim 0): a
+  flat element-wise streaming copy whose destination address is computed
+  from an index array looked up per element. Two independent launches of the
+  same kernel, one per tensor pair.
+reduction_scan_sort_structure: >
+  None. No reduction, scan or sort. Writes are collision-free by construction
+  of dest_loc (permutation); the kernel has no conflict resolution, so
+  duplicate destinations would give last-writer-wins nondeterminism.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none (pure copy; values are never converted)
+  output_dtype: same as the corresponding kv/o input
+  special_modes: exact bit copy for every dtype; dest_loc index cast int64 -> int32 (line 38)
+  masking_or_padding_values: "offs >= total masked on load and store; masked dest load uses other=0"
+intermediate_storage: >
+  No scratch. The two output buffers are persistent (module-level weak-keyed
+  cache, lifetime tied to the input tensor objects o_nope / o_rope) and are
+  reused across calls.
+mutation_rules: >
+  No input tensor is modified. The persistent cached output buffers are
+  mutated in place every call; because dest_loc is a permutation and kv does
+  not change between calls, repeated calls rewrite the same values and are
+  idempotent. If dest_loc were not a full cover, rows never named would
+  retain the o_* values from the first-call clone across all later calls.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps (key ["total"], warmup=1,
+  rep=3), lines 45-54, shared by both launches; because the two launches
+  have different `total` values they are tuned as separate keys. Default
+  path launches the undecorated kernel with _DEFAULT_CONFIG (lines 69-76).
+  get_last_config returns BLOCK_SIZE and num_warps from best_config of the
+  single autotuned object, i.e. the config selected for whichever launch
+  (nope or rope) tuned most recently. There is no block_size keyword in
+  run().
+implementation_freedoms_observed: >
+  Elements-per-program chunking and warp count; whether to index per element
+  (as here, with div/mod to recover token/head/d) or per token row; whether
+  the two tensor pairs are copied in two launches (as here) or one; whether
+  index values are consumed as int64 or narrowed to int32; vector width.
+algorithm_constraints_observed: >
+  Keep: out[dest_loc[t]] = kv[t] along dim 0 for both tensor pairs; output
+  initialised from o_* (clone), so unnamed rows keep their initial values;
+  exact copy (no dtype conversion); outputs are persistent buffers reused
+  across calls (not re-cloned per call) -- a re-implementation that clones
+  per call would time an extra read+write of both outputs; the returned pair
+  order (nope, rope).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    n is infer_problem_size's destindex branch (tensors.py lines 652-656):
+    total_tokens * (kv_nope_head_num*kv_nope_head_dim +
+    kv_rope_head_num*kv_rope_head_dim), i.e. the element count across both
+    tensor pairs. The formula counts one read of kv and one write of out for
+    every element, which is the steady-state compulsory traffic of the two
+    kernels. Not counted: the dest_loc reads (8 B per token, re-read per
+    element but cache-resident) and the first-call clones, which are cached
+    and therefore outside the steady-state timed window. No prepacking
+    assumed.
+notes_for_review:
+  - The kernel narrows dest_loc from int64 to int32 (line 38) while the torch reference asserts and uses int64; equivalent for all supported sizes.
+  - No bounds check on dest values and no collision handling; correctness depends on the generator's permutation guarantee.
+  - get_last_config reflects a single best_config although two different `total` keys are tuned; the reported config may be the rope launch's.
+  - The persistent-output cache means verification cannot detect whether rows not covered by dest_loc are preserved (all rows are overwritten by a permutation).
+  - run() accepts no block_size keyword and no **kwargs; whether the engine passes block_size is outside the files read here.

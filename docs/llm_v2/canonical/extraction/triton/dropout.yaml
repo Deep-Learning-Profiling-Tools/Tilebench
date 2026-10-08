@@ -1,0 +1,159 @@
+operator: dropout
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/dropout/impl_triton.py
+    functions:
+      - name: dropout_kernel
+        lines: [8, 24]
+        role: kernel
+      - name: _dropout_kernel_autotuned
+        lines: [27, 36]
+        role: tuner
+      - name: run
+        lines: [39, 54]
+        role: host-driver
+      - name: get_last_config
+        lines: [57, 61]
+        role: helper
+  - path: tilebench/benchmarks/operators/dropout/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/dropout/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_dropout_inputs
+        lines: [187, 190]
+        role: helper
+      - name: infer_problem_size (generic "n" branch used for metrics)
+        lines: [631, 632]
+        role: helper
+functional_semantics: >
+  Inverted dropout with a PRECOMPUTED keep mask. Reference impl_torch.run
+  (lines 4-5): out = (x * x_keep) * (1.0 / (1 - p)). x_keep is an input
+  tensor of 0/1 values in x's dtype, generated once by the generator with
+  torch.bernoulli(full(n, 1-p)) (tensors.py line 189); p is a Python float
+  (config case_defaults p=0.5) passed through the generator as the third
+  input. There is NO random number generation inside run() on either side:
+  the operator is a deterministic element-wise mask-multiply-and-rescale.
+  Reference ops: elementwise mul, scalar mul.
+run_signature:
+  text: |-
+    def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
+            block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [x, x_keep, p]
+  keyword_params: [block_size, autotune]
+  returns: single tensor, same shape and dtype as x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "fp16 | bf16 | fp32 (config case_grid)"
+    layout: contiguous 1-D (flat offsets, no strides passed)
+    mutated_in_place: false
+    notes: values torch.randn.
+  - name: x_keep
+    shape: "(n,)"
+    dtype: same as x (generator casts the bernoulli draw .to(dtype))
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: >
+      The keep mask, 1.0 = keep, 0.0 = drop; each element is Bernoulli(1-p)
+      drawn by the generator, not by the kernel. The kernel converts it to a
+      boolean via .to(tl.int1) (line 23), so any nonzero value counts as keep.
+  - name: p
+    shape: scalar
+    dtype: Python float, passed as a runtime kernel argument (fp32 scalar)
+    layout: n/a
+    mutated_in_place: false
+    notes: drop probability; only used for the rescale factor 1/(1-p).
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as x (torch.empty_like(x), line 41)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output with torch.empty_like(x); n_elements = x.numel()
+    lines: [41, 42]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: no cast, copy or transpose.
+stages:
+  - id: s1
+    description: >
+      1-D grid over n_elements in BLOCK_SIZE chunks. Load x and x_keep under
+      mask offs < n_elements; output = tl.where(x_keep != 0, x / (1 - p),
+      0.0); masked store.
+    kind: kernel
+    lines: [8, 24]
+    launches: "1 launch, grid ceil(n / BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (n,) -- no intermediates
+algorithm_family: >
+  Element-wise masked rescale (inverted dropout apply-step with an explicit
+  mask input): memory-bound streaming map reading two arrays and writing one.
+reduction_scan_sort_structure: >
+  None. Purely element-wise; no reduction, scan, sort, or RNG stream.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: >
+    none; the kernel computes x / (1 - p) with p a runtime fp32 scalar, so
+    the division is promoted to fp32 for fp16/bf16 x and the fp32 result is
+    implicitly cast back to x's dtype at the store (lines 23-24). The
+    reference computes (x * x_keep) * (1/(1-p)) in x's dtype (Python float
+    scalars do not promote). For p = 0.5 the scale is exactly 2.0 and both
+    paths are exact; for general p the kernel divides while the reference
+    multiplies by the reciprocal, which can differ in the last ulp.
+  output_dtype: same as x
+  special_modes: "division by (1 - p) in-kernel vs multiply-by-reciprocal in the reference; mask applied via tl.where on a boolean, not by multiplication"
+  masking_or_padding_values: "tail lanes masked on load/store (default other=0 for x and x_keep); dropped elements written as 0.0"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_SIZE x num_warps (key ["n_elements"], warmup=1,
+  rep=3), lines 27-36; grid lambda of meta["BLOCK_SIZE"]. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 46-53).
+  get_last_config returns BLOCK_SIZE and num_warps. The block_size keyword
+  of run() is accepted but unused.
+implementation_freedoms_observed: >
+  Chunk size, warps, vector width, and whether the mask is applied by
+  select (tl.where, as here) or by multiplication; whether the rescale is a
+  division or a multiply by a precomputed reciprocal (bit-exact only when
+  1/(1-p) is exactly representable, e.g. p = 0.5).
+algorithm_constraints_observed: >
+  Keep: the mask is an INPUT tensor (same shape/dtype as x) and must be
+  honoured element-wise -- no in-kernel RNG, no Philox seed/offset, no mask
+  generation; p is a runtime scalar used only for the 1/(1-p) rescale;
+  dropped positions produce exactly 0; output shape and dtype equal x's;
+  single pass; no scratch.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() is one allocation plus one kernel. The formula counts one
+    read of x, one read of x_keep (same dtype as x) and one write of the
+    output -- exactly the kernel's compulsory traffic. The mask is a
+    pre-generated input, so no RNG cost exists inside the boundary and none
+    is counted. No prepacked inputs assumed.
+notes_for_review:
+  - RNG/mask semantics - the keep mask x_keep is an explicit input generated outside run() by torch.bernoulli; run() is deterministic and does not consume or advance any RNG state.
+  - Kernel divides by (1 - p) where the reference multiplies by 1/(1-p); exact for the configured p = 0.5 only.
+  - For fp16/bf16 x the kernel computes in fp32 (scalar p promotion) and rounds once at the store, whereas the reference rounds in the input dtype; verification uses per-dtype default tolerances (no verify section in config.yaml).
+  - The mask is interpreted as nonzero = keep (.to(tl.int1)), whereas the reference multiplies by the mask value; identical for the generator's 0/1 mask.

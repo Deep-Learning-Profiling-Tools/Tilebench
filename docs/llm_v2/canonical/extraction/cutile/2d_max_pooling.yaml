@@ -1,0 +1,194 @@
+operator: 2d_max_pooling
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/2d_max_pooling/impl_cutile.py
+    functions:
+      - name: max_pool2d_kernel
+        lines: [20, 47]
+        role: kernel
+      - name: run
+        lines: [53, 102]
+        role: host-driver
+      - name: get_last_config
+        lines: [105, 106]
+        role: helper
+      - name: _tuner (CutileAutotuner instance) + _DEFAULT_CONFIG/_SEARCH_SPACE
+        lines: [10, 17]
+        role: tuner
+  - path: tilebench/benchmarks/operators/2d_max_pooling/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 8]
+        role: host-driver
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_2d_max_pooling_inputs
+        lines: [481, 489]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 5-8): x = input.view(N, C, H, W); y =
+  torch.nn.functional.max_pool2d(x, kernel_size, stride=stride, padding=padding)
+  (dilation 1, ceil_mode False, implicit -inf padding); return y.reshape(-1).
+  out[n, c, oh, ow] = max_{kh, kw in [0, kernel_size)} x[n, c, oh*stride + kh - padding,
+  ow*stride + kw - padding] over in-bounds positions only; H_out = (H + 2*padding -
+  kernel_size)//stride + 1 (same for W). The generator (tensors.py 481-489) produces a
+  flat randn tensor of N*C*H*W elements with W = H and returns
+  (input_flat, N, C, H, W, kernel_size, stride, padding). Reference-side preprocessing:
+  only a view and a reshape (no copies).
+run_signature:
+  text: "def run(input, N, C, H, W, kernel_size, stride, padding, block_size: int = 1024, autotune: bool = False, **kwargs)"
+  positional_inputs: [input, N, C, H, W, kernel_size, stride, padding]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single flat tensor of N*C*H_out*W_out elements, dtype = input.dtype (empty tensor if total_out <= 0)
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N*C*H*W,) flat; viewed as (N*C, H, W) at line 63"
+    dtype: fp16, bf16 or fp32 (config case_grid dtype)
+    layout: contiguous 1-D (generator torch.randn); .view requires contiguity
+    mutated_in_place: false
+    notes: ""
+  - name: N, C, H, W
+    shape: scalar ints
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: logical NCHW shape of the flat input.
+  - name: kernel_size, stride, padding
+    shape: scalar ints
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: passed to the kernel as ConstInt (lines 24-26), i.e. compile-time constants (one kernel specialisation per combination; fixed by config case_defaults).
+outputs:
+  - name: output
+    shape: "(N*C*H_out*W_out,) flat; written through the (N*C, H_out, W_out) view out3 (line 64)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: compute H_out, W_out, total_out
+    lines: [55, 57]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: early return of an empty tensor when total_out <= 0
+    lines: [59, 60]
+    kind: other
+    inside_run: true
+    cached_across_calls: false
+    notes: not reachable for the benchmark cases.
+  - description: allocate flat output
+    lines: [62, 62]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+  - description: 3-D views of input and output (no copy)
+    lines: [63, 64]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: ""
+stages:
+  - id: s1
+    description: allocate output
+    kind: allocation
+    lines: [62, 62]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (N*C*H_out*W_out,)
+  - id: s2
+    description: >
+      single kernel max_pool2d_kernel. Grid axis 0 = plane index over N*C, axes 1-2 tile
+      the (H_out, W_out) output plane with (TILE_R x TILE_C) tiles (lines 30-35, 92-96).
+      acc is initialised to -inf in the input dtype (line 37). Two statically-unrolled
+      loops over kh, kw in range(kernel_size) (ConstInt; lines 39-40) compute ih = oh*stride
+      + (kh - padding), iw = ow*stride + (kw - padding) and fetch x = ct.gather(x3,
+      (plane, ih, iw), padding_value=-inf) — any out-of-range (negative or >= H/W)
+      coordinate yields -inf, which implements both the padding region and the clipping
+      of the last window (line 43); acc = ct.maximum(acc, x) (line 44). The tile is written
+      with ct.store(out3, index=(plane, bh, bw), tile=reshape(acc, (1, TILE_R, TILE_C)))
+      (lines 46-47); elements of a partial edge tile beyond H_out/W_out are clipped by
+      ct.store.
+    kind: kernel
+    lines: [20, 47]
+    launches: "N*C x ceil(H_out/TILE_R) x ceil(W_out/TILE_C) programs, one launch (lines 97-100)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: output (written directly)
+algorithm_family: >
+  direct (sliding-window) 2-D max pooling: one output tile per program, window taps
+  unrolled at compile time, each tap fetched by an element-wise gather with -inf
+  out-of-range padding and folded in with an elementwise max.
+reduction_scan_sort_structure: >
+  Per output element, sequential max over the kernel_size*kernel_size taps in (kh, kw)
+  row-major order starting from -inf; max is order-independent for non-NaN values.
+  NaN handling of ct.maximum versus torch max_pool2d is unclear.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: input dtype (acc dtype = x3.dtype, line 37); no upcast — max is exact in any dtype
+  output_dtype: input dtype
+  special_modes: none
+  masking_or_padding_values: "-inf (acc init and gather padding_value) for positions outside the input plane"
+intermediate_storage: >
+  None. Accumulator in tile/register space; output written once.
+mutation_rules: >
+  No input is modified; output freshly allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_r
+    role: tile size (output rows per program)
+    default_present: true
+  - name: tile_c
+    role: tile size (output columns per program)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (cutile_autotune.py 98-128) over _SEARCH_SPACE
+  (impl_cutile.py 11-16: (tile_r, tile_c) in {(1,128),(1,256),(1,512),(2,128),(2,256),
+  (4,128),(4,256),(8,64)} x occupancy in {4,8,16}), keyed by (total_out, kernel_size,
+  stride, padding, dtype) (lines 67-82). Default at line 10 (tile_r=4, tile_c=128,
+  occupancy=8). Winner exported via _last_autotune_config (83-88) and get_last_config
+  (105-106); occupancy applied via kernel_with_hints (line 97). Note the shape key uses
+  total_out rather than (H_out, W_out) separately.
+implementation_freedoms_observed: >
+  Output tile shape, occupancy, grid-axis ordering, whether window taps are fetched by
+  per-element gather or by structured loads of an input patch, loop unrolling. Making
+  kernel_size/stride/padding compile-time constants is a mapping choice.
+algorithm_constraints_observed: >
+  Single kernel, no scratch; direct windowed max with -inf padding semantics (padding
+  cells never win); result dtype = input dtype with no intermediate upcast; H_out/W_out
+  from the floor formula (ceil_mode False); flat output ordering (n, c, oh, ow).
+fq_boundary:
+  bytes_expr: >
+    N * C * H * H * dtype_size
+    + N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size
+  flops_expr: >
+    N * C
+    * ((H + 2 * padding - kernel_size) // stride + 1) ** 2
+    * kernel_size ** 2
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 20-28. Assumes W = H (generator). bytes = one
+    read of the input plane plus one write of the output; flops = one compare per window
+    tap per output. run() performs no cast/pack/copy and no scratch traffic, so the timed
+    boundary (allocation + one kernel) matches; the kernel's gather re-reads each input
+    element up to kernel_size**2 times, treated as cache-absorbed.
+notes_for_review:
+  - kernel_size, stride, padding are ConstInt (lines 24-26), so each distinct combination compiles a new kernel; fixed by config so only one specialisation is exercised.
+  - -inf gather padding is used both for the explicit padding ring and for clipping windows that overhang the input, which matches the reference's implicit -inf padding.
+  - NaN propagation semantics of ct.maximum versus torch max_pool2d are unclear; not exercised by randn inputs.
+  - The autotune shape key uses total_out, so two cases with equal N*C*H_out*W_out but different aspect would share a cached winner (audit only).
+  - Edge tiles rely on ct.store clipping out-of-range elements of the (1, TILE_R, TILE_C) tile.
+  - block_size keyword unused.

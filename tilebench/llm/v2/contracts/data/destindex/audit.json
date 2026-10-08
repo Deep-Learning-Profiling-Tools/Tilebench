@@ -1,0 +1,208 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "destindex",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_triton.py",
+      "functions": [
+        {
+          "name": "_out_cache (module-level WeakTensorKeyDictionary)",
+          "lines": [
+            7,
+            7
+          ]
+        },
+        {
+          "name": "_cached_out",
+          "lines": [
+            10,
+            15
+          ]
+        },
+        {
+          "name": "copy_by_dest_kernel",
+          "lines": [
+            18,
+            42
+          ]
+        },
+        {
+          "name": "_copy_by_dest_kernel_autotuned",
+          "lines": [
+            45,
+            54
+          ]
+        },
+        {
+          "name": "_launch_copy",
+          "lines": [
+            57,
+            76
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            79,
+            91
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            94,
+            101
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_cutile.py",
+      "functions": [
+        {
+          "name": "_out_cache (module-level WeakTensorKeyDictionary)",
+          "lines": [
+            24,
+            24
+          ]
+        },
+        {
+          "name": "_cached_out",
+          "lines": [
+            27,
+            32
+          ]
+        },
+        {
+          "name": "copy_by_dest_kernel",
+          "lines": [
+            35,
+            61
+          ]
+        },
+        {
+          "name": "_tuner",
+          "lines": [
+            64,
+            64
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            67,
+            135
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            138,
+            139
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/destindex/impl_torch.py",
+      "functions": [
+        {
+          "name": "_out_cache (module-level WeakTensorKeyDictionary)",
+          "lines": [
+            4,
+            4
+          ]
+        },
+        {
+          "name": "_cached_out",
+          "lines": [
+            7,
+            12
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            15,
+            27
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[dest_loc[t], h, d] = kv[t, h, d] for both tensor pairs via flat offset decomposition + index load + store (impl_triton.py L32-42); returns (out_nope, out_rope) (L91).",
+      "cutile": "Same semantics via gather of dest_loc[token] + ct.scatter (impl_cutile.py L49-61); returns (out_nope, out_rope) (L135).",
+      "note": "Both match impl_torch.py L25-26 (index_copy_ along dim 0 into a clone of o_*). dest_loc is a permutation (tensors.py L151), so every row is overwritten and writes never collide."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "Two launches of one kernel: nope (L89) then rope (L90), each a 1-D grid over the flattened element count (L61-76).",
+      "cutile": "Two launches of one kernel: nope (L124-127) then rope (L130-133), each a 1-D grid over the flattened element count.",
+      "note": "Identical structure; the two scatter-copies are independent and may be fused into one launch (contract permits)."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "nope and rope launches touch disjoint buffers; both require the output buffers obtained from _cached_out (L87-88).",
+      "cutile": "Same (L75-76, L124-133).",
+      "note": "No dependency between the two copies; both depend on the output buffers being initialised from o_* (see preprocessing)."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "None; plain store at computed destination, no atomics, no collision handling (L42).",
+      "cutile": "None; ct.scatter with unique destinations, no atomics (L61).",
+      "note": "Unique destinations by construction of the generator; neither side resolves duplicates."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Exact element copy for fp16/bf16/fp32/int8 (L41-42); dest index narrowed int64 -> int32 (L38).",
+      "cutile": "Exact element copy (L59-61); dest index narrowed to int32 (L55).",
+      "note": "No arithmetic on values; both narrow the index identically."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "out_nope/out_rope = clone of o_nope/o_rope created on the FIRST call per input tensor identity and cached in a module-level WeakTensorKeyDictionary (L7, L10-15, L87-88); later calls reuse the buffer, so the clone (allocation + device copy of both o_* tensors) is outside the steady-state timed window.",
+      "cutile": "Identical pattern (L24, L27-32, L75-76) plus metadata-only .contiguous().view(-1) flattening (L80-83).",
+      "note": "Both sides (and impl_torch.py L4-12) agree with each other. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the task domain fixes dest_loc as a permutation of all rows (tensors.py L151 torch.randperm; comment L149-150), so every output row is overwritten and the copy of o_* into the output is not a required stage (permitted mapping; device work counted when performed). Result values must never be carried across calls; an output allocation may be reused only when the call fully overwrites every result element; writing into o_* stays forbidden. Both manual sides satisfy this: the per-identity buffer is rewritten in full by the scatter on every call and no output value survives from an earlier call."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "No scratch; the persistent output buffers are the only module-level state (L7).",
+      "cutile": "No scratch; same persistent output buffers (L24).",
+      "note": "Both agree; the persistence question is recorded under preprocessing/mutation."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "No positional input is written (kv_*, dest_loc, o_* read-only); the cached output buffers are overwritten in place on every call (L42, L87-90).",
+      "cutile": "Same: inputs read-only, cached outputs overwritten in place (L61, L75-76, L124-133).",
+      "note": "Agreed: inputs are never modified and the outputs must not alias any input. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the returned tensors may be the same allocation across calls only because the scatter overwrites every element on each call (dest_loc is a permutation); no result value may be reused across calls. Rows not named by dest_loc do not occur in the fixed task domain."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No architecture branches.",
+      "cutile": "No architecture branches.",
+      "note": "Nothing to reconcile."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 2",
+    "flops_expr": "n",
+    "consistent": "unclear",
+    "note": "n = total_tokens * (kv_nope_head_num*kv_nope_head_dim + kv_rope_head_num*kv_rope_head_dim) (tensors.py infer_problem_size L652-656). Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): Q = n * dtype_size * 2 (one read of kv and one write of out per element) is the compulsory source-read + result-write lower bound of the scatter-copy and stays the formal denominator; the dest_loc index reads (8 B per token, re-gathered per element) are lower-order and remain omitted; no candidate-specific initialisation traffic term is added, so an implementation that copies o_* into its outputs pays that device copy inside the timed window against the same Q. The manual references launch exactly the scatter per call (the per-identity clone happens once, before steady state), so their timed work equals the Q traffic."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): output-buffer policy. dest_loc is a permutation of all rows in the benchmark domain (tensors.py L151 torch.randperm, comment L149-150), so every output row is overwritten by the scatter; a separate copy of o_nope/o_rope into the outputs is not a mandatory logical stage (permitted as a mapping, counted when performed). Outputs must be correct for the current call and must not alias inputs; no cached output values or result reuse across calls; an allocation may be reused only if the call fully overwrites every result element before return. The scatter-copy algorithm and the no-collision guarantee are kept.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): bytes_expr stays n * dtype_size * 2 (compulsory source read + result write); index traffic is documented as omitted/lower-order; no candidate-specific initialisation term is added. human_reference_comparable set to true: the manual references' per-call device work is exactly the scatter.",
+    "Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): rows not addressed by dest_loc do not exist in the fixed task domain (permutation); the evaluator verifies the permutation case only and does not test a non-permutation dest_loc."
+  ],
+  "contract_sha256": "a8b8ac8df0641e9d393ee6fb6abd7292dc8d2ed0156f66aa2d78441a5a9e0541",
+  "previous_status_before_approval": "needs-review"
+}

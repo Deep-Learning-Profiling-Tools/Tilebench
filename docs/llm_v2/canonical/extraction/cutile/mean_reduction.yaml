@@ -1,0 +1,175 @@
+operator: mean_reduction
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/mean_reduction/impl_cutile.py
+    functions:
+      - name: mean_rowwise_kernel
+        lines: [21, 40]
+        role: kernel
+      - name: run
+        lines: [46, 86]
+        role: host-driver
+      - name: get_last_config
+        lines: [89, 90]
+        role: helper
+  - path: tilebench/benchmarks/operators/mean_reduction/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_mean_reduction_inputs
+        lines: [451, 453]
+        role: helper
+functional_semantics: >
+  out = x.mean(dim=dim, dtype=torch.float32) (impl_torch.py line 5). For
+  the benchmark input x of shape (M, N) and dim = 1 (the generator always
+  returns (x, 1), tensors.py line 453): out[i] = (1/N) * sum_j x[i, j],
+  with torch upcasting to fp32 before reducing, so out has shape (M,) and
+  dtype fp32 regardless of the input dtype. No reference-side
+  preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, dim: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs) -> torch.Tensor:"
+  positional_inputs: [x, dim]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: "single tensor of shape (M,), dtype fp32 (a squeeze(1) view of the run-allocated (M, 1) buffer)"
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: "one of fp16, bf16, fp32 (case dtype; generator lines 451-453)"
+    layout: "contiguous row-major; run() calls x.contiguous() on the 2-D/dim==1 path (line 50), a no-op here"
+    mutated_in_place: false
+    notes: "M is fixed by case_defaults, N is swept. randn values."
+  - name: dim
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "always 1 for the benchmark; other values take the generic permute path (lines 51-55), never exercised."
+outputs:
+  - name: out
+    shape: "(M,)"
+    dtype: fp32
+    allocated_by: run
+    aliasing: "none (view of run's own (M, 1) allocation via squeeze(1), line 86)"
+preprocessing:
+  - description: >
+      Layout normalisation to a 2-D (rows, reduce-dim) tensor: when x is
+      2-D and dim == 1, x2d = x.contiguous() (no-op for the generator
+      input); otherwise the reduce dim is permuted last, made contiguous
+      and reshaped to (-1, x.shape[dim]). Then M, N = x2d.shape.
+    lines: [49, 57]
+    kind: other
+    inside_run: true
+    cached_across_calls: false
+    notes: "The generic branch (lines 51-55) would perform a transpose copy but is never taken for the benchmark input."
+  - description: allocate out = torch.empty(M, 1, dtype=fp32)
+    lines: [60, 60]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one allocation per call.
+stages:
+  - id: s1
+    description: >
+      Row-wise mean kernel, one CTA per row (grid (M, 1, 1), line 63). The
+      CTA keeps a (1, TILE_SIZE) fp32 accumulator initialised to zero
+      (line 26) and loops j over ceil(N / TILE_SIZE) column tiles
+      (lines 27-34): each iteration loads the (1, TILE_SIZE) tile at block
+      index (row, j) with padding_mode ZERO, allow_tma=False and latency=1
+      (lines 29-31), casts it to fp32 (line 28-32) and adds it
+      element-wise into the accumulator (line 34), i.e. lane l accumulates
+      x[row, j*TILE_SIZE + l] over all j. After the loop one cross-lane
+      ct.sum over axis 1 produces the row total, which is divided by N
+      (line 36). The scalar is broadcast into a (1, 1) fp32 tile and
+      stored at (row, 0) of out with allow_tma=False (lines 39-40). N is a
+      compile-time constant of the kernel (ConstInt, line 22).
+    kind: kernel
+    lines: [21, 40]
+    launches: "1 launch of M CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: out (M, 1) fp32
+  - id: s2
+    description: return out.squeeze(1), a metadata-only view to shape (M,)
+    kind: host
+    lines: [86, 86]
+    launches: "0"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: returned view
+algorithm_family: >
+  Row-wise mean by a serial loop over column tiles with lane-wise (vector)
+  fp32 accumulation, a single final cross-lane sum, then division by N;
+  one CTA per row, single kernel.
+reduction_scan_sort_structure: >
+  Two-level reduction per row. Level 1 is sequential over column tiles in
+  increasing j with element-wise adds into a TILE_SIZE-wide fp32
+  accumulator (no cross-lane work inside the loop). Level 2 is one
+  cross-lane ct.sum over the accumulator (tree order is the library's and
+  not specified in the source). The result is divided by N (true division,
+  not multiplication by a reciprocal). Zero-padded lanes of a partial last
+  tile add 0 and the divisor is the exact N.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for every input dtype (ct.astype to float32 before the add, lines 28-33)
+  output_dtype: fp32
+  special_modes: none
+  masking_or_padding_values: "ZERO padding on the column-tile load (line 31); no masking elsewhere"
+intermediate_storage: >
+  None in global memory beyond the (M, 1) fp32 output; the accumulator is
+  a register tile.
+mutation_rules: >
+  x is never written. A new output is allocated on every call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_size
+    role: tile size (column tile width, ConstInt TILE_SIZE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE (impl_cutile.py lines 14-18):
+  ct.tune.exhaustive_search keyed on (M, N, dtype) (lines 66-73), winner
+  cached per shape key; kernel_with_hints memoises replace_hints
+  (line 82). Default path uses _DEFAULT_CONFIG (line 12). The winner is
+  recorded in _last_autotune_config (lines 74-78). block_size is accepted
+  but unused.
+implementation_freedoms_observed: >
+  Column tile width and occupancy; the order of fp32 accumulation (lane-wise
+  then tree here; any fp32 order is within tolerance); rows per CTA (one
+  here); use of TMA (the source disables it with allow_tma=False and sets
+  latency=1, which are lowering hints, not algorithmic choices); whether N
+  is baked in as a compile-time constant.
+algorithm_constraints_observed: >
+  Reduction along dim 1 of a row-major (M, N) tensor; fp32 accumulation
+  for all input dtypes; fp32 output of shape (M,); mean = sum / N with the
+  exact N; x read exactly once; no scratch buffers; no host-side copy of
+  the (already contiguous) input.
+fq_boundary:
+  bytes_expr: "M * N * dtype_size"
+  flops_expr: "M * N"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts only the single read of x, which is the kernel's
+    dominant traffic; the M * 4-byte output write is omitted (negligible)
+    and the squeeze is metadata. No prepacking is assumed. The generic
+    permute path (lines 51-55) would add an untracked transpose copy but is
+    never taken for the benchmark input.
+notes_for_review:
+  - "N is a ConstInt kernel argument (line 22), so every distinct N in the sweep compiles a separate kernel specialisation; this is a build-time choice, not an algorithmic one."
+  - "allow_tma=False and latency=1 on the loads/stores (lines 30-31, 40) constrain the lowering path; a reconciliation should treat them as implementation detail."
+  - "The result is formed as sum / N rather than sum * (1/N); the difference is at rounding level only."

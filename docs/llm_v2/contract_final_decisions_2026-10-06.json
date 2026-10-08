@@ -1,0 +1,980 @@
+{
+ "gemm_decisions": [
+  {
+   "operator": "batched_matmul",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Inputs and outputs",
+     "before": "same dtype as `A`. Read-only.",
+     "after": "Read-only. `B` is delivered in this layout; no transposed, column-major or otherwise repacked copy is provided.",
+     "decision": "batched_matmul: input B is delivered in the declared row-major layout"
+    },
+    {
+     "file": "contract.md",
+     "section": "Required logical stages",
+     "before": "Stage 2 is the only device work ... and no separate repacking pass over `A` or `B` (see the open review item)",
+     "after": "Stage 2 is the only required device work ... may additionally repack or transpose `A` or `B` ... only as device work performed inside every `run()` call ... an optional, counted layout step, not a change of algorithm",
+     "decision": "batched_matmul: may consume directly or materialize a repacked representation inside every run(); device copy/repack is timed; no split-K global partial-sum algorithm"
+    },
+    {
+     "file": "contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "The provisional rule, pending the open review item below, is: consume `A` and `B` in their given row-major layouts through zero-copy views; do not transpose, pack, cast or copy either operand",
+     "after": "`A` and `B` are delivered row-major ... may consume them directly through zero-copy views, or ... materialise a repacked or transposed representation ... produced by device work inside every `run()` call: its device time is part of the measured quantity ... no cross-call cache ... no assumption that an input arrives prepacked",
+     "decision": "batched_matmul: state the per-call repack rule as the rule (not provisional); no cross-call input-identity / data-pointer / value cache"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "(no bullet) ... provided no intermediate is written to global memory",
+     "after": "Consuming `A` and `B` in their delivered row-major layouts versus through a repacked or transposed copy ... rebuilt by device work inside every `run()` call (its time counted) ... provided no partial-sum intermediate is written",
+     "decision": "General rule: layouts/mapping free unless they introduce a forbidden global intermediate; batched_matmul per-call repack bullet"
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "Materialised transposed or packed copies of `A` or `B` (provisional, see the open review item), and any cache keyed on input tensors that survives across calls",
+     "after": "Any cache that survives across calls and is keyed on an input's identity, data pointer, shape or values ... any assumption that an operand arrives prepacked. A repacked or transposed copy ... permitted only as device work inside every `run()` call",
+     "decision": "batched_matmul: no cross-call input-identity / data-pointer / value cache of a transformed operand"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "(no repack bullet)",
+     "after": "`.transpose(...)` / `.permute(...)` / `.t()` followed by `.contiguous()`, or `torch.empty` plus a device copy, only to produce a per-call, in-run repacked copy ... (device work, counted, never cached)",
+     "decision": "Also for all four: Permitted PyTorch operations consistent (per-call repack permitted only as in-call device operation, counted)"
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "Whether `B` may be consumed through a layout other than the given row-major ... Until decided, the provisional rule above ... applies.",
+     "after": "(section removed)",
+     "decision": "batched_matmul: remove the Open review items section (decided)"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_stages.batched_gemm",
+     "before": "no global-memory intermediate (no split-K partials, no repacked operand; ...)",
+     "after": "no partial-sum intermediate in global memory (no split-K partials; ...) An optional per-call, in-run repack/transpose of an operand in its own dtype (device work, counted) may precede it; a cross-call cache of such a copy may not.",
+     "decision": "batched_matmul: per-call repack permitted; no split-K; no cross-call cache"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (transpose/repack rule)",
+     "before": "forbidden under the provisional no-repack rule (open review item)",
+     "after": "permitted only as device work inside every run() (its time counted) in the operand's own dtype, never cached across calls",
+     "decision": "batched_matmul: per-call repack timed"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (cache rule)",
+     "before": "pattern WeakTensorKeyDictionary|lru_cache|functools\\.cache|_cache\\b|cache\\[ ; message 'Cross-call caching keyed on input tensors is forbidden.'",
+     "after": "pattern extended with data_ptr\\(\\)\\s*(in|not in|==) and \\bcache\\b ; message 'Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().'",
+     "decision": "Also for all four: suspicious-level cross-call cache rule (existing equivalent rule extended instead of duplicated)"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "allowed_torch_calls",
+     "before": "torch.empty, torch.cuda.current_stream, Tensor.view, Tensor.reshape, Tensor.stride",
+     "after": "+ Tensor.transpose, Tensor.permute, Tensor.t, Tensor.contiguous",
+     "decision": "Also for all four: Permitted PyTorch operations consistent with the per-call repack"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "Provisional rule (open review item): no transposed/packed copy of A or B and no cross-call cache ...",
+     "after": "Decided rule: B (and A) ... may be consumed directly or through a repacked/transposed copy rebuilt by device work inside every run(); cross-call caches ... forbidden; no prepacked inputs ... the repack's traffic is diagnostic.",
+     "decision": "Also for all four: timing_boundary.includes_preprocessing true, per-call repack counted, cross-call caches forbidden"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing",
+     "before": "status needs-review; note 'Genuine F-Q boundary divergence ... contract carries a provisional no-repack rule'",
+     "after": "status mapping-only; note 'Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): ... consuming directly or through a per-call repack is a mapping choice ... Triton cached B^T does not conform ... human_reference_comparable = false'",
+     "decision": "batched_matmul bullets 1-3 and 5"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.intermediate_storage",
+     "before": "status needs-review; note 'A persistent input-derived buffer that outlives the call exists on one side only'",
+     "after": "status mapping-only; note 'Decided 2026-10-06 ...: a per-call repacked operand buffer is a permitted, counted mapping-level intermediate; a cross-call cached buffer is forbidden'",
+     "decision": "batched_matmul bullets 2-3"
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "The Triton boundary does not: ... neither timed nor counted and which the reference never performs.",
+     "after": "Decided 2026-10-06 ...: formula stays the lower-bound / compulsory-I/O model; per-call repack traffic is counted in time but diagnostic, not part of Q; Triton column not comparable",
+     "decision": "batched_matmul bullet 2 (device work counted) + bullet 5 (Triton column not comparable)"
+    },
+    {
+     "file": "audit.json",
+     "section": "human_reference_comparable",
+     "before": "false",
+     "after": "false (unchanged; Triton column relied on a steady-state cached transpose; cuTile column comparable, stated in review_items)",
+     "decision": "batched_matmul bullet 5"
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "3 open 'Decide whether ...' items",
+     "after": "3 'Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): ...' statements (per-call repack + no cache + no split-K; bytes_expr lower-bound + Triton column not comparable; Triton cache is a reference property, candidates may not reproduce it)",
+     "decision": "batched_matmul bullets 1-5"
+    }
+   ]
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "The entry point must consume A and B exactly as delivered. Any layout transform of B ... must be performed inside the entry point on every call",
+     "after": "A and B are delivered row-major; no prepacked input is provided or may be assumed. The entry point may consume them exactly as delivered, or it may form a layout transform of B ... by device work inside the entry point on every call: its device time is counted ... Process-wide PyTorch precision and backend settings are evaluator state ... must neither read nor change them",
+     "decision": "matmul_fp32_fp16_fp8: same per-call / uncached repack rule; no prepacked-input assumption; precision flags are evaluator state"
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "caching a transposed or repacked B (or anything derived from an input) across calls; ... changing torch.backends matmul precision flags.",
+     "after": "caching ... (or anything derived from an input's identity, address, shape or values) across calls, or assuming a prepacked B; ... reading or changing process-wide PyTorch precision or backend settings (`torch.backends.*`, `torch.set_float32_matmul_precision`, `allow_tf32`): these are evaluator state, not candidate-controlled state.",
+     "decision": "matmul_fp32_fp16_fp8: add to Forbidden substitutions that the candidate must not read or change process-wide precision/backend settings; precision class preserved (unchanged section)"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "copy (timed, never cached)",
+     "after": "copy (device work inside the entry point on every call, counted, never cached)",
+     "decision": "Also for all four: Permitted PyTorch operations consistent"
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "Whether a K-major (transposed) repack of B belongs inside the timed boundary ... / Whether the comparison tolerance presumes TF32-class error ... process-wide matmul precision flags",
+     "after": "(section removed)",
+     "decision": "matmul_fp32_fp16_fp8: remove Open review items; state the rule"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (precision state rule)",
+     "before": "pattern torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision ; level suspicious ; message 'process-wide precision flag changed'",
+     "after": "pattern torch\\.backends\\.|set_float32_matmul_precision\\(|allow_tf32|fp32_precision ; level confirmed ; scope host ; message 'Candidate changes or reads process-wide precision/backend state; precision flags are evaluator state.'",
+     "decision": "matmul_fp32_fp16_fp8: add confirmed-level rule for process-wide precision/backend state (replaces the weaker suspicious rule)"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (cache rule, new)",
+     "before": "(none)",
+     "after": "pattern WeakTensorKeyDictionary|data_ptr\\(\\)\\s*(in|not in|==)|_cache\\b|\\bcache\\b ; suspicious ; host ; message 'Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().'",
+     "decision": "Also for all four: suspicious-level cross-call cache rule"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (transposed copy rule)",
+     "before": "permitted only per call inside run(), never cached across calls",
+     "after": "permitted only per call inside run() as counted device work, never cached across calls",
+     "decision": "matmul_fp32_fp16_fp8: per-call repack timed"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "allowed_torch_calls",
+     "before": "torch.empty, torch.cuda.current_stream",
+     "after": "+ Tensor.t, Tensor.contiguous",
+     "decision": "Also for all four: Permitted PyTorch operations consistent"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "A and B are consumed as delivered; any repack of B must be per call inside run() (its device time counted) and never cached; no prepacked inputs.",
+     "after": "... Decided rule: ... may be consumed as delivered or through a repack rebuilt by device work inside every run(); cross-call caches ... forbidden; no prepacked inputs ... precision/backend flags are evaluator state ... repack traffic is diagnostic.",
+     "decision": "Also for all four: timing_boundary notes"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing / aspects.intermediate_storage",
+     "before": "status needs-review (both); notes 'Genuine F/Q boundary divergence ... lists the question as open' / 'Cross-call persistent operand copy vs none'",
+     "after": "status mapping-only (both); notes 'Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): ... mapping choice ... Triton cached bt does not conform ... human_reference_comparable = false'",
+     "decision": "matmul_fp32_fp16_fp8: per-call / uncached repack rule; no prepacked-input assumption"
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "the formula implicitly credits a free prepacked B on that side. A generated implementation that transposes B per call carries 2*K*N*dtype_size of uncounted timed traffic",
+     "after": "Decided 2026-10-06 ...: formula stays the lower-bound / compulsory-I/O model; the 2*K*N*dtype_size of a per-call copy is counted in time but diagnostic, not part of Q; Triton column not comparable",
+     "decision": "matmul_fp32_fp16_fp8: same per-call rule (timed) + human reference comparability"
+    },
+    {
+     "file": "audit.json",
+     "section": "human_reference_comparable",
+     "before": "false",
+     "after": "false (unchanged; Triton column cached bt; cuTile column comparable, stated in review_items)",
+     "decision": "manual lines relying on a cached transpose remain not comparable"
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "3 open items (repack timing; _bt_cache stale-address hazard; fp32 reference precision at verification)",
+     "after": "3 'Decided 2026-10-06 ...' statements (per-call uncached repack + Triton column not comparable; _bt_cache is a reference property, candidates forbidden; precision class preserved + process-wide flags are evaluator state, confirmed rule)",
+     "decision": "matmul_fp32_fp16_fp8 bullets 1-4"
+    }
+   ]
+  },
+  {
+   "operator": "matmul_int8",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Required logical stages",
+     "before": "for each chunk load the packed bytes once (one logical load per chunk and output tile), decode",
+     "after": "for each chunk load the packed bytes, decode",
+     "decision": "matmul_int8: REMOVE the requirement that each packed byte be logically loaded exactly once per output tile"
+    },
+    {
+     "file": "contract.md",
+     "section": "Algorithm family and structure",
+     "before": "Each packed byte is loaded once per output tile in the algorithm's logical traversal of B and reused for all four fields; this counts logical loads, not physical DRAM transactions ... see the open review item on general K.",
+     "after": "Whether a loaded packed chunk is reused for all four fields (fields-inner) or the packed rows are revisited once per field (fields-outer) is an implementation choice ... fixed is that the packed B is decoded correctly on the device inside the GEMM pass and that no unpacked (K, N) B is written to global memory ... supporting shapes other than the declared one, including arbitrary K_b, is not required.",
+     "decision": "matmul_int8: packed-byte reuse is an optimisation; loop order free; only the declared fixed shape required (no arbitrary K_b)"
+    },
+    {
+     "file": "contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "The entry point must consume A and B exactly as delivered. Any layout transform of B (for example a K-major copy of the packed matrix) must be performed inside the entry point on every call",
+     "after": "A and the packed B are delivered row-major; no prepacked (K-major) input ... may consume them exactly as delivered, or ... a K-major copy of the packed matrix, still packed ... device work inside the entry point on every call: its device time is counted. Decoding remains inside the multiplication path: a fully materialised unpacked (K, N) B in global memory is forbidden whether or not it is rebuilt per call. No cross-call cache ...",
+     "decision": "matmul_int8: same per-call / uncached repack rule for the packed B; decoding inside the multiplication path; unpacked (K,N) B forbidden"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "fields-inner versus fields-outer loop nesting; ... through a per-call in-run K-major copy.",
+     "after": "fields-inner versus fields-outer loop nesting, and whether a loaded packed chunk is reused for all four fields or reloaded per field; ... per-call in-run K-major copy of the packed matrix (device work, counted).",
+     "decision": "matmul_int8: fields-inner / fields-outer free; packed-byte reuse is an optimisation"
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "host-side decoding of B with PyTorch bit operations into an unpacked (K, N) matrix; ... caching a transposed or decoded B across calls; changing torch.backends matmul flags.",
+     "after": "materialising an unpacked (K, N) B in global memory, whether by host-side PyTorch bit operations or by a separate device decode pass; ... caching a transposed, repacked or decoded B (or anything derived from an input's identity, address, shape or values) across calls, or assuming a prepacked B; reading or changing process-wide PyTorch precision or backend settings (evaluator state ...)",
+     "decision": "matmul_int8: unpacked global intermediate forbidden; no cross-call cache; precision flags evaluator state (by extension of the matmul_fp32_fp16_fp8 bullet)"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "copy (timed, never cached)",
+     "after": "copy of the packed B (device work inside the entry point on every call, counted, never cached)",
+     "decision": "Also for all four: Permitted PyTorch operations consistent"
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "3 items (K-major repack timing; arbitrary K_b; isolation of process-wide precision flags)",
+     "after": "(section removed)",
+     "decision": "matmul_int8: remove Open review items; state the rules"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (cache rule, new)",
+     "before": "(none)",
+     "after": "pattern WeakTensorKeyDictionary|data_ptr\\(\\)\\s*(in|not in|==)|_cache\\b|\\bcache\\b ; suspicious ; host ; owner's message",
+     "decision": "Also for all four: suspicious-level cross-call cache rule"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (transposed copy rule)",
+     "before": "transposed copy of B: permitted only per call inside run(), never cached across calls",
+     "after": "transposed copy of the packed B: permitted only per call inside run() as counted device work, never cached across calls",
+     "decision": "matmul_int8: per-call repack of the packed B, timed"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "allowed_torch_calls",
+     "before": "torch.empty, torch.cuda.current_stream",
+     "after": "+ Tensor.t, Tensor.contiguous",
+     "decision": "Also for all four: Permitted PyTorch operations consistent"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "any repack of B must be per call inside run() (its device time counted) and never cached; decode happens on the device; no prepacked inputs.",
+     "after": "Decided rule: ... repack of the still-packed B rebuilt by device work inside every run(); cross-call caches ... forbidden ... unpacked (K, N) B forbidden even per call. Packed-byte reuse ... an optimisation, not a requirement. Only the declared shape ... required. ... repack traffic is diagnostic.",
+     "decision": "Also for all four: timing_boundary notes + matmul_int8 bullets"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing / aspects.intermediate_storage",
+     "before": "status needs-review (both)",
+     "after": "status mapping-only (both); notes 'Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): ...'",
+     "decision": "matmul_int8: per-call / uncached repack rule for the packed B"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.hardware_dispatch.note",
+     "before": "the contract records general-K support as an open question",
+     "after": "decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3) that only the declared shape is required and arbitrary K_b support is not",
+     "decision": "matmul_int8: only the declared fixed shape required (stale open-question reference in an aligned aspect; minimal note edit)"
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "A generated implementation transposing per call carries 2*K*N/4 bytes of uncounted timed traffic.",
+     "after": "Decided 2026-10-06 ...: formula stays the lower-bound / compulsory-I/O model; 2*K*N/4 bytes of a per-call copy counted in time but diagnostic; packed-byte reuse not modelled; Triton column not comparable",
+     "decision": "matmul_int8: per-call repack timed; reuse is an optimisation"
+    },
+    {
+     "file": "audit.json",
+     "section": "human_reference_comparable",
+     "before": "false",
+     "after": "false (unchanged; Triton column cached bt; cuTile column comparable, stated in review_items)",
+     "decision": "manual lines relying on a cached transpose remain not comparable"
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "3 open items (repack timing; arbitrary K_b; process-wide allow_tf32 isolation)",
+     "after": "4 'Decided 2026-10-06 ...' statements (per-call uncached packed repack + decode inside GEMM + Triton not comparable; declared shape only; loaded-once requirement removed; precision flags evaluator state, applied by extension)",
+     "decision": "matmul_int8 bullets 1-4 (+ precision-flag bullet of matmul_fp32_fp16_fp8 by extension)"
+    }
+   ]
+  },
+  {
+   "operator": "streamk_matmul",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "Any layout transformation of an operand ... must be done inside `run()` on every call and its device time is counted; no state keyed on input identity or contents may be cached across calls (see open review items).",
+     "after": "no prepacked or transposed copy is provided or may be assumed. An implementation may consume them as delivered, or ... a transposed copy of `B` ... by device work inside `run()` on every call: its device time is counted. No state derived from an input's identity, data pointer, shape or contents ... may be cached across calls; every call rebuilds whatever it needs.",
+     "decision": "streamk_matmul: B repack, if used, is per-call and timed; no cross-call derived cache"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "(no bullet)",
+     "after": "Consuming `B` in its delivered `(K, N)` layout versus through a transposed copy rebuilt by device work inside every `run()` call (its time counted).",
+     "decision": "General rule: layouts free; streamk per-call repack"
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "Caching a transposed or repacked operand across calls; skipping the per-call zero-fill.",
+     "after": "Caching a transposed or repacked operand (or anything derived from an input's identity, data pointer, shape or contents) across calls, or assuming a prepacked operand; skipping the per-call zero-fill.",
+     "decision": "streamk_matmul: no cross-call derived cache (Stream-K structure bullets unchanged)"
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "only for an in-run, uncached operand re-layout as described above.",
+     "after": "... as described above (device work inside `run()` on every call, counted).",
+     "decision": "Also for all four: Permitted PyTorch operations consistent"
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "2 items (operand transformation prepared once vs per call; whether the bytes model should count zero-fill / atomic RMW / fp32 round trip)",
+     "after": "(section removed; scoring not discussed in the contract)",
+     "decision": "streamk_matmul: remove Open review items; Q stays lower-bound, scratch/atomics diagnostic (audit only)"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions (cache rule)",
+     "before": "pattern WeakTensorKeyDictionary|_cache\\[\\s*b\\s*\\]|_cache\\.get\\(\\s*b\\b|functools\\.lru_cache|data_ptr\\(\\)\\s*\\]|id\\(\\s*b\\s*\\) ; message '... not permitted (open review item).'",
+     "after": "pattern extended with data_ptr\\(\\)\\s*(in|not in|==)|_cache\\b|\\bcache\\b ; message 'Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().'",
+     "decision": "Also for all four: suspicious-level cross-call cache rule (existing rule extended instead of duplicated)"
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "(open review item: the Triton reference caches it untimed, the cuTile reference does not repack).",
+     "after": "Decided rule: ... consumed as delivered or through a transposed/repacked copy rebuilt by device work inside every run() ...; cross-call caches ... forbidden; no prepacked operand ... Stream-K decomposition and atomic-add global accumulation ... are the fixed structure. bytes_expr counts A, B and C once (lower-bound model); zero-fill, atomic read-modify-write, the half-dtype fp32 round trip and repack traffic are diagnostic. The manual Triton reference caches B^T untimed and is not comparable",
+     "decision": "streamk_matmul bullets 1-3 + Also-for-all-four timing notes"
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing / aspects.intermediate_storage",
+     "before": "status needs-review (both); 'The contract conservatively requires in-run, uncached handling pending the review decision.'",
+     "after": "status mapping-only (both); notes 'Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): ... per call and timed; no cross-call derived cache ... Stream-K decomposition / global accumulation structure preserved'",
+     "decision": "streamk_matmul bullets 1-2"
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "Both timed run() bodies additionally zero-fill ..., perform atomic read-modify-write ..., and for fp16/bf16 ... On the Triton side the (N, K) transpose of B is paid only on the first call per tensor (cached) ...",
+     "after": "Decided 2026-10-06 ...: Q for scoring remains this explicitly declared lower-bound / compulsory-I/O model; scratch traffic, atomic RMW, per-call zero-fill, the fp16/bf16 fp32 round trip and any per-call operand repack are extra implementation traffic ... diagnostic, not part of Q ... Triton column not comparable; cuTile comparable",
+     "decision": "streamk_matmul bullet 3: Q lower-bound; scratch, atomic RMW and extra traffic diagnostic (audit fq_boundary note)"
+    },
+    {
+     "file": "audit.json",
+     "section": "human_reference_comparable",
+     "before": "false",
+     "after": "false (unchanged; Triton column identity-cached B^T; cuTile column comparable, stated in review_items)",
+     "decision": "manual lines relying on a cached transpose remain not comparable"
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "3 open items (prepacked-operand divergence; bytes_expr omissions; atomic non-determinism acceptance)",
+     "after": "3 'Decided 2026-10-06 ...' statements (Stream-K structure preserved + per-call timed repack + no cache + Triton not comparable; Q lower-bound with diagnostic extra traffic; atomic non-determinism accepted, semaphores/flags/workspace still forbidden)",
+     "decision": "streamk_matmul bullets 1-3"
+    }
+   ]
+  }
+ ],
+ "other_decisions": [
+  {
+   "operator": "destindex",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Functional semantics",
+     "before": "KV-cache \"copy to destination index\" with a nope part and a rope part. Given\n`kv_nope` of shape (T, Hn, Dn), `kv_rope` of shape (T, Hr, Dr), an int64\nindex vector `dest_loc` of shape (T,), and initial cache contents `o_nope`\n(T, Hn, Dn) and `o_rope` (T, Hr, Dr), the two results are\n\n    out_nope = copy of o_nope;  out_nope[dest_loc[t], :, :] = kv_nope[t, :, :]  for all t\n    out_rope = copy of o_rope;  out_rope[dest_loc[t], :, :] = kv_rope[t, :, :]  for all t\n\ni.e. `index_copy_` along dimension 0 into a copy of the initial contents.\nRows of the output not named by `dest_loc` keep the corresponding `o_*`\nvalues. In every benchmark case `dest_loc` is a permutation of [0, T), so\ndestinations are unique (no write ever collides) and every row is\noverwritten; duplicate or out-of-range destinations need not be handled.\nValues are copied bit-exactly; no arithmetic is performed.\n",
+     "after": "KV-cache \"copy to destination index\" with a nope part and a rope part. Given\n`kv_nope` of shape (T, Hn, Dn), `kv_rope` of shape (T, Hr, Dr), an int64\nindex vector `dest_loc` of shape (T,), and cache buffers `o_nope`\n(T, Hn, Dn) and `o_rope` (T, Hr, Dr), the two results are\n\n    out_nope[dest_loc[t], :, :] = kv_nope[t, :, :]  for all t\n    out_rope[dest_loc[t], :, :] = kv_rope[t, :, :]  for all t\n\ni.e. the reference `index_copy_` along dimension 0 into a copy of `o_*`.\nThe task domain is fixed: `dest_loc` is a permutation of [0, T). Hence\ndestinations are unique (no write ever collides) and every output row is\noverwritten by the scatter, so the results are fully determined by `kv_*`\nand `dest_loc`; no output row retains an `o_*` value. Duplicate or\nout-of-range destinations are outside the task domain and need not be\nhandled. Values are copied bit-exactly; no arithmetic is performed.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Inputs and outputs",
+     "before": "- Each call must return results that are correct for the arguments of that\n  call. Whether the two output buffers may persist across calls (allocated\n  and initialised from `o_*` once, then rewritten in place on each later\n  call) or must be freshly produced on every call is an open review item\n  (see below); until it is resolved either policy is accepted, and the\n  evaluator will flag the persistent policy for review.\n",
+     "after": "- Each call must return results that are correct for the arguments of that\n  call, and no result value may be carried over from an earlier call: no\n  cached outputs, no reuse of previously computed rows, no skipping of the\n  scatter when the arguments look unchanged. Reusing an output allocation\n  across calls is allowed only if the current call fully overwrites every\n  element of both results before returning (which the scatter does in this\n  task domain); a fresh allocation on every call is equally acceptable.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Required logical stages",
+     "before": "1. Output initialisation: the output buffers hold the contents of `o_nope` /\n   `o_rope` before the copy (a device copy of each `o_*` into the output\n   buffer).\n2. Scatter-copy of the nope part: for every (t, h, d), read `kv_nope[t, h, d]`\n   and write it to `out_nope[dest_loc[t], h, d]`.\n3. Scatter-copy of the rope part: likewise for `kv_rope` into `out_rope`.\n\nStages 2 and 3 depend on stage 1 (for the rows they do not overwrite) and are\nindependent of each other; they may run as two launches of one kernel, or be\nfused into a single launch. Stage 1 may be a plain device copy; it must not\nbe fused into the scatter in a way that re-reads `o_*` per element, because\nthat adds reads of `o_*` beyond the single stage-1 copy.\n",
+     "after": "1. Scatter-copy of the nope part: for every (t, h, d), read `kv_nope[t, h, d]`\n   and write it to `out_nope[dest_loc[t], h, d]`.\n2. Scatter-copy of the rope part: likewise for `kv_rope` into `out_rope`.\n\nThe two stages are independent of each other; they may run as two launches\nof one kernel, or be fused into a single launch. Initialising the output\nbuffers from `o_nope` / `o_rope` (a device copy of each `o_*` into the\noutput buffer before the scatter) is not a required stage in this task\ndomain, because every row is overwritten by the scatter; it remains a\npermitted mapping, and when performed it is device work inside `run()`.\nThe scatter itself must not read `o_*` per element.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "Besides host work (shape/stride reads, metadata-only flattening (`.view`) of\ncontiguous tensors, allocation calls), run() issues only the output\ninitialisation of stage 1 (when the policy requires it on this call), which\nis a device copy and is counted, and the scatter launches. No casts,\ntransposes or packing of inputs; no precomputation outside run(); no derived\noperand cached across calls other than the output buffers covered by the\nopen review item.\n",
+     "after": "Besides host work (shape/stride reads, metadata-only flattening (`.view`) of\ncontiguous tensors, allocation calls), run() issues only the scatter launches\nand, if the implementation chooses to initialise its output buffers from\n`o_*`, that device copy, which is counted. No casts, transposes or packing of\ninputs; no precomputation outside run(); no derived operand and no result\nvalue cached across calls (an output allocation may be kept only under the\nfull-overwrite condition stated above).\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "- Masked tail handling versus zero-padded loads with dropped destinations.\n",
+     "after": "- Masked tail handling versus zero-padded loads with dropped destinations.\n- Fresh output allocations on every call versus an allocation reused across\n  calls that the call fully overwrites; output buffers left uninitialised\n  before the scatter versus initialised from `o_*` by a device copy.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "- Re-reading `o_*` inside the scatter, or any additional logical traversal\n  of the data beyond stage 1 and the single scatter-copy.\n",
+     "after": "- Reading `o_*` inside the scatter, or any additional logical traversal of\n  the data beyond the single scatter-copy (and the optional one-time copy of\n  `o_*` into the output buffers).\n- Carrying result values across calls: returning cached outputs, reusing\n  previously computed rows, or skipping the scatter for arguments seen\n  before.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "- `torch.empty_like` / `torch.empty` for output buffers and\n  `Tensor.clone()` or `Tensor.copy_()` for stage 1 (copy of `o_*` into the\n  output buffer).\n",
+     "after": "- `torch.empty_like` / `torch.empty` for output buffers and, only for the\n  optional initialisation of an output buffer from `o_*`, `Tensor.clone()`\n  or `Tensor.copy_()`.\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "\n## Open review items\n- Output-buffer policy: must outputs be freshly initialised from `o_*` on\n  every call, or may they persist across calls (initialised once per input\n  identity and rewritten in place)? This fixes what the timed window\n  contains.\n- Whether the byte-count formula should include the output initialisation\n  when per-call initialisation is required.\n- Whether rows not addressed by `dest_loc` (never produced by the current\n  benchmark inputs) are to be verified explicitly.\n",
+     "after": "",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_stages",
+     "before": "    {\"id\": \"s1\", \"description\": \"Output initialisation: the output buffers contain o_nope / o_rope before the copy (device copy of o_* into the output; per-call or once-per-identity is the open review item).\"},\n    {\"id\": \"s2\", \"description\": \"Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once and written once in the algorithm, no atomics).\"},\n    {\"id\": \"s3\", \"description\": \"Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s2 and s3 independent, may be one or two launches; returns (out_nope, out_rope).\"}\n",
+     "after": "    {\"id\": \"s1\", \"description\": \"Scatter-copy of kv_nope into out_nope at rows dest_loc[t] (each element read once and written once in the algorithm, no atomics). The output buffers must not alias any input and need not be initialised from o_*: dest_loc is a permutation, so every row is overwritten; a device copy of o_* into the output is a permitted mapping (counted when performed), not a required stage.\"},\n    {\"id\": \"s2\", \"description\": \"Scatter-copy of kv_rope into out_rope at rows dest_loc[t]; s1 and s2 independent, may be one or two launches; returns (out_nope, out_rope) correct for the current call, with no result value carried over from an earlier call (an allocation may be reused only if the call fully overwrites every result element).\"}\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "forbidden_substitutions",
+     "before": "    {\"pattern\": \"WeakTensorKeyDictionary|_out_cache|_cache\\\\b|lru_cache|data_ptr\\\\(\\\\)\", \"message\": \"persistent output buffers keyed by input identity: open review item (policy b)\", \"level\": \"suspicious\", \"scope\": \"host\"}\n",
+     "after": "    {\"pattern\": \"WeakTensorKeyDictionary|_out_cache|_cache\\\\b|lru_cache|data_ptr\\\\(\\\\)\", \"message\": \"possible cross-call result reuse: cached outputs or result values carried over from an earlier call are forbidden; an output allocation may be reused only if the call fully overwrites every result element (review the hit)\", \"level\": \"suspicious\", \"scope\": \"host\"}\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_evidence",
+     "before": "    {\"any_of\": [\"clone\\\\(\", \"copy_\\\\(\", \"empty_like\", \"torch\\\\.empty\"], \"message\": \"output buffer initialised from o_*\", \"level\": \"suspicious\"}\n",
+     "after": "    {\"any_of\": [\"clone\\\\(\", \"copy_\\\\(\", \"empty_like\", \"torch\\\\.empty\"], \"message\": \"output buffers obtained inside run() (allocation, or a copy of o_*)\", \"level\": \"suspicious\"}\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "outputs",
+     "before": "  \"outputs\": {\"structure\": \"tuple\", \"count\": 2, \"aliasing\": \"none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope; whether the same buffers may be returned across calls (rewritten in place) is the open review item\"},\n",
+     "after": "  \"outputs\": {\"structure\": \"tuple\", \"count\": 2, \"aliasing\": \"none with any input; (out_nope, out_rope) have the shapes/dtypes of o_nope/o_rope and are correct for the current call; an output allocation may be reused across calls only if the call fully overwrites every result element (no cached result values)\"},\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary",
+     "before": "  \"timing_boundary\": {\"includes_preprocessing\": true, \"notes\": \"The output initialisation from o_* (device copy: read + write of both outputs) is device work and is counted whenever run() launches it; whether it is paid on every call or once per input identity is the open review item, and bytes_expr counts only the steady-state kv read + out write. Host-side work (allocation calls, flattening views, metadata reads) is not GPU time.\"},\n",
+     "after": "  \"timing_boundary\": {\"includes_preprocessing\": true, \"notes\": \"The GPU time of all device work launched by run() is counted: the scatter launches and, if the implementation performs it, the device copy of o_* into the output buffers (a permitted mapping, not a required stage: dest_loc is a permutation, so every row is overwritten). bytes_expr is the compulsory source-read + result-write lower bound (n * dtype_size * 2); the dest_loc index reads are lower-order and omitted, and no candidate-specific initialisation term is added. Host-side work (allocation calls, flattening views, metadata reads) is not GPU time.\"},\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing.status",
+     "before": "    \"preprocessing\": {\n      \"status\": \"needs-review\",\n",
+     "after": "    \"preprocessing\": {\n      \"status\": \"aligned\",\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.preprocessing.note",
+     "before": "      \"note\": \"Both sides (and impl_torch.py L4-12) agree with each other, but the policy itself is a timed-boundary question: a generated run() that initialises fresh outputs from o_* on every call times an extra read+write of both outputs (doubling the traffic counted by bytes_expr), one that keeps per-identity persistent buffers reproduces the manual boundary but relies on module-level state keyed by tensor identity (flagged as suspicious by the static checker), and one that writes into o_* directly would mutate inputs (forbidden). The human must choose the required policy.\"\n",
+     "after": "      \"note\": \"Both sides (and impl_torch.py L4-12) agree with each other. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the task domain fixes dest_loc as a permutation of all rows (tensors.py L151 torch.randperm; comment L149-150), so every output row is overwritten and the copy of o_* into the output is not a required stage (permitted mapping; device work counted when performed). Result values must never be carried across calls; an output allocation may be reused only when the call fully overwrites every result element; writing into o_* stays forbidden. Both manual sides satisfy this: the per-identity buffer is rewritten in full by the scatter on every call and no output value survives from an earlier call.\"\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.mutation.status",
+     "before": "    \"mutation\": {\n      \"status\": \"needs-review\",\n",
+     "after": "    \"mutation\": {\n      \"status\": \"aligned\",\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.mutation.note",
+     "before": "      \"note\": \"Agreed: inputs are never modified. Open: whether the returned tensors may be the same objects across calls (rewritten in place) or must be distinct per call; rows not named by dest_loc keep the o_* values copied on the first call.\"\n",
+     "after": "      \"note\": \"Agreed: inputs are never modified and the outputs must not alias any input. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the returned tensors may be the same allocation across calls only because the scatter overwrites every element on each call (dest_loc is a permutation); no result value may be reused across calls. Rows not named by dest_loc do not occur in the fixed task domain.\"\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "    \"note\": \"n = total_tokens * (kv_nope_head_num*kv_nope_head_dim + kv_rope_head_num*kv_rope_head_dim) (tensors.py infer_problem_size L652-656). The formula counts one read of kv and one write of out per element, which is the STEADY-STATE traffic of the two kernels only because the output initialisation from o_* (read o_* + write out, the same n*dtype_size*2 again) runs once per input identity and is cached across calls on both sides; the dest_loc index reads (8 B per token, re-gathered per element) are not counted. Whether the formula is consistent depends on the output-buffer policy chosen in the review item.\"\n",
+     "after": "    \"note\": \"n = total_tokens * (kv_nope_head_num*kv_nope_head_dim + kv_rope_head_num*kv_rope_head_dim) (tensors.py infer_problem_size L652-656). Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): Q = n * dtype_size * 2 (one read of kv and one write of out per element) is the compulsory source-read + result-write lower bound of the scatter-copy and stays the formal denominator; the dest_loc index reads (8 B per token, re-gathered per element) are lower-order and remain omitted; no candidate-specific initialisation traffic term is added, so an implementation that copies o_* into its outputs pays that device copy inside the timed window against the same Q. The manual references launch exactly the scatter per call (the per-identity clone happens once, before steady state), so their timed work equals the Q traffic.\"\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "human_reference_comparable",
+     "before": "  \"human_reference_comparable\": false,\n",
+     "after": "  \"human_reference_comparable\": true,\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "  \"review_items\": [\n    \"Output-buffer policy: decide whether a generated run() must (a) allocate the outputs and initialise them from o_nope/o_rope on every call (reference semantics, doubles the timed traffic relative to bytes_expr), or (b) may keep persistent output buffers keyed to the o_* input identity, initialised once and rewritten in place on each call (the manual boundary; relies on module-level tensor-identity state); writing into o_* directly is forbidden on both sides.\",\n    \"bytes_expr consistency: if policy (a) is chosen, decide whether bytes_expr should include the per-call read of o_* and the corresponding write (n * dtype_size * 4) so that SOL figures reflect the timed work; if (b) is chosen, human_reference_comparable can be set true.\",\n    \"Define the required result for rows not addressed by dest_loc (they must equal the o_* values) and whether the evaluator should test a non-permutation dest_loc, which the current generator never produces.\"\n  ],\n",
+     "after": "  \"review_items\": [\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): output-buffer policy. dest_loc is a permutation of all rows in the benchmark domain (tensors.py L151 torch.randperm, comment L149-150), so every output row is overwritten by the scatter; a separate copy of o_nope/o_rope into the outputs is not a mandatory logical stage (permitted as a mapping, counted when performed). Outputs must be correct for the current call and must not alias inputs; no cached output values or result reuse across calls; an allocation may be reused only if the call fully overwrites every result element before return. The scatter-copy algorithm and the no-collision guarantee are kept.\",\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): bytes_expr stays n * dtype_size * 2 (compulsory source read + result write); index traffic is documented as omitted/lower-order; no candidate-specific initialisation term is added. human_reference_comparable set to true: the manual references' per-call device work is exactly the scatter.\",\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): rows not addressed by dest_loc do not exist in the fixed task domain (permutation); the evaluator verifies the permutation case only and does not test a non-permutation dest_loc.\"\n  ],\n",
+     "decision": "dest_loc is a permutation of all rows (tensors.py L151 torch.randperm, comment L149-150): every output row is overwritten; copy of o_* is not a required stage; no cross-call result reuse; allocation reuse only under full overwrite; outputs never alias inputs."
+    }
+   ]
+  },
+  {
+   "operator": "gaussian_blur",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Required logical stages",
+     "before": "1. For each output element, accumulate the kernel_rows * kernel_cols tap\n   products from the zero-padded neighbourhood into an fp32 accumulator.\n",
+     "after": "1. For each output element, accumulate the kernel_rows * kernel_cols tap\n   products from the zero-padded neighbourhood into an fp32 accumulator,\n   each product formed in fp32 from the fp32-converted pixel and weight.\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "contract.md",
+     "section": "Precision and accumulation",
+     "before": "- The accumulator over taps is fp32 for both input dtypes.\n- The accumulated fp32 value is rounded once, to the input dtype, at the\n  store.\n- Whether the per-tap product itself must be formed in fp32 for fp16 inputs\n  (converting pixel and weight before multiplying) or may be formed in the\n  input dtype before being added to the fp32 accumulator is an open review\n  item; both are currently within the configured tolerance.\n- Tolerance: the operator config's verify section.\n",
+     "after": "- For both input dtypes (fp16 and fp32), the pixel and the tap weight are\n  converted to fp32 before each multiply, and the products are accumulated\n  in fp32: no per-tap product is formed in a dtype narrower than fp32.\n- The accumulated fp32 value is rounded once, to the input dtype, at the\n  store.\n- Tolerance: the operator config's verify section.\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "contract.md",
+     "section": "Forbidden substitutions",
+     "before": "- Accumulating in fp16, or rounding the accumulator between taps.\n",
+     "after": "- Forming a per-tap product in a dtype narrower than fp32 (multiplying the\n  fp16 pixel and weight before converting them), accumulating in fp16, or\n  rounding the accumulator between taps.\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "\n## Open review items\n- Per-tap product precision for reduced-precision inputs: must pixel and\n  weight be converted to fp32 before each multiply, or may the product be\n  formed in the input dtype before fp32 accumulation?\n",
+     "after": "",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_stages",
+     "before": "    {\"id\": \"s1\", \"description\": \"Per output element, fp32 accumulation of the kernel_rows*kernel_cols tap products over the zero-padded neighbourhood (cross-correlation, offsets i - kr//2, j - kc//2), read directly from the flat image inside the launch.\"},\n",
+     "after": "    {\"id\": \"s1\", \"description\": \"Per output element, fp32 accumulation of the kernel_rows*kernel_cols tap products over the zero-padded neighbourhood (cross-correlation, offsets i - kr//2, j - kc//2), read directly from the flat image inside the launch; for both fp16 and fp32 tasks the pixel and the weight are converted to fp32 before each multiply (no product formed in a narrower dtype).\"},\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_evidence",
+     "before": "    {\"any_of\": [\"static_range\", \"range\\\\(kernel\", \"range\\\\(0, kernel\", \"for kr\", \"for i in\"], \"message\": \"loop over all taps\", \"level\": \"suspicious\"}\n",
+     "after": "    {\"any_of\": [\"static_range\", \"range\\\\(kernel\", \"range\\\\(0, kernel\", \"for kr\", \"for i in\"], \"message\": \"loop over all taps\", \"level\": \"suspicious\"},\n    {\"any_of\": [\"\\\\.to\\\\(\\\\s*tl\\\\.float32\\\\s*\\\\)\", \"\\\\.to\\\\(\\\\s*dtype\\\\s*=\\\\s*tl\\\\.float32\\\\s*\\\\)\", \"astype\\\\(\", \"T\\\\.Cast\\\\(\", \"\\\\.cast\\\\(\", \"dtype\\\\s*=\\\\s*nl\\\\.float32\"], \"message\": \"fp32 conversion of pixel and weight before each tap multiply (required for both dtypes; a no-op for fp32 input)\", \"level\": \"suspicious\"}\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary",
+     "before": " No host padding, im2col, casts or copies; no state across calls. Per-tap product precision for fp16 is the open review item.\"},\n",
+     "after": " No host padding, im2col, casts or copies; no state across calls.\"},\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.precision.status",
+     "before": "    \"precision\": {\n      \"status\": \"needs-review\",\n",
+     "after": "    \"precision\": {\n      \"status\": \"aligned\",\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "audit.json",
+     "section": "aspects.precision.note",
+     "before": "      \"note\": \"Genuine precision-path divergence for fp16 inputs: fp16 products (one extra rounding per tap, relative error about 2^-11 each) versus fp32 products. Both pass the loose verify tolerance (atol 0.1, rtol 1e-2) and both are identical for fp32 inputs. The contract must not pick a side: the human has to decide whether per-tap products must be formed in fp32.\"\n",
+     "after": "      \"note\": \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): for both fp16 and fp32 tasks the pixel and the weight are converted to fp32 before each multiply and accumulated in fp32, cast once at the output; scoring uses the fp32_fma_vector peak. The cuTile reference (impl_cutile.py L46-47) follows this rule; the Triton reference forms fp16 products for fp16 inputs (impl_triton.py L34-37), a recorded deviation from the now-fixed rule that stays within the verify tolerance (atol 0.1, rtol 1e-2) and does not change the memory-bound timing; both sides are identical for fp32 inputs.\"\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "run() performs no preprocessing and nothing is prepacked.\"\n",
+     "after": "run() performs no preprocessing and nothing is prepacked. Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the compute-side scoring uses the fp32_fma_vector peak, consistent with the fp32-product rule; the task has one fixed, square shape, so the input_rows-squared form of the expressions is exact for it.\"\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "  \"review_items\": [\n    \"Per-tap product precision for fp16 inputs: one implementation multiplies pixel and weight in the input dtype (fp16 rounding per tap) before fp32 accumulation, the other converts both to fp32 first. Decide whether the contract requires fp32 products (stricter, matches the fp32 reference path more closely) or permits input-dtype products (both currently pass the atol 0.1 / rtol 1e-2 tolerance); the contract text leaves it open.\",\n    \"(non-blocking, metric) bytes_expr/flops_expr assume square images (input_rows squared); correct for the config sweep but wrong if input_cols != input_rows is ever swept.\"\n  ],\n",
+     "after": "  \"review_items\": [\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): per-tap product precision. For both fp16 and fp32 tasks, pixel and weight are converted to fp32 before each multiply and accumulated in fp32, with a single cast at the output; forming the product in fp16 is forbidden. Scoring uses fp32_fma_vector (not stated in the model-visible contract). The Triton manual reference's fp16 products (impl_triton.py L34-37) are a recorded deviation within tolerance; the cuTile reference (impl_cutile.py L46-47) conforms.\",\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the task has one fixed, square shape, so bytes_expr/flops_expr written with input_rows squared are exact for the task; no contract change.\"\n  ],\n",
+     "decision": "for both fp16 and fp32 tasks convert pixel and weight to fp32 before each multiply, accumulate in fp32, cast once at the output; scoring uses fp32_fma_vector (not in the contract)."
+    }
+   ]
+  },
+  {
+   "operator": "quantize_global",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Functional semantics",
+     "before": "Despite the operator's name, no scale factor, no global absolute maximum, no\nclamping and no integer quantisation is part of this operator at this\nrevision: the whole computation is one elementwise dtype conversion. An\nimplementation must not add any of those steps.\n",
+     "after": "The operator name is historical: no scale factor, no global absolute\nmaximum, no clamping and no integer quantisation is part of this operator;\nthe whole computation is one elementwise dtype conversion. An implementation\nmust not add any of those steps.\n",
+     "decision": "approve S_main / PyTorch semantics: plain fp32 -> fp16 conversion, no absmax/scale/int8 path; name is historical."
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "\n## Open review items\n\n- The operator name suggests scaled integer quantisation, but the reference\n  semantics at this revision are a plain float32 to float16 conversion with\n  no scale factor; confirmation that this conversion is the intended task is\n  pending. Until then, implement exactly the conversion described above.\n",
+     "after": "",
+     "decision": "approve S_main / PyTorch semantics: plain fp32 -> fp16 conversion, no absmax/scale/int8 path; name is historical."
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "  \"review_items\": [\n    \"BLOCKING (study owner): the operator is named quantize_global but at this SHA the reference and both implementations are a plain float32 -> float16 cast with no absmax reduction, no scale factor and no integer output; decide whether to keep the operator as this cast (and rename or document it) or to redefine it as a scaled quantisation, which would require a new reference, new implementations, a new generator and a new contract. The contract below describes the cast only and must not be approved until this is settled.\",\n    \"Non-blocking: the generator ignores its dtype argument and always produces float32 (tensors.py 175-176) and config.yaml pins dtype to fp32; confirm the single-dtype sweep is intended, since bytes_expr's dtype_size term is only meaningful for fp32 input.\"\n  ],\n",
+     "after": "  \"review_items\": [\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the S_main / PyTorch semantics are approved as the task: quantize_global is a plain fp32 -> fp16 conversion (x.to(torch.float16), impl_torch.py 5); no absmax reduction, no scale factor, no int8 or other integer output despite the historical name. The contract keeps a one-line note that the name is historical.\",\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the approved semantics fix fp32 input (generator tensors.py 175-176, config.yaml dtype fp32) and the task has one fixed shape, so bytes_expr's dtype_size term is 4 and the single-dtype sweep is intended.\"\n  ],\n",
+     "decision": "approve S_main / PyTorch semantics: plain fp32 -> fp16 conversion, no absmax/scale/int8 path; name is historical."
+    }
+   ]
+  },
+  {
+   "operator": "radix_sort",
+   "changes": [
+    {
+     "file": "contract.md",
+     "section": "Required logical stages",
+     "before": "2. **Digit passes**, least-significant digit first, until the digit\n   positions together cover all 32 bits of the key. Each pass consists of:\n",
+     "after": "2. **Digit passes**, least-significant digit first, until the digit\n   positions together cover all 32 bits of the key (the digit width, and\n   hence the number of passes, is an implementation choice). Each pass\n   consists of:\n",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    },
+    {
+     "file": "contract.md",
+     "section": "Open review items",
+     "before": "\n## Open review items\n\n- The traffic model used for figure-of-merit reporting assumes a fixed\n  number of passes over the keys, while this contract leaves the digit width\n  and pass count free; whether the pass count becomes a fixed requirement or\n  the model is adjusted is under review. Until then, any stable\n  least-significant-digit-first radix sort covering all 32 bits is\n  acceptable.\n",
+     "after": "",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "required_stages",
+     "before": "    {\"id\": \"lsd_pass_loop\", \"description\": \"Passes run least-significant digit first and together cover all 32 key bits, swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned.\"}\n",
+     "after": "    {\"id\": \"lsd_pass_loop\", \"description\": \"Passes run least-significant digit first and together cover all 32 key bits (digit width and pass count are implementation choices: no fixed 2-bit / 16-pass requirement), swapping the two key buffers after every pass; no data-dependent pass skipping; the buffer written by the final pass is returned.\"}\n",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    },
+    {
+     "file": "evaluator_rules.json",
+     "section": "timing_boundary",
+     "before": " No cached state across calls, no untimed presort or prepacking. bytes_expr in config.yaml assumes a fixed pass count and omits the clone; see audit review items.\"},\n",
+     "after": " No cached state across calls, no untimed presort or prepacking. Scoring Q (decided 2026-10-06) is the compulsory-I/O override 2 * n * dtype_size (one read of the keys plus one write of the sorted result); config.yaml's 16-pass bytes_expr is not the formal denominator, and per-pass key traffic, the working copy and the histogram/scan scratch traffic are diagnostic only.\"},\n",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    },
+    {
+     "file": "audit.json",
+     "section": "fq_boundary.note",
+     "before": "    \"note\": \"bytes_expr models 16 passes x (one key read for counting + one key read and one key write for scattering) and nothing else (config.yaml 19). Two mismatches with the timed boundary on both sides: (1) the in-run input clone (one read and one write of n keys, about 4 percent of the modelled traffic) and the histogram/scan scratch traffic are not counted; (2) the pass count 16 is a property of the 2-bit digit mapping chosen by both implementations, not of the operator. Because the contract leaves the digit width free (correctness does not depend on it), an implementation with wider digits would be credited 16-pass traffic while moving less, so the bandwidth figure would not be comparable across implementations. flops_expr = n is nominal.\"\n",
+     "after": "    \"note\": \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the scoring Q is the compulsory-I/O override 2 * n * dtype_size (one read of the N int32 keys plus one write of the sorted result), approved by the owner; config.yaml's bytes_expr 16 * 3 * n * dtype_size (the fixed-16-pass model of the 2-bit-digit mapping, config.yaml 19) is NOT the formal denominator any more, which is why consistent stays false with respect to that expression. Per-pass key traffic (16 x 3 x n x dtype_size for the manual 2-bit mapping), the in-run working-copy clone (about 4 percent of the 16-pass model) and the histogram/scan scratch traffic are diagnostic quantities only. Because the contract leaves digit width and pass count free, Q is independent of the mapping and bandwidth figures are comparable across implementations. flops_expr = n is nominal.\"\n",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    },
+    {
+     "file": "audit.json",
+     "section": "review_items",
+     "before": "  \"review_items\": [\n    \"BLOCKING (metric vs contract): bytes_expr hard-codes 16 passes (the 2-bit-digit mapping) while the contract leaves digit width and pass count free; decide either to pin the pass count in the contract (making the formula a faithful traffic model but constraining the mapping) or to keep the freedom and re-express or annotate the metric (for example report bytes per actual pass, or treat the formula as a fixed nominal '16-pass-equivalent' figure that is only comparable between implementations with the same pass count).\",\n    \"Non-blocking: the working-copy clone inside run() (2 * n * dtype_size bytes) and the histogram/scan scratch traffic are not counted by bytes_expr; decide whether to add the clone term, which every faithful implementation performs.\"\n  ],\n",
+     "after": "  \"review_items\": [\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the algorithm invariant is a stable LSD radix sort covering all 32 bits of the int32 keys (order by the full key; stability required); digit width and pass count are implementation choices, so no fixed 2-bit / 16-pass requirement appears in the stages, family or forbidden list. The family-defining prohibitions stay: no comparison sort, no library sort, no MSD-only or partial-key sort, no data-dependent pass skipping.\",\n    \"Decided 2026-10-06 (owner, FINAL_FREEZE_AND_START_B200.md §3): the old fixed-16-pass Q model is not the formal denominator; the scoring Q is the compulsory-I/O override 2 * n * dtype_size approved by the owner. Pass traffic, the working-copy clone and scratch traffic are diagnostic; the model-visible contract does not describe traffic accounting.\"\n  ],\n",
+     "decision": "stable LSD radix sort over all 32 bits is the invariant; digit width and pass count are implementation choices; family prohibitions kept; scoring Q is the owner-approved compulsory-I/O override 2*n*dtype_size, pass/scratch traffic diagnostic; contract does not describe traffic accounting."
+    }
+   ]
+  }
+ ],
+ "flagged_repairs": [
+  {
+   "operator": "interleave",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/interleave/contract.md",
+     "section": "Algorithm family and structure",
+     "before": "Single-pass elementwise zip of two streams. For a logical block of\nconsecutive input indices the corresponding output block is contiguous and\ntwice as long; whether the zip is formed in registers (stack the two input\nblocks and flatten) followed by one contiguous store, or written as two\nstride-2 stores, is an implementation choice. Lanes beyond N (the last\nblock) must never be stored and padded input values must never reach OUT.\n",
+     "after": "Elementwise zip of two streams in one logical traversal (how that traversal\nis distributed over launches is a mapping choice, see the stages). For a\nlogical block of consecutive input indices the corresponding output block is\ncontiguous and twice as long; whether the zip is formed in registers (stack\nthe two input blocks and flatten) followed by one contiguous store, or\nwritten as two stride-2 stores, is an implementation choice. Lanes beyond N\n(the last block) must never be stored and padded input values must never\nreach OUT.\n",
+     "item": 1
+    }
+   ]
+  },
+  {
+   "operator": "histogramming",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/histogramming/contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "- The partial cap P and the chunk size; grid-stride versus contiguous\n",
+     "after": "- The number of partials P and the chunk size; grid-stride versus contiguous\n",
+     "item": 2
+    }
+   ]
+  },
+  {
+   "operator": "rmsnorm",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Required logical stages",
+     "before": "Stage 2 depends on stage 1 for the same row only. The row statistic is a\nprivate value of the program that owns the row and never round-trips through\nglobal memory, because the canonical algorithm keeps it on chip between the\ntwo sweeps; splitting the two stages into separate launches with a global\n`rstd` buffer is therefore not permitted. Splitting one row across several\nprograms (cross-program reduction, atomics) is not permitted either, because\ncombining the partial sums would need a global-memory intermediate or\natomics that the canonical algorithm does not have. Rows are independent;\nseveral rows per program, a chunked loop over a long row, or distributing\nthe rows over more than one launch is free.\n",
+     "after": "Stage 2 depends on stage 1 for the same row only. The two stages are\nnormally fused, with `rstd` held privately by the program that owns the row\n(re-reading the row for stage 2 or keeping it on chip are both permitted).\nSplitting them into two launches that pass `rstd` through a `(batch*M,)`\nfp32 statistics buffer allocated inside `run()` on every call is a mapping\nchoice: the buffer's traffic is device work and is counted, and it must\nnever be cached across calls. What is fixed is the logical traversal count:\nthe row is read once for the statistic and at most once more for the\nnormalisation; a split that re-reads the whole row from global memory a\nthird time is not permitted. Splitting one row across several programs\n(cross-program reduction, atomics) is not permitted, because combining the\npartial sums would need a global-memory intermediate or atomics that the\ncanonical algorithm does not have. Rows are independent; several rows per\nprogram, a chunked loop over a long row, or distributing the rows over more\nthan one launch is free.\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Algorithm family and structure",
+     "before": "Two-pass row normalisation inside one program: a reduction sweep (sum of\nsquares) followed by an elementwise sweep (normalise, scale). The reduction\n",
+     "after": "Two-pass row normalisation: a reduction sweep (sum of squares) followed by\nan elementwise sweep (normalise, scale), each row handled whole by one\nprogram in each sweep. The reduction\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Preprocessing and timing boundary",
+     "before": "copies, no state cached across calls, nothing precomputed outside `run()`.\nThe weight is consumed as given, a contiguous `(K,)` vector, and may be\nre-read per row.\n",
+     "after": "copies, no state cached across calls, nothing precomputed outside `run()`.\nIn a split design the per-call statistics buffer is written and read by\ndevice work and is counted. The weight is consumed as given, a contiguous\n`(K,)` vector, and may be re-read per row.\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "- Distributing the rows over one or several launches, provided each row's\n  statistic stays private to the program that owns the row.\n",
+     "after": "- Fused versus split launches: distributing the rows over one or several\n  launches, or computing `rstd` in one launch and applying it in another\n  through a per-call `(batch*M,)` fp32 statistics buffer.\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Forbidden substitutions",
+     "before": "- Splitting one row's reduction across programs, or passing the row\n  statistic between launches through global memory (both add a global-memory\n  intermediate that the canonical algorithm keeps on chip).\n",
+     "after": "- Splitting one row's reduction across programs (combining the partial sums\n  would add a global-memory intermediate or atomics that the canonical\n  algorithm does not have); a split that re-reads the whole row from global\n  memory a third time; caching a statistics buffer across calls.\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "- `torch.empty_like(x)` or `torch.empty(...)` for the output only.\n",
+     "after": "- `torch.empty_like(x)` or `torch.empty(...)` for the output and, only in a\n  split design, one fp32 `(batch*M,)` statistics buffer allocated per call.\n",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/evaluator_rules.json",
+     "section": "required_stages.row_sum_squares",
+     "before": "then reciprocal square root, held privately by the program that owns the row.",
+     "after": "then reciprocal square root: one rstd per row, held on chip in a fused design or written to a per-call fp32 (batch*M,) statistics buffer in a split design.",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/evaluator_rules.json",
+     "section": "required_stages.normalise_scale",
+     "before": "using the statistic held privately by the program that owns the row (it never round-trips through global memory; the number of launches is otherwise a mapping choice).",
+     "after": "using the row's rstd (held on chip in a fused design, or read from the per-call statistics buffer in a split design; fused versus split launches is a mapping choice, and the row is never traversed a third time).",
+     "item": 3
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/rmsnorm/evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "no repack or cast of x or rms_w, no global scratch for the row statistic.",
+     "after": "no repack or cast of x or rms_w; a per-call statistics buffer of a split design is device work and is counted; it is never cached across calls.",
+     "item": 3
+    }
+   ]
+  },
+  {
+   "operator": "mean_reduction",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/contract.md",
+     "section": "Required logical stages",
+     "before": "Stages 2 and 3 are fused per row; each row is independent of every other\nrow. Splitting a row's reduction into a partial-sums pass followed by a\ncombine pass through a global scratch buffer is not required by the data\nand is not permitted, because the canonical algorithm keeps the partial\nsums on chip: the operator is a single logical traversal of `x` with no\nglobal intermediates. The traversal count is a property of the algorithm,\nnot a guarantee about physical DRAM transactions, which caches, TMA and the\ncompiler may change. The number of kernel launches is not otherwise fixed.\n",
+     "after": "Each row is independent of every other row. The natural realisation is one\nprogram per row with stages 2 and 3 fused. Splitting a row across several\nprograms, each producing a float32 partial sum, followed by a combine that\nsums the partials and applies stage 3, is a mapping choice for this pure\nsum reduction, provided `out[r]` is still written exactly once, the\npartial-sum buffer is allocated inside `run()` on every call (its traffic\nis device work and is counted) and the combine reads only the partials: the\noperator is a single logical traversal of `x`, and the combine must not add\na further traversal of `x`. The traversal count is a property of the\nalgorithm, not a guarantee about physical DRAM transactions, which caches,\nTMA and the compiler may change. The number of kernel launches is not\notherwise fixed.\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/contract.md",
+     "section": "Algorithm family and structure",
+     "before": "cross-lane tree, a direct tree, or a sequential loop. The result must be\n",
+     "after": "cross-lane tree, a direct tree, a sequential loop, or per-program partials\ncombined in a second step. The result must be\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "- Rows per program (one or several), column chunk width, number of lanes,\n  pipelining depth, vector width and launch geometry are free.\n",
+     "after": "- Rows per program (one or several), column chunk width, number of lanes,\n  pipelining depth, vector width and launch geometry are free.\n- One program per row, or a row split across several programs with a combine\n  of their float32 partial sums (see the stages).\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/contract.md",
+     "section": "Forbidden substitutions",
+     "before": "- More than one logical traversal of `x` (a second pass over its\n  elements), or staging partial sums in global memory.\n",
+     "after": "- More than one logical traversal of `x` (a second pass over its elements,\n  including a combine that re-reads `x` instead of the partial sums).\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/contract.md",
+     "section": "Permitted PyTorch operations",
+     "before": "- `torch.empty(M, dtype=torch.float32, device=x.device)` or\n  `torch.empty((M, 1), ...)` for the output.\n",
+     "after": "- `torch.empty(M, dtype=torch.float32, device=x.device)` or\n  `torch.empty((M, 1), ...)` for the output and, only in a split-row design,\n  one float32 partial-sum buffer allocated per call.\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/evaluator_rules.json",
+     "section": "required_stages.normalise_store",
+     "before": "fused with the sum, with no partial sums in global memory.",
+     "after": "fused with the sum, or applied by a combine that sums the per-call float32 partials of a split-row design (the combine must not re-read x).",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/evaluator_rules.json",
+     "section": "forbidden_substitutions[torch.zeros].message",
+     "before": "No initialised global scratch is part of this operator; partial sums must stay on chip.",
+     "after": "An initialised global scratch is not part of the canonical algorithm; the only permitted scratch is a per-call partial-sum buffer of a split-row design, whose fill is counted device work.",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/mean_reduction/evaluator_rules.json",
+     "section": "timing_boundary.notes",
+     "before": "no host-side cast or copy of x, no global partial-sum scratch.",
+     "after": "no host-side cast or copy of x; a per-call partial-sum buffer of a split-row design (and any device fill of it) is device work and is counted; no cross-call cache of it.",
+     "item": 4
+    }
+   ]
+  },
+  {
+   "operator": "kl_divergence",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/kl_divergence/contract.md",
+     "section": "Required logical stages",
+     "before": "combine is permitted provided LOSS[r] is still written exactly once and any\npartial-sum scratch is allocated inside the entry point.\n",
+     "after": "combine is permitted provided LOSS[r] is still written exactly once, any\npartial-sum scratch is allocated inside the entry point on every call (its\ntraffic is device work and is counted) and the combine reads only the\npartials, adding no further traversal of the inputs.\n",
+     "item": 4
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/kl_divergence/contract.md",
+     "section": "Precision and accumulation",
+     "before": "logarithm is the natural log evaluated at fp32 precision (an approximate\nintrinsic within the tolerance is acceptable). The guard for non-positive Y\n",
+     "after": "logarithm is the natural log evaluated at fp32 precision. An approximate\nlogarithm intrinsic whose error stays within the verification tolerance is\nacceptable. The guard for non-positive Y\n",
+     "item": 11
+    }
+   ]
+  },
+  {
+   "operator": "bitonic_sort",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/bitonic_sort/contract.md",
+     "section": "Required logical stages",
+     "before": "program locally. The pad pass may be fused into the first such group. At\nevery global synchronisation point the entire array lives in `work`; the\nnetwork is executed in place and no second buffer is permitted.\n",
+     "after": "program locally. The pad pass may be fused into the first such group. The\nnetwork is in place by construction: every compare-exchange writes back only\nthe two positions it read, so at every global synchronisation point the\nentire array lives in `work` and the algorithm has no second buffer (a\nping-pong copy would add traffic the network does not have).\n",
+     "item": 5
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/bitonic_sort/contract.md",
+     "section": "Algorithm family and structure",
+     "before": "by `(i AND k) == 0`, strict comparisons. Padding values sink to `work[N:M]`\n",
+     "after": "by `(i AND k) == 0`, strict comparisons, executed in place in one working\nbuffer. Padding values sink to `work[N:M]`\n",
+     "item": 5
+    }
+   ]
+  },
+  {
+   "operator": "matrix_transpose",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/matrix_transpose/contract.md",
+     "section": "Algorithm family and structure",
+     "before": "Out-of-place tiled transpose: the matrix is partitioned into rectangular\nlogical tiles; each tile is read with the input's row-major addressing and\nwritten with the output's row-major addressing at swapped coordinates. No\n",
+     "after": "Out-of-place tiled transpose: the matrix is partitioned into logical tiles\nof any dimensions (square, rectangular, or a single row or column; the tile shape\nis a mapping choice, not part of the algorithm); each tile is read with the\ninput's row-major addressing and written with the output's row-major\naddressing at swapped coordinates. No\n",
+     "item": 6
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/matrix_transpose/contract.md",
+     "section": "Permitted implementation mappings",
+     "before": "- Tile shape (square or rectangular), elements per program, grid shape and\n  traversal order, pipelining depth and vector width are free.\n",
+     "after": "- Tile shape (square, rectangular, or a single row or column), elements per\n  program, grid shape and traversal order, pipelining depth and vector width\n  are free.\n",
+     "item": 6
+    }
+   ]
+  },
+  {
+   "operator": "matrix_copy",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/matrix_copy/contract.md",
+     "section": "Required logical stages",
+     "before": "Nothing may be fused with host-side work, and no additional passes over the\ndata are allowed, because a staged or repeated copy adds a full extra read\nand write of the matrix and so changes the algorithm rather than its\nmapping. These are logical traversal counts, not a guarantee about physical\n",
+     "after": "No device work other than the copy itself may be launched by `run()`, and\nno additional passes over the data are allowed, because a staged or\nrepeated copy adds a full extra read and write of the matrix and so changes\nthe algorithm rather than its mapping. These are logical traversal counts,\nnot a guarantee about physical\n",
+     "item": 7
+    }
+   ]
+  },
+  {
+   "operator": "top_k_selection",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/top_k_selection/contract.md",
+     "section": "Required logical stages",
+     "before": "Let `K'` be the smallest power of two that is `>= k`, and let `B` be the\nblock width, with `B >= 2 * K'` (it need not be a power of two).\n",
+     "after": "Let `K'` be the smallest power of two that is `>= k`, and let `B` be the\nblock width, with `B >= 2 * K'` (it need not be a power of two). `K'` is\npart of the algorithm, not a tuning choice: it fixes the per-block candidate\nwidth and with it the candidate traffic between levels (a width below `k`\nwould break exactness; any other width changes that traffic).\n",
+     "item": 8
+    },
+    {
+     "file": "tilebench/llm/v2/contracts/data/top_k_selection/contract.md",
+     "section": "Forbidden substitutions",
+     "before": "- A per-block candidate width smaller than `k`, or a fan-in below 2 (a\n  level that does not shrink the candidate set).\n",
+     "after": "- A per-block candidate width other than `K'` (a width below `k` breaks\n  exactness; any other width changes the inter-level candidate traffic), or\n  a fan-in below 2 (a level that does not shrink the candidate set).\n",
+     "item": 8
+    }
+   ]
+  },
+  {
+   "operator": "flash_attention",
+   "changes": [
+    {
+     "file": "tilebench/llm/v2/contracts/data/flash_attention/contract.md",
+     "section": "Required logical stages",
+     "before": "   visiting them would roughly double the executed work). The visiting\n   order is free; an order in which a row can meet a fully masked tile\n   before any unmasked key needs a guard against exp(-inf - (-inf)).\n",
+     "after": "   visiting them would roughly double the executed work). The visiting\n   order is a mapping choice and no particular order is required; note only\n   that an order in which a row can meet a fully masked tile before any\n   unmasked key needs a guard against exp(-inf - (-inf)).\n",
+     "item": 9
+    }
+   ]
+  }
+ ]
+}

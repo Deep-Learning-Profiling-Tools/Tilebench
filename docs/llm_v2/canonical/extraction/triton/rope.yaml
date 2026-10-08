@@ -1,0 +1,198 @@
+operator: rope
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/rope/impl_triton.py
+    functions:
+      - name: rope_embedding
+        lines: [10, 48]
+        role: kernel
+      - name: _rope_embedding_autotuned
+        lines: [51, 62]
+        role: tuner
+      - name: run
+        lines: [65, 103]
+        role: host-driver
+      - name: get_last_config
+        lines: [106, 114]
+        role: helper
+  - path: tilebench/benchmarks/operators/rope/impl_torch.py
+    functions:
+      - name: rotate_half
+        lines: [3, 6]
+        role: helper
+      - name: run
+        lines: [8, 21]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/rope/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_rope_inputs
+        lines: [213, 221]
+        role: helper
+functional_semantics: >
+  Half-split (rotate-half, NeoX-style, non-interleaved) rotary position
+  embedding applied to q of shape (B, S, H, D) with cos and sin tables of
+  shape (S, D/2). With q1 = q[..., :D/2], q2 = q[..., D/2:], c = cos[s, :]
+  and s_ = sin[s, :] broadcast over batch and heads
+  (cos.unsqueeze(0).unsqueeze(2), lines 11-12):
+  out[..., :D/2] = q1*c - q2*s_ ; out[..., D/2:] = q2*c + q1*s_ ;
+  out = torch.cat((q1_out, q2_out), dim=-1) (impl_torch.py lines 14-21).
+  The same (cos, sin) row is used for every batch entry and every head at a
+  given sequence position. The helper rotate_half (lines 3-6) is defined
+  but not used by run. The generator fills cos and sin with torch.randn
+  (tensors.py lines 218-219), so semantically this is a generic pairwise
+  rotation with arbitrary per-position coefficients, not a true RoPE table.
+run_signature:
+  text: |
+    def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
+            block_size: int = None, autotune: bool = False):
+  positional_inputs: [q, cos, sin]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (B, S, H, D) and dtype q.dtype (a clone of q updated in place by the kernel)
+  get_last_config: present
+inputs:
+  - name: q
+    shape: "(batch_size, seq_len, n_heads, head_dim)"
+    dtype: "fp16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous row-major (generator torch.randn, tensors.py line 215)
+    mutated_in_place: false
+    notes: >
+      Cloned on entry (line 68); the kernel rotates the clone in place.
+      The row stride passed to the kernel is output.stride(1) (= H*D) and
+      rows are indexed as b*S + s, which is correct only for a contiguous
+      (B, S, H, D) layout; .contiguous() on the clone guarantees that.
+  - name: cos
+    shape: "(seq_len, head_dim // 2)"
+    dtype: same as q
+    layout: contiguous (row stride cos.stride(0) is passed)
+    mutated_in_place: false
+    notes: Indexed by (row % seq_len), i.e. by sequence position only.
+  - name: sin
+    shape: "(seq_len, head_dim // 2)"
+    dtype: same as q
+    layout: contiguous (row stride sin.stride(0) is passed)
+    mutated_in_place: false
+    notes: Indexed by (row % seq_len).
+outputs:
+  - name: output
+    shape: "(batch_size, seq_len, n_heads, head_dim)"
+    dtype: same as q
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = q.clone().contiguous() - a full copy of q that the in-place kernel then overwrites
+    lines: [68, 68]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: >
+      This is a complete read+write of the (B, S, H, D) tensor inside the
+      timed region, done solely so that the in-place kernel does not touch
+      the caller's q.
+  - description: BLOCK_SIZE = next_power_of_2(head_dim // 2); n_rows = batch * seq_len
+    lines: [69, 72]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: BLOCK_SIZE is derived from head_dim, not tuned.
+stages:
+  - id: s1
+    description: Device-to-device clone of q into the output buffer (q.clone().contiguous()).
+    kind: memcpy
+    lines: [68, 68]
+    launches: "1 (copy kernel)"
+    depends_on: []
+    fusable_with: [s2]
+    produces: output buffer holding a copy of q
+  - id: s2
+    description: >
+      rope_embedding kernel, grid = (batch*seq_len, ceil(n_heads /
+      ROPE_GROUP_SIZE)) (lines 75 and 88-89). Program (row, g) loads the
+      sin and cos rows for position row % seqlen over the first
+      half_head_dim columns (mask col_offsets < half_head_dim, other=0,
+      lines 29-32); BACKWARD_PASS is a constexpr that is always False
+      (lines 10, 34-35, 83, 96), so the sin negation branch is dead. It
+      then addresses ROPE_GROUP_SIZE consecutive heads (mask head < n_heads,
+      lines 37-38), loads Q1 = first half and Q2 = second half of each head
+      as (ROPE_GROUP_SIZE, BLOCK_SIZE) tiles cast to the sin dtype (lines
+      40-45), and stores Q1*cos - Q2*sin into the first half and
+      Q2*cos + Q1*sin into the second half of the same buffer (lines 47-48).
+    kind: kernel
+    lines: [10, 48]
+    launches: "1 (grid = batch*seq_len x ceil(n_heads/ROPE_GROUP_SIZE))"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: none (final output, in place in the clone)
+algorithm_family: >
+  Half-split (rotate-half) rotary embedding as an elementwise map over
+  (position, head, dim/2) pairs, implemented as clone-then-in-place; one
+  program per (flattened batch*seq row, head group); no reductions.
+reduction_scan_sort_structure: >
+  None. Purely elementwise; each output element depends on exactly two
+  input elements (i and i + D/2 of the same head) and one cos/sin pair.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: "none; the rotation arithmetic is performed in the dtype of the loaded sin tile (Q1/Q2 are cast with .to(sin1.dtype), lines 44-45), i.e. in fp16 for fp16 inputs - there is no fp32 upcast"
+  output_dtype: same as input (stored into the clone of q)
+  special_modes: none
+  masking_or_padding_values: "other=0 for cos, sin, Q1 and Q2 loads; masked lanes (col >= D/2 or head >= n_heads) are never stored"
+intermediate_storage: >
+  None beyond the output clone itself (allocated by q.clone() at line 68),
+  which is also the kernel's in-place working buffer.
+mutation_rules: >
+  q, cos and sin are not modified. The kernel mutates the freshly cloned
+  output in place; because a new clone is made on every call, repeated
+  calls are idempotent. The autotuner declares restore_value=["Q"]
+  (line 61) so that tuning trials on the same buffer do not compound
+  rotations.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: ROPE_GROUP_SIZE
+    role: tile size (heads per program; also sets grid dimension 1)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 51-62) over ROPE_GROUP_SIZE x num_warps x
+  num_stages, key=["seqlen", "head_dim"], warmup=1, rep=3,
+  restore_value=["Q"]. Default path launches the undecorated kernel with
+  _DEFAULT_CONFIG (lines 86-101). get_last_config() reads best_config
+  (lines 106-114). Audit only.
+implementation_freedoms_observed: >
+  Heads-per-program grouping and the grid shape, warps/stages, whether to
+  clone-then-rotate-in-place (as here) or write out-of-place directly from
+  q into a fresh output (which removes the copy), the compute dtype (the
+  source computes in the input dtype; fp32 internal math would also satisfy
+  the 5e-3 verify tolerance), and vectorisation.
+algorithm_constraints_observed: >
+  Pairing is half-split, element i with element i + D/2 within each head
+  (not interleaved pairs); cos/sin are indexed by sequence position only
+  and shared across batch and heads; the sign convention
+  (q1*c - q2*s, q2*c + q1*s); output shape and dtype equal q's; q itself
+  must not be modified; the whole (B, S, H, D) tensor is returned.
+fq_boundary:
+  bytes_expr: "2 * batch_size * seq_len * n_heads * head_dim * dtype_size"
+  flops_expr: "3 * batch_size * seq_len * n_heads * head_dim"
+  consistent_with_timed_boundary: false
+  notes: >
+    The formula counts one read of q and one write of the output. The timed
+    run() first clones q (read n + write n elements) and then the in-place
+    kernel reads and writes the clone (read n + write n), so the measured
+    region moves roughly 4n*dtype_size bytes, about twice the formula; the
+    cos/sin reads (2 * seq_len * head_dim/2 elements, re-read once per head
+    group) are also uncounted. The formula therefore assumes an
+    out-of-place kernel with no copy, which is not what run() does. The
+    flop count (6 ops per element pair = 3 per element) matches the math.
+notes_for_review:
+  - "The q.clone() inside run() is timed and roughly doubles the actual bytes moved relative to bytes_expr; an out-of-place re-implementation would look faster for non-algorithmic reasons."
+  - "For fp16 inputs the rotation is computed in fp16 (no upcast); config.yaml's verify atol/rtol 5e-3 accommodates this."
+  - "rotate_half in impl_torch.py is dead code."
+  - "BACKWARD_PASS is a constant False fed through triton.heuristics; the backward branch is unreachable."
+  - "block_size is accepted but unused; BLOCK_SIZE is derived from head_dim."
+  - "The generator's cos/sin are random, so correctness only establishes the generic pairwise rotation, not a RoPE angle table."

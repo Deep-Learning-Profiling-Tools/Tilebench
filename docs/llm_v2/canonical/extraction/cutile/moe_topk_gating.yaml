@@ -1,0 +1,224 @@
+operator: moe_topk_gating
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/moe_topk_gating/impl_cutile.py
+    functions:
+      - name: moe_topk_gating_kernel
+        lines: [15, 63]
+        role: kernel
+      - name: _next_pow2
+        lines: [69, 70]
+        role: helper
+      - name: run
+        lines: [73, 108]
+        role: host-driver
+      - name: get_last_config
+        lines: [111, 112]
+        role: helper
+  - path: tilebench/benchmarks/operators/moe_topk_gating/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 20]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_moe_topk_gating_inputs
+        lines: [224, 228]
+        role: helper
+functional_semantics: >
+  For logits of shape (M, E): (vals, idx) = torch.topk(logits, k=k, dim=-1,
+  largest=True, sorted=True) selects, per row, the k largest logits in
+  descending order together with their column indices (impl_torch.py
+  lines 7-13). weights = torch.softmax(vals.to(float32), dim=-1).to(
+  logits.dtype): a softmax over only the k selected values, computed in
+  fp32 and cast back to the logits dtype (lines 15-18). The function
+  returns the tuple (weights (M, k) in logits dtype, idx.to(int32) (M, k))
+  (line 20). No reference-side preprocessing. The generator (tensors.py
+  lines 224-228) builds every row as a random permutation of
+  linspace(-3, 3, E) cast to the case dtype, so values within a row are
+  distinct (the grid step 6/127 exceeds the bf16 spacing below 4.0) and
+  tie-breaking is not exercised.
+run_signature:
+  text: "def run(logits: torch.Tensor, M: int, E: int, k: int, block_size: int = 1024, autotune: bool = False, **kwargs):"
+  positional_inputs: [logits, M, E, k]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: "tuple (topk_weights (M, k) in logits dtype, topk_indices (M, k) int32)"
+  get_last_config: present
+inputs:
+  - name: logits
+    shape: "(M, E)"
+    dtype: "one of fp16, bf16, fp32 (case dtype)"
+    layout: "contiguous row-major (produced by advanced indexing grid[rank] in the generator); passed to ct.launch as-is"
+    mutated_in_place: false
+    notes: "E and k are fixed by case_defaults; M is swept."
+  - name: M
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "row count; used for output allocation and the grid (lines 76-77, 82)"
+  - name: E
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "expert count; used on the host to derive BLOCK_SIZE_E = next_pow2(E) (line 79) and passed to the kernel as a runtime argument that the kernel body never reads (line 20)."
+  - name: k
+    shape: scalar
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: "passed to the kernel as ConstInt K (line 21) and used to derive BLOCK_SIZE_K = next_pow2(k) (line 80)."
+outputs:
+  - name: topk_weights
+    shape: "(M, k)"
+    dtype: same as logits
+    allocated_by: run
+    aliasing: none
+  - name: topk_indices
+    shape: "(M, k)"
+    dtype: int32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate topk_weights (M, k) in logits dtype and topk_indices (M, k) int32
+    lines: [76, 77]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: two allocations per call.
+  - description: "compute compile-time tile widths block_size_e = next_pow2(E), block_size_k = next_pow2(k)"
+    lines: [79, 80]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: "derived from the problem, not tunable; both are ConstInt kernel arguments (lines 22-23)."
+stages:
+  - id: s1
+    description: >
+      Row load. One CTA per row (grid (M, 1, 1), line 82). The CTA loads
+      the (1, BLOCK_SIZE_E) tile at block index (row, 0) with
+      padding_mode NEG_INF so columns beyond E read as -inf (lines 31-36),
+      then upcasts it to fp32 (line 37). It also builds lane-index tiles
+      offsets_le (1, BLOCK_SIZE_E) and offsets_k (1, BLOCK_SIZE_K)
+      (lines 27-28) and initialises topk_vals to -inf and topk_idxs to 0
+      (lines 39-40).
+    kind: kernel
+    lines: [25, 40]
+    launches: "1 launch of M CTAs (single fused kernel; s1-s4 are phases of the same launch)"
+    depends_on: []
+    fusable_with: "already fused with s2, s3, s4"
+    produces: fp32 row tile in registers
+  - id: s2
+    description: >
+      Top-k selection by K successive argmax extractions (K is ConstInt so
+      the loop is static, lines 42-51). Round i computes
+      curr_max_val = ct.max(logits, axis=-1) and curr_max_idx =
+      ct.argmax(logits, axis=-1) (lines 43-44), writes them into slot i of
+      the (1, BLOCK_SIZE_K) tiles with ct.where(offsets_k == i, ...)
+      (lines 47-48), then removes the chosen column from further rounds by
+      setting logits to -inf where offsets_le == curr_max_idx (line 51).
+      Because each round takes the remaining maximum, the k values come
+      out in descending order, matching sorted=True.
+    kind: kernel
+    lines: [42, 51]
+    launches: "same launch as s1"
+    depends_on: [s1]
+    fusable_with: "already fused with s1, s3, s4"
+    produces: "topk_vals (1, BLOCK_SIZE_K) fp32 and topk_idxs (1, BLOCK_SIZE_K) int32 in registers"
+  - id: s3
+    description: >
+      Gating weights: numerically stable softmax over the top-k tile in
+      fp32 (lines 54-57): mx = max over the K lanes, vals = exp(vals - mx),
+      s = sum over the lanes, vals = vals / s. Unfilled slots (when
+      BLOCK_SIZE_K > k) hold -inf and contribute exp(-inf) = 0 to the sum;
+      with k = 2 there are no such slots.
+    kind: kernel
+    lines: [54, 57]
+    launches: "same launch as s1"
+    depends_on: [s2]
+    fusable_with: "already fused with s1, s2, s4"
+    produces: normalised weights (1, BLOCK_SIZE_K) fp32 in registers
+  - id: s4
+    description: >
+      Cast the weights to the dtype of topk_w_ptr (line 59) and store both
+      (1, BLOCK_SIZE_K) tiles at block index (row, 0) of topk_weights and
+      topk_indices (lines 62-63).
+    kind: kernel
+    lines: [59, 63]
+    launches: "same launch as s1"
+    depends_on: [s3]
+    fusable_with: "already fused with s1, s2, s3"
+    produces: topk_weights and topk_indices (final outputs)
+algorithm_family: >
+  Single fused per-row kernel: iterative top-k selection by K rounds of
+  max/argmax with -inf masking (a K-step selection of the largest
+  entries), followed by a max-subtracted softmax over the K selected
+  logits; one CTA per row.
+reduction_scan_sort_structure: >
+  Top-k: K sequential rounds, each a full-width max reduction and argmax
+  over the BLOCK_SIZE_E lanes of the (masked) fp32 row; outputs are in
+  descending value order by construction. The tie-breaking rule of
+  ct.argmax is not stated in the source (unclear); the generator makes
+  per-row values distinct so it is not exercised. Softmax: max over K
+  lanes, exp of the shifted values, sum over K lanes, division; all in
+  fp32. No sort network and no scan.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "fp32 for selection and softmax (row upcast at line 37; fp16/bf16 to fp32 is exact so the selection order equals the reference's order on the original dtype)"
+  output_dtype: "weights in the logits dtype (cast at line 59); indices int32"
+  special_modes: none
+  masking_or_padding_values: "NEG_INF load padding for columns E..BLOCK_SIZE_E-1 (not exercised, E is a power of two); -inf written over already-selected columns; -inf initial value for unfilled top-k slots; 0 initial value for index slots"
+intermediate_storage: >
+  None in global memory; all intermediates are register tiles.
+mutation_rules: >
+  logits is never written. Both outputs are freshly allocated on every
+  call; repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints); the only tunable
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE, an occupancy-only list (impl_cutile.py
+  line 11): ct.tune.exhaustive_search keyed on (M, E, k, dtype)
+  (lines 85-95), winner cached per shape key; kernel_with_hints memoises
+  replace_hints (line 101). Default path uses _DEFAULT_CONFIG (line 10).
+  Winner recorded in _last_autotune_config (lines 96-97). BLOCK_SIZE_E and
+  BLOCK_SIZE_K are derived from E and k, not searched. block_size is
+  accepted but unused.
+implementation_freedoms_observed: >
+  Occupancy; the selection method (iterative argmax here; any method
+  returning the k largest values in descending order with their indices is
+  equivalent on distinct inputs); rows per CTA; whether the row is kept in
+  registers across rounds; grid shape.
+algorithm_constraints_observed: >
+  Two outputs returned as a tuple in the order (weights, indices); indices
+  int32; weights are a softmax over only the k selected logits, computed
+  in fp32 and cast to the logits dtype; values ordered descending; the
+  whole row is read once; no scratch memory; no host-side preprocessing of
+  logits.
+fq_boundary:
+  bytes_expr: "M * E * dtype_size + M * k * dtype_size + M * k * 4"
+  flops_expr: "M * (4 * k * E + 3 * k)"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr = read of logits + write of the (M, k) weights in the input
+    dtype + write of the (M, k) int32 indices, exactly the traffic of the
+    single kernel; no prepacking and no preprocessing copies. flops_expr is
+    a nominal count (roughly four ops per logit per selection round for k
+    rounds, plus three per selected value for the softmax) that mirrors
+    the iterative-argmax structure of this implementation.
+notes_for_review:
+  - "E is passed to the kernel as a runtime argument but never read in the body (line 20); row width is governed solely by the ConstInt BLOCK_SIZE_E and NEG_INF padding."
+  - "ct.argmax tie-breaking is unspecified in the source; the generator's distinct per-row values hide any difference from torch.topk."
+  - "For k not a power of two the padded top-k slots stay -inf and contribute 0 to the softmax sum; stores are trimmed to k columns by the (M, k) output shape; not exercised with k = 2."

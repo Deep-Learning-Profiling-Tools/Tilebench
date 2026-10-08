@@ -1,0 +1,2983 @@
+[
+ {
+  "operator": "1d_conv",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "one device pass that ... / Stage 2 is the only device work and is a single launch.",
+    "after": "one logical pass that ... / Stage 2 is the only device work. ... Spreading the output tiles over more than one launch without such an intermediate is a mapping choice.",
+    "reason": "Both kernels use one launch (audit stages: impl_triton.py 180-204, impl_cutile.py 209-218), but an extra launch over disjoint output tiles adds no global intermediate or pass; the real invariant is no global intermediate (audit intermediate_storage: none on either side)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "It must not be split into an im2col/unfold pass plus a GEMM, a padded-copy pass plus a convolution, or a split-K partial pass plus a reduce pass.",
+    "after": "... because each of these adds a global-memory round trip of an intermediate (patch matrix, padded input or partial sums) that the canonical implicit GEMM does not have.",
+    "reason": "im2col, padded copy and split-K each materialise a global intermediate; audit stages/intermediate_storage: neither kernel has one."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "within a chunk the product is a tensor-core (or equivalent) matrix multiply.",
+    "after": "... matrix multiply (this is what makes it an implicit GEMM rather than a direct multiply-accumulate convolution).",
+    "reason": "Audit reduction_scan_sort: chunks folded by an MMA primitive on both sides; this defines the implicit-GEMM family."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "No split-K, no atomics, no partial-sum scratch.",
+    "after": "No split-K, no atomics, no partial-sum scratch, because splitting the reduction would combine partial sums through global memory, a different reduction structure.",
+    "reason": "Audit reduction_scan_sort: one sequential fp32 accumulator over the full reduction on both sides; split-K changes the reduction structure."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. It must not cast, ...",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. `run()` must not cast, ... (rest unchanged)",
+    "reason": "Host allocation/metadata is not GPU time under Proton device timing; the substantive no-cast/no-im2col/no-cache rules are kept verbatim."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles (or the groups) are spread, provided no intermediate is written to global memory and every output element is still produced by one full-reduction accumulator.",
+    "reason": "Launch count is a mapping coincidence of the two kernels once the no-intermediate invariant is stated."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Materialising im2col/unfold, a Toeplitz matrix, or a padded copy of the input. / Split-K with a second reduce pass, or atomic accumulation into the output.",
+    "after": "... (each adds a global-memory intermediate that the implicit GEMM avoids). / ... (partial sums would round-trip through global memory instead of staying in one on-chip accumulator).",
+    "reason": "Both are algorithm-family invariants (global intermediates, reduction structure); only the reason clause was added."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[implicit_gemm_conv]",
+    "before": "One kernel launch: per group, ...",
+    "after": "One logical pass with no global-memory intermediate (no im2col, padded copy or split-K partials; the output tiles may be spread over several launches): per group, ...",
+    "reason": "Description encoded the relaxed single-launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: scalar metadata, the output allocation, optional zero-copy views and the single implicit-GEMM kernel. ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the implicit-GEMM kernel launch(es)); host-side scalar metadata, the output allocation call and zero-copy views are not GPU time. ...",
+    "reason": "Class 4 alignment; includes_preprocessing unchanged."
+   }
+  ],
+  "kept_unchanged_notes": "All forbidden_substitutions/required_evidence rules enforce S or A (library conv/GEMM, im2col, padded copy or zero-filled buffer, atomics as split-K evidence, downcast, cross-call cache, MMA primitive, fp32 accumulator); none enforced the single launch, so none was removed. Out-of-range masking text kept: the declared shape has padding=1, so padding-region masking is always needed, and edge-lane masking applies wherever the chosen tile does not divide the reduction or channel extents. The metric-formula sentence about cache re-reads of overlapping windows is not a load-count restriction and was left as is."
+ },
+ {
+  "operator": "2d_conv",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "The benchmark uses `W == H`, but the implementation must not assume it.",
+    "after": "The task's declared shape has `W == H`; supporting shapes other than the declared one is not required.",
+    "reason": "The task fixes one (square) shape; generality beyond it is not required. Edited although the section is on the do-not-change list because it is a pure any-shape leftover (flagged)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "one device pass that ... / Stage 2 is the only device work and is a single launch.",
+    "after": "one logical pass that ... / Stage 2 is the only device work. ... Spreading the output tiles over more than one launch without such an intermediate is a mapping choice.",
+    "reason": "Both kernels use one launch (audit stages: impl_triton.py 199-223, impl_cutile.py 228-237), but an extra launch over disjoint output tiles adds no global intermediate or pass; the real invariant is no global intermediate (audit intermediate_storage: none on either side)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "It must not be split into an im2col/unfold pass plus a GEMM, a padded-copy pass plus a convolution, or a split-K partial pass plus a reduce pass.",
+    "after": "... because each of these adds a global-memory round trip of an intermediate (patch matrix, padded input or partial sums) that the canonical implicit GEMM does not have.",
+    "reason": "im2col, padded copy and split-K each materialise a global intermediate; audit stages/intermediate_storage: neither kernel has one."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "within a chunk the product is a tensor-core (or equivalent) matrix multiply.",
+    "after": "... matrix multiply (this is what makes it an implicit GEMM rather than a direct multiply-accumulate convolution).",
+    "reason": "Audit reduction_scan_sort: chunks folded by an MMA primitive on both sides; this defines the implicit-GEMM family."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "No split-K, no atomics, no partial-sum scratch.",
+    "after": "No split-K, no atomics, no partial-sum scratch, because splitting the reduction would combine partial sums through global memory, a different reduction structure.",
+    "reason": "Audit reduction_scan_sort: one sequential fp32 accumulator over the full reduction on both sides; split-K changes the reduction structure."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. It must not cast, ...",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. `run()` must not cast, ... (rest unchanged)",
+    "reason": "Host allocation/metadata is not GPU time under Proton device timing; the substantive no-cast/no-im2col/no-cache rules are kept verbatim."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles (or the groups) are spread, provided no intermediate is written to global memory and every output element is still produced by one full-reduction accumulator.",
+    "reason": "Launch count is a mapping coincidence of the two kernels once the no-intermediate invariant is stated."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Materialising im2col/unfold, a Toeplitz matrix, or a padded copy of the input. / Split-K with a second reduce pass, or atomic accumulation into the output.",
+    "after": "... (each adds a global-memory intermediate that the implicit GEMM avoids). / ... (partial sums would round-trip through global memory instead of staying in one on-chip accumulator).",
+    "reason": "Both are algorithm-family invariants (global intermediates, reduction structure); only the reason clause was added."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[implicit_gemm_conv]",
+    "before": "One kernel launch: per group, ...",
+    "after": "One logical pass with no global-memory intermediate (no im2col, padded copy or split-K partials; the output tiles may be spread over several launches): per group, ...",
+    "reason": "Description encoded the relaxed single-launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: scalar metadata, the output allocation, optional zero-copy views and the single implicit-GEMM kernel. ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the implicit-GEMM kernel launch(es)); host-side scalar metadata, the output allocation call and zero-copy views are not GPU time. ...",
+    "reason": "Class 4 alignment; includes_preprocessing unchanged."
+   }
+  ],
+  "kept_unchanged_notes": "All forbidden_substitutions/required_evidence rules enforce S or A (library conv/GEMM, im2col, padded copy or zero-filled buffer, atomics as split-K evidence, downcast, cross-call cache, MMA primitive, fp32 accumulator); none enforced the single launch, so none was removed. Out-of-range masking text kept: the declared shape has padding=1, so padding-region masking is always needed, and edge-lane masking applies wherever the chosen tile does not divide the reduction or channel extents. The metric-formula sentence about cache re-reads of overlapping windows is not a load-count restriction and was left as is."
+ },
+ {
+  "operator": "3d_conv",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "The benchmark uses `W == H`, but the implementation must not assume it.",
+    "after": "The task's declared shape has `W == H`; supporting shapes other than the declared one is not required.",
+    "reason": "The task fixes one (square) shape; generality beyond it is not required. Edited although the section is on the do-not-change list because it is a pure any-shape leftover (flagged)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "one device pass that ... / Stage 2 is the only device work and is a single launch.",
+    "after": "one logical pass that ... / Stage 2 is the only device work. ... Spreading the output tiles over more than one launch without such an intermediate is a mapping choice.",
+    "reason": "Both kernels use one launch (audit stages: impl_triton.py 223-247, impl_cutile.py 246-255), but an extra launch over disjoint output tiles adds no global intermediate or pass; the real invariant is no global intermediate (audit intermediate_storage: none on either side)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "It must not be split into an im2col/unfold pass plus a GEMM, a padded-copy pass plus a convolution, or a split-K partial pass plus a reduce pass.",
+    "after": "... because each of these adds a global-memory round trip of an intermediate (patch matrix, padded input or partial sums) that the canonical implicit GEMM does not have.",
+    "reason": "im2col, padded copy and split-K each materialise a global intermediate; audit stages/intermediate_storage: neither kernel has one."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "within a chunk the product is a tensor-core (or equivalent) matrix multiply.",
+    "after": "... matrix multiply (this is what makes it an implicit GEMM rather than a direct multiply-accumulate convolution).",
+    "reason": "Audit reduction_scan_sort: chunks folded by an MMA primitive on both sides; this defines the implicit-GEMM family."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "No split-K, no atomics, no partial-sum scratch.",
+    "after": "No split-K, no atomics, no partial-sum scratch, because splitting the reduction would combine partial sums through global memory, a different reduction structure.",
+    "reason": "Audit reduction_scan_sort: one sequential fp32 accumulator over the full reduction on both sides; split-K changes the reduction structure."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. It must not cast, ...",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. `run()` must not cast, ... (rest unchanged)",
+    "reason": "Host allocation/metadata is not GPU time under Proton device timing; the substantive no-cast/no-im2col/no-cache rules are kept verbatim."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles (or the groups) are spread, provided no intermediate is written to global memory and every output element is still produced by one full-reduction accumulator.",
+    "reason": "Launch count is a mapping coincidence of the two kernels once the no-intermediate invariant is stated."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Materialising im2col/unfold, a Toeplitz matrix, or a padded copy of the input. / Split-K with a second reduce pass, or atomic accumulation into the output.",
+    "after": "... (each adds a global-memory intermediate that the implicit GEMM avoids). / ... (partial sums would round-trip through global memory instead of staying in one on-chip accumulator).",
+    "reason": "Both are algorithm-family invariants (global intermediates, reduction structure); only the reason clause was added."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[implicit_gemm_conv]",
+    "before": "One kernel launch: per group, ...",
+    "after": "One logical pass with no global-memory intermediate (no im2col, padded copy or split-K partials; the output tiles may be spread over several launches): per group, ...",
+    "reason": "Description encoded the relaxed single-launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: scalar metadata, the output allocation, optional zero-copy views and the single implicit-GEMM kernel. ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the implicit-GEMM kernel launch(es)); host-side scalar metadata, the output allocation call and zero-copy views are not GPU time. ...",
+    "reason": "Class 4 alignment; includes_preprocessing unchanged."
+   }
+  ],
+  "kept_unchanged_notes": "All forbidden_substitutions/required_evidence rules enforce S or A (library conv/GEMM, im2col, padded copy or zero-filled buffer, atomics as split-K evidence, downcast, cross-call cache, MMA primitive, fp32 accumulator); none enforced the single launch, so none was removed. Out-of-range masking text kept: the declared shape has padding=1, so padding-region masking is always needed, and edge-lane masking applies wherever the chosen tile does not divide the reduction or channel extents. The metric-formula sentence about cache re-reads of overlapping windows is not a load-count restriction and was left as is."
+ },
+ {
+  "operator": "2d_max_pooling",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "The benchmark uses `W == H`; the implementation must not assume it.",
+    "after": "The task's declared shape has `W == H`; supporting shapes other than the declared one is not required.",
+    "reason": "Fixed-shape task; edited in a do-not-change section because it is a pure any-shape leftover (flagged)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "one device pass ... / Stage 2 is the only device work and is a single launch.",
+    "after": "one logical pass ... / Stage 2 is the only device work. ... Spreading the output tiles over more than one launch, each reading the input directly and writing final values, is a mapping choice.",
+    "reason": "Audit stages: one launch over (N*C, ceil(H_out/rows), ceil(W_out/cols)) on both sides (impl_triton.py 73-102, impl_cutile.py 92-100); a further launch over disjoint tiles adds no intermediate."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No pass may materialise a padded copy ... second pass over partial results.",
+    "after": "... because each of these adds a global-memory intermediate and an extra logical pass that the direct stencil does not have.",
+    "reason": "Audit intermediate_storage: none on either side; these define the direct-stencil family."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "Each program owns a tile of one or more output planes, initialises a running tile to `-inf`, ...",
+    "after": "Each output tile keeps a running maximum that starts from `-inf` (the identity of the maximum), ...; how many output rows, columns or planes one program covers is a mapping choice.",
+    "reason": "Plane/tile-per-program is a grid-shape coincidence (both use a 3-axis grid with one plane per program, impl_triton.py 22-27)."
+   },
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "stores the tile with bounds masking.",
+    "after": "is stored with bounds masking wherever the tile overhangs the output",
+    "reason": "Masking is needed only where the chosen tile does not divide the declared H_out/W_out."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. It must not pad, ...",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. `run()` must not pad, ... (rest unchanged)",
+    "reason": "Host H_out arithmetic/allocation/views are not GPU time."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles are spread, provided each launch reads the input directly and writes final output values.",
+    "reason": "Launch count is not the invariant."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "`unfold` / im2col-style window materialisation, ... or any padded copy of the input. / A multi-pass scheme (for example a row-wise max followed by a column-wise max written through scratch).",
+    "after": "... (each materialises an intermediate in global memory ...). / A multi-pass scheme that produces the output from partial results kept in global memory (...), because it adds a global round trip and a second logical pass over the data.",
+    "reason": "Reason clauses added; the multi-pass ban is narrowed to its real invariant (partials in global memory), not to launch count."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[windowed_max]",
+    "before": "One kernel launch: each output element ...",
+    "after": "One logical pass with no global-memory intermediate (the output tiles may be spread over several launches): each output element ...",
+    "reason": "Encoded the relaxed single launch."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: H_out/W_out arithmetic, the output allocation, ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the stencil kernel launch(es)); host-side H_out/W_out arithmetic, the output allocation call and zero-copy views are not GPU time. ...",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "All forbidden/evidence rules enforce S or A (library pooling, unfold, host max, padded/initialised copy, host dtype conversion, in-kernel max primitive, -inf identity); none removed."
+ },
+ {
+  "operator": "gaussian_blur",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Both stages execute in ONE launch;",
+    "after": "Both stages belong to one logical pass: ... Spreading the output tiles over more than one launch, each producing final values directly from the image, is a mapping choice.",
+    "reason": "Audit stages: one kernel over a 2-D tile grid on both sides; launch count is not what makes the direct stencil."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "there is no intermediate buffer, no separate padding pass and no second pass over the image.",
+    "after": "... because each of these would add a global-memory round trip that the direct stencil does not have.",
+    "reason": "Audit intermediate_storage: none on either side."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "Each output element is produced by exactly one program.",
+    "after": "The whole tap sum of an output element is accumulated within one program (no partial sums combined across programs), because the canonical algorithm keeps it in a single on-chip fp32 accumulator.",
+    "reason": "Audit reduction_scan_sort/dependencies: sequential per-element fp32 tap sum, no cross-program dependency; restated as the real invariant (no cross-program partial sums)."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: the element-count guard, the output allocation, metadata-only 2-D views of the flat input/output, and the launch.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. Besides launching the stencil, run() performs only host-side work: the element-count guard, the output allocation and metadata-only 2-D views ...",
+    "reason": "Host guard/allocation/views are not GPU time; substantive no-padding/no-cast/no-cache rules kept."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Preprocessing and timing boundary",
+    "before": "The kernel weights are read inside the launch",
+    "after": "The kernel weights are read on the device by the stencil computation",
+    "reason": "Removes the implicit single-launch wording; the no-host-pre-expansion rule is kept."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles are spread, as long as each output element is produced in full by one program directly from the image.",
+    "reason": "Launch count is a mapping."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "FFT-based filtering. / im2col / unfold followed by a matrix product; / Host-side zero-padding of the image or any intermediate image buffer.",
+    "after": "... (a different algorithm family). / ... (materialises the patch matrix in global memory); / ... (a global-memory round trip that the direct stencil does not have).",
+    "reason": "Reason clauses for A restrictions."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[s2]",
+    "before": "...; one launch, no intermediate, no host padding.",
+    "after": "...; one logical pass (the output tiles may be spread over several launches, each tap sum stays within one program), no intermediate, no host padding.",
+    "reason": "Encoded the relaxed single launch."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "The timed run() contains the element-count guard, the output allocation, metadata-only 2-D views and one launch. ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the stencil launch(es)); the element-count guard, the output allocation call and metadata-only 2-D views are host-side work and not GPU time. ...",
+    "reason": "Class 4; includes_preprocessing kept false."
+   }
+  ],
+  "kept_unchanged_notes": "Open review item (per-tap product precision) and Precision section untouched. Functional semantics sentence 'the implementation must nevertheless use the kernel_rows / kernel_cols / input_rows / input_cols it is given' left unchanged (do-not-change section; not contradictory if read as 'use the declared values', but could be read as an any-shape requirement). All forbidden/evidence rules enforce S or A; none removed."
+ },
+ {
+  "operator": "jacobi_stencil_2d",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "The benchmark uses square grids, but the implementation must not assume cols == rows.",
+    "after": "The task's declared shape is square (cols == rows); supporting shapes other than the declared one is not required.",
+    "reason": "Fixed-shape task; edited in a do-not-change section because it is a pure any-shape leftover (flagged)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "The boundary copy and the interior update must come from the same device pass:",
+    "after": "The boundary copy and the interior update belong to the same logical pass, in which every element of OUT is written once from IN: ... Writing the boundary and the interior positions in one launch or in separate launches over disjoint positions is a mapping choice.",
+    "reason": "Audit stages: one launch with tl.where/ct.where boundary select on both sides; a separate boundary launch over disjoint positions adds no intermediate or traversal."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "a host-side copy of IN followed by an interior-only kernel is not permitted.",
+    "after": "a copy of the whole of IN into OUT (on the host or by a device pass) followed by an interior-only kernel is not permitted, because it adds a second traversal of the grid that the canonical sweep does not have.",
+    "reason": "The original 'same device pass' already excluded a device copy; reason stated as a logical-traversal invariant."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number.",
+    "reason": "Allocation is host work; halo/clone/cache rules kept verbatim."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "select-based versus two-region writes of the boundary inside the kernel;",
+    "after": "select-based versus two-region writes of the boundary, in the same launch as the interior or in a separate launch over the disjoint boundary positions;",
+    "reason": "Launch count is a mapping."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "IN.clone(), torch.clone or copy_ to obtain the boundary;",
+    "after": "IN.clone(), torch.clone or copy_ to obtain the boundary (a second full traversal of the grid);",
+    "reason": "Reason clause."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[stencil_sweep]",
+    "before": "One device pass: interior = ..., boundary = centre copied; OUT fully written by the kernel.",
+    "after": "One logical sweep in which every OUT element is written once from IN: ...; boundary and interior may be written by one launch or by separate launches over disjoint positions, but not by a full copy of IN followed by an interior update.",
+    "reason": "Encoded the relaxed same-launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Output allocation is the only host work and is timed; ...",
+    "after": "The GPU time of all device work launched by run() is counted (here only the sweep launch(es)); the output allocation call is host-side work and not GPU time. ...",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "clone/copy_ rule kept (enforces the A no-second-traversal invariant); 'one launch suffices' is a permission, not a restriction. I/O sentence 'written by the implementation's own device pass' left unchanged (read as logical pass)."
+ },
+ {
+  "operator": "batched_matmul",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "The benchmark uses `N == K == M`, but the implementation must not assume it, and `M`, `N`, `K` need not be multiples of any tile extent.",
+    "after": "The task's declared shape has `N == K == M`; supporting shapes other than the declared one is not required. Edge handling is required wherever that shape is not a multiple of the chosen tile.",
+    "reason": "Fixed shape (M=N=K=640, BATCH=32 at the largest case); edited in a do-not-change section because it is a pure any-shape leftover (flagged)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "one device pass ... / Stage 2 is the only device work and is a single launch.",
+    "after": "one logical pass ... / ... Spreading the output tiles over more than one launch (for example one launch per batch slice) without any intermediate is a mapping choice.",
+    "reason": "Audit stages: one GEMM launch on both sides (impl_triton.py 139-162, impl_cutile.py 118-128); the invariant is no split-K and no repack pass, not the launch count."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages / Algorithm family / Forbidden substitutions",
+    "before": "There is no split-K pass followed by a reduction pass / No split-K, no atomics, no partial-sum scratch. / Split-K with a separate reduce pass, or atomic accumulation into the output.",
+    "after": "... (partial sums would round-trip through global memory instead of staying in one on-chip accumulator) / ..., because splitting `K` would combine partial sums through global memory, a different reduction structure.",
+    "reason": "Audit reduction_scan_sort: K reduced sequentially into one fp32 accumulator on both sides."
+   },
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "Edge tiles must be handled by zero-filled loads ... ; tile-multiple shapes must not be assumed.",
+    "after": "Wherever the chosen tile does not divide the task's `M`, `N` or `K`, edge tiles must be handled by zero-filled loads ...; supporting shapes other than the task's declared shape is not required.",
+    "reason": "Masking kept where the declared shape needs it (640 is not a multiple of every tile)."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed, on every call. The provisional rule, ...",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. The provisional rule, ... (verbatim)",
+    "reason": "Host views/descriptors/allocation are not GPU time; provisional no-repack/no-cache rule unchanged."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "- The number of launches over which the output tiles are spread (for example one launch per batch slice), provided no intermediate is written to global memory.",
+    "reason": "Launch count is a mapping."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[batched_gemm]",
+    "before": "One kernel launch: each (batch, M-tile, N-tile) output tile ...",
+    "after": "One logical pass with no global-memory intermediate (no split-K partials, no repacked operand; the output tiles may be spread over several launches): each ...",
+    "reason": "Encoded the relaxed single launch."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: zero-copy views, host descriptor/metadata construction, the output allocation and the single GEMM kernel. ... it must be inside the timed call.",
+    "after": "The GPU time of all device work launched by run() is counted (here only the GEMM launch(es)); zero-copy views, host descriptor/metadata construction and the output allocation call are host-side work and not GPU time. Provisional rule ...: ... it must be device work inside run() on every call, where its GPU time is counted.",
+    "reason": "Class 4; provisional rule meaning unchanged."
+   }
+  ],
+  "kept_unchanged_notes": "Open review item and provisional no-repack/no-cache rule unchanged in meaning; host transpose, cache, atomics and torch.zeros rules kept (they enforce the provisional rule or the A no-split-K invariant)."
+ },
+ {
+  "operator": "matmul_fp32_fp16_fp8",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "Tails beyond M, N or K must contribute 0 and must never be stored; the benchmark shapes happen to be tile-aligned, but correctness must not depend on it.",
+    "after": "Wherever the chosen tile does not divide the task's M, N or K, tails beyond them must contribute 0 and must never be stored; supporting shapes other than the task's declared shape is not required.",
+    "reason": "Fixed shape (M=N=4096, K=20480 at the largest case); any-shape requirement replaced."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "(section started with the repack rule) / ... and is timed. / The output allocation is timed.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. / ... and its device time is counted. / (sentence removed)",
+    "reason": "Output allocation is host work; the per-call uncached repack rule (provisional) is unchanged in meaning."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "...; any repack of B must be per call inside run() (timed) and never cached; output allocation timed; no prepacked inputs.",
+    "after": "The GPU time of all device work launched by run() is counted; the output allocation call and descriptor/metadata construction are host-side work and not GPU time. ...; any repack of B must be per call inside run() (its device time counted) and never cached; no prepacked inputs.",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "No launch-count lock existed ('One launch suffices' is a permission; split-K with deterministic combine already permitted). Open review items unchanged. All rules enforce S, A or the provisional per-call repack rule; none removed."
+ },
+ {
+  "operator": "matmul_int8",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "for each chunk load the packed bytes once,",
+    "after": "for each chunk load the packed bytes once (one logical load per chunk and output tile),",
+    "reason": "Logical-load phrasing."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no unpacked copy of B may be materialised in global memory.",
+    "after": "... because a separate decode pass would write and re-read a four times larger unpacked matrix that the canonical in-mainloop decode never materialises.",
+    "reason": "Audit stages/intermediate_storage: decode in registers inside the GEMM loop on both sides (impl_triton.py 68-77, impl_cutile.py 50-66)."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "Each packed byte is read from global memory once per output tile and reused for all four fields.",
+    "after": "Each packed byte is loaded once per output tile in the algorithm's logical traversal of B and reused for all four fields; this counts logical loads, not physical DRAM transactions, which caches, hardware copy engines and the compiler may change.",
+    "reason": "Both kernels load the packed tile once per j and decode four fields from it (fields-inner); kept as a logical-traversal statement."
+   },
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "Tail handling: ... Implementations must be correct for every benchmark shape (K a multiple of 1024 with M = N fixed); see the open review item on general K.",
+    "after": "Tail handling, wherever the chosen tile does not divide K_b, N or M of the task's shape: ... Implementations must be correct for the task's declared shape (K is a multiple of 1024 in every task of this operator); supporting shapes other than the declared one is not required; see the open review item on general K.",
+    "reason": "One shape per task; the -1 decode tail masking is kept conditional on the declared shape; open review item referenced unchanged."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "... and is timed. / The output allocation is timed.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. / ... and its device time is counted. / (sentence removed)",
+    "reason": "Class 4; provisional per-call repack rule unchanged."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "...; output allocation timed; no prepacked inputs.",
+    "after": "The GPU time of all device work launched by run() is counted; the output allocation call and descriptor/metadata construction are host-side work and not GPU time. ...",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Open review items unchanged. Permitted mapping 'fields-inner versus fields-outer loop nesting' left unchanged although fields-outer nesting would reload each packed chunk four times per output tile, which conflicts with the once-per-tile reuse statement (flagged for the owner). All rules kept (host decode, transpose-cache, float evaluation, decode evidence, int32 evidence enforce S/A/provisional)."
+ },
+ {
+  "operator": "streamk_matmul",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "(the leading programs take the remainder).",
+    "after": "(the leading programs take the remainder; which programs take it is a mapping choice).",
+    "reason": "Remainder assignment does not change total work or communication; both kernels happen to give it to the leading programs (audit stages: Triton 101-107, cuTile 65-71)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "the zero-filled `Cacc` is the only combination target, and a tile cut across several programs is completed purely by the atomic adds.",
+    "after": "... because a workspace or flag array would add global-memory intermediates and inter-program synchronisation that the canonical atomic-add combination does not have.",
+    "reason": "Audit reduction_scan_sort: fp32 atomic adds into zeroed c on both sides; no workspace."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "the remaining `T - S` tiles, one tile per program,",
+    "after": "the remaining `T - S` tiles, each reduced over the full K range by a single program ... (whether a program handles one such tile or several in turn is a mapping choice).",
+    "reason": "Grid shape of the data-parallel region (blocking_tiles programs on both sides) is a mapping; the invariant is full-K reduction by one program with plain stores."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Inside `run()` and timed, on every call: the device SM-count query, the output allocation, the zero-fill of `Cacc` ..., any descriptor or metadata construction, both launches, and the final cast",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. Device work inside `run()` on every call, all of it counted: the zero-fill of `Cacc` ..., the Stream-K and data-parallel launch or launches, and the final cast ... The device SM-count query, the output allocation and any descriptor or metadata construction are host-side work inside `run()` and are not GPU time.",
+    "reason": "SM query/allocation/descriptors are host work; zero-fill and cast are device work and stay counted; provisional repack rule unchanged."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no entry)",
+    "after": "- Whether each data-parallel program handles one tile or several tiles in turn; which programs of the Stream-K wave take the remainder of the even split.",
+    "reason": "Relaxed M items listed as mappings."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "A pure data-parallel GEMM ... or a split-K scheme ... / Combining Stream-K segments through semaphores, flags or an owner program ...",
+    "after": "... (each changes the work decomposition and cross-program communication that define the hybrid Stream-K algorithm). / ... (this adds a partials workspace and inter-program synchronisation in global memory that the canonical combination does not have).",
+    "reason": "Reason clauses for A invariants."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages[data_parallel_tiles]",
+    "before": "The remaining full tiles, one per program, full-K fp32 accumulation ...",
+    "after": "The remaining full tiles, each reduced over the full K range by a single program (one or several tiles per program), fp32 accumulation ...",
+    "reason": "Encoded the relaxed one-tile-per-program restriction."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed on every call: SM-count query, output allocation, zero-fill ..., both launches and the final half-dtype cast. ... per-call, timed work",
+    "after": "The GPU time of all device work launched by run() on every call is counted: the zero-fill ..., any operand re-layout copy, the Stream-K and data-parallel launch(es) and the final half-dtype cast. The SM-count query, the output allocation call and descriptor/metadata construction are host-side work and not GPU time. ... per-call device work whose time is counted",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Kept as A: persistent wave of P = SM-count programs, the region rule (T mod P plus one wave), equal contiguous iteration ranges, fp32 atomic-add combination into the per-call zero-filled Cacc, separate fp32 Cacc plus one final cast for half dtypes (audit stages: identical partition and four-stage pipeline). Semaphore/flag/workspace, SM-count, partition and zero-fill evidence rules kept. Open review items unchanged."
+ },
+ {
+  "operator": "linear_self_attention",
+  "changes": [
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "S and Z must be completely reduced over all M rows before stage 5 consumes them (no streaming or online approximation of the state).",
+    "after": "... (no streaming or online approximation of the state), because every non-causal output row depends on the state summed over all rows.",
+    "reason": "Dependency-structure invariant; audit dependencies identical on both sides."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: allocation of O and of any scratch, any layout transform ... and every launch.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes on every call ... is not part of the measured number. Any layout transform ... and every launch are device work inside the entry point and are counted; the allocation of O and of any scratch is host-side work.",
+    "reason": "Allocation is host work; transposed copies are device work and stay counted."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "the number of launches (anywhere from two to eight).",
+    "after": "the number of launches, provided S and Z are completely reduced over all M rows before stage 5 consumes them.",
+    "reason": "Audit stages (mapping-only): 8 vs 5 launches; the 2..8 range came from the two kernels, the invariant is the complete reduction of S and Z before the output stage."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "All allocations (O and scratch), any in-run transposed copies and every launch are inside run() and timed; ...",
+    "after": "The GPU time of all device work launched by run() is counted (every kernel launch and any in-run transposed copy); the allocation calls for O and scratch are host-side work and not GPU time. ...",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Class 2 not applicable (no online softmax rescaling). All forbidden/evidence rules enforce S or A (library GEMM/attention, host phi/colsum, precision flag); none removed. Edge masking for M (10000 at the largest case) is required by the declared shape and kept."
+ },
+ {
+  "operator": "flash_attention",
+  "changes": [
+   {
+    "class": "2",
+    "section": "Required logical stages",
+    "before": "initialises a running row-max m = -inf",
+    "after": "row-max m, either -inf or taken from the first visited key tile",
+    "reason": "Class 2: a literal -inf initial state is not part of the algorithm."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Streaming key/value loop, in ascending key order",
+    "after": "each visited once ... The visiting order is free; ... needs a guard against exp(-inf - (-inf))",
+    "reason": "audit reduction_scan_sort is mapping-only; key-tile order only changes fp32 rounding (both kernels ascend: triton L47-67, cutile L65-122)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "skipped by the loop bound when causal",
+    "after": "not visited when causal, because visiting them would roughly double the executed work",
+    "reason": "Skipping masked tiles changes total work (audit fq_boundary: both skip, triton L47, cutile L72); the loop-bound mechanism is a mapping."
+   },
+   {
+    "class": "2",
+    "section": "Required logical stages",
+    "before": "(none)",
+    "after": "Each tile subtracts the running maximum known at that point ... may degenerate to a single tile",
+    "reason": "Class 2: intermediate tiles use the running max; holding the whole key range on chip is permitted."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "All three stages execute in ONE launch per call.",
+    "after": "The running statistics and the accumulator stay on chip ... The number of kernel launches is not otherwise fixed.",
+    "reason": "Real invariant is no global intermediate (audit intermediate_storage: none on either side, triton L38-40, cutile L55-57)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "a split-key reduction with a global combine are not permitted",
+    "after": "... because each would round-trip scores, statistics or partial outputs through global memory",
+    "reason": "Split-KV adds a global intermediate and cross-program communication (audit dependencies: no cross-program dependency)."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "Stage 2 must be a single pass over K/V per query block",
+    "after": "single logical pass ... not physical DRAM transactions",
+    "reason": "Class 3: logical traversal, not a DRAM-transaction count."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "a sequential combine over key tiles in ascending order",
+    "after": "a combine over the visited key tiles inside the program that owns the query block ... key-tile order free",
+    "reason": "Order is a mapping coincidence; single-owner combine is the A part."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "No sort, no scan, no cross-program reduction. Causal tiles ... are skipped",
+    "after": "(a split-key combine would add a global round trip ...) ... (they would add about half the work)",
+    "reason": "Reason clauses for kept A invariants."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: shape reads, host scalars ..., the output allocation, ... and the launch.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(none)",
+    "after": "key-tile order / single tile; spreading (batch, head, query block) work over programs and launches",
+    "reason": "Relaxed M items moved into permitted mappings."
+   },
+   {
+    "class": "2",
+    "section": "Forbidden substitutions",
+    "before": "a two-pass (max first, then exponentials) softmax over the full key axis",
+    "after": "a two-pass softmax that traverses K twice",
+    "reason": "Max-then-exp over values held on chip is not a second pass."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Forbidden substitutions",
+    "before": "split-key partial results combined in a second launch",
+    "after": "combined across programs (in a second launch or otherwise). Each adds a global round trip ...",
+    "reason": "Invariant is the cross-program combine, not the launch count."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Forbidden substitutions",
+    "before": "(the loop bound must skip them)",
+    "after": "(they must be skipped, for example by the loop bound)",
+    "reason": "Skipping is A; the loop-bound mechanism is a mapping (cuTile uses a trip count, Triton a loop bound)."
+   },
+   {
+    "class": "2",
+    "section": "Forbidden substitutions",
+    "before": "omitting the running rescale",
+    "after": "omitting the running rescale when the key range is processed in more than one tile",
+    "reason": "No rescale is needed in the single-tile degenerate case."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s1 'program: query tile loaded once; running max = -inf'",
+    "after": "owning program; running max (-inf or the first visited tile's max)",
+    "reason": "Align with class 2/3 wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s2 'Single ascending pass ...'",
+    "after": "'Single logical pass ... any order ... rescale when more than one tile'",
+    "reason": "Align with relaxed order and class 2/3."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s3 'the whole operator is one launch with no global intermediate'",
+    "after": "'no global intermediate ... no cross-program combine; the launch count is not fixed'",
+    "reason": "Launch count relaxed as M."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'The timed run() contains only host scalars, the output allocation ...'",
+    "after": "'Measured: GPU time of all device work ...; host scalars, allocation call, descriptors are host work'",
+    "reason": "Class 4 alignment; includes_preprocessing unchanged."
+   }
+  ]
+ },
+ {
+  "operator": "flash_decode",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "1. Per (batch, head) program:",
+    "after": "1. For each (batch, head):",
+    "reason": "Program mapping is already free in Permitted mappings (several per program, head_dim split)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "single online pass over splits in ascending index order",
+    "after": "single online pass over the splits ... may be visited in any order",
+    "reason": "audit reduction_scan_sort: order only changes fp32 summation order."
+   },
+   {
+    "class": "2",
+    "section": "Required logical stages",
+    "before": "(none)",
+    "after": "in chunks: each chunk subtracts the running maximum ...; if the whole split axis is held on chip ... no -inf initial state",
+    "reason": "Class 2 degeneration and chunked running max."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "All three stages execute in ONE launch; ... no second launch.",
+    "after": "The weights and running statistics never round-trip through global memory ... The number of kernel launches is not otherwise fixed.",
+    "reason": "Invariant is no global intermediate (audit intermediate_storage: none)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no cross-program reduction",
+    "after": "not reduced across programs, because ... a cross-program combine would add a global intermediate",
+    "reason": "Reason clause; cross-program combine changes communication."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "reduced sequentially per (batch, head) program (ascending order for the online form)",
+    "after": "reduced inside one program (in any order, streamed or held whole)",
+    "reason": "Order and streaming are mapping choices; single-program reduction is A."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: the host .item() ..., shape reads, the output allocation ..., and the launch.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Online single pass versus two-pass max-then-sum",
+    "after": "+ visiting order; chunked with rescaling or whole split axis on chip; grouping (batch, head) into programs and launches",
+    "reason": "Relaxed M items listed as mappings."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Forbidden substitutions",
+    "before": "any second launch or global scratch",
+    "after": "any other global scratch (for example partial combines ... merged by a second launch)",
+    "reason": "Invariant is the global intermediate, not the launch count."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s1 'Per (batch, head) program'",
+    "after": "'Per (batch, head)'",
+    "reason": "Program mapping relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s2 'online running-max recurrence in ascending order'",
+    "after": "'in any order or in chunks ... or held on chip'",
+    "reason": "Order relaxed; class 2."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s3 'one launch, no global intermediate'",
+    "after": "'no global intermediate and no cross-program combine over splits'",
+    "reason": "Launch count relaxed as M."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'The timed run() contains a host .item() ...'",
+    "after": "'Measured: GPU time of all device work ...; .item(), allocation, view are host work'",
+    "reason": "Class 4."
+   }
+  ]
+ },
+ {
+  "operator": "block_sparse_attention",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "one device pass",
+    "after": "one logical pass over the listed key blocks",
+    "reason": "Class 3 wording."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "visits the listed key blocks in stored order",
+    "after": "visits each listed key block once (stored order is natural; the order is free)",
+    "reason": "Visiting order only changes fp32 rounding (audit reduction_scan_sort: both use stored order)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Stage 2 is the only device work and is a single launch.",
+    "after": "Stage 2 is the only device work. ... How the work is distributed over launches is not fixed.",
+    "reason": "Invariant is no global intermediate/no device preprocessing (audit intermediate_storage: none)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No pass may decode the CSR layout ... or split the key range ...; ... exactly the key blocks listed ..., once each.",
+    "after": "... because each adds a global intermediate ...; ... because visiting other blocks changes the executed work",
+    "reason": "Reason clauses for block-sparse skipping and no split-key."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "Key blocks are visited in the order stored in the CSR column list.",
+    "after": "Each key block listed ... is visited once; the visiting order ... is free.",
+    "reason": "Order is a mapping coincidence."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "the mask is applied to every visited block including fully causal ones",
+    "after": "the mask may be applied to every visited block or only to blocks that intersect the diagonal or the sequence end",
+    "reason": "Contradicted the existing permitted mapping 'Specialising the mask ...'; result is identical."
+   },
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "key index >= total_seq_len or query index >= total_seq_len are set to -inf",
+    "after": "(the sequence-bound terms matter only where the task's fixed M is not a multiple of the block size)",
+    "reason": "Fixed-shape rule; fixed M = 10240 is a multiple of BLOCK_M = BLOCK_N = 64."
+   },
+   {
+    "class": "2",
+    "section": "Algorithm family and structure",
+    "before": "(none)",
+    "after": "Each block subtracts the running maximum known at that point ...; held on chip at once ... no -inf initial state (guard and zero-sum rule still apply)",
+    "reason": "Class 2."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. ... It may assert shape consistency, allocate the output, ... and launch.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(none)",
+    "after": "order of a row block's listed key blocks; holding all of them on chip",
+    "reason": "Relaxed M items listed."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "A two-pass softmax (separate max/sum pass then a normalisation pass), split-key schemes ..., or atomic accumulation.",
+    "after": "A two-pass softmax that traverses the listed key blocks twice ...: each adds a second logical pass or a global intermediate.",
+    "reason": "Reason clause; also clarifies class 2 (held values are not a second pass)."
+   },
+   {
+    "class": "shape",
+    "section": "Forbidden substitutions",
+    "before": "omitting the causal or sequence-bound mask",
+    "after": "omitting the causal mask, or the sequence-bound mask where the task's fixed M is not a multiple of the block size",
+    "reason": "Fixed-shape rule."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "csr_online_softmax_attention 'One kernel launch: ... in stored order ...'",
+    "after": "'Single logical pass with no global intermediate: ... once (any order) ... no split-key combine'",
+    "reason": "Launch count and order relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work ...; asserts, allocation, guards, descriptors are host work'",
+    "reason": "Class 4; includes_preprocessing kept true."
+   }
+  ]
+ },
+ {
+  "operator": "cross_entropy",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "from a single read of the row",
+    "after": "from a single logical traversal of the row (... not of physical DRAM transactions ...)",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "All three stages must execute in one launch (one row per program, or several rows per program).",
+    "after": "Splitting the stages with a materialised intermediate ... is not permitted, because the canonical algorithm keeps them on chip; how rows are assigned to programs and launches is otherwise free.",
+    "reason": "Invariant is the on-chip statistics (audit intermediate_storage: none); launch count is M."
+   },
+   {
+    "class": "2",
+    "section": "Algorithm family and structure",
+    "before": "held in one logical tile padded to a power of two, in which case padding lanes must hold -inf",
+    "after": "held in one logical tile, in which case the max and sum are evaluated over the held values and any padding lanes ... must not contribute (for example by holding -inf ...)",
+    "reason": "Class 2 degeneration; the -inf fill and power-of-two padding are mechanisms (num_classes = 512)."
+   },
+   {
+    "class": "2",
+    "section": "Algorithm family and structure",
+    "before": "online update (running max with rescaling of the running sum)",
+    "after": "online update (each chunk subtracts the running max, with rescaling of the running sum)",
+    "reason": "Class 2 wording."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: reading shapes/strides, allocating the output, computing host scalars ..., and launching.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Whole-row tile (power-of-two padded)",
+    "after": "Whole-row tile (padded to any convenient width)",
+    "reason": "Power-of-two tile width is a DSL/tile coincidence."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s1 'from one read of the row (whole-row tile with -inf padding ...)'",
+    "after": "'from one logical traversal ... (whole-row tile with non-contributing padding ...)'",
+    "reason": "Class 3/2 alignment."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "s3 'all stages in one launch, no global intermediate'",
+    "after": "'no global intermediate (statistics, shifted logits, probabilities stay on chip)'",
+    "reason": "Launch count relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'The timed run() contains only the output allocation ...'",
+    "after": "'Measured: GPU time of all device work ...; allocation and host arithmetic are host work'",
+    "reason": "Class 4."
+   }
+  ]
+ },
+ {
+  "operator": "kl_divergence",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "for each row, stream the columns",
+    "after": "for each row, traverse the columns once",
+    "reason": "Class 3 (logical traversal; streaming vs holding is a mapping)."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "Every input element is read exactly once.",
+    "after": "Every input element is consumed in exactly one logical traversal (... not a guarantee about physical DRAM transactions ...)",
+    "reason": "Class 3."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: reading the shapes, allocating LOSS and launching.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Shape reads and the LOSS allocation are the only host work and are timed'",
+    "after": "'Measured: GPU time of all device work (kernel(s), any device fill of split-row scratch); shape reads and allocation are host work'",
+    "reason": "Class 4; includes_preprocessing kept true."
+   }
+  ],
+  "kept_unchanged_notes": "Class 2 not applicable (no softmax). No launch-count lock existed (split-row combine already permitted). Pre-existing garbled sentence in the protected Precision section ('The intrinsic within the tolerance is acceptable).') left untouched; integrator may want to repair it."
+ },
+ {
+  "operator": "moe_topk_gating",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read the row of `E` logits once and convert it to float32",
+    "after": "one logical traversal of the row ..., converted to float32 and kept on chip across the selection rounds",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Stages 2 to 5 must be fused into one launch per row group",
+    "after": "Stages 2 to 5 are fused: ... nothing is written to global memory between the stages, because ...; how rows are grouped into programs and launches is free.",
+    "reason": "Invariant is no global intermediate (audit intermediate_storage: none); launch grouping is M."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "The selection must read the row from global memory once",
+    "after": "The selection makes one logical traversal of the row ... (re-reading the row in every round would make it a k-pass algorithm; ... not physical DRAM transactions ...)",
+    "reason": "Class 3 with A reason."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "(`k` rounds of full-row max and argmax)",
+    "after": "(... which is the selection work this operator measures)",
+    "reason": "audit fq_boundary: flops_expr models the k full-row sweeps of the iterative-argmax structure."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the two output allocations, derivation of padded tile widths ..., and the fused kernel.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "the padded tile width (any power of two at least `E`)",
+    "after": "the padded tile width (any width at least `E`)",
+    "reason": "Power-of-two width is a tile coincidence (audit preprocessing: next power of two on both sides)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "row_load_fp32 'Read each row of logits once'",
+    "after": "'One logical traversal of each row ... kept on chip across the rounds'",
+    "reason": "Class 3."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "store_outputs 'fused with the previous stages in one launch'",
+    "after": "'fused ..., with nothing written to global memory between them'",
+    "reason": "Launch count relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work ...; allocations and width derivation are host work'",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Class 2: the softmax is over k values already held on chip (max/sum over held values), so no change was needed. Iterative max-extraction selection kept as A."
+ },
+ {
+  "operator": "argmax",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "one device pass in which every row of `x` is read exactly once",
+    "after": "one logical traversal of every row of `x`",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Stage 2 is the only device work and is a single launch.",
+    "after": "Stage 2 is the only device work. ... the number of launches is not otherwise fixed.",
+    "reason": "Invariant is single-owner reduction without global partials (audit intermediate_storage: none)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "The whole of a row must be reduced by the program that owns it; no partial (value, index) results ...",
+    "after": "... because a cross-program merge adds a global intermediate that the canonical single-owner reduction does not have",
+    "reason": "Reason clause (audit dependencies: no cross-program merge on either side)."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "reads `x` twice and is forbidden",
+    "after": "traverses `x` twice and is forbidden. Traversals count passes of the algorithm, not physical DRAM transactions ...",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "Sequential chunked scan per row. A program walks its row in column chunks in increasing column order",
+    "after": "Chunked scan per row inside the program that owns it ... Another chunk order, or a single chunk covering the whole row, is permitted when the merge still keeps the first occurrence.",
+    "reason": "Comparisons are exact, so chunk order is a mapping; first-occurrence semantics (S) kept."
+   },
+   {
+    "class": "shape",
+    "section": "Algorithm family and structure",
+    "before": "Columns beyond `N` in the last chunk must be padded with `-inf`",
+    "after": "(where the task's `N` is not a multiple of the chunk width)",
+    "reason": "Fixed-shape rule (N = 20480)."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed. ... It may check device/contiguity, allocate the output, compute the chunk count, and launch.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(none)",
+    "after": "The order in which a row's chunks are visited, with a merge that keeps the first occurrence.",
+    "reason": "Relaxed M item listed."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Any scheme that reads `x` more than once",
+    "after": "Any scheme with more than one logical traversal of `x` (for example a max pass followed by an index-search pass)",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Forbidden substitutions",
+    "before": "lets a later chunk win on ties (for example `>=`)",
+    "after": "lets a later column win on ties (for example `>=` with chunks visited in increasing order)",
+    "reason": "Tie rule (S) kept, tied to column order not chunk order."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "row_scan_argmax 'One kernel launch: each row is read once, in column chunks in increasing order ...'",
+    "after": "'One logical traversal of each row by the program that owns it ... (a strict greater-than test when chunks are visited in increasing order) ... no partial results in global memory'",
+    "reason": "Launch count and order relaxed; A/S kept."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": ">=\\s*best rule message 'A non-strict merge ... would pick a later occurrence'",
+    "after": "'A non-strict merge (with chunks in increasing order) ...'",
+    "reason": "Rule kept (suspicious, enforces S tie rule); message narrowed to the increasing-order case."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work ...; guard, allocation, chunk arithmetic are host work'",
+    "reason": "Class 4."
+   }
+  ]
+ },
+ {
+  "operator": "mean_reduction",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "for each row, read every element exactly once",
+    "after": "traverse every element exactly once (one logical traversal)",
+    "reason": "Class 3."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Stages 2 and 3 are expected to be fused into one launch; ... Splitting a row's reduction across several launches",
+    "after": "Stages 2 and 3 are fused per row ... Splitting a row's reduction into a partial-sums pass followed by a combine pass through a global scratch buffer ... The number of kernel launches is not otherwise fixed.",
+    "reason": "Invariant is no global partial sums (audit intermediate_storage: none); launch count is M."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "is not required by the data and is not permitted:",
+    "after": "... is not permitted, because the canonical algorithm keeps the partial sums on chip",
+    "reason": "Reason clause."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "the operator is a single read of `x` with no global intermediates",
+    "after": "a single logical traversal of `x` ... not a guarantee about physical DRAM transactions, which caches, TMA and the compiler may change",
+    "reason": "Class 3 (the explicitly named mean_reduction case)."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "Single-pass row-wise reduction.",
+    "after": "Single-logical-pass row-wise reduction.",
+    "reason": "Class 3."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the reduction kernel.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Whether `N` is specialised as a compile-time constant or passed at runtime is free.",
+    "after": "+ edge handling is required wherever the task's fixed `N` is not a multiple of the chosen chunk width, and supporting shapes other than the task's declared shape is not required",
+    "reason": "Fixed-shape rule, placed in an editable section because the Inputs line is protected."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading `x` more than once",
+    "after": "More than one logical traversal of `x` (a second pass over its elements)",
+    "reason": "Class 3."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "rowwise_fp32_sum 'Single read of x'",
+    "after": "'Single logical traversal of x'",
+    "reason": "Class 3."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "normalise_store 'fused with the sum in the same launch'",
+    "after": "'fused with the sum, with no partial sums in global memory'",
+    "reason": "Launch count relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": ".float() rule message 'an untimed-equivalent extra pass'",
+    "after": "'an extra pass over x (counted device work that the canonical algorithm does not have)'",
+    "reason": "Class 4 consistency; rule kept (A: no extra pass)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work ...; allocation, guard, view are host work'",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Protected sections left verbatim: Functional semantics says a dim != 1 re-layout 'is timed' (device work, consistent with class 4); Inputs says 'N need not be a multiple of any tile width'."
+ },
+ {
+  "operator": "top_k_selection",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "the block width, a power of two with `B >= 2 * K'`",
+    "after": "the block width, with `B >= 2 * K'` (it need not be a power of two)",
+    "reason": "B is a tile size; power-of-two is a DSL coincidence (cuTile resolves to a supported width, impl_cutile L162-173). K' kept: it sets the inter-level candidate traffic."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "cut into `ceil(N / B)` contiguous blocks (address order)",
+    "after": "blocks of at most `B` elements (contiguous blocks in address order are the natural partition; any fixed partition is permitted)",
+    "reason": "Partition shape does not change work, fan-in or exactness."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Each level is one launch ...; levels cannot be fused into one launch",
+    "after": "Each level needs all candidates of the previous level ... device-wide dependency ... One launch per level is the natural realisation; how the dependency is enforced is a mapping choice.",
+    "reason": "Invariant is the level dependency through global candidate buffers (audit dependencies), not the launch count."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "leaves are the input blocks in address order",
+    "after": "leaves are the input blocks",
+    "reason": "Same partition relaxation."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "A different selection family: ... or a single-program sequential selection.",
+    "after": "...; each replaces the hierarchical block tournament, and with it the passes and the work decomposition that define this operator.",
+    "reason": "Reason clause for the hierarchical-selection invariant."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: computing `K'` and `B`, every per-level candidate buffer allocation, every level's launch, and the final slice.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "The block width `B` (subject to `B >= 2 K'`), elements per program, launch parameters, pipelining.",
+    "after": "+ not necessarily a power of two; the partition into blocks; how the dependency between levels is enforced",
+    "reason": "Relaxed M items listed."
+   },
+   {
+    "class": "4",
+    "section": "Permitted implementation mappings",
+    "before": "(both are timed)",
+    "after": "(the slice is metadata only; a copy is device work and is counted)",
+    "reason": "Class 4: a slice is host metadata."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "block_topk_level 'A launch that cuts ... into contiguous blocks of width B'",
+    "after": "'A level that cuts ... into blocks of at most B elements (contiguous blocks are natural; any fixed partition)'",
+    "reason": "Launch count and partition relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "hierarchy_loop 'each level is its own launch'",
+    "after": "'each level depends on the whole previous level's global candidate buffer (one launch per level is the natural realisation)'",
+    "reason": "Launch count relaxed; dependency (A) kept."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work ...; arithmetic, allocations, slice are host work'",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "K' = next power of two >= k kept (it fixes the candidate width, i.e. the inter-level traffic); its required_evidence rule kept."
+ },
+ {
+  "operator": "bitonic_sort",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Each pair is exchanged exactly once per stage, by the lane owning the lower index.",
+    "after": "... exactly once per stage, by a single owner (the lane owning the lower index is natural; which lane does it is free)",
+    "reason": "Which lane performs the exchange is a mapping (audit: both use the lower-index lane)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "separated by a global synchronisation (a launch boundary)",
+    "after": "separated by a global synchronisation (for example a launch boundary)",
+    "reason": "Dependency is the invariant, the launch boundary one realisation (audit review item on fusion freedom)."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: the allocation of `work`, the pad pass, every stage of the network and the final zero-copy slice.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Elements per program, grid shape, vector width, pipelining.",
+    "after": "+ which lane performs each compare-exchange",
+    "reason": "Relaxed M item listed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "compare_exchange_network 'swap performed once per pair by the lower index'",
+    "after": "'by a single owner (lower-index lane is natural)'",
+    "reason": "Lane ownership relaxed."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ...'",
+    "after": "'Measured: GPU time of all device work (pad pass and every network stage); allocation and slice are host work'",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Kept, but uncertain: 'executed in place and no second buffer is permitted' (looks like M, but the protected Inputs and outputs and Permitted PyTorch operations sections describe a single working buffer); strict comparisons (unobservable for values except signed zeros). Network schedule, XOR partner and (i AND k) direction kept as A."
+ },
+ {
+  "operator": "radix_sort",
+  "changes": [
+   {
+    "class": "4",
+    "section": "Required logical stages",
+    "before": "(this copy is part of the timed work)",
+    "after": "(this copy is device work and is counted)",
+    "reason": "Class 4 wording."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "skipping a pass because its digit happens to be constant is forbidden.",
+    "after": "..., because it would make the number of passes depend on the data.",
+    "reason": "Reason clause for a kept A invariant."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the working copy of `input`, all allocations, every pass and the buffer swaps.",
+    "after": "exact measured-quantity paragraph + operator rules kept (no copy/cast/re-layout, no cross-call state)",
+    "reason": "Host allocation, metadata reads and Python are not GPU time; only device work launched by run() is measured."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "(none)",
+    "after": "Specialising on the task's fixed `N` ...: edge handling is required wherever the fixed `N` is not a multiple of the chosen block, and supporting lengths other than the task's declared shape is not required.",
+    "reason": "Fixed-shape rule, placed in an editable section because the Inputs line is protected."
+   },
+   {
+    "class": "4",
+    "section": "Permitted PyTorch operations",
+    "before": "this is part of the timed work",
+    "after": "this fill is device work and is counted",
+    "reason": "Class 4 consistency (zero-fill is device work)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "working_copy_and_scratch '(timed)'",
+    "after": "'(device work, counted)'",
+    "reason": "Class 4."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.json",
+    "before": "timing_boundary.notes 'Everything inside run() is timed: ... all allocations ... and the buffer swaps'",
+    "after": "'Measured: GPU time of ... clone, any zero-fill and every digit pass; allocations and Python swaps are host work'",
+    "reason": "Class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Open review items section and its provisional rule (any stable LSD radix covering 32 bits; digit width/pass count free) left verbatim. Working copy (clone) kept as a required stage. Protected Inputs line 'N is arbitrary (not a multiple of any block size)' left untouched although the fixed N = 20,000,000 is a multiple of 256."
+ },
+ {
+  "operator": "layernorm",
+  "changes": [
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: the views, the allocation and the launch(es).",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Both run() bodies do only views + empty_like on the host (audit preprocessing: impl_triton.py:71-73, impl_cutile.py:82-86), which Proton device time does not measure."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Views, allocation and launch(es) are all inside run() and timed",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time",
+    "reason": "Aligns the evaluator note with the class-4 contract text."
+   }
+  ],
+  "kept_unchanged_notes": "Split launches with a per-call (batch*M,) mean/rstd buffer were already permitted and are left as is (no new restriction added), although rmsnorm forbids the analogous rstd round trip."
+ },
+ {
+  "operator": "rmsnorm",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Both stages belong to one launch",
+    "after": "distributing the rows over more than one launch is free",
+    "reason": "Launch count is not the invariant: both kernels launch one program per row (audit stages: impl_triton.py 67, impl_cutile.py 77); splitting rows over launches adds no global intermediate."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "splitting the two stages into separate launches with a global `rstd` buffer is not the canonical structure",
+    "after": "never round-trips through global memory, because the canonical algorithm keeps it on chip between the two sweeps",
+    "reason": "Audit intermediate_storage: rstd lives in registers on both sides (impl_triton.py 22,28; impl_cutile.py 27,37); a global rstd buffer is a new global-memory intermediate."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "Splitting one row across several programs (cross-program reduction, atomics) ... is not permitted",
+    "after": "because combining the partial sums would need a global-memory intermediate or atomics that the canonical algorithm does not have",
+    "reason": "Audit dependencies: rstd is a program-private scalar on both sides; cross-program reduction changes the communication pattern (work decomposition), so it stays an algorithm invariant."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Splitting one row's reduction across programs or launches.",
+    "after": "passing the row statistic between launches through global memory (both add a global-memory intermediate ...)",
+    "reason": "Restates the launch ban as the real invariant (no global round trip of the statistic, audit intermediate_storage: none on either side) and gives the reason."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(no launch-count entry)",
+    "after": "Distributing the rows over one or several launches, provided each row's statistic stays private ...",
+    "reason": "Moves the relaxed launch count into the permitted mappings."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: viewing `x` as `(batch*M, K)`, allocating the output, and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ...; Viewing `x` ... is metadata only.",
+    "reason": "Both run() bodies do only reshape views and one empty_like on the host (audit preprocessing: impl_triton.py 58-65, impl_cutile.py 67-74); host work is not Proton device time."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.normalise_scale",
+    "before": "in the same launch as the statistic",
+    "after": "using the statistic held privately by the program that owns the row (it never round-trips through global memory ...)",
+    "reason": "The stage description encoded the relaxed launch-count restriction; it now encodes the A invariant."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Everything inside run() is timed: the (batch*M, K) views, the output allocation and the single two-pass kernel.",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment; also drops 'single' kernel (relaxed M)."
+   }
+  ]
+ },
+ {
+  "operator": "l2_norm",
+  "changes": [
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: the reshape, the allocation and the launch(es).",
+    "after": "The measured quantity is the GPU time of all device work ...; The reshape ... is a view (metadata only).",
+    "reason": "Both run() bodies do only a reshape view and empty_like on the host (audit preprocessing: impl_triton.py:53-56, impl_cutile.py:61-63)."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "The reshape ..., the allocation and the launch(es) are all inside run() and timed",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ],
+  "kept_unchanged_notes": "Split launches with a per-call statistics buffer were already permitted and are left as is (no new restriction added)."
+ },
+ {
+  "operator": "batch_normalization",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(first read of `input`)",
+    "after": "(first logical traversal of `input`)",
+    "reason": "Pass labels are logical traversals; physical DRAM reads are not what the contract governs."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "each program owns a contiguous block of rows",
+    "after": "each program owns a block of rows",
+    "reason": "Contiguity of the row block (impl_triton.py 8-9/31-37, _K1_BLOCK_N rows from block_id*BLOCK_N) is a mapping; a strided row set changes neither total work nor the per-block partials + fixed-order combine."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(second read of `input`)",
+    "after": "(second logical traversal of `input`)",
+    "reason": "Pass labels are logical traversals, not physical DRAM transactions."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "Stages 2 and 4 must be separate launches (or separated by an equivalent grid-wide synchronisation).",
+    "after": "No program of stage 4 may start before every program of stage 2 has finished, because the statistics depend on all rows; separate launches or ... both satisfy this.",
+    "reason": "Audit dependencies: K3 depends on K2 which needs all K1 partials (impl_triton.py 133-160); the invariant is the grid-wide dependency, launches are only one way to honour it."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "`input` is read exactly twice (once in stage 2, once in stage 4); no third pass is permitted.",
+    "after": "The algorithm makes exactly two logical traversals of `input` ...; not guarantees about physical DRAM transactions",
+    "reason": "Audit fq_boundary counts two reads of input; rephrased as logical traversals with the reason (single-pass moments)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "a centred second pass over `input` is not permitted.",
+    "after": "a centred second pass over `input` is not permitted, because it would add a third logical traversal of `input`.",
+    "reason": "Audit reduction_scan_sort: both sides use the one-pass var = SQ/N - mean^2 with clamp (impl_triton.py 66-71, impl_cutile.py 83-86); states the reason."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Rows per partial block, sub-tile height, ...",
+    "after": "Rows per partial block and whether a block is a contiguous or a strided set of rows, ...",
+    "reason": "Receives the relaxed contiguity restriction from stage 2."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "reads `input` a third time",
+    "after": "adds a third logical traversal of `input`",
+    "reason": "Logical traversal wording instead of a physical read count."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Atomic accumulation of channel totals.",
+    "after": "Atomic accumulation of channel totals (it replaces the deterministic, fixed-order two-level reduction).",
+    "reason": "Audit reduction_scan_sort: both sides use per-block partials + fixed-order level-2 sum, no atomics; adds the reason clause."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed, including the scratch allocations.",
+    "after": "The measured quantity is the GPU time of all device work ...; scratch traffic ... is device work inside the measured time.",
+    "reason": "The scratch allocations are host torch.empty calls (impl_triton.py 124-130, impl_cutile.py 136-142), not GPU time."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.block_partials",
+    "before": "First read of input: one launch in which each program reduces a contiguous block of rows",
+    "after": "First logical traversal of input: each program reduces a block of rows (contiguous or strided)",
+    "reason": "Drops the relaxed M parts (one launch, contiguity) and uses logical-traversal wording."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.apply",
+    "before": "Second read of input",
+    "after": "Second logical traversal of input",
+    "reason": "Class 3 wording."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output and four fp32 scratch allocations, ...",
+    "after": "All device work launched by run() is counted ...; Host-side work (... allocation calls ...) is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ]
+ },
+ {
+  "operator": "rope",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected as a single launch",
+    "after": "how it is distributed over launches is a mapping choice, provided no global-memory intermediate other than the output buffer is introduced",
+    "reason": "Elementwise with no cross-program dependency (audit dependencies); a launch split adds no intermediate."
+   },
+   {
+    "class": "4",
+    "section": "Required logical stages",
+    "before": "The copy of `q` that an in-place scheme needs is part of `run()`, is timed,",
+    "after": "is device work launched by `run()`, is counted in the measured time,",
+    "reason": "The clone (impl_triton.py 68, impl_cutile.py 63) is a device copy; the claim is restated in device-work terms."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Heads per program, rows per program, grid shape, pipelining, vector width.",
+    "after": "..., grid shape, number of launches, pipelining, vector width.",
+    "reason": "Receives the relaxed launch count."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "All work is inside `run()` and timed: any clone or copy of `q`, the views ..., the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ...; Any clone or copy of `q` ... is device work and is counted. The views ... are metadata only.",
+    "reason": "Views and allocation are host work; the clone is device work (audit preprocessing)."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.pairwise_rotation",
+    "before": "One elementwise launch:",
+    "after": "One logical elementwise stage (the number of launches is a mapping choice):",
+    "reason": "Stage description encoded the relaxed single-launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Everything inside run() is timed, including any clone of q ..., the layout views, the output allocation",
+    "after": "All device work launched by run() is counted, including any clone of q ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ]
+ },
+ {
+  "operator": "histogramming",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Required logical stages",
+    "before": "P is bounded independently of N (a fixed cap, reduced for small N)",
+    "after": "P is a configuration choice for the task's fixed input length (see the permitted mappings)",
+    "reason": "num_partials = min(NUM_PARTIAL, cdiv(N, BLOCK_SIZE)) (impl_triton.py L127, impl_cutile.py L113) is an any-N sizing rule; with one fixed N, P is a tuning constant already listed as a permitted mapping."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "Stage 2 walks the input once in chunks",
+    "after": "Stage 2 makes a single logical traversal of the input in chunks ...; this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "Logical traversal wording (audit stages: both grid-stride over the input once)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Algorithm family and structure",
+    "before": "A single shared histogram ... is a different algorithm and is not permitted.",
+    "after": "... because it replaces private partial counts plus a reduction with contended updates of one global histogram.",
+    "reason": "Audit stages/intermediate_storage: both sides use private rows of a global scratch + column sum; privatisation vs global atomics is the listed A example."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: the input assertions, the output allocation, the scratch allocation and its zero fill ...",
+    "after": "The measured quantity is the GPU time ...; Besides host work (...allocation calls...), run() issues only the scratch zero fill ...; The zero fill ... is device work and is counted.",
+    "reason": "torch.zeros scratch (impl_triton.py L128, impl_cutile.py L116) is a device fill inside the measured time; the allocation call and assertions are host work."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.s1",
+    "before": "P bounded independently of N.",
+    "after": "P is a configuration choice for the fixed input length.",
+    "reason": "Mirrors the shape fix in stage 1."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.s2",
+    "before": "(single pass over the input)",
+    "after": "(single logical traversal of the input)",
+    "reason": "Class 3 wording."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "The timed run() includes the scratch allocation and its zero fill",
+    "after": "All device work launched by run() is counted: the scratch zero fill ...; host-side work (allocation calls, ...) is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ],
+  "kept_unchanged_notes": "Stage-3 grid-barrier rule already phrased as a dependency invariant; left unchanged."
+ },
+ {
+  "operator": "quantize_global",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "`n` need not be a multiple of any tile length",
+    "after": "Edge handling is required wherever the task's fixed `n` is not a multiple of the chosen tile length; ... Supporting lengths other than the task's declared `n` is not required.",
+    "reason": "Any-length leftover; the task fixes n (config largest case 20*2^20). NOTE: this sentence sits in the protected Inputs-and-outputs section; edit limited to the shape clause."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read each float32 element exactly once, ... write it exactly once",
+    "after": "in one logical traversal, read each float32 element, convert it to float16, and write it",
+    "reason": "Logical traversal wording instead of a physical access count."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "and is expected to be one launch",
+    "after": "how it is distributed over launches is a mapping choice",
+    "reason": "Embarrassingly parallel (audit dependencies); a launch split adds no intermediate or pass."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "adding a preliminary pass over the data (for example to compute a maximum) is forbidden.",
+    "after": "... is forbidden, because no maximum or scale is part of this operator.",
+    "reason": "Audit reduction_scan_sort: no absmax pass on either side; reason added, open review item untouched."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(none)",
+    "after": "Pass counts are logical traversals in the algorithm, not guarantees about physical DRAM transactions ...",
+    "reason": "Class 3 clarification for the pass counts in this section."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the conversion kernel.",
+    "after": "The measured quantity is the GPU time of all device work ...",
+    "reason": "Both run() bodies do only empty + no-op contiguous on the host (audit preprocessing: impl_triton.py 32-34, impl_cutile.py 33-35)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "number of programs, vector width",
+    "after": "number of programs, number of launches, vector width",
+    "reason": "Receives the relaxed launch count."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading or writing the data more than once.",
+    "after": "More than one logical traversal of the input or of the output (... not of physical memory transactions).",
+    "reason": "Logical traversal wording."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.elementwise_convert",
+    "before": "One kernel pass that reads each float32 element once",
+    "after": "One logical pass (the number of launches is a mapping choice) that reads each float32 element once",
+    "reason": "Drops the relaxed one-kernel restriction."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation, an optional no-op contiguous() guard and the single conversion kernel.",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ],
+  "kept_unchanged_notes": "Open review item and its provisional rule ('implement exactly the conversion') unchanged."
+ },
+ {
+  "operator": "dequantize_rowwise",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "Both stages execute in one launch",
+    "after": "How the elements are distributed over launches is a mapping choice.",
+    "reason": "Embarrassingly parallel (audit dependencies: impl_triton.py L17-28); a launch split adds no intermediate."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no intermediate and no second pass",
+    "after": "the fp32 product is never written to global memory, because the canonical algorithm rounds it directly at the store; ... no second logical pass",
+    "reason": "Audit intermediate_storage: none on either side; keeps the real invariant with its reason."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "one read of the int8 matrix, one read of the scale vector, one fp16 write",
+    "after": "one logical traversal of the int8 matrix and of the scale vector and one fp16 write per element; these are passes in the algorithm, not guarantees about physical DRAM transactions",
+    "reason": "The scale is physically re-read per (row, chunk) program (audit fq_boundary); counts are logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only shape reads, the fp16 output allocation and the launch.",
+    "after": "The measured quantity is the GPU time ...; Besides host work (shape reads and the fp16 output allocation call), run() issues only the dequantisation launch(es).",
+    "reason": "Output allocation is a host call (impl_triton.py L46, impl_cutile.py L45)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "launch geometry, vector width",
+    "after": "launch geometry, number of launches, vector width",
+    "reason": "Receives the relaxed launch count."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.s2",
+    "before": "one launch, no intermediate.",
+    "after": "fused with s1 per element: no global intermediate and no second pass (the number of launches is a mapping choice).",
+    "reason": "Drops the relaxed one-launch restriction, keeps the A invariant."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "The timed run() contains only the fp16 output allocation and one launch.",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ]
+ },
+ {
+  "operator": "weight_dequant",
+  "changes": [
+   {
+    "class": "shape",
+    "section": "Inputs and outputs",
+    "before": "but the implementation must honour a distinct `N`",
+    "after": "the implementation may specialise on the declared shape and need not support other shapes",
+    "reason": "Any-shape leftover; the fixed task shape is square (config: only M swept, generator N defaults to M, audit fq_boundary). NOTE: this sentence sits in the protected Inputs-and-outputs section."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "and is expected to be one launch",
+    "after": "how it is distributed over launches is a mapping choice",
+    "reason": "Blocks independent (audit dependencies); a launch split adds no intermediate."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No pass that materialises an expanded `(M, N)` scale map, and no global scratch, is permitted.",
+    "after": "... because the canonical algorithm derives each scale address on the fly and has no global-memory intermediate.",
+    "reason": "Audit intermediate_storage: the reference scale map is not materialised on either side."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "one read of `X`, one write of `Y`",
+    "after": "one logical traversal of `X`, one write of `Y` per element ...; not guarantees about physical DRAM transactions",
+    "reason": "Per-element scale requests are cache-served (audit fq_boundary); counts are logical."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "A second pass over the data",
+    "after": "A second logical traversal of the data",
+    "reason": "Logical traversal wording."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: the output allocation, flattening or 2-D views, and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ...; Flattening or 2-D views are metadata only.",
+    "reason": "Both run() bodies do only torch.empty, views and integer arithmetic on the host (audit preprocessing)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(tile-aligned or not), pipelining",
+    "after": "(tile-aligned or not), number of launches, pipelining",
+    "reason": "Receives the relaxed launch count."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.block_scaled_multiply",
+    "before": "One kernel pass over all M*N elements",
+    "after": "One logical pass over all M*N elements (the number of launches is a mapping choice)",
+    "reason": "Drops the relaxed one-kernel restriction."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation, any flat/2-D views and the single elementwise kernel.",
+    "after": "All device work launched by run() is counted ...; host-side work ... is not GPU time.",
+    "reason": "Class 4 alignment."
+   },
+   {
+    "class": "shape",
+    "section": "Required logical stages",
+    "before": "multiply, store under a bounds mask.",
+    "after": "multiply, store (with edge handling wherever the task's fixed shape is not a multiple of the chosen tile).",
+    "reason": "Unconditional mask was an any-shape leftover: the fixed 10240x10240 shape (T=128) is a multiple of typical tiles; both kernels mask/pad only for edge tiles (audit hardware_dispatch: Triton mask 15-28, cuTile ZERO padding 28,37)."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.block_scaled_multiply",
+    "before": "masked store.",
+    "after": "store (masked wherever the fixed shape is not a multiple of the chosen tile).",
+    "reason": "Mirrors the shape fix in stage 2."
+   }
+  ]
+ },
+ {
+  "operator": "destindex",
+  "changes": [
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "it must not be fused into the scatter in a way that re-reads `o_*` per element.",
+    "after": "..., because that adds reads of `o_*` beyond the single stage-1 copy.",
+    "reason": "Extra logical pass over o_*; both sides scatter kv only (audit stages: impl_triton.py L89-90). Reason clause only."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "each source element is read exactly once and written exactly once.",
+    "after": "each source element is read once and written once in the algorithm (logical accesses, not a guarantee about physical DRAM transactions).",
+    "reason": "Logical-access wording."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "any additional full pass over the data",
+    "after": "any additional logical traversal of the data",
+    "reason": "Logical traversal wording."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: shape/stride reads, metadata-only flattening ..., the output initialisation of stage 1 ..., and the launches.",
+    "after": "The measured quantity is the GPU time ...; Besides host work (...), run() issues only the output initialisation of stage 1 ..., which is a device copy and is counted, and the scatter launches.",
+    "reason": "Stage-1 clone is device work; views/allocation are host. Open review item and provisional policy unchanged."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.s2",
+    "before": "(each element read once, written once, no atomics)",
+    "after": "(each element read once and written once in the algorithm, no atomics)",
+    "reason": "Class 3 wording."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "The output initialisation from o_* (read + write of both outputs) is inside run(); ... Flattening views are metadata only.",
+    "after": "... is device work and is counted whenever run() launches it; ... Host-side work (...) is not GPU time.",
+    "reason": "Class 4 alignment; open review item wording kept."
+   }
+  ],
+  "kept_unchanged_notes": "Open review items and the provisional 'either policy is accepted' rule unchanged."
+ },
+ {
+  "operator": "interleave",
+  "changes": [
+   {
+    "class": "4",
+    "section": "Required logical stages",
+    "before": "(inside the entry point, therefore timed)",
+    "after": "(inside the entry point, on every call)",
+    "reason": "torch.empty is a host allocation call (impl_triton.py:43, impl_cutile.py:35), not GPU time; the every-call rule is kept."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read A and B exactly once each and write OUT exactly once",
+    "after": "in one logical traversal, read each element of A and B once and write each element of OUT once",
+    "reason": "Logical traversal wording."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "it must not be split into separate passes over A and over B that each rewrite OUT.",
+    "after": "how it is distributed over launches (for example one launch per input, each writing its stride-2 half of OUT) is a mapping choice",
+    "reason": "Each element of A, B and OUT is still touched once logically and no intermediate appears; the permitted 'two stride-2 stores' mapping differs only in launch count. Single launch on both sides (audit stages) is a mapping coincidence."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(none)",
+    "after": "Pass counts are logical traversals in the algorithm, not guarantees about physical DRAM transactions ...",
+    "reason": "Class 3 clarification."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "launch parameters, vector width",
+    "after": "launch parameters, number of launches (for example one per input), vector width",
+    "reason": "Receives the relaxed launch count."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "more than one pass over the inputs",
+    "after": "more than one logical traversal of the inputs",
+    "reason": "Logical traversal wording."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything the entry point does is timed: the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ...",
+    "reason": "Only host work is torch.empty (audit preprocessing), which is not GPU time."
+   },
+   {
+    "class": "rules",
+    "section": "required_stages.interleave_copy",
+    "before": "Single device pass reading A and B once each and writing OUT once",
+    "after": "One logical traversal reading each element of A and B once and writing each element of OUT once ...; the number of launches is a mapping choice.",
+    "reason": "Drops the relaxed single-pass/launch restriction."
+   },
+   {
+    "class": "rules",
+    "section": "timing_boundary.notes",
+    "before": "The only host work is the output allocation; it is inside run() and timed.",
+    "after": "All device work launched by run() is counted ...; the output allocation call ... not GPU time.",
+    "reason": "Class 4 alignment."
+   }
+  ]
+ },
+ {
+  "operator": "relu",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read each element of `x` exactly once ... write the result exactly once",
+    "after": "one logical traversal of `x` that reads each element once ... writes the result once",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected to be one launch",
+    "after": "How the index range is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No additional pass over the data is permitted.",
+    "after": "No additional pass ... is permitted, because a second pass adds a full extra read or write of the data and so changes the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the kernel.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count locked in Required logical stages)",
+    "after": "The number of launches is free ... provided each element is still processed once and no intermediate is written to global memory.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Tail handling ... is free, provided no out-of-range element is written.",
+    "after": "Edge handling is required wherever the task's fixed `n` is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case n = 20*2^20 is a multiple of every power-of-two tile up to 2^22."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading or writing the data more than once.",
+    "after": "Reading or writing the data in more than one logical traversal ... this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical. Kept as A (reason clause added)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.elementwise_clamp",
+    "before": "One kernel pass ... with correct tail handling for n elements",
+    "after": "One logical pass (any split across programs or launches, no global intermediate) ... edge handling wherever n is not a multiple of the chosen tile",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single elementwise kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Left 'Inputs and outputs' unchanged per instructions although it says '`n` need not be a multiple of any tile length' (a generic-shape leftover; the fixed-shape rule is now stated under Permitted mappings). Forbidden rule on torch.zeros/clone kept: it enforces the no-intermediate (A) invariant."
+ },
+ {
+  "operator": "mul2",
+  "changes": [
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read each element of `x` exactly once ... write the result exactly once",
+    "after": "one logical traversal of `x` that reads each element once ... writes the result once",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected to be one launch",
+    "after": "How the index range is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No additional pass over the data is permitted.",
+    "after": "No additional pass ... is permitted, because a second pass adds a full extra read or write of the data and so changes the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the kernel.",
+    "after": "The measured quantity is the GPU time of all device work that `run()` causes ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count locked in Required logical stages)",
+    "after": "The number of launches is free ... provided each element is still processed once and no intermediate is written to global memory.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Tail handling ... is free, provided no out-of-range element is written.",
+    "after": "Edge handling is required wherever the task's fixed `n` is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case n = 20*2^20 is a multiple of every power-of-two tile up to 2^22."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading or writing the data more than once.",
+    "after": "Reading or writing the data in more than one logical traversal ... this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical. Kept as A (reason clause added)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.elementwise_double",
+    "before": "One kernel pass ... with correct tail handling for n elements",
+    "after": "One logical pass (any split across programs or launches, no global intermediate) ... edge handling wherever n is not a multiple of the chosen tile",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single elementwise kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Left 'Inputs and outputs' unchanged per instructions although it says '`n` need not be a multiple of any tile length' (a generic-shape leftover; the fixed-shape rule is now stated under Permitted mappings). Forbidden rule on torch.zeros/clone kept: it enforces the no-intermediate (A) invariant."
+ },
+ {
+  "operator": "leaky_relu",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "One logical stage, one launch.",
+    "after": "One logical stage: no intermediate ... no second pass ... How the index range is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "(single pass implied by 'one launch')",
+    "after": "no intermediate tensor is materialised in global memory and there is no second pass over the data, because either would change the algorithm rather than its mapping",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read X exactly once, write Y exactly once",
+    "after": "one logical traversal ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything inside the entry point is timed: the allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count locked in stages)",
+    "after": "the number of launches the index range is partitioned into (each element still processed once, no intermediate written to global memory)",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "masked versus zero-padded tail handling.",
+    "after": "Edge handling is required wherever the task's fixed N is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case N = 5e7 = 2^7*390625, so tiles of 256 or more need edge handling."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.elementwise_map",
+    "before": "Single device pass ... X read once, Y written once.",
+    "after": "Single logical pass (any split across programs or launches, no global intermediate) ...",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Output allocation is the only host work and is timed",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Algorithm family 'Single-pass elementwise map ... Lanes beyond N must never be stored.' kept unchanged (A + S; the reason clause now sits in Required logical stages)."
+ },
+ {
+  "operator": "sigmoid",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "load a contiguous block of `X` ... is expected to be one launch",
+    "after": "load each element of `X` ... How the elements are split across programs or launches is a mapping choice.",
+    "reason": "Contiguous blocking and one launch are shared by both kernels (audit stages: grid = ceil(N/block)) but add no intermediate or pass; they are mappings."
+   },
+   {
+    "class": "shape",
+    "section": "Required logical stages",
+    "before": "store under a bounds mask",
+    "after": "store, with edge handling where the last tile is partial",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No second pass over the data is permitted.",
+    "after": "No second pass ... is permitted, because it would change the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(no statement)",
+    "after": "each element of `X` is read once ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "with flat contiguous blocking",
+    "after": "(removed; assignment of elements to programs moved to Permitted mappings)",
+    "reason": "Contiguous blocking is a work assignment that changes neither total work nor traffic; Permitted mappings already freed grid shape."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "one read and one write per element",
+    "after": "one logical read and one logical write per element",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Elements per program, grid shape ...",
+    "after": "the assignment of elements to programs (contiguous blocks or any other partition) ... The number of launches is free",
+    "reason": "Receives the blocking and launch-count freedoms removed from stages / algorithm family."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "for the last partial block; ... never stored.",
+    "after": "Edge handling is required wherever the task's fixed `N` is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case N = 5e7, so tiles of 256 or more need it."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Any additional pass over the data or global scratch buffer.",
+    "after": "Any additional logical pass ... because either changes the algorithm's data movement rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.elementwise_sigmoid",
+    "before": "One kernel pass ... masked store.",
+    "after": "One logical pass ... (any split across programs or launches, no global intermediate) ... store with edge handling wherever N is not a multiple of the chosen tile.",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single elementwise kernel",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "'Inputs and outputs' still says N 'sizes the grid and the bounds mask' (protected section, left unchanged). Forbidden 'Evaluating the sigmoid in fp16/bf16' kept (S, precision)."
+ },
+ {
+  "operator": "fused_activation",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "A single launch; ... belong to the same program.",
+    "after": "One logical pass; ... How the index range is split across programs or launches is a mapping choice.",
+    "reason": "The launch count and the program-to-element assignment are mappings; the real invariant (z never written to global memory) is stated instead (audit stages/intermediate_storage: single pass, no intermediate on either side)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no intermediate, no second pass",
+    "after": "z is never materialised in global memory between the multiply-add and the activation, because fusing the two steps is what defines this operator",
+    "reason": "The fused FMA+SiLU with no global z is the controlled algorithm (fq_boundary counts 3 reads + 1 write)."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: the shape check, the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time ... Besides the launch, run() may perform the shape check and the output allocation.",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(single launch locked in stages)",
+    "after": "The number of launches is free ... nothing but the output is written to global memory.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Masked tail handling versus zero-padded loads ...",
+    "after": "Edge handling is required wherever the task's fixed n is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case n = 20*2^20."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Splitting the FMA and the activation into separate launches or writing z to global memory.",
+    "after": "Materialising z in global memory between the multiply-add and the activation ..., because the fused single pass defines this operator.",
+    "reason": "Rephrased from a launch count to the invariant it protects (no global z); a split necessarily writes z, so nothing is relaxed."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Any buffer other than the output.",
+    "after": "Any buffer other than the output, because a global intermediate or scratch would add data movement the fused pass does not have.",
+    "reason": "Audit intermediate_storage: none on either side; reason clause added."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.s1",
+    "before": "no intermediate, one launch.",
+    "after": "z is never materialised in global memory ...; the index range may be split across programs or launches.",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "The timed run() contains the shape check, ... the fp32 output allocation and one launch.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "Forbidden rule torch.(zeros|zeros_like|full|empty_like|cat|stack) kept: it enforces the no-extra-buffer (A) rule. includes_preprocessing left false as instructed."
+ },
+ {
+  "operator": "swiglu",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected to be one launch",
+    "after": "How the elements are split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Required logical stages",
+    "before": "store under a bounds mask",
+    "after": "store, with edge handling where the last tile is partial",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case M*N = 4096*20480 = 5*2^24, a multiple of every power-of-two tile up to 2^24."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No separate silu pass followed by a multiply pass, and no global scratch, is permitted.",
+    "after": "..., because materialising `silu(x)` adds an intermediate and a second traversal and so changes the algorithm rather than its mapping.",
+    "reason": "Audit intermediate_storage: none on either side; the fused gate is the controlled algorithm."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(no statement)",
+    "after": "each element of `x` and `y` is read once ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "with flat contiguous blocking over the flattened tensors",
+    "after": "(removed; moved to Permitted mappings)",
+    "reason": "Contradicted the existing '1-D flat versus 2-D grid' mapping freedom; blocking changes neither work nor traffic."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "two reads and one write per element",
+    "after": "two logical reads and one logical write per element",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: flattening views of `x` and `y`, the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time ... Flattening views of `x`, `y` and the output are permitted.",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Elements per program, 1-D flat versus 2-D grid, ...",
+    "after": "the assignment of elements to programs (contiguous blocks over the flattened tensors or any other partition) ... The number of launches is free",
+    "reason": "Receives the blocking and launch-count freedoms removed from stages / algorithm family."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "for the last partial block; padded lanes are never stored.",
+    "after": "Edge handling is required wherever the task's fixed shape is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "A second pass over the data or a global intermediate for `silu(x)`.",
+    "after": "A second logical pass ... because either adds a traversal the fused gate does not have.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.fused_gate",
+    "before": "One kernel pass ... masked store.",
+    "after": "One logical pass ... (any split across programs or launches, no global intermediate) ... store with edge handling wherever M*N is not a multiple of the chosen tile.",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the flattening views, the output allocation and the single fused elementwise kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ]
+ },
+ {
+  "operator": "vector_add",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "load a contiguous block ... is expected to be one launch",
+    "after": "load each element ... How the elements are split across programs or launches is a mapping choice.",
+    "reason": "Contiguous blocking and one launch are shared by both kernels (audit stages) but add no intermediate or pass; they are mappings."
+   },
+   {
+    "class": "shape",
+    "section": "Required logical stages",
+    "before": "store under a bounds mask",
+    "after": "store, with edge handling where the last tile is partial",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case n = 20*2^20; the cuTile reference itself uses no padding mode (audit review_items)."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No second pass over the data is permitted.",
+    "after": "No second pass ... is permitted, because it would change the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "(no statement)",
+    "after": "each element of `x` and `y` is read once ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Algorithm family and structure",
+    "before": "with flat contiguous blocking",
+    "after": "(removed; moved to Permitted mappings)",
+    "reason": "Contiguous blocking is a work assignment that changes neither total work nor traffic."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "two reads and one write per element",
+    "after": "two logical reads and one logical write per element",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything `run()` does is timed: the output allocation and the launch.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "the benchmark sizes are multiples of common block widths, but correctness for arbitrary `n` is required",
+    "after": "Edge handling is required wherever the task's fixed `n` is not a multiple of the chosen tile ...; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes n = 20*2^20; 'arbitrary n' was a generic-shape leftover (cf. audit review_items on the unpadded cuTile reference)."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "Elements per program, grid shape, ...",
+    "after": "the assignment of elements to programs (contiguous blocks or any other partition) ... The number of launches is free",
+    "reason": "Receives the blocking and launch-count freedoms removed from stages / algorithm family."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Any additional pass over the data or global scratch buffer.",
+    "after": "Any additional logical pass ... because either changes the algorithm's data movement rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.elementwise_add",
+    "before": "One kernel pass ... masked store.",
+    "after": "One logical pass ... store with edge handling wherever n is not a multiple of the chosen tile.",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_evidence",
+    "before": "{any_of: [mask, padding_mode, PaddingMode, boundary, n_elements, numel], message: No bounds-handling evidence ...}",
+    "after": "(removed)",
+    "reason": "It enforced 'correctness for arbitrary n', which the fixed-shape correction removes: with n = 20*2^20 an unmasked power-of-two tile is correct (as in the cuTile reference, audit review_items), so the rule would flag valid code."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single elementwise kernel over n elements.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ]
+ },
+ {
+  "operator": "dropout",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "A single launch;",
+    "after": "One logical pass; ... How the index range is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no reduction, no intermediate, no second pass.",
+    "after": "..., because the operator is a single streaming masked rescale and an intermediate or second pass would change its data movement.",
+    "reason": "Audit intermediate_storage: none on either side; fq_boundary counts one read of x, one of x_keep and one write."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "run() performs only: output allocation, host scalar arithmetic on p, and the launch.",
+    "after": "The measured quantity is the GPU time ... Besides the launch, run() may perform the output allocation and host scalar arithmetic on p.",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(single launch locked in stages)",
+    "after": "The number of launches is free ... nothing but the output is written to global memory.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Masked tail handling versus padded loads with clipped stores ...",
+    "after": "Edge handling is required wherever the task's fixed n is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case n = 20*2^20."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Forbidden substitutions",
+    "before": "Any buffer other than the output (no mask repacking, no scratch).",
+    "after": "..., because the operator consumes the supplied mask as given and writes only the output.",
+    "reason": "Mask repacking changes the F/Q boundary (mask read at x's dtype); audit preprocessing/intermediate_storage: none."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "The timed run() contains only the output allocation, the host scalar 1/(1-p) and one launch.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "RNG prohibition kept unchanged (A: random-number semantics; reason already stated: 'The output must depend only on the supplied mask'). required_stages.s1 ('Single element-wise pass ... No RNG, no intermediate') encodes no launch count and was left unchanged. includes_preprocessing left false."
+ },
+ {
+  "operator": "matrix_copy",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "It is expected to be one launch; splitting the copy across several launches is permitted but pointless.",
+    "after": "How the copy is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "no additional passes over the data are allowed.",
+    "after": "..., because a staged or repeated copy adds a full extra read and write of the matrix and so changes the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read every element of `A` exactly once ... exactly once",
+    "after": "one logical traversal ... These are logical traversal counts, not a guarantee about physical DRAM transactions, which caches, bulk copies and the compiler may change.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "3",
+    "section": "Algorithm family and structure",
+    "before": "as long as each element is moved exactly once.",
+    "after": "as long as the algorithm moves each element exactly once (a logical count, not a count of physical memory transactions).",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the copy.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count discussed in stages)",
+    "after": "The number of launches is free: the copy may be one launch or split across several ...",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Tail handling ... is free, provided no out-of-range element is written.",
+    "after": "Edge handling is required wherever the task's fixed `N*N` (or, for 2-D tiles, `N`) is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case N = 5120, N*N = 25*2^20."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading or writing the data more than once",
+    "after": "Reading or writing the data in more than one logical traversal ...; this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical. Kept as A (reason clause added)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.stream_copy",
+    "before": "One kernel pass ... with correct tail handling for N*N elements.",
+    "after": "One logical pass (any split across programs or launches, no global intermediate) ... edge handling wherever the fixed N*N ... is not a multiple of the chosen tile.",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation, optional metadata-only flatten views, and the single copy kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "'Inputs and outputs' still says 'N*N is not guaranteed to be a multiple of any tile length in general' (protected section, left unchanged; the fixed-shape rule now sits under Permitted mappings). 'Nothing may be fused with host-side work' kept verbatim (meaning unclear but not a launch/M restriction)."
+ },
+ {
+  "operator": "matrix_transpose",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected to be one launch",
+    "after": "How the tiles are split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No additional pass over the data is permitted (for example ... compaction pass).",
+    "after": "..., because it adds a full extra read and write of the matrix and so changes the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read every element of `x` exactly once and write it exactly once",
+    "after": "one logical traversal ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the transpose kernel.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count locked in stages)",
+    "after": "The number of launches is free: the tiles may be covered by one launch or split across several ...",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Edge tiles may be handled by explicit masks or ...",
+    "after": "Edge handling is required wherever the task's fixed `m` or `n` is not a multiple of the chosen tile dimension; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case m = 4096, n = 20480."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Multiple passes over the data or scratch buffers in global memory.",
+    "after": "Multiple logical passes ... because either adds a full extra read and write of the matrix; this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical. Kept as A (reason clause added)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.tiled_transpose",
+    "before": "One kernel pass ... with edge tiles handled ...",
+    "after": "One logical pass (any split across programs or launches, no global intermediate) ... edge handling wherever m or n is not a multiple of the chosen tile ...",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single transpose kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "'Inputs and outputs' still says 'm and n need not be multiples of any tile size in general' (protected section). Algorithm family 'Out-of-place tiled transpose ... rectangular logical tiles' kept: tile shape (incl. degenerate row tiles) and the on-chip re-layout are already free, so it locks no mapping (audit stages: mapping-only)."
+ },
+ {
+  "operator": "reverse_array",
+  "changes": [
+   {
+    "class": "1-relaxed-M",
+    "section": "Required logical stages",
+    "before": "is expected to be one launch",
+    "after": "How the index range is split across programs or launches is a mapping choice.",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "1-kept-A-with-reason",
+    "section": "Required logical stages",
+    "before": "No additional pass over the data is permitted.",
+    "after": "..., because it adds a full extra read and write of the array and so changes the algorithm rather than its mapping.",
+    "reason": "A second traversal adds a full extra read/write of the data and changes the algorithm (audit intermediate_storage: no scratch on either side; fq_boundary counts one read and one write); kept as an algorithm-family invariant with the reason stated."
+   },
+   {
+    "class": "3",
+    "section": "Required logical stages",
+    "before": "read every element of `input` exactly once and write it exactly once",
+    "after": "one logical traversal ... These are logical traversal counts, not a guarantee about physical DRAM transactions",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical."
+   },
+   {
+    "class": "4",
+    "section": "Preprocessing and timing boundary",
+    "before": "Everything happens inside `run()` and is timed: the output allocation and the kernel.",
+    "after": "The measured quantity is the GPU time of all device work ... Host-side work ... is not GPU time",
+    "reason": "Host allocation and metadata are not Proton device time; only device work launched by run() is measured."
+   },
+   {
+    "class": "1-relaxed-M",
+    "section": "Permitted implementation mappings",
+    "before": "(launch count locked in stages)",
+    "after": "The number of launches is free ...",
+    "reason": "Both kernels use one launch only because the map is trivially parallel (audit stages); partitioning the index range over more launches adds no global intermediate and no extra pass, so the launch count is a mapping, not the algorithm."
+   },
+   {
+    "class": "shape",
+    "section": "Permitted implementation mappings",
+    "before": "Tail handling by explicit masks, by gather padding values ...",
+    "after": "Edge handling is required wherever the task's fixed `N` is not a multiple of the chosen tile; supporting shapes other than the task's declared shape is not required.",
+    "reason": "The task fixes one shape; edge handling is needed only where that shape is not a multiple of the chosen tile. Largest case N = 2e7 = 2^8*78125, so tiles of 512 or more need it."
+   },
+   {
+    "class": "3",
+    "section": "Forbidden substitutions",
+    "before": "Reading or writing the data more than once, or staging through a scratch buffer",
+    "after": "Reading or writing the data in more than one logical traversal, ... because either adds a full extra read and write of the array; this counts passes in the algorithm, not physical memory transactions.",
+    "reason": "'exactly once' read/write counts were ambiguous between logical traversals and physical DRAM transactions; now explicitly logical. Kept as A (reason clause added)."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.required_stages.mirrored_copy",
+    "before": "One kernel pass ... with correct tail handling ...",
+    "after": "One logical pass (any split across programs or launches, no global intermediate) ... edge handling wherever N is not a multiple of the chosen tile ...",
+    "reason": "required_stages text encoded the relaxed single-launch / unconditional-mask wording."
+   },
+   {
+    "class": "rules",
+    "section": "evaluator_rules.timing_boundary.notes",
+    "before": "Everything inside run() is timed: the output allocation and the single reversal kernel.",
+    "after": "Measured: the GPU time of all device work run() launches ... Host-side work ... is not GPU time.",
+    "reason": "timing_boundary.notes claimed host allocation was timed; aligned with class 4."
+   }
+  ],
+  "kept_unchanged_notes": "'Inputs and outputs' still says 'N is not a multiple of the tile length in the benchmark, so tail handling is exercised' (protected section). For the fixed N = 2e7 this holds only for tiles >= 512; a tile of 256 or less divides N."
+ }
+]

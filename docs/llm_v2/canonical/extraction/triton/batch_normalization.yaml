@@ -1,0 +1,248 @@
+operator: batch_normalization
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/batch_normalization/impl_triton.py
+    functions:
+      - name: compute_block_sums_kernel
+        lines: [12, 40]
+        role: kernel
+      - name: compute_mean_invstd_kernel
+        lines: [43, 71]
+        role: kernel
+      - name: apply_batch_norm_kernel
+        lines: [74, 106]
+        role: kernel
+      - name: _apply_batch_norm_kernel_autotuned
+        lines: [109, 118]
+        role: tuner
+      - name: run
+        lines: [121, 162]
+        role: host-driver
+      - name: get_last_config
+        lines: [165, 172]
+        role: helper
+  - path: tilebench/benchmarks/operators/batch_normalization/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/batch_normalization/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_batch_normalization_inputs
+        lines: [97, 102]
+        role: helper
+functional_semantics: >
+  Training-mode batch normalisation of a 2-D (N, C) matrix over the batch axis
+  with a per-channel affine transform. The reference (impl_torch.py lines
+  9-14) calls torch.nn.functional.batch_norm(input, running_mean=None,
+  running_var=None, weight=gamma.float(), bias=beta.float(), training=True,
+  momentum=0.0, eps=eps), i.e. for each channel c: mean_c = (1/N) sum_n
+  x[n, c], var_c = (1/N) sum_n (x[n, c] - mean_c)^2 (biased), and
+  y[n, c] = (x[n, c] - mean_c) / sqrt(var_c + eps) * gamma_c + beta_c.
+  Reference-side preprocessing: gamma and beta are upcast to fp32 (line 12).
+  A special case N == 1 returns beta broadcast to the input shape (lines 7-8).
+  The generator (tensors.py 97-102) produces torch.randn input (N, C), gamma
+  (C,), beta (C,) in the case dtype and passes N, C, eps positionally.
+run_signature:
+  text: |
+    def run(input: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
+            N: int, C: int, eps: float,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, gamma, beta, N, C, eps]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor output of shape (N, C), dtype of input
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(N, C)"
+    dtype: case dtype (fp16, bf16 or fp32)
+    layout: contiguous row-major; the kernels index rows * C + cols (lines 34, 103), so a row stride of C is assumed
+    mutated_in_place: false
+    notes: read twice (statistics pass and apply pass)
+  - name: gamma
+    shape: "(C,)"
+    dtype: input dtype
+    layout: contiguous
+    mutated_in_place: false
+    notes: upcast to fp32 inside the apply kernel (line 94)
+  - name: beta
+    shape: "(C,)"
+    dtype: input dtype
+    layout: contiguous
+    mutated_in_place: false
+    notes: upcast to fp32 inside the apply kernel (line 95)
+  - name: N
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime argument to all three kernels
+  - name: C
+    shape: scalar int
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: tl.constexpr in kernels 1 and 3 (lines 18, 83), runtime in kernel 2 (line 50); padded to the next power of two for the column tile (lines 134, 151, 158)
+  - name: eps
+    shape: scalar float
+    dtype: python float
+    layout: n/a
+    mutated_in_place: false
+    notes: runtime argument of kernel 2 (line 53)
+outputs:
+  - name: output
+    shape: "(N, C)"
+    dtype: input dtype (torch.empty_like at line 124)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output allocation with torch.empty_like(input)
+    lines: [124, 124]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: NUM_BLOCKS = ceil(N / fixed row-block constant) for the statistics kernel
+    lines: [125, 125]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: scratch allocation of block_sum and block_sq_sum (NUM_BLOCKS, C) fp32 and of mean and inv_std (C,) fp32 with torch.empty
+    lines: [127, 130]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: allocated on every call
+  - description: next-power-of-two padding sizes for the column tile (C_P2) and the partial tile (BLOCK_B)
+    lines: [134, 140]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+stages:
+  - id: s1
+    description: >
+      compute_block_sums_kernel: one program per fixed-size row block (grid
+      (NUM_BLOCKS,), line 133). The program holds per-channel fp32 vectors
+      acc_sum and acc_sq over a power-of-two column tile (lines 24-28), walks
+      its rows in static sub-chunks (line 31), loads each sub-chunk with
+      other=0.0 and upcasts to fp32 (lines 34-35), reduces across rows with
+      tl.sum(axis=0) for x and x*x (lines 36-37) and writes the two partial
+      vectors to row block_id of the scratch matrices (lines 39-40).
+    kind: kernel
+    lines: [12, 40]
+    launches: "1 launch; NUM_BLOCKS programs"
+    depends_on: []
+    fusable_with: none
+    produces: block_sum, block_sq_sum (NUM_BLOCKS, C) fp32
+  - id: s2
+    description: >
+      compute_mean_invstd_kernel: one program per channel (grid (C,), line
+      141). It loads the NUM_BLOCKS partial sums and partial squares of its
+      channel in one power-of-two tile with other=0.0 (lines 57-61), reduces
+      them with tl.sum (lines 63-64), computes mean = S/N and
+      var = SQ/N - mean^2 clamped at 0 (lines 66-68), and stores mean and
+      inv_std = rsqrt(var + eps) (lines 70-71).
+    kind: kernel
+    lines: [43, 71]
+    launches: "1 launch; C programs"
+    depends_on: [s1]
+    fusable_with: unclear
+    produces: mean, inv_std (C,) fp32
+  - id: s3
+    description: >
+      apply_batch_norm_kernel: one program per ROWS rows (grid ceil(N/ROWS),
+      lines 148, 155). It loads mean, inv_std, gamma, beta for all channels
+      (fp32, lines 92-95), folds them into scale = inv_std*gamma and
+      shift = beta - mean*scale (lines 96-97), then for each static
+      sub-chunk of rows loads x (upcast to fp32), computes y = x*scale + shift
+      and stores it to the output with a row/column mask (lines 100-106).
+      Launched at lines 147-160 (autotuned or fixed config).
+    kind: kernel
+    lines: [74, 106]
+    launches: "1 launch; ceil(N / ROWS) programs"
+    depends_on: [s2]
+    fusable_with: unclear
+    produces: output
+algorithm_family: >
+  Three-kernel batch normalisation: two-level single-pass moment statistics
+  (per-row-block partial sum and sum of squares, then a per-channel finalize
+  computing mean and inverse standard deviation from E[x^2] - E[x]^2),
+  followed by a separate normalise-and-affine pass that re-reads the input.
+reduction_scan_sort_structure: >
+  Level 1 (s1): within a row block, rows are consumed in static sub-chunks in
+  increasing row order; each sub-chunk is reduced across rows by tl.sum
+  (tree) and accumulated sequentially into the per-channel fp32 vectors.
+  Level 2 (s2): per channel, the NUM_BLOCKS partials are reduced by one
+  tl.sum (tree) over a power-of-two tile in block order. Variance is formed
+  as SQ/N - mean^2 (single-pass, not Welford, not two-pass), clamped to be
+  non-negative before rsqrt. The apply pass is elementwise.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for the partial sums, squares, mean, variance, inv_std and the normalise arithmetic (x, gamma, beta upcast to fp32 at lines 35, 94-95, 104)
+  output_dtype: input dtype; the fp32 result y is stored into the input-dtype buffer at line 106 (implicit cast at the store)
+  special_modes: "variance via E[x^2] - E[x]^2 with max(var, 0) clamp (lines 67-68); eps added before rsqrt (line 71)"
+  masking_or_padding_values: "other=0.0 for rows beyond N and columns beyond C in all loads (lines 35, 60-61, 92-95, 104), so padded lanes contribute nothing to the sums"
+intermediate_storage: >
+  block_sum and block_sq_sum, each (NUM_BLOCKS, C) fp32, written by s1 and
+  read by s2; mean and inv_std, each (C,) fp32, written by s2 and read by s3.
+  All four are allocated with torch.empty inside run() on every call (lines
+  127-130) and live until run() returns.
+mutation_rules: >
+  No input is modified; the output and all scratch buffers are freshly
+  allocated per call; repeated calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: ROWS
+    role: tile size (rows per program of the apply kernel)
+    default_present: true
+  - name: num_warps
+    role: warps (apply kernel only)
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 109-118) on apply_batch_norm_kernel only, over ROWS
+  x num_warps, keyed on N, warmup=1, rep=3; the non-autotuned path launches
+  the undecorated apply kernel with _DEFAULT_CONFIG (lines 5, 154-160).
+  Kernels s1 and s2 are never tuned: s1 uses the fixed module constants
+  _K1_BLOCK_N = 64 rows per program and _STEP = 8 rows per sub-chunk with
+  num_warps=4 (lines 8-9, 133-137); s2 uses BLOCK_B = next_power_of_2
+  (NUM_BLOCKS) and Triton's default warp count (lines 140-144); s3 shares
+  _STEP. get_last_config reads best_config of the apply kernel (lines
+  165-172). Audit only.
+implementation_freedoms_observed: >
+  Row-block sizes, sub-chunk sizes and warps of every kernel; the number of
+  partial blocks; whether the per-channel finalize is a separate kernel or
+  folded into the apply kernel's prologue (each program re-reducing the
+  partials) or into s1 via atomics; the statistics formula (Welford or
+  two-pass would also satisfy the verify tolerance); vectorisation; whether
+  scratch is reused across calls.
+algorithm_constraints_observed: >
+  Output y = (x - mean) * rsqrt(var + eps) * gamma + beta with the biased
+  (divide by N) variance per channel over the batch axis; statistics computed
+  and applied in fp32 with the result cast to the input dtype; two passes
+  over the input (a statistics pass and an apply pass) separated by a global
+  synchronisation, with per-channel partial sums in fp32 scratch; gamma and
+  beta read once; output (N, C) contiguous in the input dtype.
+fq_boundary:
+  bytes_expr: "3 * N * C * dtype_size + 2 * C * dtype_size"
+  flops_expr: "4 * N * C"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts two reads of the input (statistics and apply passes),
+    one write of the output, and one read each of gamma and beta, which is
+    exactly the traffic of the three kernels inside run(); nothing is
+    prepacked outside run(). Not counted are the fp32 scratch traffic (the
+    partials written by s1 and read by s2, about 8*NUM_BLOCKS*C bytes, plus
+    the (C,) mean/inv_std written by s2 and re-read by every s3 program),
+    which is small relative to N*C, and the scratch allocations, which move
+    no bytes.
+notes_for_review:
+  - The variance is computed as E[x^2] - E[x]^2 in fp32, which is cancellation-prone for data with large mean; the reference uses ATen's batch_norm statistics, so the two differ in rounding (verify atol/rtol 1e-2).
+  - The reference's N == 1 special case (return beta) is not mirrored; for N == 1 the kernel path gives var = 0 and y = beta up to rounding; N == 1 is not in the sweep.
+  - The statistics kernels have fixed launch geometry outside the autotune space, so autotuning only touches the apply pass.
+  - The apply kernel stores an fp32 value into the input-dtype output and relies on Triton's implicit cast at tl.store.
+  - The block_size keyword is accepted but unused; the kernels assume the input row stride equals C.

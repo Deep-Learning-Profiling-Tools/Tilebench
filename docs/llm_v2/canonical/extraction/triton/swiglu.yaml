@@ -1,0 +1,140 @@
+operator: swiglu
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/swiglu/impl_triton.py
+    functions:
+      - name: swiglu_kernel
+        lines: [8, 23]
+        role: kernel
+      - name: _swiglu_kernel_autotuned
+        lines: [26, 35]
+        role: tuner
+      - name: run
+        lines: [38, 57]
+        role: host-driver
+      - name: get_last_config
+        lines: [60, 64]
+        role: helper
+  - path: tilebench/benchmarks/operators/swiglu/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/swiglu/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_swiglu_inputs
+        lines: [193, 196]
+        role: helper
+functional_semantics: >
+  Elementwise SwiGLU gate: out = silu(x) * y = x * sigmoid(x) * y for two
+  tensors x, y of identical shape (M, N), via
+  torch.nn.functional.silu(x) * y (impl_torch.py line 5). No
+  reference-side preprocessing.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, y: torch.Tensor,
+            block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [x, y]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape x.shape and dtype x.dtype (fresh allocation, returned as a view of the flat output)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(M, N)"
+    dtype: "fp16 | bf16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous (generator torch.randn, tensors.py line 194); flattened by .contiguous().view(-1)
+    mutated_in_place: false
+    notes: The gate operand (silu is applied to x).
+  - name: y
+    shape: "(M, N)"
+    dtype: same as x
+    layout: contiguous (tensors.py line 195); flattened likewise
+    mutated_in_place: false
+    notes: Shape equality with x is asserted (line 40).
+outputs:
+  - name: output
+    shape: "(M, N)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: x_flat = x.contiguous().view(-1); y_flat = y.contiguous().view(-1)
+    lines: [41, 42]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: Views only for the contiguous generator inputs; would copy for non-contiguous inputs.
+  - description: output = torch.empty_like(x_flat); n_elements = x_flat.numel()
+    lines: [43, 44]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: The result is returned as output.view(x.shape) (line 57).
+stages:
+  - id: s1
+    description: >
+      swiglu_kernel, grid = ceil(n_elements / BLOCK_SIZE) (lines 47, 51).
+      Each program loads BLOCK_SIZE contiguous x and y elements (mask
+      offsets < n_elements, other=0.), upcasts both to fp32, computes
+      x * sigmoid(x) * y (line 22) and stores the result cast back to
+      x's dtype (line 23).
+    kind: kernel
+    lines: [8, 23]
+    launches: "ceil(M*N/BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (final output)
+algorithm_family: >
+  Memory-bound 1-D elementwise fused SiLU-gated multiply (SwiGLU) with flat
+  contiguous blocking, one launch.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "n/a; silu and the product are evaluated in fp32 after explicit upcasts (lines 20-22)"
+  output_dtype: same as x (explicit .to(x.dtype) at line 23)
+  special_modes: "tl.sigmoid builtin (exp lowering is Triton-internal, unclear)"
+  masking_or_padding_values: "other=0. for both loads; masked lanes are not stored"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 26-35) over BLOCK_SIZE x num_warps,
+  key=["n_elements"], warmup=1, rep=3; no num_stages. Default path
+  launches the undecorated kernel with _DEFAULT_CONFIG (lines 49-56). The
+  block_size keyword of run() is ignored. get_last_config() reads
+  best_config (lines 60-64). Audit only.
+implementation_freedoms_observed: >
+  Block size, warps, vectorisation, 1-D vs 2-D grid, and the sigmoid/exp
+  formulation within tolerance.
+algorithm_constraints_observed: >
+  Elementwise x * sigmoid(x) * y over all M*N elements; fp32 internal
+  arithmetic (or equivalent accuracy) with output cast to x's dtype; one
+  read of each input and one write of the output; out-of-place; no input
+  mutation; output shape equals x's shape.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() only creates views, allocates the output and launches the kernel;
+    two reads plus one write of n elements is exactly the kernel's traffic.
+    `n` is not a config.yaml parameter (the case parameters are M and N);
+    it is engine-provided (presumably M*N) and was not verified here. One
+    flop per element is nominal (sigmoid plus two multiplies).
+notes_for_review:
+  - "block_size keyword is accepted but ignored."
+  - "`n` in the metric expressions is engine-provided, not a case parameter; its definition was not read."
+  - "Output dtype follows x; y is assumed to share x's dtype (same-dtype generator)."

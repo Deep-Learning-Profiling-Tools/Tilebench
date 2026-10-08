@@ -1,0 +1,139 @@
+operator: sigmoid
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/sigmoid/impl_triton.py
+    functions:
+      - name: sigmoid_kernel
+        lines: [8, 17]
+        role: kernel
+      - name: _sigmoid_kernel_autotuned
+        lines: [20, 30]
+        role: tuner
+      - name: run
+        lines: [33, 50]
+        role: host-driver
+      - name: get_last_config
+        lines: [53, 61]
+        role: helper
+  - path: tilebench/benchmarks/operators/sigmoid/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/sigmoid/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_sigmoid_inputs
+        lines: [111, 113]
+        role: helper
+functional_semantics: >
+  Elementwise logistic function y = 1 / (1 + exp(-x)) over a 1-D tensor of
+  n elements, via torch.sigmoid(X) (impl_torch.py line 5). The integer
+  argument N is ignored by the reference. No reference-side preprocessing.
+run_signature:
+  text: |
+    def run(X: torch.Tensor, N: int,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [X, N]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single tensor with X's shape and dtype (fresh allocation)
+  get_last_config: present
+inputs:
+  - name: X
+    shape: "(n,)"
+    dtype: "fp16 | bf16 | fp32 (config.yaml dtype grid)"
+    layout: contiguous (generator torch.randn, tensors.py line 112)
+    mutated_in_place: false
+    notes: Treated as a flat pointer; only N elements are processed.
+  - name: N
+    shape: scalar
+    dtype: python int
+    layout: n/a
+    mutated_in_place: false
+    notes: >
+      Element count used for the grid and the bounds mask (lines 38, 42,
+      44); the generator passes N = n = X.numel() (tensors.py line 113).
+      Consistency with X.numel() is not asserted.
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as X
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(X)
+    lines: [35, 35]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: Only host work before the launch.
+stages:
+  - id: s1
+    description: >
+      sigmoid_kernel, grid = ceil(N / BLOCK_SIZE) programs (lines 38, 42).
+      Each program handles BLOCK_SIZE contiguous elements: masked load
+      (offsets < n_elements, no `other` value), upcast to fp32 (line 15),
+      tl.sigmoid (line 16), masked store (line 17) with implicit cast to
+      the output dtype.
+    kind: kernel
+    lines: [8, 17]
+    launches: "ceil(N/BLOCK_SIZE)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (final output)
+algorithm_family: >
+  Memory-bound 1-D elementwise map (logistic sigmoid) with flat contiguous
+  blocking, one launch.
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: "n/a; the sigmoid is evaluated in fp32 after an explicit upcast (line 15)"
+  output_dtype: same as input (implicit cast at tl.store, line 17)
+  special_modes: "tl.sigmoid builtin; whether its exp lowers to a fast approximate instruction is Triton-internal (unclear)"
+  masking_or_padding_values: "none (tl.load without `other`; masked lanes hold undefined values and are never stored)"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (elements per program)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 20-30) over BLOCK_SIZE x num_warps x num_stages,
+  key=["n_elements"], warmup=1, rep=3. The default path launches the
+  undecorated kernel with _DEFAULT_CONFIG (lines 40-48). The block_size
+  keyword of run() is ignored. get_last_config() reads best_config
+  (lines 53-61). Audit only.
+implementation_freedoms_observed: >
+  Block size, warps, stages, vectorisation width, grid shape (1-D here),
+  and the exact exp formulation (exp vs exp2 with scaling), as long as the
+  per-dtype verify tolerances hold.
+algorithm_constraints_observed: >
+  Elementwise sigmoid over all N elements; internal computation in fp32
+  (or at least accurate to the per-dtype tolerance) with the output cast
+  back to the input dtype; out-of-place; no input mutation; a single
+  memory-bound sweep (read once, write once).
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() does nothing but allocate the output and launch the kernel; the
+    formula's one read plus one write of n elements is exactly the kernel's
+    traffic. n is the case parameter and is passed to run() as N. One flop
+    per element is nominal (the sigmoid costs an exp, an add and a divide).
+notes_for_review:
+  - "block_size keyword is accepted but never used; the default path always uses _DEFAULT_CONFIG."
+  - "N is not validated against X.numel(); the kernel trusts N for both the grid and the mask."
+  - "tl.load has no `other`; correctness relies on masked lanes never being stored."

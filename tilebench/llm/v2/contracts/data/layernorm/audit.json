@@ -1,0 +1,148 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "layernorm",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 2,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/layernorm/impl_triton.py",
+      "functions": [
+        {
+          "name": "layernorm_kernel",
+          "lines": [
+            8,
+            44
+          ]
+        },
+        {
+          "name": "_layernorm_kernel_autotuned",
+          "lines": [
+            47,
+            57
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            60,
+            94
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            97,
+            105
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/layernorm/impl_cutile.py",
+      "functions": [
+        {
+          "name": "layernorm_kernel",
+          "lines": [
+            22,
+            64
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            70,
+            112
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            115,
+            116
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/layernorm/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            5,
+            6
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "per row: mean, biased var, rstd = rsqrt(var+eps), y = (x-mean)*rstd*w + b, fp32 stats, output in x dtype (impl_triton.py:22-44).",
+      "cutile": "same formula (impl_cutile.py:27-64).",
+      "note": "Both match impl_torch.py:6 (F.layer_norm over the last dim, eps default 1e-5). Generator tensors.py:403-407 returns (x, weight, bias); eps not supplied by config, so both use the signature default."
+    },
+    "stages": {
+      "status": "aligned",
+      "triton": "contiguous().reshape view (impl_triton.py:71), empty_like (72-73), one launch grid (batch_M,) (75-92).",
+      "cutile": "views + weight/bias contiguous no-ops (impl_cutile.py:82-86), one launch grid (batch_M,1,1) (89,108-110).",
+      "note": "Stats and apply fused in one kernel, one program per row, on both sides."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "apply pass depends on mean/rstd of the same row (impl_triton.py:31-34,43).",
+      "cutile": "same (impl_cutile.py:39-41,63).",
+      "note": "Rows independent."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "lane-wise sum and sum-of-squares over chunks, one tl.sum each, var = E[x^2] - mean^2 (impl_triton.py:22-33).",
+      "cutile": "identical one-pass formulation with ct.sum (impl_cutile.py:27-40).",
+      "note": "Both use the one-pass variance; the contract permits any fp32 formulation (one-pass, centred, Welford) since verification is tolerance-based."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "fp32 upcast of x, weight, bias; fp32 stats; fp32 result stored to the output pointer with implicit cast (impl_triton.py:27,40-44).",
+      "cutile": "fp32 upcast of x, weight, bias; explicit ct.astype to x.dtype at store (impl_cutile.py:30-35,51-63).",
+      "note": "Same precision path; implicit vs explicit final cast is a primitive detail."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "x.contiguous().reshape (view) + empty_like inside run; weight/bias passed as-is (impl_triton.py:71-73,79).",
+      "cutile": "same views + weight.contiguous()/bias.contiguous() no-ops (impl_cutile.py:82-86).",
+      "note": "Nothing cached or prepacked; both run() signatures lack **kwargs (engine passes only autotune)."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "none (mean/rstd in registers).",
+      "cutile": "none.",
+      "note": "No global scratch."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "inputs never written; fresh out (impl_triton.py:72).",
+      "cutile": "inputs never written; fresh out (impl_cutile.py:83).",
+      "note": "Idempotent."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "no dispatch branches; masked loads with other=0.0/1.0/0.0 for x/weight/bias (impl_triton.py:27,41-42).",
+      "cutile": "no dispatch branches; zero-padded loads for all three (impl_cutile.py:33,54,60); fixed allow_tma=False/latency=1 hints.",
+      "note": "Tail fill values differ (weight other=1.0 vs zero pad) but masked lanes are never stored; mapping detail."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "n * dtype_size * 3",
+    "flops_expr": "6 * n",
+    "consistent": "true",
+    "note": "n = batch*M*K (tensors.py:699-700). Counts X read twice (statistics + apply passes) plus Y written once, matching both kernels' row re-read; the (K,) weight/bias reads are uncounted. This two-pass convention differs from l2_norm's compulsory 2n model: an on-chip single-read design would be credited with 3n bytes. Nothing is untimed or prepacked; views and allocation are inside run()."
+  },
+  "human_reference_comparable": true,
+  "review_items": [],
+  "contract_sha256": "9ccc0942b42f8f7d7a4ac74c0f66b5e84133a0cd8fa2469a3069bb9095619fc4",
+  "previous_status_before_approval": "draft"
+}

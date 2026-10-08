@@ -1,0 +1,37 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "bitonic_sort",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "allocate_work", "description": "Allocate a working buffer of M = next power of two >= N elements in data's dtype inside run()."},
+    {"id": "pad", "description": "One kernel pass copying data[0:N] into work[0:N] and filling work[N:M] with +inf (may be fused into the first stage group)."},
+    {"id": "compare_exchange_network", "description": "The bitonic schedule k = 2..M ascending, j = k/2..1 descending; per stage, partner i XOR j, direction (i AND k) == 0, strict-comparison swap performed once per pair by a single owner (lower-index lane is natural), in place in work; stages separated by global synchronisation unless confined to one program's slice."},
+    {"id": "return_leading_slice", "description": "Return work[:N] as a zero-copy view."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(sort|argsort|msort|topk|kthvalue)\\(|\\bsorted\\(|np\\.sort\\(|\\.sort\\(\\)|\\.sort\\(dim", "message": "A library sort replaces the whole computation.", "level": "confirmed", "scope": "host"},
+    {"pattern": "tl\\.sort\\(|ct\\.sort\\(|T\\.sort\\(|nl\\.sort\\(", "message": "A DSL-level sort primitive replaces explicit compare-exchange stages; check that the network semantics and stage structure are preserved.", "level": "suspicious", "scope": "any"},
+    {"pattern": "torch\\.full\\(|torch\\.cat\\(|torch\\.(nn\\.functional\\.)?pad\\(|\\bF\\.pad\\(|\\.copy_\\(|\\[:N\\]\\s*=", "message": "The pad must be a kernel pass over the run-allocated buffer, not host-side fill/copy operations.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.clone\\(\\)", "message": "clone() is only acceptable on the N <= 1 early-exit path.", "level": "suspicious", "scope": "host"},
+    {"pattern": ">=|<=", "message": "Possible non-strict comparison in the swap test; equal values must never be exchanged (ignore if used only for bounds masks).", "level": "suspicious", "scope": "any"},
+    {"pattern": "torch\\.empty\\([^)]*\\)[\\s\\S]*torch\\.empty\\(|torch\\.empty_like\\(", "message": "A second buffer suggests ping-pong buffering; the network must run in place in a single working buffer.", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.|\\.float\\(\\)|\\.half\\(\\)|astype\\(", "message": "No dtype conversion is part of this operator.", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["\\^", "bitwise_xor", "xor"], "message": "No XOR partner computation found; partner = i XOR j is required.", "level": "suspicious"},
+    {"any_of": ["&\\s*k", "bitwise_and", "& k\\b"], "message": "No (i AND k) direction test found.", "level": "suspicious"},
+    {"any_of": ["inf", "POS_INF", "pos_inf"], "message": "No +inf padding found.", "level": "suspicious"},
+    {"any_of": ["tl\\.where", "ct\\.where", "T\\.if_then_else", "nl\\.where", "where\\("], "message": "No select/where found for the compare-exchange.", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": [
+    "torch.empty",
+    "torch.cuda.current_stream",
+    "Tensor.contiguous",
+    "Tensor.__getitem__",
+    "Tensor.clone"
+  ],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "view of the run-allocated working buffer (length M = next power of two >= N), i.e. work[:N]; must never share storage with data"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "Measured: GPU time of all device work run() causes (the pad pass and every network stage); the M-element allocation call and the zero-copy slice are host work, not GPU time. Nothing is cached across calls; the metric counts only 2*N*dtype_size bytes while the executed work is the pad plus L(L+1)/2 in-place passes over M elements."},
+  "tolerance_source": "config.verify"
+}

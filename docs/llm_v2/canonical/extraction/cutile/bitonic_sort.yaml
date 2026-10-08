@@ -1,0 +1,213 @@
+operator: bitonic_sort
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/bitonic_sort/impl_cutile.py
+    functions:
+      - name: pad_kernel
+        lines: [23, 31]
+        role: kernel
+      - name: bitonic_step_kernel
+        lines: [34, 57]
+        role: kernel
+      - name: _next_pow2
+        lines: [19, 20]
+        role: helper
+      - name: run
+        lines: [63, 109]
+        role: host-driver
+      - name: get_last_config
+        lines: [112, 113]
+        role: helper
+      - name: _tuner (CutileAutotuner on bitonic_step_kernel) + _DEFAULT_CONFIG/_SEARCH_SPACE
+        lines: [10, 16]
+        role: tuner
+  - path: tilebench/benchmarks/operators/bitonic_sort/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 40]
+        role: host-driver
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_bitonic_sort_inputs
+        lines: [106, 108]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py 4-40): ascending sort of a 1-D tensor of N values by an
+  explicit bitonic sorting network. If N <= 1 return data.clone() (5-6). Otherwise M =
+  next power of two >= N; work = full((M,), +inf) with work[:N] = data (8-10); for k = 2,
+  4, ..., M and for j = k/2, k/4, ..., 1: for every index i with partner ixj = i XOR j and
+  ixj > i, with ascending = (i AND k) == 0, swap work[i] and work[ixj] when
+  (ascending and work[i] > work[ixj]) or (not ascending and work[i] < work[ixj])
+  (14-38); return work[:N].contiguous() (40). +inf padding sinks to the tail, so the
+  first N entries are the ascending sort of data. Generator (tensors.py 106-108) returns
+  (randn(n), n). Config sweeps n and dtype in {fp16, fp32}.
+run_signature:
+  text: "def run(data: torch.Tensor, N: int, block_size: int = 1024, autotune: bool = False, **kwargs)"
+  positional_inputs: [data, N]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single 1-D tensor of N sorted values, dtype = data.dtype (a view of the padded scratch buffer; data.clone() when N <= 1)
+  get_last_config: present
+inputs:
+  - name: data
+    shape: "(N,)"
+    dtype: fp16 or fp32 (config case_grid dtype)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: read once by pad_kernel (line 76); never written.
+  - name: N
+    shape: scalar int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: number of valid elements; M = _next_pow2(N) (line 69).
+outputs:
+  - name: sorted
+    shape: "(N,)"
+    dtype: data.dtype
+    allocated_by: run
+    aliasing: view-of-input
+preprocessing:
+  - description: early return data.clone() for N <= 1
+    lines: [66, 67]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: not reached by the benchmark (n >= 500000).
+  - description: M = next power of two >= N; allocate work (M,) in data.dtype
+    lines: [69, 70]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: scratch of size M, which can be up to 2x N.
+  - description: pad_kernel copies data into work and fills [N, M) with +inf (ct.load with PaddingMode.POS_INF, ct.store)
+    lines: [74, 76]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: a GPU kernel, timed; grid uses the default tile regardless of autotune (line 74).
+stages:
+  - id: s1
+    description: allocate work (M,) scratch
+    kind: allocation
+    lines: [69, 70]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: work (M,) in data.dtype
+  - id: s2
+    description: >
+      pad_kernel: each program loads a TILE-wide slice of data at tile index (bid,) with
+      ct.PaddingMode.POS_INF (elements >= N read as +inf) and stores it at the same tile
+      index of work (lines 28-31). Produces the +inf-padded power-of-two working array.
+    kind: kernel
+    lines: [23, 31]
+    launches: "ceil(M/TILE) programs, one launch (lines 74-76)"
+    depends_on: [s1]
+    fusable_with: "unclear"
+    produces: work filled (data in [0, N), +inf in [N, M))
+  - id: s3
+    description: >
+      bitonic_step_kernel, launched once per (k, j) stage of the network by the host
+      double loop at lines 101-107 (k = 2..M doubling, j = k/2..1 halving), in that order.
+      Each program owns TILE consecutive indices offs (line 37), computes the partner
+      ixj = offs XOR j (38) and active = (ixj > offs) & (ixj < M) & (offs < M) (40). It
+      reads its own slice a = ct.load(work, index=(bid,), shape=(TILE,), ZERO padding)
+      (43-44) and the partner values b = ct.gather(work, ixj, padding_value=0.0) (45);
+      ascending = (offs & k) == 0 (47); swap = ascending ? a > b : a < b (48); new_a/new_b
+      are the exchanged pair (49-50). Inactive lanes redirect both scatter indices to M
+      (out of bounds, dropped) (53-54); then ct.scatter(work, offs, new_a) and
+      ct.scatter(work, ixj, new_b) (56-57). Each compare-exchange pair is therefore
+      written exactly once, by the program owning the lower index; the program owning the
+      higher index computes but discards (its lane is inactive). The whole network runs in
+      place in global memory with one launch per stage.
+    kind: kernel
+    lines: [34, 57]
+    launches: "log2(M)*(log2(M)+1)/2 launches of ceil(M/TILE) programs each (lines 99-107)"
+    depends_on: [s2]
+    fusable_with: "unclear"
+    produces: work sorted ascending (first N entries = sorted data, tail = +inf)
+  - id: s4
+    description: return work[:N].contiguous() — a leading slice of a contiguous 1-D buffer, so .contiguous() returns the view without copying
+    kind: host
+    lines: [109, 109]
+    launches: "1"
+    depends_on: [s3]
+    fusable_with: "none"
+    produces: output view (N,) aliasing work
+algorithm_family: >
+  bitonic sorting network, ascending, operating in place on a +inf-padded power-of-two
+  global buffer; one kernel launch per compare-exchange stage (k, j), no in-tile or
+  shared-memory sub-sorting, no merging of stages.
+reduction_scan_sort_structure: >
+  Standard bitonic network: outer stages k = 2, 4, ..., M; inner sub-stages j = k/2 down to
+  1; partner i XOR j; direction ascending when (i AND k) == 0. Swaps on strict inequality
+  only (a > b / a < b), so equal values are never exchanged; final order is globally
+  ascending (top stage k = M has every direction ascending). Padding +inf occupies
+  [N, M) and sinks to the end. All elements (including padding) participate in every
+  stage.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: none (comparisons and moves only, in the data dtype)
+  output_dtype: data dtype
+  special_modes: none
+  masking_or_padding_values: "+inf fill for indices [N, M) (ct.PaddingMode.POS_INF in pad_kernel); ZERO padding / padding_value 0.0 on the step kernel's loads only affects lanes that are inactive and never written; inactive scatter lanes target index M (dropped)"
+intermediate_storage: >
+  work: (M,) tensor in data.dtype, M = next power of two >= N, allocated per call inside
+  run(); it is both the working array of the network and the backing storage of the
+  returned view, so it outlives the call.
+mutation_rules: >
+  data is never modified. work is mutated in place across all stage launches. The
+  returned tensor is a view of work, so the caller's result and the scratch share
+  storage; repeated calls allocate a fresh work and are idempotent with respect to data.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (indices per program of the step kernel; also pad-kernel tile via the default config)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint via kernel.replace_hints (step kernel only)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner on bitonic_step_kernel (line 60). tune_or_cached over _SEARCH_SPACE
+  (impl_cutile.py 11-15: tile in {512,1024,2048,4096} x occupancy in {4,8,16,32}), keyed
+  by (M, dtype) (lines 83-90). The sweep times only the first stage (k0, j0) = (2, 1)
+  (line 82) and the winner is reused for every stage. Default at line 10 (tile=1024,
+  occupancy=4). The pad kernel always uses _DEFAULT_CONFIG.tile (lines 74-76). Winner
+  exported via _last_autotune_config (91-95) and get_last_config (112-113); occupancy
+  applied via kernel_with_hints (line 99).
+implementation_freedoms_observed: >
+  Elements per program, occupancy, whether early stages (small j) are fused into a single
+  launch working within a tile, whether the pad pass is fused with the first stage,
+  per-stage specialisation of (k, j) as constants. block_size keyword unused.
+algorithm_constraints_observed: >
+  Bitonic compare-exchange network over a +inf-padded power-of-two buffer; ascending
+  direction rule (i AND k) == 0; strict-inequality swaps; stage order k ascending, j
+  descending; the whole array is exchanged in global memory between stages (no partial
+  in-register sort); output is the first N entries in the data dtype; input left intact.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: unclear
+  notes: >
+    Copied verbatim from config.yaml lines 13-15. Both expressions are nominal
+    (read n + write n bytes; n "flops") rather than a model of the executed work: the
+    timed run() performs the pad copy plus log2(M)*(log2(M)+1)/2 full passes over M >= n
+    elements (each pass reads and writes the buffer), and M can be up to 2n. The formula
+    does not count the pad pass, the padding overhead or the multi-pass traffic, so the
+    derived bandwidth is an effective (compulsory-traffic) rate, consistent as an
+    operator-level figure of merit but not with the implementation's actual traffic.
+notes_for_review:
+  - The returned tensor aliases the per-call scratch work via work[:N] (line 109); no copy is made, so the output's backing buffer is M elements long.
+  - Correctness of in-place exchange relies on each pair being written by exactly one program (the lower-index lane) and on reads completing before scatters within a program; cross-program reads of a partner slot by the inactive higher-index lane are discarded.
+  - Inactive lanes scatter to index M (lines 53-57); relies on ct.scatter dropping out-of-bounds indices.
+  - Autotuning times only stage (k, j) = (2, 1) and applies the choice to all stages (audit only).
+  - The pad kernel's grid uses the default tile even when autotuning (line 74-76), independent of the chosen step tile (audit only).
+  - The number of launches grows as O(log^2 n) and every launch is a full pass over global memory; CUDA-graph capture is enabled in config (use_cuda_graph: true), which matters for launch overhead but not for the algorithm.
+  - fp16 inputs: +inf is representable, and comparisons happen in fp16.
+  - block_size keyword unused.

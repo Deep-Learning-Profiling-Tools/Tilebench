@@ -1,0 +1,147 @@
+operator: dropout
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/dropout/impl_cutile.py
+    functions:
+      - name: dropout_kernel
+        lines: [21, 27]
+        role: kernel
+      - name: run
+        lines: [33, 61]
+        role: host-driver
+      - name: get_last_config
+        lines: [64, 65]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [30, 30]
+        role: tuner
+  - path: tilebench/benchmarks/operators/dropout/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/dropout/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_dropout_inputs
+        lines: [187, 190]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  Inverted dropout applied with a PRECOMPUTED keep mask: reference (impl_torch.py line 5)
+  out = (x * x_keep) * (1.0 / (1 - p)). No random number generation happens in any backend:
+  the generator (tensors.py 187-190) draws x = randn(n) and x_keep = bernoulli(1 - p) cast to the
+  same dtype as x (values exactly 0.0 or 1.0), and passes p as a Python float (0.5 from
+  case_defaults). Mask semantics: x_keep[i] == 1 keeps element i (scaled by 1/(1-p)),
+  x_keep[i] == 0 zeroes it. Output has the dtype and shape of x.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, x_keep: torch.Tensor, p: float,
+            block_size: int = 1024, autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [x, x_keep, p]
+  keyword_params: [block_size, autotune]
+  returns: single tensor `output` with x's shape and dtype
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: fp16 | bf16 | fp32 (case dtype)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: loaded as (TILE,) tiles at index (bid,) with no padding_mode argument (library default; line 24)
+  - name: x_keep
+    shape: "(n,)"
+    dtype: same as x (0.0 / 1.0 values)
+    layout: contiguous 1-D
+    mutated_in_place: false
+    notes: multiplicative keep mask supplied by the caller, never generated in-kernel (line 25)
+  - name: p
+    shape: scalar
+    dtype: Python float
+    layout: n/a
+    mutated_in_place: false
+    notes: only used on the host to form scale = 1/(1-p) (line 37), passed to the kernel as a float scalar argument
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: x.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(x)
+    lines: [35, 35]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: null
+  - description: scale = 1.0 / (1.0 - p) computed on the host
+    lines: [37, 37]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: scalar kernel argument; the kernel never sees p
+stages:
+  - id: s1
+    description: >
+      1-D grid ceil(n / TILE) (line 58). Each program loads a (TILE,) tile of x and of x_keep,
+      casts both to fp32, computes x_keep * x * scale in fp32, casts back to x.dtype and stores
+      the tile at index (bid,) (lines 23-27).
+    kind: kernel
+    lines: [21, 27]
+    launches: "1 (ceil(n/TILE) programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output
+algorithm_family: >
+  Element-wise masked scaling (two reads, one multiply by a mask, one multiply by a host scalar, one write).
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32]
+  accumulation: fp32 for both multiplies (ct.astype to float32 at lines 24-25), single rounding to x.dtype at the store (line 26)
+  output_dtype: x.dtype
+  special_modes: none
+  masking_or_padding_values: "no padding_mode specified on the loads; every n in the config sweep (1024*1024*i) is a multiple of every tile size in the default/search space, so no out-of-range lanes occur in the benchmark"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output each call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (elements per program)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over (tile, occupancy), keyed by (n_elements, dtype). Audit only.
+implementation_freedoms_observed: >
+  Tile size and occupancy; whether the product is formed in fp32 or in the input dtype
+  (the reference multiplies in the input dtype with one intermediate rounding, the cuTile kernel
+  rounds once); handling of a non-multiple tail (not exercised). The `block_size` keyword is
+  accepted but unused (line 34).
+algorithm_constraints_observed: >
+  The mask is an input tensor, not generated (no RNG, no seed); scale = 1/(1-p) applied as a
+  multiplicative scalar; output in x's dtype; x and x_keep read exactly once each.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 3"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    Counts reads of x and x_keep and the output write, which is exactly the kernel's traffic;
+    run() performs no data preprocessing (scale is a host scalar) and assumes nothing prepacked.
+notes_for_review:
+  - Dropout mask is caller-supplied (Bernoulli drawn in the generator); this operator benchmarks masked scaling, not RNG.
+  - Loads omit padding_mode; correctness for n not divisible by TILE is not exercised by the config sweep.
+  - The reference computes (x * x_keep) in the input dtype before scaling, the kernel computes everything in fp32; with 0/1 masks and p = 0.5 (scale exactly 2) the results coincide.
+  - The block_size keyword is accepted and ignored.

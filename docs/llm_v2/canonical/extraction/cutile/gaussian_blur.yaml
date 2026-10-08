@@ -1,0 +1,168 @@
+operator: gaussian_blur
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/gaussian_blur/impl_cutile.py
+    functions:
+      - name: gaussian_blur_kernel
+        lines: [20, 49]
+        role: kernel
+      - name: run
+        lines: [55, 102]
+        role: host-driver
+      - name: get_last_config
+        lines: [105, 106]
+        role: helper
+      - name: _tuner (CutileAutotuner instance)
+        lines: [52, 52]
+        role: tuner
+  - path: tilebench/benchmarks/operators/gaussian_blur/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 11]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/gaussian_blur/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_gaussian_blur_inputs
+        lines: [378, 387]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+functional_semantics: >
+  2-D "same"-size blur of a single-channel image with a small normalised kernel. Reference
+  (impl_torch.py 5-11): the flat image (input_rows*input_cols,) is viewed as (1,1,R,C), the flat
+  kernel as (1,1,kr,kc), y = F.conv2d(x, w, padding=(kr//2, kc//2)) (cross-correlation, zero
+  padding, no kernel flip), y is sliced to [:R, :C] and flattened. out[r,c] =
+  sum_{i<kr, j<kc} x[r + i - kr//2, c + j - kc//2] * w[i,j] with x = 0 outside the image.
+  Generator (tensors.py 378-387): input = randn(R*C), input_cols defaults to input_rows (square),
+  kernel = rand(kr*kc) normalised to sum 1; the four ints are passed positionally. config fixes
+  kernel_rows = kernel_cols = 7 and sweeps input_rows and dtype (fp16, fp32).
+run_signature:
+  text: |
+    def run(input, kernel, input_rows, input_cols,
+            kernel_rows, kernel_cols,
+            block_size: int = 1024, autotune: bool = False, **kwargs):
+  positional_inputs: [input, kernel, input_rows, input_cols, kernel_rows, kernel_cols]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single flat tensor `output` of shape (input_rows*input_cols,) in input's dtype (or an empty tensor when the image is empty, line 60)
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(input_rows * input_cols,)"
+    dtype: fp16 | fp32
+    layout: contiguous; viewed as (input_rows, input_cols) on the host (line 63)
+    mutated_in_place: false
+    notes: read via ct.gather with 2-D index grids and padding_value=0.0 (line 42), one gather per kernel tap
+  - name: kernel
+    shape: "(kernel_rows * kernel_cols,)"
+    dtype: same as input
+    layout: contiguous (flat)
+    mutated_in_place: false
+    notes: each tap read as a scalar ct.load(kernel_flat, index=(kr*kernel_cols+kc,), shape=()) (lines 44-45)
+  - name: input_rows / input_cols / kernel_rows / kernel_cols
+    shape: scalars
+    dtype: Python int
+    layout: n/a
+    mutated_in_place: false
+    notes: kernel_rows and kernel_cols are ConstInt kernel arguments (static tap loops); image dims only shape the grid and views
+outputs:
+  - name: output
+    shape: "(input_rows * input_cols,)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: early return of an empty tensor if input_rows*input_cols <= 0
+    lines: [58, 60]
+    kind: other
+    inside_run: true
+    cached_across_calls: false
+    notes: not reachable for the config sweep
+  - description: output = torch.empty(total_elements) in input dtype; x2d = input.view(R, C); out2d = output.view(R, C)
+    lines: [62, 64]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: views are metadata only; no copies, casts or halo padding on the host
+stages:
+  - id: s1
+    description: >
+      2-D grid (cdiv(R, TILE_R), cdiv(C, TILE_C), 1) (lines 92-96). Each program forms row index
+      column r2 (TILE_R,1) and column index row c2 (1,TILE_C) (lines 33-34), an fp32 accumulator
+      (TILE_R, TILE_C) of zeros (line 36), then for kr in range(kernel_rows), kc in range(kernel_cols)
+      (static loops over ConstInt bounds, lines 38-47): in_r = r2 + (kr - kernel_rows//2),
+      in_c = c2 + (kc - kernel_cols//2); x = ct.gather(x2d, (in_r, in_c), padding_value=0.0) (handles
+      both the image border and the tile's own out-of-range lanes); w = scalar load of kernel tap;
+      acc += fp32(x) * fp32(w). Finally ct.store(out2d, index=(bh, bw), tile=astype(acc, out2d.dtype))
+      (line 49); out-of-range lanes are clipped by ct.store.
+    kind: kernel
+    lines: [20, 49]
+    launches: "1 (cdiv(R,TILE_R) * cdiv(C,TILE_C) programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: output
+algorithm_family: >
+  Direct 2-D stencil / cross-correlation: per output tile, one full-tile gather per kernel tap
+  (kernel_rows * kernel_cols gathers) accumulated in fp32; no halo tile staging, no separable
+  decomposition, no shared-memory reuse expressed in source.
+reduction_scan_sort_structure: >
+  Sequential accumulation over taps in (kr outer, kc inner) order, element-wise per output
+  pixel; no cross-lane reduction.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 (acc = ct.zeros(..., float32); both the gathered pixel and the tap weight are cast to fp32 before the multiply-add, lines 46-47)
+  output_dtype: input.dtype (astype(acc, out2d.dtype), line 49)
+  special_modes: none
+  masking_or_padding_values: "0.0 for gathers outside the image (padding_value=0.0), which implements the reference's zero padding; the same mechanism covers tile overhang"
+intermediate_storage: >
+  None.
+mutation_rules: >
+  No input is modified; fresh output each call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile_r
+    role: tile size (rows per program)
+    default_present: true
+  - name: tile_c
+    role: tile size (columns per program)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached over a list of (tile_r, tile_c) pairs crossed with occupancy,
+  keyed by (total_elements, kernel_rows, kernel_cols, dtype). Audit only.
+implementation_freedoms_observed: >
+  Tile shape and occupancy; whether neighbours are fetched by per-tap gathers (as here) or via
+  a haloed block load; whether the tap weights are loaded once as a tile or per tap as scalars;
+  loop order over taps. The `block_size` keyword is accepted but unused (line 57).
+algorithm_constraints_observed: >
+  Cross-correlation (no kernel flip) with zero padding of kr//2, kc//2 and output cropped to the
+  input size; fp32 accumulation over all taps; output in the input dtype as a flat vector;
+  kernel_rows/kernel_cols are compile-time constants; input is used in place via a 2-D view,
+  no host-side padding or im2col.
+fq_boundary:
+  bytes_expr: "input_rows * input_rows * dtype_size + kernel_rows * kernel_cols * dtype_size + input_rows * input_rows * dtype_size"
+  flops_expr: "2 * input_rows * input_rows * kernel_rows * kernel_cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    Both expressions use input_rows squared, i.e. assume a square image, which holds because the
+    generator sets input_cols = input_rows when not given. bytes_expr counts one image read, the
+    kernel read and one output write (compulsory traffic); the kernel's kr*kc gathers re-read
+    neighbouring pixels, which the formula does not count (expected for a stencil). flops_expr is
+    2 MACs-worth per tap per pixel, matching the kernel's multiply-add. run() has no
+    preprocessing beyond allocation and views and assumes nothing prepacked.
+notes_for_review:
+  - The stencil is realised as 49 (7x7) full-tile ct.gather calls per output tile with no halo reuse expressed in source; neighbour reuse depends entirely on the cache hierarchy.
+  - Tap weights are read as scalar loads inside the double loop rather than once per program.
+  - Verify tolerances are loose (atol 0.1, rtol 1e-2) because the fp16 reference path's accumulation precision is not controlled.
+  - The metrics plot tflops, although the kernel is memory/gather bound by construction.
+  - bytes_expr and flops_expr are written in config.yaml as multi-line folded (>) scalars; the strings above are their evaluated (space-joined) values.

@@ -1,0 +1,131 @@
+operator: mul2
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/mul2/impl_cutile.py
+    functions:
+      - name: mul2_kernel
+        lines: [15, 20]
+        role: kernel
+      - name: run
+        lines: [33, 59]
+        role: host-driver
+      - name: get_last_config
+        lines: [62, 63]
+        role: helper
+  - path: tilebench/benchmarks/operators/mul2/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 5]
+        role: host-driver
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner.kernel_with_hints
+        lines: [83, 96]
+        role: tuner
+      - name: CutileAutotuner.tune_or_cached
+        lines: [98, 128]
+        role: tuner
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_mul2_inputs
+        lines: [69, 75]
+        role: helper
+functional_semantics: >
+  y = x * 2 (impl_torch.py line 5): element-wise multiplication of a 1-D
+  tensor by the Python int 2, result in the input dtype. No reference-side
+  preprocessing. The generator (tensors.py lines 69-75) draws int8 inputs
+  from [-32, 32] so that the doubled value stays inside int8, and randn
+  for the floating dtypes.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (n,), same dtype as x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n,)"
+    dtype: "one of fp16, bf16, fp32, int8 (case dtype)"
+    layout: "contiguous 1-D (generator output); passed to ct.launch as-is, no .contiguous() call"
+    mutated_in_place: false
+    notes: "n_elements is taken from x.numel() (line 35)."
+outputs:
+  - name: output
+    shape: "(n,)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: allocate output = torch.empty_like(x)
+    lines: [34, 34]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: one allocation per call.
+stages:
+  - id: s1
+    description: >
+      1-D element-wise kernel: each CTA loads one tile of TILE elements at
+      block index bid (ct.load, no explicit padding_mode, line 18),
+      multiplies the tile by the literal 2 (line 19) and stores it at the
+      same block index of output (line 20). Grid = ceil(n / TILE) CTAs
+      (lines 56-57).
+    kind: kernel
+    lines: [15, 20]
+    launches: "1 launch of ceil(n / TILE) CTAs"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (final result)
+algorithm_family: >
+  Single-pass 1-D tiled element-wise map (scale by 2).
+reduction_scan_sort_structure: >
+  None.
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: "none; the multiply is performed on the tile in its own dtype (cuTile's promotion rule for a Python int scalar is not stated in the source, but doubling is exact in every dtype involved, so the result is dtype-independent)"
+  output_dtype: same as input
+  special_modes: "exact (x2 is exact in floating point; int8 values are range-limited by the generator so no overflow)"
+  masking_or_padding_values: >
+    No explicit padding_mode or mask; a tail tile would rely on library
+    default load padding and bounds-clipped stores. For the sweep n is a
+    multiple of 1024*1024, a multiple of every tile length in the search
+    space, so no tail tile occurs.
+intermediate_storage: >
+  None beyond the output buffer.
+mutation_rules: >
+  x is never written. A new output is allocated on every call; repeated
+  calls are idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: tile
+    role: tile size (1-D tile length, ConstInt TILE)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint (applied through replace_hints)
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner over _SEARCH_SPACE (impl_cutile.py lines 23-27):
+  ct.tune.exhaustive_search keyed on (n_elements, dtype) (lines 39-46),
+  winner cached per shape key; kernel_with_hints memoises replace_hints
+  (line 55). Default path uses _DEFAULT_CONFIG (line 12). Winner recorded
+  in _last_autotune_config (lines 47-51). block_size is accepted but
+  unused.
+implementation_freedoms_observed: >
+  Tile length and occupancy; vectorisation and load/store lowering are
+  left to the compiler; grid shape.
+algorithm_constraints_observed: >
+  Single pass: each element read once and written once; no dtype change;
+  output is a fresh buffer; no scratch memory; result bit-exact with the
+  reference.
+fq_boundary:
+  bytes_expr: "n * dtype_size * 2"
+  flops_expr: "n"
+  consistent_with_timed_boundary: true
+  notes: >
+    bytes_expr counts one read and one write of n elements, exactly the
+    kernel's traffic; nothing is prepacked and run() performs no copies.
+    flops_expr counts one multiply per element.
+notes_for_review:
+  - "ct.load at line 18 has no explicit padding_mode; tail-tile behaviour is the library default and is not exercised by the sweep."
+  - "The int8 path depends on the generator's [-32, 32] range to avoid overflow; the kernel itself does no saturation."

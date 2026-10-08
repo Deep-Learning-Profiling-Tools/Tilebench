@@ -1,0 +1,123 @@
+operator: matrix_transpose
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matrix_transpose/impl_triton.py
+    functions:
+      - name: transpose_kernel
+        lines: [8, 31]
+        role: kernel
+      - name: _transpose_kernel_autotuned
+        lines: [34, 43]
+        role: tuner
+      - name: run
+        lines: [46, 66]
+        role: host-driver
+      - name: get_last_config
+        lines: [69, 73]
+        role: helper
+  - path: tilebench/benchmarks/operators/matrix_transpose/impl_torch.py
+    functions:
+      - name: run
+        lines: [4, 7]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/matrix_transpose/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matrix_transpose_inputs
+        lines: [199, 204]
+        role: helper
+functional_semantics: >
+  out = x.transpose(0, 1).contiguous() (impl_torch.py lines 4-7): for a 2-D input
+  of shape (m, n), out has shape (n, m) and out[j, i] = x[i, j], materialised as a
+  new contiguous tensor of the same dtype. The reference raises ValueError for
+  non-2-D input and does no other preprocessing.
+run_signature:
+  text: "def run(x: torch.Tensor, block_size: int = 1024, autotune: bool = False) -> torch.Tensor:"
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (n, m) with the dtype of x
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(m, n)"
+    dtype: "one of fp16, bf16, fp32, int8 (config.yaml line 14)"
+    layout: "row-major contiguous from the generator; the kernel receives explicit strides x.stride(0), x.stride(1) (lines 54, 62) so any 2-D strided layout is addressed correctly"
+    mutated_in_place: false
+    notes: "m is fixed by case_defaults and n is swept (config.yaml lines 8-13); int8 values from randint(-64, 65), others from randn (tensors.py 199-204)"
+outputs:
+  - name: output
+    shape: "(n, m)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: "read m, n = x.shape and allocate output = torch.empty((n, m)) of x's dtype on x's device"
+    lines: [47, 48]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: "no cast, copy or packing of x; strides of x and output are read on the host and passed as kernel arguments (lines 54, 62)"
+stages:
+  - id: s1
+    description: "2-D tiled transpose: a 2-D grid of (ceil(m/BLOCK_TILE), ceil(n/BLOCK_TILE)) programs; each loads a square BLOCK_TILE x BLOCK_TILE tile of x at rows offs_m, columns offs_n (masked to m, n, stride-aware) and stores the same tile values to output at row index offs_n and column index offs_m using the output strides, i.e. the write addresses are the transpose of the read addresses"
+    kind: kernel
+    lines: [8, 31]
+    launches: "ceil(m/BLOCK_TILE) * ceil(n/BLOCK_TILE) programs in one launch"
+    depends_on: []
+    fusable_with: "none"
+    produces: "output (final result)"
+algorithm_family: >
+  Square-tile out-of-place 2-D transpose: each program reads one tile with
+  row-major addressing and writes it with swapped row/column addressing. Any
+  on-chip re-layout between the coalesced read and the transposed write is left
+  to the Triton compiler; the source expresses only the address swap.
+reduction_scan_sort_structure: >
+  None (pure data movement).
+precision:
+  input_dtypes: [fp16, bf16, fp32, int8]
+  accumulation: none
+  output_dtype: same as input
+  special_modes: "none; bit-exact element movement"
+  masking_or_padding_values: "edge tiles masked by (offs_m < m) & (offs_n < n) on both load and store; masked loads use tl.load's default fill and are never stored"
+intermediate_storage: >
+  None beyond the output buffer.
+mutation_rules: >
+  x is read-only. A fresh output is allocated per call; repeated calls are
+  idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_TILE
+    role: tile size (square tile edge, shared by both dimensions)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune over BLOCK_TILE x num_warps (lines 34-43), key=["m", "n"],
+  warmup=1, rep=3. autotune=True launches the autotuned wrapper with a
+  meta-dependent 2-D grid (lines 51-55); otherwise the raw kernel is launched with
+  _DEFAULT_CONFIG (lines 57-65). get_last_config reads best_config (69-73).
+  Audit only.
+implementation_freedoms_observed: >
+  Tile shape (square or rectangular), warp count, grid traversal order, use of
+  shared memory or TMA for the on-chip transpose, vector width, and whether the
+  read or the write side is kept coalesced are all open.
+algorithm_constraints_observed: >
+  Single pass that reads every element of x once and writes every element of the
+  (n, m) output once, with out[j, i] = x[i, j], in the input dtype, producing a
+  contiguous row-major (n, m) result in a new buffer. Edge tiles must be masked.
+fq_boundary:
+  bytes_expr: "m * n * dtype_size * 2"
+  flops_expr: "0"
+  consistent_with_timed_boundary: true
+  notes: >
+    The timed run() reads m*n elements once and writes m*n elements once; the
+    formula counts exactly that and nothing else (the output allocation has no
+    traffic of its own). No prepacked inputs are assumed. flops_expr is 0, so
+    no roofline compute intensity is defined for this operator.
+notes_for_review:
+  - "The block_size keyword is accepted but unused; the tile edge comes from _DEFAULT_CONFIG or the autotuner."
+  - "The store pattern (rows of the loaded tile become columns of the output) means one side of the tile traffic is strided unless the compiler re-lays the tile out on chip; the source does not control this."
+  - "The kernel is stride-aware for both x and output, which is more general than the generator exercises (always contiguous input)."

@@ -1,0 +1,381 @@
+operator: linear_self_attention
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/linear_self_attention/impl_triton.py
+    functions:
+      - name: _phi
+        lines: [33, 36]
+        role: helper
+      - name: phi_kernel
+        lines: [39, 43]
+        role: kernel
+      - name: _kv_set_block_size_hook
+        lines: [46, 52]
+        role: tuner
+      - name: kv_gemm_kernel
+        lines: [55, 77]
+        role: kernel
+      - name: z_kernel
+        lines: [80, 104]
+        role: kernel
+      - name: _out_set_block_size_hook
+        lines: [107, 113]
+        role: tuner
+      - name: out_gemm_kernel
+        lines: [116, 143]
+        role: kernel
+      - name: _kv_kernel_autotuned
+        lines: [146, 161]
+        role: tuner
+      - name: _out_kernel_autotuned
+        lines: [164, 179]
+        role: tuner
+      - name: _launch_z
+        lines: [182, 190]
+        role: host-driver
+      - name: run
+        lines: [193, 286]
+        role: host-driver
+      - name: _cfg_dict
+        lines: [289, 298]
+        role: helper
+      - name: get_last_config
+        lines: [301, 309]
+        role: helper
+  - path: tilebench/benchmarks/operators/linear_self_attention/impl_torch.py
+    functions:
+      - name: _phi
+        lines: [4, 7]
+        role: helper
+      - name: run
+        lines: [10, 30]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/linear_self_attention/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_linear_self_attention_inputs
+        lines: [500, 518]
+        role: helper
+      - name: infer_problem_size (linear_self_attention branch, M*D)
+        lines: [770, 771]
+        role: helper
+functional_semantics: >
+  Non-causal, single-head linear attention with the elu+1 feature map.
+  Reference impl_torch (lines 4-30): phi(x) = where(x > 0, x + 1, exp(x))
+  applied element-wise to Q and K (M, D) fp32; S = phi(K)^T @ V (D, D);
+  Z = phi(K).sum(dim=0) (D,); out = (phi(Q) @ S) / ((phi(Q) @ Z)[:, None]
+  + eps) (M, D). The reference calls .contiguous() on Q, K, V and sets
+  torch.backends.cuda.matmul.allow_tf32 = True around its matmuls
+  (restored in finally), so S, phi(Q)@S and the phi(Q)@Z matvec all run
+  as TF32 on the reference side. Generator (tensors.py 500-518): Q, K, V =
+  uniform(-3, 3) fp32 (M, D), contiguous; any non-fp32 dtype raises; eps
+  (case_defaults 1e-6) is returned as the fourth positional argument.
+run_signature:
+  text: |-
+    def run(
+        Q: torch.Tensor,
+        K: torch.Tensor,
+        V: torch.Tensor,
+        eps: float = 1e-6,
+        block_size: int = None,
+        autotune: bool = False,
+        **kwargs,
+    ):
+  positional_inputs: [Q, K, V, eps]
+  keyword_params: [block_size, autotune, "**kwargs"]
+  returns: single fp32 tensor O of shape (M, D)
+  get_last_config: present (keys prefixed kv_ and out_, lines 289-309)
+inputs:
+  - name: Q
+    shape: "(M, D)"
+    dtype: fp32 (asserted, line 204)
+    layout: contiguous (run() calls .contiguous(), line 206; no-op for generator inputs)
+    mutated_in_place: false
+    notes: CUDA asserted (line 202); consumed by phi_kernel only (line 219).
+  - name: K
+    shape: "(M, D)"
+    dtype: fp32
+    layout: contiguous (line 207)
+    mutated_in_place: false
+    notes: consumed by phi_kernel only (line 220).
+  - name: V
+    shape: "(M, D)"
+    dtype: fp32
+    layout: contiguous (line 208)
+    mutated_in_place: false
+    notes: consumed only through the transposed copy V_t = V.t().contiguous() (line 224) made inside run() on every call.
+  - name: eps
+    shape: scalar python float
+    dtype: float
+    layout: n/a
+    mutated_in_place: false
+    notes: passed as float(eps) to out_gemm_kernel where it is a tl.constexpr (line 119).
+outputs:
+  - name: O
+    shape: "(M, D)"
+    dtype: fp32
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: assertions (cuda, equal shapes, fp32) and Q/K/V .contiguous()
+    lines: [202, 208]
+    kind: copy
+    inside_run: true
+    cached_across_calls: false
+    notes: no-op copies for the generator's contiguous inputs.
+  - description: allocate PhiQ, PhiK (M, D), S (D, D), Z (D,), O (M, D), all fp32
+    lines: [210, 215]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: five fresh buffers per call.
+  - description: PhiK_t = PhiK.t().contiguous() -- transpose copy of phi(K) to (D, M) row-major so the kv GEMM can TMA-load K-major tiles
+    lines: [223, 223]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: false
+    notes: a torch copy kernel executed on the timed path every call; not cached.
+  - description: V_t = V.t().contiguous() -- transpose copy of the input V to (D, M) row-major
+    lines: [224, 224]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: false
+    notes: input-layout transform performed inside run() every call (timed); no cache, so it is paid even though V does not change between repeats.
+  - description: TensorDescriptor.from_tensor for PhiK_t, V_t, S (dummy [1,1] block shape in the autotune path, config block shapes in the default path)
+    lines: [227, 230]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: default path equivalent at lines 250-255; the autotune pre_hooks (lines 46-52) set block_shape per config.
+  - description: S_t = S.t().contiguous() -- transpose copy of the (D, D) state so the out GEMM can TMA-load K-major tiles
+    lines: [239, 239]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: false
+    notes: default path at line 269; small (D x D) but a separate copy kernel on the timed path.
+  - description: TensorDescriptor.from_tensor for PhiQ, S_t, O
+    lines: [240, 242]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: default path at lines 270-275.
+stages:
+  - id: s1
+    description: allocations, contiguity checks (see preprocessing)
+    kind: allocation
+    lines: [202, 215]
+    launches: "0"
+    depends_on: []
+    fusable_with: "none"
+    produces: PhiQ, PhiK, S, Z, O buffers
+  - id: s2
+    description: >
+      phi_kernel on Q -> PhiQ: 1-D element-wise map, PhiQ = where(Q > 0,
+      Q + 1, exp(Q)), masked load/store (lines 39-43). Launch parameters
+      are fixed in the call (line 219), not tuned.
+    kind: kernel
+    lines: [39, 43]
+    launches: "1 launch, grid ceil(M*D / BLOCK)"
+    depends_on: [s1]
+    fusable_with: [s9]
+    produces: PhiQ (M, D) fp32
+  - id: s3
+    description: phi_kernel on K -> PhiK (same kernel, line 220).
+    kind: kernel
+    lines: [39, 43]
+    launches: "1 launch, grid ceil(M*D / BLOCK)"
+    depends_on: [s1]
+    fusable_with: [s4, s6, s7]
+    produces: PhiK (M, D) fp32
+  - id: s4
+    description: PhiK_t = PhiK.t().contiguous() (torch transpose copy to (D, M)).
+    kind: memcpy
+    lines: [223, 223]
+    launches: "1 torch copy kernel (expected)"
+    depends_on: [s3]
+    fusable_with: [s3]
+    produces: PhiK_t (D, M) fp32
+  - id: s5
+    description: V_t = V.t().contiguous() (torch transpose copy to (D, M)).
+    kind: memcpy
+    lines: [224, 224]
+    launches: "1 torch copy kernel (expected)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: V_t (D, M) fp32
+  - id: s6
+    description: >
+      kv_gemm_kernel: S[d1, d2] = sum_m PhiK_t[d1, m] * V_t[d2, m]. 2-D grid
+      over (D/BLOCK_M, D/BLOCK_N) output tiles; fp32 accumulator; K-loop
+      tl.range(cdiv(M, BLOCK_K)) (line 70) TMA-loads kt [BLOCK_M, BLOCK_K]
+      from PhiK_t and vt [BLOCK_N, BLOCK_K] from V_t and does acc =
+      tl.dot(kt, vt.T, acc, input_precision='tf32') (lines 73-75); TMA
+      store of the S tile cast to S's dtype (fp32) (line 77). OOB rows for
+      M not a tile multiple rely on TMA zero-fill.
+    kind: kernel
+    lines: [55, 77]
+    launches: "1 launch, grid ceil(D / BLOCK_M) x ceil(D / BLOCK_N)"
+    depends_on: [s4, s5]
+    fusable_with: [s7]
+    produces: S (D, D) fp32
+  - id: s7
+    description: >
+      z_kernel: Z[d] = sum_m PhiK[m, d]. 1-D grid over D in BLOCK_D chunks;
+      each program loops over M in BLOCK_M row chunks, masked load of a
+      [BLOCK_M, BLOCK_D] block of PhiK (other=0.0), acc += tl.sum(block,
+      axis=0) (lines 94-102); masked store of Z (line 104). Launch
+      parameters fixed in _launch_z (lines 182-190), not tuned; reads PhiK
+      a second time (independently of s4).
+    kind: kernel
+    lines: [80, 104]
+    launches: "1 launch, grid ceil(D / BLOCK_D)"
+    depends_on: [s3]
+    fusable_with: [s3, s6]
+    produces: Z (D,) fp32
+  - id: s8
+    description: S_t = S.t().contiguous() (torch transpose copy, (D, D)).
+    kind: memcpy
+    lines: [239, 239]
+    launches: "1 torch copy kernel (expected); default path line 269"
+    depends_on: [s6]
+    fusable_with: [s6]
+    produces: S_t (D, D) fp32
+  - id: s9
+    description: >
+      out_gemm_kernel: for an (M, D) output tile, numer = PhiQ_tile @ S via
+      K-loop tl.range(cdiv(D, BLOCK_K)) with TMA loads q [BLOCK_M,
+      BLOCK_K] from PhiQ and st [BLOCK_N, BLOCK_K] from S_t, numer =
+      tl.dot(q, st.T, numer, input_precision='tf32') (lines 133-136); in
+      the same loop denom[m] += sum_k q[m, k] * Z[k] with Z loaded masked
+      (other=0.0) and a plain fp32 multiply + tl.sum(axis=1) (lines
+      138-140); out = numer / (denom[:, None] + eps) (line 142); TMA store
+      to O (line 143). The denominator is recomputed by every N-tile
+      program of the same M rows.
+    kind: kernel
+    lines: [116, 143]
+    launches: "1 launch, grid ceil(M / BLOCK_M) x ceil(D / BLOCK_N)"
+    depends_on: [s2, s7, s8]
+    fusable_with: [s2]
+    produces: O (M, D) fp32 (returned)
+algorithm_family: >
+  Linear attention (feature map phi = elu + 1, non-causal, single head)
+  realised as an unfused pipeline: two element-wise feature-map kernels, a
+  state GEMM S = phi(K)^T V and an output GEMM phi(Q) S, both TMA-fed
+  tensor-core GEMMs with TF32 operands over host-pre-transposed K-major
+  copies, plus a separate column-sum kernel for the normaliser Z and a
+  fused per-row denominator phi(Q).Z inside the output GEMM; eight device
+  launches per call (five Triton kernels + three torch transpose copies).
+reduction_scan_sort_structure: >
+  S: reduction over M inside tl.dot, sequential over BLOCK_K-sized chunks
+  in the tl.range loop, fp32 accumulator, TF32 MMA. Z: sequential over M in
+  BLOCK_M chunks, tl.sum over the chunk's rows then vector add, fp32. numer:
+  reduction over D in BLOCK_K chunks, TF32 MMA, fp32 accumulator. denom:
+  per chunk tl.sum(axis=1) of q*z in fp32 FMA (not tensor core), then
+  sequential accumulation. eps is added to the denominator after the full
+  reduction, matching the reference.
+precision:
+  input_dtypes: [fp32]
+  accumulation: fp32 for all four reductions
+  output_dtype: fp32
+  special_modes: "input_precision='tf32' on both tl.dot calls (lines 75, 136): MMA operands are rounded to TF32, matching the reference's allow_tf32=True. Asymmetry: the Triton denominator phi(Q).Z is exact fp32 FMA, whereas the reference evaluates phi_q @ Z as a TF32 matmul; the Triton phi uses tl.exp."
+  masking_or_padding_values: "z_kernel: other=0.0 on PhiK loads and masked Z store; out_gemm: Z loaded with other=0.0; TMA descriptor loads zero-fill out-of-bounds rows/cols and TMA stores clip (relevant for M = 10000 which is not a tile multiple); phi_kernel masked by offs < M*D"
+intermediate_storage: >
+  Per call, all fp32, all allocated inside run() and released by refcount
+  after return: PhiQ (M, D), PhiK (M, D), PhiK_t (D, M), V_t (D, M), S
+  (D, D), S_t (D, D), Z (D,). Nothing persists across calls.
+mutation_rules: >
+  Q, K, V are never written (contiguous() is a no-op for the generator's
+  inputs); every call allocates fresh buffers; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: kv_BLOCK_M
+    role: tile size (kv GEMM)
+    default_present: true
+  - name: kv_BLOCK_N
+    role: tile size (kv GEMM)
+    default_present: true
+  - name: kv_BLOCK_K
+    role: tile size (kv GEMM, reduction chunk over M)
+    default_present: true
+  - name: kv_num_warps
+    role: warps (kv GEMM)
+    default_present: true
+  - name: kv_num_stages
+    role: stages (kv GEMM)
+    default_present: true
+  - name: out_BLOCK_M
+    role: tile size (out GEMM)
+    default_present: true
+  - name: out_BLOCK_N
+    role: tile size (out GEMM)
+    default_present: true
+  - name: out_BLOCK_K
+    role: tile size (out GEMM, reduction chunk over D)
+    default_present: true
+  - name: out_num_warps
+    role: warps (out GEMM)
+    default_present: true
+  - name: out_num_stages
+    role: stages (out GEMM)
+    default_present: true
+  - name: phi BLOCK / num_warps
+    role: tile size / warps of phi_kernel, fixed literals at the launch (lines 219-220), never tuned
+    default_present: true
+  - name: z BLOCK_M / BLOCK_D / num_warps / num_stages
+    role: tile sizes / warps / stages of z_kernel, fixed literals in _launch_z (lines 182-190), never tuned
+    default_present: true
+autotune_mechanism: >
+  Two independent triton.autotune wrappers (lines 146-179) over the shared
+  _TILE_SHAPES list x num_warps x num_stages, keyed on ["M", "D"], each
+  with a pre_hook (lines 46-52, 107-113) that rewrites the three
+  TensorDescriptors' block_shape to the candidate config (descriptors are
+  created with a dummy [1, 1] block shape in the autotune path, lines
+  227-230 and 240-242). Default path builds descriptors with
+  _DEFAULT_KV_CONFIG / _DEFAULT_OUT_CONFIG block shapes (lines 250-284).
+  phi_kernel and z_kernel are launched with fixed parameters in both
+  paths. get_last_config merges both best_configs with kv_/out_ prefixes.
+implementation_freedoms_observed: >
+  Tile shapes, warps, stages and pipelining of the two GEMMs; TMA
+  descriptors versus pointer loads; whether operands are materialised as
+  transposed copies (as here) or read with transposed strides / tl.trans;
+  fusing phi into the GEMM operand loads; computing Z inside the kv GEMM
+  (as phi(K)^T 1) or inside the phi kernel instead of a separate pass;
+  computing the denominator once per row block instead of per N tile;
+  launch count and ordering; whether to pre-transpose V outside the timed
+  region (not done here).
+algorithm_constraints_observed: >
+  Keep: phi(x) = x + 1 for x > 0, exp(x) otherwise, applied to Q and K;
+  state S = phi(K)^T V of shape (D, D) accumulated in fp32 with TF32 (or
+  better) operand precision; Z = column sums of phi(K); O = phi(Q) S /
+  (phi(Q) . Z + eps) with eps added after the reduction; fp32 (M, D)
+  output; fp32 inputs; non-causal, single head, no 1/sqrt(D) scaling;
+  inputs read-only.
+fq_boundary:
+  bytes_expr: "(4 * M * D + D * D + D) * dtype_size"
+  flops_expr: "4 * M * D * D + 3 * M * D"
+  consistent_with_timed_boundary: true
+  notes: >
+    Everything the formula counts happens inside run(); nothing is cached
+    or prepacked across calls and no input is assumed pre-transposed, so
+    the formula credits no untimed work. It is however the minimal-traffic
+    model (read Q, K, V once, write O once, plus S and Z once); the timed
+    region actually performs about 11 M*D-sized passes (PhiQ/PhiK
+    write+read, PhiK_t and V_t write+read, PhiK re-read by z_kernel, S and
+    S_t round trips) and three torch transpose copies, roughly 2.5-3x the
+    counted bytes. flops counts the two GEMMs (4*M*D*D) plus three M*D
+    element-wise/matvec passes, which approximates the two phi maps and the
+    denominator; the Z sum and per-N-tile denominator recomputation are
+    extra uncounted work. dtype_size is 4 (fp32 only).
+notes_for_review:
+  - V_t = V.t().contiguous() is an input-layout transform executed inside run() on every call (timed, uncached) purely to feed the TMA descriptor; a cached or host-side prepack would move it out of the timed region, so the F/Q boundary here is 'transpose included'.
+  - PhiK_t and S_t transposes are likewise per-call torch copy kernels on the timed path; total launches per call = 8 (5 Triton + 3 torch copies).
+  - bytes_expr counts only the ideal 4*M*D + D*D + D traffic; actual traffic in the timed region is roughly 3x larger.
+  - z_kernel has a fixed, untuned configuration and a grid of only ceil(D / BLOCK_D) programs (very low parallelism for small D); it re-reads PhiK from memory instead of being fused into the kv GEMM or phi pass.
+  - The denominator phi(Q).Z is recomputed by every N-tile program (redundant by a factor ceil(D / out_BLOCK_N)) and in exact fp32 FMA, while the reference computes it as a TF32 matvec.
+  - TMA/TensorDescriptor path requires a TMA-capable GPU; no fallback branch exists in the source.
+  - The M = 10000 cases are not tile multiples; correctness relies on TMA zero-fill of out-of-bounds operand rows and store clipping (z_kernel uses explicit masks).
+  - The reference toggles the process-wide torch.backends.cuda.matmul.allow_tf32 flag (restored in finally).
+  - block_size kwarg is accepted but ignored; eps becomes a tl.constexpr so a different eps recompiles out_gemm_kernel.
+  - get_last_config keys (kv_*, out_*) match _DEFAULT_KV_CONFIG / _DEFAULT_OUT_CONFIG names, as required for NCU replay.

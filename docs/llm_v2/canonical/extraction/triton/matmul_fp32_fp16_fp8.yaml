@@ -1,0 +1,255 @@
+operator: matmul_fp32_fp16_fp8
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py
+    functions:
+      - name: _tma_set_block_size_hook
+        lines: [23, 29]
+        role: tuner
+      - name: _b_transposed (and module-level _bt_cache dict, line 32)
+        lines: [35, 39]
+        role: helper
+      - name: matmul_kernel
+        lines: [42, 79]
+        role: kernel
+      - name: matmul_kernel_autotuned
+        lines: [82, 118]
+        role: tuner
+      - name: run
+        lines: [124, 165]
+        role: host-driver
+      - name: get_last_config
+        lines: [168, 179]
+        role: helper
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_torch.py
+    functions:
+      - name: module-level torch.backends.cuda.matmul.allow_tf32 = True
+        lines: [4, 4]
+        role: helper
+      - name: _fp8_args (and module-level _fp8_cache dict, line 7)
+        lines: [10, 18]
+        role: helper
+      - name: run
+        lines: [21, 27]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_matmul_fp32_fp16_fp8_inputs
+        lines: [416, 436]
+        role: helper
+      - name: infer_problem_size (matmul_fp32_fp16_fp8 branch, 2*M*N*K)
+        lines: [705, 706]
+        role: helper
+functional_semantics: >
+  Plain GEMM C = A @ B with A (M, K) row-major and B (K, N) row-major in
+  the same dtype, output in that dtype. Reference impl_torch (lines 1-27):
+  for fp32/fp16, torch.matmul(a, b) with the process-wide flag
+  torch.backends.cuda.matmul.allow_tf32 = True set at import time (line 4,
+  never restored), so the fp32 reference is a TF32 tensor-core GEMM with
+  fp32 accumulation; fp16 is cuBLAS fp16-in/fp32-acc/fp16-out. For
+  float8_e4m3fn: out = torch._scaled_mm(a, b_col, scale_a=ones(M, 1),
+  scale_b=ones(1, N), out_dtype=bfloat16).to(float8_e4m3fn), i.e. an
+  UNSCALED fp8 GEMM (unit per-row/per-column scales) with fp32
+  accumulation, rounded to bf16 then to e4m3fn. Reference-side
+  preprocessing (lines 10-18): b_col = b.t().contiguous().t() (a
+  column-major (K, N) view whose storage is the (N, K) row-major transpose)
+  plus the two ones scale tensors, cached in the module dict _fp8_cache
+  keyed by (a.data_ptr(), b.data_ptr(), a.shape, b.shape) and never
+  evicted. Generator (tensors.py 416-436): a = randn(M, K) * K**-0.5,
+  b = randn(K, N) * K**-0.5 in the case dtype (generated in fp32 and cast
+  for fp8); config sweeps dtype in {fp32, fp16, fp8_e4m3fn} with M = N =
+  4096 and K = 1024*i. fp8_e5m2 is mentioned in the generator docstring
+  but is neither in the config nor supported by this Triton source.
+run_signature:
+  text: |-
+    def run(a: torch.Tensor, b: torch.Tensor, block_size: int = None,
+            autotune: bool = False) -> torch.Tensor:
+  positional_inputs: [a, b]
+  keyword_params: [block_size, autotune]
+  returns: single tensor c of shape (M, N) in a's dtype
+  get_last_config: present
+inputs:
+  - name: a
+    shape: "(M, K)"
+    dtype: fp32 | fp16 | float8_e4m3fn (config case_grid dtype)
+    layout: row-major contiguous; a host TensorDescriptor is built directly on it (lines 137, 150), which requires 16-byte-aligned strides
+    mutated_in_place: false
+    notes: TMA-loaded as [BLOCK_M, BLOCK_K] tiles (line 72); a.dtype selects DT_ID (line 121) and the per-dtype default config (lines 7-20).
+  - name: b
+    shape: "(K, N)"
+    dtype: same as a (asserted, line 127)
+    layout: row-major contiguous as supplied; NEVER read by the kernel directly -- consumed only through bt = b.t().contiguous() of shape (N, K) (lines 35-39, 132)
+    mutated_in_place: false
+    notes: see preprocessing; the (N, K) copy is cached across calls by raw data pointer.
+outputs:
+  - name: c
+    shape: "(M, N)"
+    dtype: a.dtype (fp32 / fp16 / float8_e4m3fn); the fp32 accumulator is cast to c_desc.dtype at the TMA store (line 79)
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: >
+      bt = _b_transposed(b): b.t().contiguous() -> (N, K) row-major, i.e.
+      B stored K-major so the kernel can TMA-load [BLOCK_N, BLOCK_K] tiles
+      and compute tl.dot(a, b.T). Cached in the module-level plain dict
+      _bt_cache keyed by (b.data_ptr(), b.shape, b.dtype).
+    lines: [32, 39]
+    kind: transpose
+    inside_run: true
+    cached_across_calls: true
+    notes: >
+      Called at line 132 on every run(), but the transpose copy kernel
+      (read K*N + write K*N elements, one torch copy launch) executes only
+      on the first call for a given key -- i.e. during warmup -- and all
+      later (timed) calls return the cached tensor. The cache is never
+      evicted and holds a strong reference to every bt ever produced
+      (memory grows across the sweep). Because the key is a raw address,
+      a later B tensor that reuses a freed B's address with the same
+      shape/dtype would silently receive the stale transposed data.
+  - description: shape/dtype asserts; c = torch.empty((M, N), dtype=a.dtype)
+    lines: [126, 131]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: fresh output per call.
+  - description: >
+      Host-side TMA descriptors: TensorDescriptor.from_tensor for a, bt
+      and c. Autotune path uses a dummy [1, 1] block shape (lines 136-139)
+      that the config pre_hook _tma_set_block_size_hook (lines 23-29)
+      overwrites per candidate and before the final launch; default path
+      builds them with the chosen block shapes (lines 150-152).
+    lines: [136, 152]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: cheap host metadata; rebuilt every call.
+stages:
+  - id: s1
+    description: bt cache lookup (transpose only on first sight of b), output allocation, descriptor construction
+    kind: host
+    lines: [126, 153]
+    launches: "0 in steady state (1 torch transpose-copy launch on the first call per distinct b)"
+    depends_on: []
+    fusable_with: "none"
+    produces: bt (N, K) cached; c (M, N); a_desc, b_desc, c_desc
+  - id: s2
+    description: >
+      matmul_kernel: 1-D grid of ceil(M/BLOCK_M) * ceil(N/BLOCK_N) programs
+      with grouped tile ordering (GROUP_SIZE_M swizzle, lines 54-62). Per
+      program: fp32 accumulator (line 67); K-loop tl.range(cdiv(K,
+      BLOCK_K)) (line 69) TMA-loads a [BLOCK_M, BLOCK_K] from a_desc and b
+      [BLOCK_N, BLOCK_K] from b_desc (bt), then accumulator = tl.dot(a,
+      b.T, accumulator, input_precision='tf32') (line 76); epilogue TMA
+      store of accumulator.to(c_desc.dtype) (line 79). DT_ID is a constexpr
+      used only as an autotune cache key (lines 48, 115, 121), not in the
+      kernel body.
+    kind: kernel
+    lines: [42, 79]
+    launches: "1 launch, grid ceil(M / BLOCK_M) * ceil(N / BLOCK_N)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: c (M, N) (returned) -- no intermediates
+algorithm_family: >
+  Single-kernel blocked dense GEMM in NT form (A row-major, B consumed
+  K-major via a cached host transpose), host-side TMA TensorDescriptor
+  loads/stores, fp32 accumulation over a BLOCK_K-stepped K loop with
+  tl.range, grouped/swizzled 1-D tile ordering; no split-K, no persistent
+  scheduling, no fp8 scaling.
+reduction_scan_sort_structure: >
+  Reduction over K inside tl.dot per BLOCK_K chunk (tensor-core MMA),
+  accumulated sequentially across chunks in a fp32 register tile; chunk
+  order is ascending k. The reference's cuBLAS/_scaled_mm reduction order
+  differs; config verify atol 5.0 / rtol 0.1 is sized for the fp8 output
+  quantisation.
+precision:
+  input_dtypes: [fp32, fp16, fp8_e4m3fn]
+  accumulation: fp32 for all three dtypes (tl.zeros fp32, line 67)
+  output_dtype: "input dtype: fp32 -> fp32, fp16 -> fp16, fp8_e4m3fn -> fp8_e4m3fn; single rounding fp32 -> target at the store (reference rounds fp32 -> bf16 -> e4m3fn for fp8, a double rounding)"
+  special_modes: "input_precision='tf32' passed unconditionally to tl.dot (line 76): for fp32 the MMA operands are rounded to TF32 (10-bit mantissa), matching the reference's allow_tf32=True; for fp16/fp8 the flag is expected to be ignored (unclear whether Triton warns). fp8: raw e4m3fn operands, fp8 MMA with fp32 accumulation, NO per-tensor/per-row/per-column scale factors (consistent with the reference's unit scales). fp8_e5m2: unsupported (KeyError in _DT_IDS / ValueError in _DEFAULT_CONFIGS)."
+  masking_or_padding_values: "no explicit masks; out-of-bounds tile rows/cols are handled by the TMA descriptors (zero-filled loads, clipped stores); the config sweep (M = N = 4096, K multiples of 1024) is tile-aligned for every search-space tile"
+intermediate_storage: >
+  bt (N, K) in a.dtype: module-level cache entry, lifetime = process
+  (never freed), one entry per distinct (data_ptr, shape, dtype) of B.
+  No other scratch; c is the returned output.
+mutation_rules: >
+  a and b are never written; c is fresh per call; repeated calls with the
+  same B object are idempotent. NOT robust to B's storage being reused for
+  different data at the same address/shape/dtype (stale cached transpose).
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE_M
+    role: tile size
+    default_present: true
+  - name: BLOCK_SIZE_N
+    role: tile size
+    default_present: true
+  - name: BLOCK_SIZE_K
+    role: tile size (K chunk)
+    default_present: true
+  - name: GROUP_SIZE_M
+    role: tile ordering / L2 swizzle group
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+  - name: num_stages
+    role: stages
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 82-118) over two config families (a large-tile
+  grid and a fixed 128x128 family with varied K chunk/stages), keyed on
+  ["M", "N", "K", "DT_ID"] so each dtype tunes separately, warmup=1,
+  rep=3, with pre_hook _tma_set_block_size_hook rewriting the three
+  descriptors' block_shape per candidate. Default path uses the per-dtype
+  _DEFAULT_CONFIGS entry (lines 7-20, 146-164). get_last_config reads
+  best_config (lines 168-179).
+implementation_freedoms_observed: >
+  Tile sizes, warps, stages, grouped ordering, pipelining; TMA descriptors
+  versus pointer loads; whether B is consumed K-major through a transposed
+  copy (as here, cached) or read directly in its (K, N) layout as [BLOCK_K,
+  BLOCK_N] tiles with tl.dot(a, b); split-K or persistent scheduling;
+  where the output cast happens.
+algorithm_constraints_observed: >
+  Keep: C = A @ B as a dense GEMM with fp32 accumulation; output dtype =
+  input dtype including fp8_e4m3fn output; fp32 path with TF32 operand
+  precision (the reference is TF32, so "same approach" parity means TF32,
+  not full fp32 MMA); fp8 e4m3fn operands consumed unscaled; inputs
+  read-only; fresh (M, N) output. Whether the K-major repack of B is part
+  of the timed algorithm is the open boundary question: in this source it
+  is performed once and cached, so the steady-state timed region is the
+  GEMM alone.
+fq_boundary:
+  bytes_expr: "(M * K + K * N + M * N) * dtype_size"
+  flops_expr: "2 * M * N * K"
+  consistent_with_timed_boundary: true
+  notes: >
+    The formula counts reading A once, reading B once and writing C once
+    at dtype_size bytes each (dtype_size resolved by the framework; 4/2/1
+    expected for fp32/fp16/fp8_e4m3fn; core/dtypes.py not read here). In
+    the steady-state timed region that is exactly what the kernel does,
+    but only because the K-major transposition of B into bt is cached
+    across calls: the transpose (an extra read + write of K*N elements and
+    a copy-kernel launch) runs once at first sight of B (warmup) and is
+    never timed. The formula therefore implicitly assumes a prepacked
+    K-major B is free. A faithful re-implementation that transposes B
+    inside each call would carry 2*K*N*dtype_size of uncounted, timed
+    traffic; one that consumes B in its native (K, N) layout would match
+    the formula without any cache. The reference applies the same cached
+    prepack only for fp8 (b_col view + unit scales); for fp32/fp16 the
+    torch reference consumes B directly, so for those dtypes the Triton
+    side alone benefits from an untimed layout transform. flops_expr
+    counts the GEMM exactly.
+notes_for_review:
+  - _bt_cache is a plain dict keyed by (data_ptr, shape, dtype), never evicted: stale-address hazard (wrong results if a freed B's address is reused by a same-shape, same-dtype B) and unbounded retention of every (N, K) copy across the 60-case sweep; contrast matmul_int8 which uses WeakTensorKeyDictionary.
+  - The B transpose is inside run() but untimed in steady state, so the Triton timed boundary is 'GEMM with prepacked K-major B' -- the central F/Q boundary observation for this operator.
+  - impl_torch sets torch.backends.cuda.matmul.allow_tf32 = True at import and never restores it (process-wide side effect); matmul_int8's reference sets the same flag to False inside its run() without restoring, so in a shared process the fp32 reference here may run without TF32 depending on operator order.
+  - fp8 output rounding differs (Triton fp32 -> e4m3fn once; reference fp32 -> bf16 -> e4m3fn); covered by verify atol 5.0 / rtol 0.1.
+  - fp8 scaling semantics on both sides are 'none' (reference uses unit scale_a/scale_b); no scale tensors exist in the Triton path.
+  - fp8_e5m2 is unsupported in _DT_IDS/_DEFAULT_CONFIGS although the generator docstring discusses it; the config does not sweep it.
+  - input_precision='tf32' is passed for fp16 and fp8 too; expected to be ignored but not verified here.
+  - TMA descriptors require 16-byte-aligned strides and a TMA-capable GPU; there is no fallback branch, and the fp8 c descriptor relies on TMA fp8 store support.
+  - run() has no **kwargs; the engine must pass only block_size/autotune.
+  - DT_ID exists solely to partition the autotune cache per dtype; it does not change the kernel body.

@@ -1,0 +1,29 @@
+{
+  "schema": "tilebench-evaluator-rules/1",
+  "operator": "matmul_int8",
+  "contract_revision": 2,
+  "required_stages": [
+    {"id": "output_alloc", "description": "Allocate C (M, N) int32 inside run()."},
+    {"id": "packed_decode", "description": "On the device, inside the GEMM pass: field i of each packed byte = ((byte >> 2i) & 3) - 1, paired with A columns i*K_b + r; no unpacked B in global memory."},
+    {"id": "int32_gemm", "description": "int8 x int8 products accumulated exactly in int32 per logical output tile; int32 tile stored."}
+  ],
+  "forbidden_substitutions": [
+    {"pattern": "torch\\.(matmul|mm|addmm|bmm|einsum|_int_mm)\\(", "message": "library GEMM computes the operator", "level": "confirmed", "scope": "host"},
+    {"pattern": "[\\w\\)\\]]\\s*@\\s*[\\w\\(]", "message": "infix @ matrix multiply on the data path", "level": "suspicious", "scope": "host"},
+    {"pattern": "b\\.to\\(\\s*torch\\.int32\\s*\\)|\\(\\s*b\\s*&|b\\s*>>|torch\\.bitwise_(and|right_shift)\\(", "message": "host-side decode of the packed B with PyTorch bit operations", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.t\\(\\)\\.contiguous\\(\\)|\\.transpose\\(\\s*0\\s*,\\s*1\\s*\\)\\.contiguous\\(\\)", "message": "transposed copy of the packed B: permitted only per call inside run() as counted device work, never cached across calls", "level": "suspicious", "scope": "host"},
+    {"pattern": "WeakTensorKeyDictionary|data_ptr\\(\\)\\s*(in|not in|==)|_cache\\b|\\bcache\\b", "message": "Possible cross-call cache keyed by input identity/data pointer; transformed operands must be rebuilt inside every run().", "level": "suspicious", "scope": "host"},
+    {"pattern": "\\.to\\(\\s*torch\\.float(32|16)?\\s*\\)|\\.float\\(\\)|\\.half\\(\\)", "message": "floating-point evaluation of an integer product", "level": "suspicious", "scope": "host"},
+    {"pattern": "torch\\.backends\\.cuda\\.matmul\\.allow_tf32|torch\\.set_float32_matmul_precision", "message": "process-wide precision flag changed", "level": "suspicious", "scope": "host"}
+  ],
+  "required_evidence": [
+    {"any_of": ["tl\\.dot", "ct\\.mma", "T\\.gemm", "nisa\\.nc_matmul", "nl\\.matmul", "mma"], "message": "a device-side tiled matrix multiply", "level": "suspicious"},
+    {"any_of": [">>", "&\\s*\\(?\\s*(3|0x3|mask)"], "message": "a device-side 2-bit field decode (shift and mask)", "level": "suspicious"},
+    {"any_of": ["int32", "i32"], "message": "an int32 accumulator", "level": "suspicious"}
+  ],
+  "allowed_torch_calls": ["torch.empty", "torch.cuda.current_stream", "Tensor.t", "Tensor.contiguous"],
+  "mutation": {"inputs_mutated": [], "restore_required": false},
+  "outputs": {"structure": "tensor", "count": 1, "aliasing": "none: fresh (M, N) int32 tensor allocated inside run()"},
+  "timing_boundary": {"includes_preprocessing": true, "notes": "The GPU time of all device work launched by run() on every call is counted: the GEMM launch(es) and, if the design uses one, the per-call K-major copy of the packed B. The output allocation call and descriptor/metadata construction are host-side work and not GPU time. Decided rule: A and the packed B are delivered row-major and may be consumed as delivered or through a repack of the still-packed B rebuilt by device work inside every run(); cross-call caches of a transformed or decoded operand keyed on input identity, data pointer, shape or values are forbidden; no prepacked inputs may be assumed. Decode stays on the device inside the GEMM pass; a globally materialised unpacked (K, N) B is forbidden even per call. Packed-byte reuse across the four fields is an optimisation, not a requirement. Only the declared shape (K a multiple of 1024) is required. bytes_expr counts A, packed B and C once; repack traffic is diagnostic."},
+  "tolerance_source": "config.verify"
+}

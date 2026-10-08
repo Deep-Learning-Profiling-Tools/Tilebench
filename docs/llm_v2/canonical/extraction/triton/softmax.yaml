@@ -1,0 +1,151 @@
+operator: softmax
+source: triton
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/softmax/impl_triton.py
+    functions:
+      - name: softmax_online_kernel
+        lines: [8, 37]
+        role: kernel
+      - name: _softmax_kernel_autotuned
+        lines: [40, 49]
+        role: tuner
+      - name: run
+        lines: [52, 73]
+        role: host-driver
+      - name: get_last_config
+        lines: [76, 83]
+        role: helper
+  - path: tilebench/benchmarks/operators/softmax/impl_torch.py
+    functions:
+      - name: run
+        lines: [3, 4]
+        role: host-driver
+  - path: tilebench/benchmarks/operators/softmax/config.yaml
+    functions: []
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_softmax_inputs
+        lines: [231, 240]
+        role: helper
+functional_semantics: >
+  Row-wise softmax over the last dimension of a 2-D tensor x of shape
+  (n_rows, n_cols): y[i, j] = exp(x[i, j] - max_j x[i, :]) /
+  sum_j exp(x[i, j] - max_j x[i, :]), via torch.softmax(x, dim=-1)
+  (impl_torch.py line 4). No reference-side preprocessing.
+run_signature:
+  text: |
+    def run(x: torch.Tensor, block_size: int = None, autotune: bool = False):
+  positional_inputs: [x]
+  keyword_params: [block_size, autotune]
+  returns: single tensor of shape (n_rows, n_cols) and dtype x.dtype (fresh allocation)
+  get_last_config: present
+inputs:
+  - name: x
+    shape: "(n_rows, n_cols)"
+    dtype: "fp16 | fp32 (config.yaml dtype grid)"
+    layout: row-major contiguous (generator torch.randn, tensors.py line 237); the kernel takes x.stride(0) and assumes a unit column stride
+    mutated_in_place: false
+    notes: run() unpacks exactly two dimensions (line 53).
+outputs:
+  - name: output
+    shape: "(n_rows, n_cols)"
+    dtype: same as x
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: output = torch.empty_like(x); grid = (n_rows,)
+    lines: [53, 55]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: No data movement before the launch.
+stages:
+  - id: s1
+    description: >
+      softmax_online_kernel, one program per row (grid = (n_rows,),
+      line 55). Sweep A (lines 20-29): running max m = -inf and running
+      denominator l = 0; for each BLOCK_SIZE-wide column chunk, load with
+      other=-inf, upcast to fp32, block_max = tl.max(chunk); m_new =
+      max(m, block_max); l = l * exp(m - m_new) + sum(exp(chunk - m_new));
+      m = m_new. Both the row max and the (rescaled) sum are obtained in
+      this single sweep. Sweep B (lines 32-37): re-load each chunk with
+      other=0.0, upcast to fp32, y = exp(x - m) / l, store cast to the
+      output element type under the column mask.
+    kind: kernel
+    lines: [8, 37]
+    launches: "1 (grid = n_rows programs)"
+    depends_on: []
+    fusable_with: "none"
+    produces: none (final output)
+algorithm_family: >
+  Row-wise online softmax: two sweeps over each row inside one kernel
+  (sweep 1 computes max and rescaled sum together with the online-softmax
+  recurrence; sweep 2 normalises), one program per row, chunked over
+  columns. Not the classic three-pass max / sum / normalise scheme and not
+  a multi-program split-row scheme.
+reduction_scan_sort_structure: >
+  Max: within each chunk a tl.max tree reduction over BLOCK_SIZE lanes,
+  then a sequential left-to-right max across chunks (order-independent).
+  Denominator: within each chunk a tl.sum tree reduction of exp(x - m_new),
+  combined sequentially across chunks with the rescale factor
+  exp(m_old - m_new); hence the summation order is chunk-sequential with
+  an intra-chunk tree, and each chunk's exponentials are taken relative to
+  the running (not final) max. Padding lanes contribute exp(-inf) = 0.
+  Normalisation uses tl.exp (natural exponential) and a true division by l.
+  No scan or sort.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 for all dtypes (m, l and every exp are fp32; loads are upcast at lines 25 and 35)
+  output_dtype: same as input (explicit .to(output_ptr.dtype.element_ty) at line 37)
+  special_modes: "none (tl.exp; division rather than reciprocal multiply)"
+  masking_or_padding_values: "-inf for sweep A loads (so padding does not affect max or sum); 0.0 for sweep B loads (masked at store)"
+intermediate_storage: >
+  None. The running max and denominator are scalars in registers; the row
+  is re-read from memory for the second sweep.
+mutation_rules: >
+  No input is modified; a fresh output is allocated per call; idempotent.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: BLOCK_SIZE
+    role: tile size (column chunk width)
+    default_present: true
+  - name: num_warps
+    role: warps
+    default_present: true
+autotune_mechanism: >
+  triton.autotune (lines 40-49) over BLOCK_SIZE x num_warps,
+  key=["n_cols"], warmup=1, rep=3. No num_stages in either the default
+  or the search space. Default path launches the undecorated kernel with
+  _DEFAULT_CONFIG (lines 63-71). block_size keyword of run() is ignored.
+  get_last_config() reads best_config (lines 76-83). Audit only.
+implementation_freedoms_observed: >
+  Chunk width and warps; keeping the row in registers between the two
+  sweeps instead of re-reading it (when it fits); exp vs exp2-with-log2e;
+  reciprocal-multiply vs divide; the exact fp32 summation order (tree vs
+  sequential) within tolerance; whether max and sum are fused into one
+  sweep (as here) or separated.
+algorithm_constraints_observed: >
+  Numerically stable softmax (max subtraction) along the last dimension,
+  rows independent; fp32 internal arithmetic with output cast to the
+  input dtype; no global scratch and no cross-program reduction (a single
+  program owns a whole row); out-of-place; no input mutation.
+fq_boundary:
+  bytes_expr: "n_rows * n_cols * dtype_size * 2"
+  flops_expr: "n_rows * n_cols"
+  consistent_with_timed_boundary: true
+  notes: >
+    run() only allocates the output and launches the kernel, so the timed
+    region is the kernel. The formula counts one read and one write of the
+    matrix, which is the ideal traffic; the kernel actually reads each row
+    twice (sweep A and sweep B) and the second read is served from cache
+    only when the row fits (the sweep sizes up to 10240 fp32 columns per
+    row, i.e. 40 KB, are plausible L1/L2 residents but this was not
+    verified). One flop per element is nominal (two exp per element plus
+    the division are not modelled).
+notes_for_review:
+  - "block_size keyword is accepted but ignored."
+  - "The second sweep re-reads the row; the byte model is the ideal single-read traffic."
+  - "Column stride is assumed to be 1 (only stride(0) is passed)."
+  - "tl.exp lowering precision (ex2.approx-based or not) is Triton-internal; the per-dtype verifier tolerances apply."
+  - "Online rescaling means per-chunk exponentials are relative to the running max, so fp32 rounding differs slightly from a global-max two-pass scheme; within tolerance."

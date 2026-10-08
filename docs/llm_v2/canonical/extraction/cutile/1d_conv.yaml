@@ -1,0 +1,237 @@
+operator: 1d_conv
+source: cutile
+source_sha: ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe
+files:
+  - path: tilebench/benchmarks/operators/1d_conv/impl_cutile.py
+    functions:
+      - name: conv1d_kernel
+        lines: [23, 139]
+        role: kernel
+      - name: run
+        lines: [144, 219]
+        role: host-driver
+      - name: get_last_config
+        lines: [222, 223]
+        role: helper
+      - name: _tuner (CutileAutotuner instance) + _DEFAULT_CONFIG/_SEARCH_SPACE
+        lines: [12, 20]
+        role: tuner
+  - path: tilebench/benchmarks/operators/1d_conv/impl_torch.py
+    functions:
+      - name: run
+        lines: [5, 14]
+        role: host-driver
+  - path: tilebench/data/tensors.py
+    functions:
+      - name: generate_1d_conv_inputs
+        lines: [366, 377]
+        role: helper
+  - path: tilebench/core/cutile_autotune.py
+    functions:
+      - name: CutileAutotuner
+        lines: [70, 128]
+        role: tuner
+functional_semantics: >
+  Reference (impl_torch.py lines 5-14) is torch.nn.functional.conv1d(input, weight,
+  bias=None, stride=stride, padding=padding, groups=groups) with no reference-side
+  preprocessing. For input of shape (batch, in_channels, L) and weight of shape
+  (out_channels, in_channels // groups, kernel_size):
+  out[b, oc, ol] = sum_{ic_local, kl} input[b, g*icpg + ic_local, ol*stride + kl - padding]
+  * weight[oc, ic_local, kl], where g = oc // (out_channels // groups), icpg =
+  in_channels // groups, out_L = (L + 2*padding - kernel_size) // stride + 1, and
+  input positions outside [0, L) contribute zero (zero padding). No bias.
+  The generator (tensors.py 366-377) builds contiguous randn input and weight and
+  returns (input, weight, stride, padding, groups); config case_defaults fix batch,
+  in_channels, out_channels, kernel_size, stride, padding, groups and sweep L and dtype.
+run_signature:
+  text: "def run(input: torch.Tensor, weight: torch.Tensor, stride: int = 1, padding: int = 1, groups: int = 1, block_size: int = 1024, autotune: bool = False, **kwargs)"
+  positional_inputs: [input, weight, stride, padding, groups]
+  keyword_params: [block_size, autotune, kwargs]
+  returns: single tensor output of shape (batch, out_channels, out_L), dtype = input.dtype
+  get_last_config: present
+inputs:
+  - name: input
+    shape: "(batch, in_channels, L)"
+    dtype: fp16 or fp32 (config case_grid dtype)
+    layout: contiguous (asserted at impl_cutile.py line 155)
+    mutated_in_place: false
+    notes: viewed flat as input.view(-1) (line 166); strides passed to the kernel (line 179).
+  - name: weight
+    shape: "(out_channels, in_channels // groups, kernel_size)"
+    dtype: same as input
+    layout: contiguous (asserted at line 155)
+    mutated_in_place: false
+    notes: viewed flat as weight.view(-1) (line 167); strides passed (line 180).
+  - name: stride
+    shape: scalar int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: generator returns it as the third tuple element; run() also accepts it as keyword.
+  - name: padding
+    shape: scalar int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: symmetric zero padding on both ends of L.
+  - name: groups
+    shape: scalar int
+    dtype: int
+    layout: n/a
+    mutated_in_place: false
+    notes: mapped to grid dimension 2 (lines 194, 212); in_channels_per_group * groups == in_channels asserted (line 158).
+outputs:
+  - name: output
+    shape: "(batch, out_channels, out_L)"
+    dtype: input.dtype
+    allocated_by: run
+    aliasing: none
+preprocessing:
+  - description: shape unpacking, out_L and out_channels_per_group arithmetic, contiguity assert
+    lines: [155, 161]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: pure Python scalar work.
+  - description: allocate output with torch.empty
+    lines: [163, 164]
+    kind: allocation
+    inside_run: true
+    cached_across_calls: false
+    notes: output dtype = input dtype.
+  - description: flat views of input, weight, output (no copy)
+    lines: [166, 168]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: .view(-1) on contiguous tensors; no data movement.
+  - description: build runtime argument tuple (shapes, strides, scalars)
+    lines: [170, 183]
+    kind: metadata
+    inside_run: true
+    cached_across_calls: false
+    notes: no cast, transpose or packing of any tensor.
+stages:
+  - id: s1
+    description: allocate output tensor
+    kind: allocation
+    lines: [163, 164]
+    launches: "1"
+    depends_on: []
+    fusable_with: "none"
+    produces: output (batch, out_channels, out_L)
+  - id: s2
+    description: >
+      single implicit-GEMM kernel conv1d_kernel. Grid axis 0 tiles the flattened
+      (batch x out_L) output-position axis, axis 1 tiles output channels within a
+      group, axis 2 = groups (lines 41-43, 209-213). Each program builds a
+      (BLOCK_BL x BLOCK_OUT) fp32 accumulator (line 62) and loops over the flattened
+      reduction axis in_feat = ic_local*kL + kl of length in_channels_per_group*kL in
+      chunks of BLOCK_IN (line 67; `for ... in range(0, ct.cdiv(total_in_feat, BLOCK_IN))`,
+      a `range` whose trip count is a runtime value, not a ConstInt). Per chunk: input
+      operand tile gathered with ct.gather(input_flat, linear_index, padding_value=0.0)
+      where the linear index is computed from (b, ic_abs, il = ol*stride + kl - pad)
+      with invalid il/b clamped to 0 and the tile then zeroed by ct.where(in_mask, ., 0.0)
+      (lines 78-99); weight tile gathered likewise and zeroed where in_feat or oc is out
+      of range (lines 102-115); both cast to mma_dtype (tfloat32 when input is fp32,
+      else native dtype, line 65) and accumulated with ct.mma (lines 117-118). Epilogue
+      casts acc to the output dtype and ct.scatter()s it to linear output indices;
+      masked-out elements are redirected to index batch*out_channels*out_L (one past
+      the end) so the scatter drops them (lines 121-138).
+    kind: kernel
+    lines: [23, 139]
+    launches: "ceil(batch*out_L / BLOCK_BL) x ceil(out_channels_per_group / BLOCK_OUT) x groups programs, one launch (lines 209-218)"
+    depends_on: [s1]
+    fusable_with: "none"
+    produces: output (written directly, no scratch)
+algorithm_family: >
+  implicit-GEMM convolution (gather-based, no explicit im2col): output tile = (flattened
+  batch*out_L positions) x (output channels of one group); reduction over the flattened
+  (in_channel_local, kernel_tap) axis; tensor-core MMA with fp32 accumulation; grouped
+  convolution via a grid dimension per group.
+reduction_scan_sort_structure: >
+  Sequential loop over reduction chunks in increasing in_feat order (ic_local-major,
+  kl-minor flattening: ic_local = in_feat // kL, kl = in_feat % kL, lines 71-72); within a
+  chunk the summation order is whatever ct.mma uses (unspecified). Single fp32
+  accumulator per output element; no split-K, no atomics.
+precision:
+  input_dtypes: [fp16, fp32]
+  accumulation: fp32 (ct.full(..., dtype=ct.float32) at line 62, ct.mma accumulates into it)
+  output_dtype: input dtype (ct.astype(acc, output_flat.dtype) line 137; output allocated as input.dtype line 164)
+  special_modes: >
+    fp32 inputs are cast to ct.tfloat32 for the MMA operands (line 65, 117-118), i.e. TF32
+    tensor-core math with fp32 accumulate; fp16 inputs use native fp16 MMA. Verification
+    tolerance in config.yaml (lines 1-3) is atol 1e-1 / rtol 1e-2.
+  masking_or_padding_values: >
+    0.0 for out-of-range input positions (zero padding) and out-of-range weight/reduction
+    entries (gather padding_value=0.0 plus explicit ct.where(..., 0.0)); output elements
+    outside the problem are routed to an out-of-bounds scatter index and dropped.
+intermediate_storage: >
+  None. No global scratch buffers; the accumulator lives in the tile/register space of
+  the program. Output is written once.
+mutation_rules: >
+  No input is modified; output is a fresh allocation per call; repeated calls are
+  idempotent. The autotune path only mutates module-level Python caches
+  (_last_autotune_config, the CutileAutotuner caches), never tensors.
+hardware_dispatch_branches: []
+tunable_parameters:
+  - name: block_bl
+    role: tile size (rows = flattened batch*out_L positions)
+    default_present: true
+  - name: block_in
+    role: tile size (reduction chunk along in_feat)
+    default_present: true
+  - name: block_out
+    role: tile size (output channels per program)
+    default_present: true
+  - name: occupancy
+    role: occupancy hint passed via kernel.replace_hints
+    default_present: true
+autotune_mechanism: >
+  CutileAutotuner.tune_or_cached (tilebench/core/cutile_autotune.py 98-128) wrapping
+  ct.tune.exhaustive_search over _SEARCH_SPACE (impl_cutile.py 13-20; product of
+  block_bl in {32,64,128}, block_in in {16,32,64}, block_out in {64,128}, occupancy in
+  {4,8,16,32}, filtered to 256 <= block_bl*block_out <= 128*128), keyed by
+  (batch, in_channels, out_channels, in_L, kL, stride, padding, groups, dtype) (lines
+  185-198). Default config at line 12 (block_bl=64, block_in=32, block_out=64,
+  occupancy=8). Selected config exported through the _last_autotune_config dict
+  (lines 199-205) and get_last_config (222-223). The occupancy hint is applied with
+  _tuner.kernel_with_hints (line 214); tile sizes are ConstInt kernel arguments.
+implementation_freedoms_observed: >
+  Tile shapes along the three axes, occupancy, grid-axis ordering (positions-major vs
+  channel-major), whether operands are fetched by element-wise gather or structured
+  loads, how out-of-range indices are made safe (clamp + mask here), loop pipelining
+  depth, and whether the reduction loop trip count is made a compile-time constant.
+  The `block_size` keyword is accepted but unused.
+algorithm_constraints_observed: >
+  One kernel launch, no scratch memory, no im2col materialisation; output tile is
+  (positions x out-channels) with a single fp32 accumulator per output element reduced
+  sequentially over (ic_local, tap) chunks; fp32 operands use TF32 MMA, fp16 native;
+  zero padding semantics for stride/padding; groups handled as independent GEMMs
+  (grid dimension); output dtype = input dtype; bias absent; input and weight must be
+  contiguous.
+fq_boundary:
+  bytes_expr: >
+    batch * in_channels * L * dtype_size
+    + out_channels * (in_channels // groups) * kernel_size * dtype_size
+    + batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * dtype_size
+  flops_expr: >
+    2 * batch * out_channels
+    * ((L + 2 * padding - kernel_size) // stride + 1)
+    * (in_channels // groups) * kernel_size
+  consistent_with_timed_boundary: true
+  notes: >
+    Copied verbatim from config.yaml lines 26-35. flops counts 2 x the exact MAC count of
+    the convolution and bytes counts one read of input, one read of weight and one write
+    of output. run() performs no cast/transpose/pack and no scratch traffic, so the
+    timed boundary (allocation + one kernel) matches the formula; the kernel's actual
+    gather traffic re-touches each input element kernel_size times, which the formula
+    treats as compulsory-traffic-only (cache absorbs the re-reads).
+notes_for_review:
+  - The reduction loop at line 67 is a `range` over a runtime trip count (ct.cdiv of runtime args), neither a ConstInt trip count nor a `while`; whether cuTile pipelines it is unclear from source.
+  - Masked output elements are scattered to index batch*out_channels*out_L (one past the end, line 135); correctness relies on ct.scatter dropping out-of-bounds indices.
+  - valid_b (line 81) is implied by bl_mask (b_idx < batch iff bl_offsets < batch*out_L), so it is redundant but harmless.
+  - gather padding_value=0.0 is redundant with the explicit ct.where zeroing because invalid indices are clamped to 0 before the gather (lines 88-99, 114-115).
+  - fp32 inputs are computed with TF32 operands (line 65); config.yaml atol 1e-1 absorbs this.
+  - The kernel accepts general stride/padding/groups but the benchmark fixes stride=1, padding=1, kernel_size=3, groups=1 through case_defaults (config.yaml 12-19).
+  - block_size keyword is unused by the cuTile path.

@@ -1,0 +1,157 @@
+{
+  "schema": "tilebench-contract-audit/1",
+  "operator": "mean_reduction",
+  "source_sha": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "contract_revision": 3,
+  "status": "approved",
+  "approved_by": "study owner, FINAL_FREEZE_AND_START_B200.md §3 (2026-10-06): revision-2 rule (aligned evidence is not automatically mandatory) approved; eight needs-review decisions and 14 flagged-item repairs applied; approval recorded after contract/rules/audit consistency and leak checks",
+  "approved_on": "2026-10-06",
+  "sources": {
+    "triton": {
+      "file": "tilebench/benchmarks/operators/mean_reduction/impl_triton.py",
+      "functions": [
+        {
+          "name": "mean_rowwise_kernel",
+          "lines": [
+            9,
+            30
+          ]
+        },
+        {
+          "name": "_mean_rowwise_kernel_autotuned",
+          "lines": [
+            33,
+            43
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            46,
+            73
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            76,
+            84
+          ]
+        }
+      ]
+    },
+    "cutile": {
+      "file": "tilebench/benchmarks/operators/mean_reduction/impl_cutile.py",
+      "functions": [
+        {
+          "name": "mean_rowwise_kernel",
+          "lines": [
+            21,
+            40
+          ]
+        },
+        {
+          "name": "run",
+          "lines": [
+            46,
+            86
+          ]
+        },
+        {
+          "name": "get_last_config",
+          "lines": [
+            89,
+            90
+          ]
+        }
+      ]
+    },
+    "torch": {
+      "file": "tilebench/benchmarks/operators/mean_reduction/impl_torch.py",
+      "functions": [
+        {
+          "name": "run",
+          "lines": [
+            4,
+            5
+          ]
+        }
+      ]
+    }
+  },
+  "aspects": {
+    "functional_semantics": {
+      "status": "aligned",
+      "triton": "out[r] = (sum_c x[r, c]) / N in float32 for a 2-D row-major x with dim == 1; output (M,) float32 (impl_triton.py 25-30, 58).",
+      "cutile": "out[row] = (sum_c x[row, c]) / N in float32; output (M, 1) float32 returned as a squeeze(1) view of shape (M,) (impl_cutile.py 34-40, 60, 86).",
+      "note": "Both realise the reference x.mean(dim=1, dtype=torch.float32) (impl_torch.py 5); the generator always passes dim = 1 on a 2-D tensor (tensors.py 451-453)."
+    },
+    "stages": {
+      "status": "mapping-only",
+      "triton": "One kernel; each program owns a small group of rows, strip-mines the columns into a lane-wise float32 accumulator, reduces across lanes, divides by N and stores (impl_triton.py 18-30).",
+      "cutile": "One kernel; one CTA per row, same strip-mined lane-wise float32 accumulation, cross-lane sum, divide by N, store into an (M, 1) buffer; plus a host-side metadata squeeze (impl_cutile.py 26-40, 86).",
+      "note": "Identical reduction structure; rows per program and the (M,) versus (M, 1) output buffer shape are layout choices. The squeeze is metadata-only."
+    },
+    "dependencies": {
+      "status": "aligned",
+      "triton": "Rows are independent; the column loop is sequential within a program (impl_triton.py 20-26).",
+      "cutile": "Rows are independent; the column loop is sequential within a CTA (impl_cutile.py 27-34).",
+      "note": "Same dependency structure."
+    },
+    "reduction_scan_sort": {
+      "status": "aligned",
+      "triton": "Two-level sum: sequential lane-wise accumulation over column chunks in increasing column order, then one cross-lane tree sum; mean = row_sum / N as float32 true division; masked columns contribute 0.0 (impl_triton.py 25-29).",
+      "cutile": "Two-level sum: sequential lane-wise accumulation over column tiles in increasing order, then one cross-lane sum; mean = sum / N as float32 true division; zero-padded columns contribute 0 (impl_cutile.py 28-36).",
+      "note": "Same reduction class; the internal order of the cross-lane tree is the DSL's and is not pinned by either source. The reference uses its own float32 summation order, so only tolerance-level agreement is required."
+    },
+    "precision": {
+      "status": "aligned",
+      "triton": "Each loaded chunk is cast to float32 before accumulation; accumulator is float32; divide in float32; output float32 for fp16/bf16/fp32 inputs (impl_triton.py 18, 25, 29).",
+      "cutile": "Each loaded tile is cast to float32 before accumulation; accumulator is float32; divide in float32; output float32 (impl_cutile.py 26, 28-33, 36).",
+      "note": "Identical precision path."
+    },
+    "preprocessing": {
+      "status": "aligned",
+      "triton": "x2d = x.contiguous() for the 2-D/dim == 1 case (no-op); the generic path permutes the reduced dim last and copies, never taken by the benchmark; allocate out (M,) float32 (impl_triton.py 49-58).",
+      "cutile": "Same contiguous()/generic-permute code; allocate out (M, 1) float32 (impl_cutile.py 49-60).",
+      "note": "Both carry the same untested generic-dim path; for benchmark inputs there is no data movement before the kernel."
+    },
+    "intermediate_storage": {
+      "status": "aligned",
+      "triton": "None in global memory; accumulator is a register tile (impl_triton.py 18).",
+      "cutile": "None in global memory; accumulator is a register tile (impl_cutile.py 26).",
+      "note": "No scratch buffers."
+    },
+    "mutation": {
+      "status": "aligned",
+      "triton": "x is read-only; fresh output per call (impl_triton.py 25, 58).",
+      "cutile": "x is read-only; fresh output per call (impl_cutile.py 29, 60).",
+      "note": "Neither side mutates the input; the contract forbids mutation."
+    },
+    "hardware_dispatch": {
+      "status": "aligned",
+      "triton": "No hardware branches (whole file).",
+      "cutile": "No hardware branches; allow_tma=False and latency hints on loads/stores are lowering hints, not branches (impl_cutile.py 30-31, 40).",
+      "note": "Single code path on both sides."
+    }
+  },
+  "fq_boundary": {
+    "bytes_expr": "M * N * dtype_size",
+    "flops_expr": "M * N",
+    "consistent": "true",
+    "note": "bytes_expr counts the single read of x, which both timed run() bodies perform with no preprocessing traffic and nothing prepacked. It omits the M float32 output writes (M * 4 bytes), which every implementation must perform and which are at most about 0.4 percent of the counted traffic over the sweep (M fixed, N >= 1024, config.yaml 8-13). The omission is inherent to the operator, not an implementation-specific boundary difference, so the boundary is treated as consistent; the metric gap is listed as a non-blocking review item. flops_expr counts one add per element and ignores the M divides."
+  },
+  "human_reference_comparable": true,
+  "review_items": [
+    "Non-blocking metric accuracy: bytes_expr 'M * N * dtype_size' omits the M * 4-byte float32 output write that every implementation performs; decide whether to change it to 'M * N * dtype_size + M * 4' (at most about 0.4 percent over the sweep; does not affect the contract text)."
+  ],
+  "contract_sha256": "6a713cac5ec2bcef7a43d81be02d5d37d376d7c3847e435bba2c04dcd311c2a8",
+  "previous_status_before_approval": "draft",
+  "revision_3": {
+    "from_contract_revision": 2,
+    "previous_contract_sha256": "13cd7cc31e55bc87edf805a05dc53e655ade024cb8fa8be2920e6ada95827b71",
+    "change": "20-case task wording: single fixed/declared shape clauses migrated to the frozen configured cases; canonical algorithm unchanged",
+    "decided_by": "study owner, FINAL_TILEBENCHPP_LLM_EXECUTION_PROMPT_2026-10-07.md §3",
+    "applied_on": "2026-10-07"
+  }
+}
