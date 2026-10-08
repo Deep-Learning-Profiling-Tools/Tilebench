@@ -364,6 +364,15 @@ def main():
     # for CUDA graphs); the same for every case of the run. Absent for an engine
     # that does not report it.
     run_provenance["timing"] = results[0].get("timing")
+    if active == ["nki"]:
+        # what the Neuron numbers were measured on; identity again, as the run put its
+        # neuronx-cc on PATH
+        run_provenance["neuron"] = {
+            "hardware": _neuron_identity() or identity or {"label": args.gpu, "detected": False},
+            "baseline": "PyTorch eager (torch.compile disabled)",
+            "speedup_nki": "torch_eager_device_ms / nki_device_ms",
+            "timing": "mean device busy sum per run()",
+        }
     with open(provenance_path, "w") as f:
         json.dump(run_provenance, f, indent=4)
     print(f"Provenance      → {provenance_path}")
@@ -414,17 +423,6 @@ def main():
         print(f"Note: {csv_path} does not exist yet — writing a fresh "
               f"torch+tilelang CSV (nothing to merge into)")
     nki = active == ["nki"]
-    if nki:
-        # where and on what the Neuron numbers were measured (logs, not version controlled)
-        prov = results_logs_dir(args.gpu) / "hardware_provenance" / Path(default_output).name
-        prov.parent.mkdir(parents=True, exist_ok=True)
-        identity = _neuron_identity() or identity      # again: the run put its neuronx-cc on PATH
-        prov.write_text(json.dumps({"hardware": identity or {"label": args.gpu, "detected": False},
-                                    "operator": args.operator,
-                                    "baseline": "PyTorch eager (torch.compile disabled)",
-                                    "speedup_nki": "torch_eager_device_ms / nki_device_ms",
-                                    "timing": "mean device busy sum per run()"}, indent=1))
-        print(f"Provenance      → {prov}")
     # Direct cuTile/Triton latency ratio (>1 means cuTile slower), emitted
     # whenever both backends ran so the committed 8-column CSVs are
     # reproducible by this script alone.

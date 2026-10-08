@@ -108,12 +108,10 @@ def test_gitignore_tracks_only_the_per_hardware_summary_csvs(tmp_path):
 # the committed B200 data
 # --------------------------------------------------------------------------
 
-#: Columns measured on the GPU of the namespace. NKI_COLUMNS are the one legal
-#: extension: cross-hardware measurements from AWS Trainium, merged in by
-#: `run_bench.py --tile-language nki`, with speedup_nki = torch_nki_ms / nki_ms.
+#: Columns measured on the GPU of the namespace. Nothing else may be appended: NKI
+#: (AWS Trainium) is recorded in its own namespace, results/TRN2/, never in a GPU CSV.
 FROZEN = ["params", "dtype", "torch_ms", "triton_ms", "cutile_ms", "speedup_triton",
           "speedup_cutile", "triton_vs_cutile", "tilelang_ms", "speedup_tilelang"]
-NKI_COLUMNS = ["torch_nki_ms", "nki_ms", "speedup_nki"]
 
 
 def read_csv(path):
@@ -126,17 +124,20 @@ def b200_csvs():
     return sorted((REPO / "results" / "B200" / "csv").glob("*.csv"))
 
 
-def test_b200_csv_schema_allows_only_the_nki_extension():
+def test_b200_csv_schema_is_the_frozen_one():
     for p in b200_csvs():
         header, rows = read_csv(p)
-        assert header[:len(FROZEN)] == FROZEN, p.name
-        assert header[len(FROZEN):] in ([], NKI_COLUMNS), p.name       # nothing else may be appended
+        assert header == FROZEN, p.name                                 # nothing may be appended
         assert not {"gpu", "device", "hardware"} & set(header), p.name  # the directory names the GPU
-        if header[len(FROZEN):]:
-            for r in rows:                                              # never torch_ms / nki_ms
-                if "nan" not in (r["torch_nki_ms"], r["nki_ms"]):
-                    assert float(r["speedup_nki"]) == pytest.approx(
-                        float(r["torch_nki_ms"]) / float(r["nki_ms"]), abs=0.006), (p.name, r["params"])
+
+
+@pytest.mark.parametrize("gpu", ["B200", "GH200", "MI300X"])
+def test_gpu_csvs_carry_no_nki_columns(gpu):
+    paths_ = sorted((REPO / "results" / gpu / "csv").glob("**/*.csv"))
+    assert paths_, gpu
+    for p in paths_:
+        header, _ = read_csv(p)
+        assert not [c for c in header if "nki" in c], p.name
 
 
 # --------------------------------------------------------------------------
@@ -346,8 +347,10 @@ def test_nki_writes_its_own_neuron_namespace(run_bench, results, campaign):
     assert b200.read_bytes() == before                             # the GPU namespace is untouched
     timing = json.loads((results / "TRN2/logs/time_measurement_logs/mul2_default_nki.json").read_text())
     assert "nki_ms" in timing[0] and timing[0]["torch_status"] == "ok"
-    prov = json.loads((results / "TRN2/logs/hardware_provenance/mul2_default_nki.json").read_text())
-    assert prov["hardware"]["label"] == "TRN2" and "eager" in prov["baseline"]
+    prov = json.loads((results / "TRN2/logs/provenance/mul2_default_nki.json").read_text())
+    assert prov["neuron"]["hardware"]["label"] == "TRN2" and "eager" in prov["neuron"]["baseline"]
+    assert prov["run"]["summary_csv"].endswith("TRN2/csv/mul2_default.csv")
+    assert not (results / "TRN2/logs/hardware_provenance").exists()        # one sidecar per run
     assert run_bench.calls["logs_dir"][-1] == results / "TRN2" / "logs"
 
 
