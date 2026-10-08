@@ -1,0 +1,511 @@
+{
+ "all_checks_pass": true,
+ "checks": {
+  "1.each_pair_has_counter_pcs_static_trace_profiles": {
+   "incomplete": {},
+   "pass": true
+  },
+  "1.operators_accounted": {
+   "extra": [],
+   "missing": [],
+   "n_operators": 45,
+   "pass": true
+  },
+  "1.pairs_formal_and_profiled": {
+   "formal_not_profiled": [],
+   "formal_pairs": 109,
+   "pass": true,
+   "profiled_not_formal": [],
+   "profiled_pairs": 109
+  },
+  "10.diagnosis_records_link_existing_profiles": {
+   "broken": [],
+   "pass": true
+  },
+  "10.diagnosis_text_verbatim_from_frozen_source": {
+   "pass": true
+  },
+  "10.primary_M1_M7_records_traced_to_raw_evidence": {
+   "not_fully_traced": [
+    {
+     "detail": "non-ATen library families per dtype: {'bf16': [], 'fp16': [], 'fp32': []}; all families: {'bf16': ['ATen norm', 'ATen vectorized elementwise'], 'fp16': ['ATen norm', 'ATen vectorized elementwise'], 'fp32': ['ATen norm', 'ATen vectorized elementwise']}; no vendor-library family in the trace: the M3 claim rests on the PyTorch-side latency difference, not on a vendor-library change",
+     "mechanism": "M3",
+     "operator": "batch_normalization",
+     "role": "primary",
+     "status": "partially_traced"
+    },
+    {
+     "detail": "stages with fewer workgroups than 304 CUs: {'bf16': [], 'fp16': [], 'fp32': []}; all stages (workgroups): {'bf16': [('apply_batch_norm_kernel', 2500), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)], 'fp16': [('apply_batch_norm_kernel', 1250), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)], 'fp32': [('apply_batch_norm_kernel', 2500), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)]}",
+     "mechanism": "M6",
+     "operator": "batch_normalization",
+     "role": "secondary",
+     "status": "not_traced"
+    },
+    {
+     "detail": "Triton loads without nt in ['bf16', 'fp16', 'fp32', 'int8']; ATen vectorized/reduce kernel in []; ATT decodes for this op: none (nt inferred from kernel template)",
+     "mechanism": "M2",
+     "operator": "destindex",
+     "role": "secondary",
+     "status": "partially_traced"
+    },
+    {
+     "detail": "non-ATen library families per dtype: {'fp16': [], 'fp32': []}; all families: {'fp16': ['other'], 'fp32': ['other']}; no vendor-library family in the trace: the M3 claim rests on the PyTorch-side latency difference, not on a vendor-library change",
+     "mechanism": "M3",
+     "operator": "softmax",
+     "role": "primary",
+     "status": "partially_traced"
+    }
+   ],
+   "pass": true,
+   "records": 42,
+   "trace_status": {
+    "C:not_applicable": 14,
+    "M1:traced": 7,
+    "M2:partially_traced": 1,
+    "M2:traced": 14,
+    "M3:partially_traced": 2,
+    "M3:traced": 5,
+    "M4:traced_by_metric": 3,
+    "M5:traced": 4,
+    "M6:not_traced": 1,
+    "M6:traced": 3,
+    "M7:traced": 2
+   }
+  },
+  "11.diagnostic_experiments_separate": {
+   "experiments": [
+    "cache_modifier_ablation_fp32",
+    "flush_protocol_variants_fp32",
+    "gemm_desc_vs_ptr_fp16",
+    "gemm_desc_vs_ptr_fp32",
+    "stream_vadd_config_sweep_fp16",
+    "stream_vadd_config_sweep_fp32"
+   ],
+   "formal_values_equal_to_experiment_values": [],
+   "pass": true,
+   "rows": 120
+  },
+  "12.fp8_e4m3fn_omission_documented_not_fabricated": {
+   "fp8_rows": 0,
+   "pass": true
+  },
+  "2.profile_id_unique": {
+   "duplicates": [],
+   "pass": true
+  },
+  "3.profile_path_and_sha256_recorded": {
+   "missing": [],
+   "pass": true
+  },
+  "3.report_sha256_recomputed_from_local_reports": {
+   "checked": 336,
+   "mismatches": [],
+   "pass": true
+  },
+  "4.profiled_full_params_contain_case_params": {
+   "n": 109,
+   "pass": true
+  },
+  "4.profiles_matched_to_device_dsl_operator_dtype_case": {
+   "pass": true,
+   "status_counts": {
+    "matched": 445
+   },
+   "unmatched_or_wrong": []
+  },
+  "5.case_id_unique_per_mode": {
+   "duplicates": [],
+   "pass": true
+  },
+  "5.formal_latency_equals_source_csv": {
+   "csv_rows_total": 4360,
+   "mismatches": [],
+   "pass": true,
+   "rows_checked": 4360
+  },
+  "6.no_profiler_duration_in_benchmark_cases": {
+   "pass": true,
+   "suspicious_columns": []
+  },
+  "6.profiler_durations_flagged_diagnostic_only": {
+   "n": 509,
+   "pass": true
+  },
+  "7.derived_metrics_equal_source_kernel_metric_csv": {
+   "compared": 62752,
+   "differences": [],
+   "pass": true
+  },
+  "7.no_absent_metric_filled": {
+   "pass": true,
+   "violations": 0
+  },
+  "8.pc_samples_not_presented_as_executions": {
+   "pass": true,
+   "violations": 0
+  },
+  "8.static_dynamic_instruction_counts_separated": {
+   "count_kinds": {
+    "dynamic_att_hitcount_traced_waves": 536,
+    "dynamic_hw_counter_total_summed_over_dispatches": 4992,
+    "static_isa_opcode_count": 6705
+   },
+   "pass": true,
+   "violations": 0
+  },
+  "9.resource_metrics_have_unit_and_scope": {
+   "derived_metrics_without_unit_in_source": [],
+   "n": 22293,
+   "pass": true,
+   "violations": 0
+  },
+  "file_present:README.md": {
+   "pass": true
+  },
+  "file_present:environment.json": {
+   "pass": true
+  },
+  "prior_analysis_values_reproduced": {
+   "counters.json": {
+    "compared": 12624,
+    "mismatches": 0
+   },
+   "isa.json": {
+    "compared": 994,
+    "mismatches": 0
+   },
+   "pass": true,
+   "pcs.json": {
+    "compared": 109,
+    "mismatches": 0
+   },
+   "perf.json(max_case)": {
+    "compared": 218,
+    "mismatches": 0
+   }
+  },
+  "schema:benchmark_cases.csv": {
+   "header": [
+    "device",
+    "architecture",
+    "dsl",
+    "operator",
+    "category",
+    "dtype",
+    "case_id",
+    "params_json",
+    "mode",
+    "torch_ms",
+    "dsl_ms",
+    "validity",
+    "source_csv",
+    "source_git_sha",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:diagnosis_evidence.csv": {
+   "header": [
+    "device",
+    "dsl",
+    "operator",
+    "dtype",
+    "comparison_scope",
+    "mechanism_id",
+    "observation",
+    "mechanism_hypothesis",
+    "supporting_metric_names",
+    "supporting_profile_ids",
+    "alternative_explanation",
+    "confounders",
+    "evidence_quality",
+    "review_status",
+    "source_paths"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:diagnostic_experiments.csv": {
+   "header": [
+    "experiment_id",
+    "operator",
+    "dtype",
+    "variant",
+    "changed_factor",
+    "other_configuration_changes",
+    "latency_ms",
+    "reference_variant",
+    "measurement_protocol",
+    "correctness_status",
+    "evidence_path",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:execution_paths.csv": {
+   "header": [
+    "profile_id",
+    "stage",
+    "access_path",
+    "matrix_path",
+    "buffer_location",
+    "layout_operations",
+    "atomic_path",
+    "resource_summary",
+    "evidence_path",
+    "evidence_confidence",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:instruction_mix.csv": {
+   "header": [
+    "profile_id",
+    "launch_id",
+    "instruction_family",
+    "instruction_name",
+    "count",
+    "count_kind",
+    "scope",
+    "evidence_path",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:kernel_metrics_long.csv.gz": {
+   "header": [
+    "profile_id",
+    "launch_id",
+    "kernel_name",
+    "stage",
+    "raw_metric_name",
+    "normalized_group",
+    "value",
+    "unit",
+    "scope",
+    "counter_kind",
+    "extraction_method",
+    "status",
+    "raw_source",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:pc_hotspots.csv.gz": {
+   "header": [
+    "profile_id",
+    "launch_id",
+    "pc",
+    "instruction_family",
+    "instruction_text",
+    "sample_count",
+    "executed_instruction_count",
+    "stall_reason",
+    "source_line",
+    "evidence_path",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  },
+  "schema:profile_index.csv": {
+   "header": [
+    "profile_id",
+    "device",
+    "dsl",
+    "operator",
+    "dtype",
+    "case_id",
+    "params_json",
+    "collection_level",
+    "replay_mode",
+    "report_path",
+    "report_sha256",
+    "report_origin",
+    "report_revision",
+    "benchmark_case_match_status",
+    "code_match_status",
+    "launch_count",
+    "notes"
+   ],
+   "missing": [],
+   "pass": true
+  }
+ },
+ "counts": {
+  "benchmark_case_rows": 4360,
+  "benchmark_case_rows_by_mode": {
+   "autotune": 2180,
+   "default": 2180
+  },
+  "benchmark_validity": {
+   "verified_ok": 4360
+  },
+  "diagnosis_rows": 56,
+  "diagnostic_experiment_rows": 120,
+  "execution_path_rows": 523,
+  "instruction_mix_rows": 12233,
+  "kernel_launches_pytorch_trace": 32151,
+  "kernel_launches_rocprof_compute": 810,
+  "kernel_metric_rows": 252200,
+  "operator_dtype_pairs_formal": 109,
+  "operator_dtype_pairs_profiled": 109,
+  "operators": 45,
+  "pc_hotspot_rows": 19107,
+  "profiles": 445,
+  "profiles_by_kind": {
+   "att": 9,
+   "kernel_trace": 109,
+   "pc_sampling": 109,
+   "rocprof_compute": 109,
+   "static_isa": 109
+  }
+ },
+ "device": "MI300X",
+ "extraction_stats": {
+  "case_match:matched": 109,
+  "km_status:collected": 60694,
+  "km_status:unavailable_empty_in_report": 2058,
+  "launches_raw_pmc": 810,
+  "launches_rocprof_compute": 810,
+  "launches_torch_trace": 32151,
+  "pcs_rows": 17120,
+  "pcs_text_checked": 17120,
+  "pcs_text_found": 17120,
+  "reports": 445,
+  "skipped_l2_per_channel_rows": 705024,
+  "skipped_per_instance_raw_rows": 1451520,
+  "skipped_single_dispatch_order_stats": 54752
+ },
+ "metric_6_2_all_zero_across_suite": {
+  "6.2.0": true,
+  "6.2.1": true,
+  "6.2.10": true,
+  "6.2.2": true,
+  "6.2.3": true,
+  "6.2.4": true,
+  "6.2.5": true,
+  "6.2.6": true,
+  "6.2.7": true,
+  "6.2.8": true,
+  "6.2.9": true
+ },
+ "metric_coverage_triton_profiles_of_109": {
+  "10.1.0 VALU instr": 109,
+  "10.1.1 VMEM instr": 109,
+  "10.1.3 MFMA instr": 109,
+  "10.2.0 INT32 VALU": 109,
+  "11.2.9 VMEM latency": 109,
+  "16.1.3 vL1D coalescing": 109,
+  "17.1.2 L2 hit": 109,
+  "17.3.4 L2 atomic req": 109,
+  "17.6.11 L2-Fabric atomic": 109,
+  "2.1.10 MFMA Util": 109,
+  "2.1.15 Wavefront Occupancy": 109,
+  "2.1.9 VALU Util": 109,
+  "4.1.9 HBM Bandwidth": 109,
+  "7.1.5 VGPRs": 109,
+  "7.1.6 AGPRs": 109,
+  "7.1.7 SGPRs": 109,
+  "7.1.8 LDS Allocation": 109,
+  "7.1.9 Scratch Allocation": 109,
+  "7.2.5 Issue Wait Cycles": 109
+ },
+ "metric_status_counts": {
+  "derived_from_dispatch_record|derived": 810,
+  "dispatch_record|collected": 8193,
+  "launch_metadata|collected": 994,
+  "pc_sampling_count|collected": 941,
+  "pc_sampling_count|unavailable_no_samples": 1,
+  "profiler_duration_diagnostic_only|collected": 509,
+  "raw_pmc_counter|collected": 176580,
+  "rocprof_compute_derived_metric|collected": 60694,
+  "rocprof_compute_derived_metric|unavailable_empty_in_report": 2058,
+  "static_compiler_metadata|collected": 1420
+ },
+ "missing_entries": {
+  "aten_att_decodes": "9 kernels only",
+  "cutile_tilelang_on_mi300x": "not applicable (no MI300X DSL comparison exists)",
+  "known_exclusion": {
+   "dtype": "fp8_e4m3fn",
+   "operator": "matmul_fp32_fp16_fp8",
+   "reason": "FP8 E4M3FN is UNSUPPORTED_DTYPE in the MI300X formal run (gfx942 FP8 is E4M3FNUZ; the PyTorch reference torch._scaled_mm rejects e4m3fn on gfx942). No formal CSV row, no autotune winner, no profile. Not replaced by another dtype."
+  },
+  "profiles_at_non_max_inputs": "none: every profile is at one input case per pair (the largest CSV row)",
+  "pytorch_counter_profiles": "never collected",
+  "pytorch_raw_rocprofv3_traces": "not retained (derived per-kernel table only)",
+  "triton_att_traces": "never collected"
+ },
+ "parse_failures_and_issues": {
+  "catalogue_vs_capture_params_differ": [
+   "fused_activation/triton_fp32",
+   "quantize_global/triton_fp32"
+  ]
+ },
+ "prior_analysis_crosscheck": {
+  "counters.json": {
+   "compared": 12624,
+   "examples": [],
+   "mismatches": 0
+  },
+  "isa.json": {
+   "compared": 994,
+   "examples": [],
+   "mismatches": 0
+  },
+  "pcs.json": {
+   "compared": 109,
+   "examples": [],
+   "mismatches": 0
+  },
+  "perf.json(max_case)": {
+   "compared": 218,
+   "examples": [],
+   "mismatches": 0,
+   "note": "prior analysis used full-precision timing logs; the package uses the 4-decimal CSV values"
+  }
+ },
+ "raw_value_comparison": {
+  "compared": 62752,
+  "differences": 0
+ },
+ "schema": "tilearena-paper-figures-qa/1",
+ "unresolved_mappings": {
+  "diagnosis_records_not_fully_traced": [
+   {
+    "detail": "non-ATen library families per dtype: {'bf16': [], 'fp16': [], 'fp32': []}; all families: {'bf16': ['ATen norm', 'ATen vectorized elementwise'], 'fp16': ['ATen norm', 'ATen vectorized elementwise'], 'fp32': ['ATen norm', 'ATen vectorized elementwise']}; no vendor-library family in the trace: the M3 claim rests on the PyTorch-side latency difference, not on a vendor-library change",
+    "mechanism": "M3",
+    "operator": "batch_normalization",
+    "role": "primary",
+    "status": "partially_traced"
+   },
+   {
+    "detail": "stages with fewer workgroups than 304 CUs: {'bf16': [], 'fp16': [], 'fp32': []}; all stages (workgroups): {'bf16': [('apply_batch_norm_kernel', 2500), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)], 'fp16': [('apply_batch_norm_kernel', 1250), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)], 'fp32': [('apply_batch_norm_kernel', 2500), ('compute_block_sums_kernel', 313), ('compute_mean_invstd_kernel', 1024)]}",
+    "mechanism": "M6",
+    "operator": "batch_normalization",
+    "role": "secondary",
+    "status": "not_traced"
+   },
+   {
+    "detail": "Triton loads without nt in ['bf16', 'fp16', 'fp32', 'int8']; ATen vectorized/reduce kernel in []; ATT decodes for this op: none (nt inferred from kernel template)",
+    "mechanism": "M2",
+    "operator": "destindex",
+    "role": "secondary",
+    "status": "partially_traced"
+   },
+   {
+    "detail": "non-ATen library families per dtype: {'fp16': [], 'fp32': []}; all families: {'fp16': ['other'], 'fp32': ['other']}; no vendor-library family in the trace: the M3 claim rests on the PyTorch-side latency difference, not on a vendor-library change",
+    "mechanism": "M3",
+    "operator": "softmax",
+    "role": "primary",
+    "status": "partially_traced"
+   }
+  ],
+  "profiles_not_matched": []
+ }
+}
