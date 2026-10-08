@@ -13,6 +13,7 @@ This document contains implementation and maintenance details for extending Tile
 - [Dtype Handling](#dtype-handling)
 - [Metrics and Device Peaks](#metrics-and-device-peaks)
 - [Profiling](#profiling)
+- [Neuron Measurement (Trn2)](#neuron-measurement-trn2)
 - [LLM Code Generation](#llm-code-generation)
 - [Generated Outputs](#generated-outputs)
 - [Multi-Architecture Status (TileBench++)](#multi-architecture-status-tilebench)
@@ -57,7 +58,7 @@ Local logs and generated figures are ignored by Git.
 results/B200/logs/time_measurement_logs/mul2_default_triton-cutile.json
 results/B200/logs/time_measurement_logs/mul2_autotune_triton-cutile.json
 results/B200/logs/time_measurement_logs/mul2_default_tilelang.json
-results/B200/logs/time_measurement_logs/mul2_default_nki.json
+results/TRN2/logs/time_measurement_logs/mul2_default_nki.json
 ```
 
 The backend tag always lists the backends in the canonical order `triton`, `cutile`, `tilelang`, `nki`, so `--tile-language cutile,triton` and `triton,cutile` name the same file; a torch-only run is tagged `torch`. `run_bench.py` owns these names: callers do not rename or copy results. Build them with `timing_log_path` and `autotune_log_path` from `tilebench/paths.py`, and the selection with `tilebench/backends.py`. A reader must name the run it wants; never pick a file by glob, by modification time, or as "the latest". Explicit `--output` and `--autotune-log` paths still win. The summary CSV stays one per mode.
@@ -82,21 +83,22 @@ A field that cannot be determined is `None` (with `source.error` when Git is una
 
 **What a namespace holds.** The PyTorch, Triton, cuTile and TileLang columns of a CSV under `results/<gpu>/csv/` were measured on that GPU. A TileLang-only run is merged into the existing CSV of the same `--gpu`, leaving the frozen PyTorch, Triton and cuTile columns untouched. A backend that the platform does not support is reported as skipped or failed by the engine, with `nan` latency and `<backend>_ok = false`; never record it as a successful result.
 
-**NKI.** NKI runs on AWS Trainium, not on the GPU. It only runs when named explicitly, and `--gpu` then names the campaign whose record the measurements join, without claiming that NKI ran on that GPU:
+**NKI.** NKI runs on AWS Trainium, not on a GPU, and only when named explicitly. It runs alone and takes the label of the Neuron device it runs on; the label must match the detected device:
 
 ```bash
-python scripts/run_bench.py --gpu B200 --operator mul2 --tile-language nki
+python scripts/run_bench.py --gpu TRN2 --operator mul2 --tile-language nki
 ```
 
-On the Neuron host this re-times PyTorch on the Neuron device and merges three columns into `results/B200/csv/<operator>_{default,autotune}.csv`:
+It compares the NKI implementation with PyTorch eager on the same Trainium device and writes its own namespace, `results/TRN2/csv/<operator>_<mode>.csv`:
 
 | Column | Meaning |
 |---|---|
-| `torch_nki_ms` | PyTorch reference timed on the Trainium device |
-| `nki_ms` | NKI latency on Trainium |
-| `speedup_nki` | `torch_nki_ms / nki_ms` |
+| `torch_ms` | PyTorch eager, timed on the Trainium device |
+| `nki_ms` | NKI, timed on the Trainium device |
+| `speedup_nki` | `torch_ms / nki_ms`; `nan` unless both statuses are `ok` |
+| `torch_status`, `nki_status` | see [Neuron Measurement (Trn2)](#neuron-measurement-trn2) |
 
-These are cross-hardware measurements kept beside the B200 columns for a unified per-operator record. `torch_ms`, `triton_ms`, `cutile_ms` and `tilelang_ms` remain B200 measurements and are never modified by an NKI merge. NKI latencies are written as measured, with no B200 drift scaling, and `speedup_nki` is never `torch_ms / nki_ms`. NKI timing and autotune JSON go to `results/<gpu>/logs/` like every other log, and the Neuron profiling artifacts go to `results/<gpu>/logs/nki_profiles/` with their audit index `results/<gpu>/logs/nki_neff_manifest.jsonl`.
+`run_bench.py` refuses an NKI run with a GPU label or together with GPU backends, so no GPU CSV ever receives NKI columns, and NKI is never compared with a GPU's PyTorch time. The timing and autotune JSON go to `results/TRN2/logs/`, and the run's provenance sidecar (`results/TRN2/logs/provenance/`) gets a `neuron` block with the instance type, LNC, driver and package versions.
 
 ### `scripts/run_bench_all.py`
 
@@ -343,6 +345,15 @@ python scripts/profiling/hf_upload_rocm_compute.py --gpu MI300X --hf-folder AMD_
 
 The driver is resumable: it writes `sweep_log.json` after every pair, skips a pair recorded ok only after its artifact validates again, keeps the error of a failed pair, and ends with `coverage.json` (valid pairs, successes, failures, exclusions). `hf_upload_rocm_compute.py` uploads complete pair directories, every file whatever its extension, of the pairs the sweep log records ok and that validate again, to `<hf-folder>/<op>/<backend>_<dtype>/` of `bcui2/NCU_report`, with the two records; `--hf-folder` is independent of `--gpu`. A download is re-analyzed with `rocprof-compute analyze -p <...>/workload` without running the kernel.
 
+## Neuron Measurement (Trn2)
+
+**Formal Trn2 measurement.** `run_bench.py --gpu TRN2 --tile-language nki` on a Trainium host runs on the native PyTorch Neuron stack (`tilebench/core/neuron_native.py`): PyTorch eager `impl_torch.run` on `torch.device("neuron")` against the NKI `run()` with the same neuron tensors, warmup 1 / repeat 3 unless given on the command line. torch.compile is disabled for the whole run, so a `torch.compile` call inside an implementation runs eagerly; there is no torch-xla path and no best-baseline. Both outputs are verified against the CPU reference. The latency is the mean over the repeats of the device busy sum of one `run()` (the durations of its device executions added up, per-core copies of one execution merged by `tilebench/core/neuron_intervals.py`; one `torch.profiler` `NeuronConfig(RUNTIME)` session per synchronized call, read with the parsers of `tilebench/core/nki_timer.py`), the same definition as the GPU path, where Proton adds up the CUDA kernel durations inside the scope. Host wall time is recorded next to it and never used in a speedup. `speedup_nki = torch_ms / nki_ms` (PyTorch eager device time over NKI device time).
+
+NKI results live only in their Neuron hardware namespace (`results/TRN2/`, the label must match the detected device): `csv/<op>_<mode>.csv` has the columns `params, dtype, torch_ms, nki_ms, speedup_nki, torch_status, nki_status`, and the run's provenance sidecar (`logs/provenance/`) has a `neuron` block with the instance type, LNC, driver and package versions. `run_bench.py` refuses to write NKI into a GPU namespace or to mix NKI with GPU backends. `torch_status` is `ok`, `failed` (did not verify, or no device time) or `unresolved` (`neuron_native.BASELINE_UNRESOLVED`, not run); `nki_status` is `ok`, `failed` or `unsupported` (the implementation raised `NotImplementedError`). Only `ok`/`ok` rows carry a speedup; the others are `nan`. Peak/roofline metadata is looked up by the namespace label, so TRN2 never reads a GPU's peak file. Compile caches and traces stay under `results/TRN2/logs/neuron_native_{cache,profiles}/` (not version controlled). Run it with the interpreter of the native environment, whose `neuronx-cc` is put first on `PATH`.
+
+- **PyTorch code.** The operators' `impl_torch.py` carry no torch-xla branch; the native stack runs the same PyTorch code as the GPUs, apart from `neuron`-device branches where the generic code cannot run on the device (noted in the operator's NKI PR).
+- **Algorithm matching.** PyTorch is the semantic reference and practical baseline and need not use the same algorithm. Algorithm matching is judged among Triton, cuTile, TileLang and NKI on the high-level algorithm and math semantics only; core mapping, program_id split, tile shapes, SBUF residency and data reuse, kernel fusion and launch counts, DMA/PSUM/partition layout, hardware arithmetic primitives and backend tuning knobs are allowed to differ.
+
 ## LLM Code Generation
 
 The iterative generation pipeline is under:
@@ -471,7 +482,9 @@ Before 124fdc94 the CDNA3 path returned the fallback unconditionally. The six MI
 
 ### 2d_conv tolerance
 
-`2d_conv` verifies with `atol: 1e-1` and `rtol: 1e-2` on B200 and GH200. On CDNA3, `verify.arch_overrides.cdna3` raises `atol` to `2e-1` for the ROCm/MIOpen fp16 reference. `verifier.config_tolerance` resolves the override by `detect_arch()`. `2d_conv` is the only operator with an override.
+`2d_conv` verifies with `atol: 1e-1` and `rtol: 1e-2` on B200 and GH200. On CDNA3, `verify.arch_overrides.cdna3` raises `atol` to `2e-1` for the ROCm/MIOpen fp16 reference. `verifier.config_tolerance` resolves the override by `detect_arch()`. `2d_conv` is the only operator with a GPU override.
+
+On the native Trainium stack the engine resolves the key `trn2` (`neuron_native.NEURON_ARCH`) instead of `detect_arch()`, for the PyTorch eager baseline and NKI alike; no GPU key applies there. `cross_entropy` uses it (`arch_overrides.trn2`: `atol` = `rtol` = `1e-3`, added with its NKI implementation): the tolerance its formal Trn2 results were verified with. The GPU tolerances of every operator are unchanged.
 
 ### Profiling inventory
 

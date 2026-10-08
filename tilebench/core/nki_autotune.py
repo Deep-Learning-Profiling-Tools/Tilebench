@@ -47,6 +47,15 @@ argument tuple for the kernel, tunables included:
 
 Candidate timing (pluggable via ``timer=``, default ``"auto"``):
 
+  0. ``"native"`` — the native PyTorch Neuron stack (torch-neuronx, inputs on
+     ``torch.device("neuron")``): the ``@nki.jit`` kernel is called with the
+     operator's own neuron tensors and timed exactly like the formal Trn2
+     measurement (core/neuron_native.py): one untimed call (compile),
+     NEURON_DEFAULT_WARMUP warmup calls, then NEURON_DEFAULT_REPEAT calls, each
+     in its own torch.profiler session; a candidate's latency is the mean
+     device busy sum of its executions. ``"auto"`` picks it whenever an
+     argument lives on the neuron device (paths 1 and 2 need the standalone
+     baremetal runner or torch_xla, neither of which the native stack has).
   1. ``"benchmark"`` — the standalone (baremetal) path of the ``nki``
      package (>= 0.6): the ``@nki.jit`` kernel is compiled with numpy
      inputs and timed with ``CompiledKernel.benchmark`` (device mode),
@@ -277,6 +286,21 @@ def _to_numpy_args(args: Sequence) -> tuple:
     return tuple(out)
 
 
+def _on_native_device(args: Sequence) -> bool:
+    """True when an argument is a tensor on the native torch-neuronx device."""
+    return any(isinstance(a, torch.Tensor) and a.device.type == "neuron" for a in args)
+
+
+_NATIVE_RT: list = []  # one NativeNeuron per process, created on first native timing
+
+
+def _native_runtime():
+    if not _NATIVE_RT:
+        from tilebench.core.neuron_native import NativeNeuron
+        _NATIVE_RT.append(NativeNeuron())
+    return _NATIVE_RT[0]
+
+
 def _kernel_func(kernel):
     """Best-effort unwrap of a ``@nki.jit`` object back to the plain python
     function, for re-decoration with ``nki.benchmark``.  # VERIFY ON TRN2"""
@@ -299,7 +323,7 @@ class NkiAutotuner:
     def __init__(self, kernel, *, timer: str = "auto",
                  warmup: int = 5, iters: int = 10,
                  quiet: bool = False, name: str | None = None):
-        if timer not in ("auto", "benchmark", "wallclock"):
+        if timer not in ("auto", "native", "benchmark", "wallclock"):
             raise ValueError(f"unknown timer '{timer}'")
         self.kernel = kernel
         # Stable cross-process identity used by the winner trace / replay flow.
@@ -370,7 +394,34 @@ class NkiAutotuner:
         samples = sorted(_once() for _ in range(self.iters))
         return samples[len(samples) // 2]
 
+    def _time_native(self, args: Sequence) -> float:
+        """Mean device busy sum (ms) on the native torch-neuronx stack, measured like the
+        formal Trn2 timing (same warmup / repeat, same profiler path and busy-sum definition)."""
+        import statistics
+        import tempfile
+        from pathlib import Path
+
+        from tilebench.core import neuron_native
+
+        rt = _native_runtime()
+        self.kernel(*args)                      # compile; untimed
+        rt.sync()
+        for _ in range(neuron_native.NEURON_DEFAULT_WARMUP):
+            self.kernel(*args)
+            rt.sync()
+        busy = []
+        with tempfile.TemporaryDirectory(prefix="nki_autotune_") as d:
+            for i in range(neuron_native.NEURON_DEFAULT_REPEAT):
+                it = neuron_native._device_call(rt, self.kernel, args, {}, Path(d) / f"iter{i}",
+                                                f"autotune-{i}")
+                if it["n_executions"] == 0:
+                    raise RuntimeError("candidate call recorded no device execution")
+                busy.append(it["busy_sum_ms"])
+        return statistics.fmean(busy)
+
     def _time_candidate(self, args: Sequence) -> float:
+        if self.timer == "native" or (self.timer == "auto" and _on_native_device(args)):
+            return self._time_native(args)
         if self.timer == "benchmark":
             return self._time_benchmark(args)
         if self.timer == "wallclock":

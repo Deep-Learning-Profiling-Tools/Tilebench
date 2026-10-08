@@ -1,6 +1,9 @@
 import importlib
 import inspect
+import math
 import os
+import time
+from pathlib import Path
 
 import torch
 import yaml
@@ -13,9 +16,11 @@ from tilebench.paths import operator_config
 
 
 # CUDA is required for the GPU-only backends (Triton, cuTile, TileLang) and for
-# Proton-based torch timing. On non-CUDA hosts (e.g. AWS Trainium) those are
-# skipped; torch and NKI are instead both timed on the XLA (Neuron) device via
-# the Neuron runtime's execution trace (see tilebench/core/nki_timer.py).
+# Proton-based torch timing. On non-CUDA hosts (AWS Trainium) those are skipped;
+# PyTorch eager and NKI are both run on the native PyTorch Neuron stack
+# (torch.device("neuron")) and timed from the Neuron runtime's
+# device trace (see tilebench/core/neuron_native.py). The legacy torch-xla path
+# (nki_orchestrator.py) is no longer part of the benchmark.
 HAS_CUDA = torch.cuda.is_available()
 
 # On Neuron hosts every benchmark entry point (scripts/run_bench.py and
@@ -41,15 +46,51 @@ def _announce_timing_mode(mode: dict) -> None:
               "Proton backend.")
 
 
-def _nki_artifact_paths(logs_dir) -> dict:
-    """Where the NKI profiling flow keeps its artifacts: inside the run's result
+def _neuron_dirs(logs_dir) -> dict:
+    """Where the native Neuron flow keeps its artifacts: inside the run's result
     namespace, results/<gpu>/logs/, next to the timing and autotune logs."""
     if logs_dir is None:
         raise ValueError(
-            "NKI profiling stores its artifacts under results/<gpu>/logs/; call "
+            "Neuron profiling stores its artifacts under results/<gpu>/logs/; call "
             "run_benchmark_suite(..., logs_dir=tilebench.paths.results_logs_dir(<gpu>))")
-    return {"base_dir": os.path.join(logs_dir, "nki_profiles"),
-            "index_path": os.path.join(logs_dir, "nki_neff_manifest.jsonl")}
+    return {"profiles": Path(logs_dir) / "neuron_native_profiles",
+            "cache": Path(logs_dir) / "neuron_native_cache"}
+
+
+def _torch_status(neuron_result) -> str | None:
+    """How speedup_nki's PyTorch eager baseline stands: "ok" (verified, device-timed),
+    "unresolved" (not run, see neuron_native.BASELINE_UNRESOLVED) or "failed"."""
+    if neuron_result is None:
+        return None
+    if neuron_result.get("baseline_unresolved"):
+        return "unresolved"
+    return "ok" if neuron_result.get("torch_ms", float("nan")) > 0 else "failed"
+
+
+def _actual_settings(neuron_result, warmup, repeat, autotune) -> dict:
+    """Requested and executed warmup / repeat of a Neuron case. actual_* is the count of calls
+    each measured backend really executed (warmup calls, timed device calls); it is a single
+    number when every backend agrees, else the per-backend dict."""
+    if neuron_result is None:
+        return {}
+    got = {b: (st.get("actual_warmup"), st.get("actual_repeat"))
+           for b, st in (("torch", neuron_result.get("torch_stats")), ("nki", neuron_result.get("nki_stats")))
+           if st and st.get("actual_repeat") is not None}
+    vals = set(got.values())
+    w, r = next(iter(vals)) if len(vals) == 1 else (None, None)
+    return {"requested_warmup": warmup, "requested_repeat": repeat, "actual_autotune": autotune,
+            "actual_warmup": w if len(vals) == 1 else {b: v[0] for b, v in got.items()},
+            "actual_repeat": r if len(vals) == 1 else {b: v[1] for b, v in got.items()}}
+
+
+def _nki_status(neuron_result) -> str | None:
+    """"ok" (verified, device-timed), "unsupported" (the implementation declares the
+    dtype/shape unsupported) or "failed"."""
+    if neuron_result is None:
+        return None
+    if neuron_result.get("nki_unsupported"):
+        return "unsupported"
+    return "ok" if neuron_result.get("nki_ok") else "failed"
 
 
 def _sync():
@@ -63,7 +104,12 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     # Only the Neuron profiling flow writes files from inside the engine; every
     # other output is written by the caller. Resolved up front so a missing
     # namespace fails before any case runs, not once per case.
-    nki_paths = None if HAS_CUDA else _nki_artifact_paths(logs_dir)
+    neuron_dirs = None if HAS_CUDA else _neuron_dirs(logs_dir)
+    if neuron_dirs is not None:
+        from tilebench.core import neuron_native
+
+        # before any import that may load torch_neuronx (the impl modules below)
+        neuron_env = neuron_native.prepare_environment(neuron_dirs["cache"])
 
     config_path = operator_config(operator_name)
     with open(config_path, "r") as f:
@@ -129,8 +175,16 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
     warmup            = int(bench_cfg.get("warmup", DEFAULT_WARMUP))
     repeat            = int(bench_cfg.get("repeat", DEFAULT_REPEAT))
     autotune          = bool(bench_cfg.get("autotune", False))
+    if not HAS_CUDA:
+        # Trn2 convention: warmup 1 / repeat 3 and no autotune unless given explicitly on the
+        # command line; the operator config.yaml's (GPU) warmup / repeat / autotune do not apply.
+        overrides = benchmark_overrides or {}
+        warmup = int(overrides.get("warmup", neuron_native.NEURON_DEFAULT_WARMUP))
+        repeat = int(overrides.get("repeat", neuron_native.NEURON_DEFAULT_REPEAT))
+        autotune = bool(overrides.get("autotune", False))
 
-    verify_atol, verify_rtol = config_tolerance(config.get("verify", {}), detect_arch())
+    verify_atol, verify_rtol = config_tolerance(config.get("verify", {}),
+                                                detect_arch() if HAS_CUDA else neuron_native.NEURON_ARCH)
     use_cuda_graph    = bool(bench_cfg.get("use_cuda_graph", False))
     proton_scope_name = str(bench_cfg.get("proton_scope_name", "launch"))
     proton_backend    = bench_cfg.get("proton_backend")
@@ -180,6 +234,8 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             kw["autotune"] = autotune
         return kw
 
+    neuron_rt = None
+    run_stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
     for case_idx, case in enumerate(cases):
         params     = {k: v for k, v in case.items() if k not in ("dtype", "block_size")}
         dtype_str  = case.get("dtype", "fp32")
@@ -205,43 +261,53 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         lbl = f"{operator_name}_{dtype_str}_c{case_idx:03d}"
 
         # --- Torch (baseline) + NKI on non-CUDA hosts ---
-        # Proton-timed on CUDA. On non-CUDA hosts (e.g. Trainium), Proton can't
-        # observe the device; the torch baseline and (when selected) the NKI
-        # run() are both hardware-timed from the Neuron runtime's execution
-        # trace (real inputs, warmup + repeat iterations, multi-graph run()s
-        # summed), every executed NEFF matched by SHA256 to the compiled
-        # artifact resolved with deterministic identity (private per-spec
-        # working dir + compile cache, exact autotune-winner replay in a fresh
-        # process, AwsNeuronCustomNativeKernel marker validation, and a
-        # per-spec manifest). See core/nki_orchestrator.py. Nothing here is
-        # timed by XLA wall-clock.
+        # Proton-timed on CUDA. On Trainium both run on the native neuron device:
+        # PyTorch eager impl_torch.run and the NKI run() with the same neuron
+        # tensors, each verified against the CPU reference and timed from the
+        # runtime device trace (neuron_native.measure). No torch.compile, no
+        # torch-xla. Operators in neuron_native.BASELINE_UNRESOLVED run NKI only.
         neuron_result = None
         if HAS_CUDA:
             torch_stats = _bench(impl_torch.run, inputs, label=f"{lbl}_torch")
             torch_ms    = torch_stats["mean"]
         else:
+            neuron_result = {"torch_stats": None, "torch_ms": float("nan"), "torch_err": "",
+                             "nki_stats": None, "nki_ms": float("nan"), "nki_ok": False,
+                             "nki_err": "", "nki_cfg": None,
+                             "baseline_unresolved": operator_name in neuron_native.BASELINE_UNRESOLVED,
+                             "baseline_reason": neuron_native.BASELINE_UNRESOLVED.get(operator_name, "")}
             try:
-                from tilebench.core.nki_orchestrator import profile_case_on_neuron
-
-                neuron_result = profile_case_on_neuron(
-                    operator=operator_name, params=params, dtype_str=dtype_str,
-                    inputs=inputs, ref_output=ref_output, impl_nki=impl_nki,
-                    block_size=block_size, autotune=autotune,
-                    verify_atol=verify_atol, verify_rtol=verify_rtol,
-                    warmup=warmup, repeat=repeat, **nki_paths)
-                torch_stats = neuron_result["torch_stats"]
-                torch_ms    = neuron_result["torch_ms"]
-                if neuron_result.get("torch_err"):
-                    print(f"  Torch (Neuron) baseline FAILED: {neuron_result['torch_err']}")
+                if neuron_rt is None:
+                    neuron_rt = neuron_native.NativeNeuron()
+                prof = neuron_dirs["profiles"] / operator_name / run_stamp / lbl
+                if neuron_result["baseline_unresolved"]:
+                    neuron_result["torch_err"] = "baseline unresolved: " + neuron_result["baseline_reason"]
+                    print(f"  Torch (Neuron eager) baseline not run: {neuron_result['baseline_reason']}")
+                else:
+                    t = neuron_native.measure(impl_torch.run, {}, inputs, ref_output, rt=neuron_rt,
+                                              warmup=warmup, repeat=repeat, atol=verify_atol,
+                                              rtol=verify_rtol, profile_dir=prof / "torch_eager",
+                                              label=f"{lbl}_torch")
+                    t["stats"]["neuronx_cc"] = neuron_env["neuronx_cc"]
+                    neuron_result.update(torch_stats=t["stats"], torch_ms=t["ms"], torch_err=t["err"])
+                    if t["err"]:
+                        print(f"  Torch (Neuron eager) baseline: {t['err']}")
+                if impl_nki is not None:
+                    nki_kw = _run_kwargs(impl_nki.run, block_size)
+                    n = neuron_native.measure(impl_nki.run, nki_kw, inputs, ref_output, rt=neuron_rt,
+                                              warmup=warmup, repeat=repeat, atol=verify_atol,
+                                              rtol=verify_rtol, profile_dir=prof / "nki",
+                                              label=f"{lbl}_nki")
+                    n["stats"]["neuronx_cc"] = neuron_env["neuronx_cc"]
+                    neuron_result.update(
+                        nki_stats=n["stats"], nki_ms=n["ms"], nki_ok=n["ok"] and not math.isnan(n["ms"]),
+                        nki_err=n["err"], nki_unsupported=n["unsupported"],
+                        nki_cfg=getattr(impl_nki, "get_last_config", lambda: None)() if autotune else None)
             except Exception as e:
-                print(f"  Neuron (torch+NKI) profiling FAILED: {e}")
-                neuron_result = {
-                    "torch_stats": None, "torch_ms": float("nan"),
-                    "nki_stats": None, "nki_ms": float("nan"),
-                    "nki_ok": False, "nki_err": str(e), "nki_cfg": None,
-                }
-                torch_stats = None
-                torch_ms    = float("nan")
+                print(f"  Neuron (torch+NKI) measurement FAILED: {e}")
+                neuron_result.update(nki_ok=False, nki_err=f"{type(e).__name__}: {e}"[:2000])
+            torch_stats = neuron_result["torch_stats"]
+            torch_ms    = neuron_result["torch_ms"]
 
         # --- Triton ---
         triton_cfg = None
@@ -338,12 +404,10 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                 tilelang_stats = None
                 print(f"  TileLang execution FAILED: {tilelang_err}")
 
-        # --- NKI (AWS Trainium; exact-NEFF neuron-profile timing) ---
-        # The heavy lifting happened in the orchestrator call above (fresh
-        # selector + profile worker processes, exact winner replay, validated
-        # artifact identity). Here we only unpack its result. An identity
+        # --- NKI (AWS Trainium; native device-trace timing) ---
+        # Measured above with the torch baseline. A verification or device-timing
         # failure is a benchmark failure: nki_ok=False, nki_ms=nan, detailed
-        # nki_err — never a latency from an uncertain artifact.
+        # nki_err — never a host wall time in place of the device time.
         nki_cfg = None
         if impl_nki is None:
             nki_ok = False
@@ -352,7 +416,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             nki_stats = None
             print("  NKI skipped (not available)")
         elif neuron_result is None:
-            # CUDA host: torch-xla/Neuron runtime is not present.
+            # CUDA host: the Neuron runtime is not present.
             nki_ok = False
             nki_err = "NKI timing requires a Neuron (non-CUDA) host"
             nki_ms = float("nan")
@@ -398,8 +462,14 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             "speedup_triton":        torch_ms / triton_ms if triton_ms > 0 else 0.0,
             "speedup_cutile":        torch_ms / cutile_ms if cutile_ms > 0 else 0.0,
             "speedup_tilelang":      torch_ms / tilelang_ms if tilelang_ms > 0 else 0.0,
-            "speedup_nki":           torch_ms / nki_ms if nki_ms > 0 else 0.0,
+            "speedup_nki":           (torch_ms / nki_ms if nki_ms > 0 else 0.0) if HAS_CUDA
+                                     else neuron_native.speedup(torch_ms, nki_ms),
             "timing":                timing,
+            # Neuron rows only: how the baseline / NKI stand and the executed warmup / repeat
+            **({} if HAS_CUDA else {
+                "torch_status":      _torch_status(neuron_result),
+                **_actual_settings(neuron_result, warmup, repeat, autotune),
+                "nki_status":        _nki_status(neuron_result)}),
         })
 
     return results
