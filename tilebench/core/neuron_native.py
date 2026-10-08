@@ -214,7 +214,7 @@ def _device_call(rt: NativeNeuron, fn, args, kw, profile_dir: Path, label: str) 
     from torch_neuronx.profiling import NeuronConfig, ProfileMode
 
     from tilebench.core import nki_timer
-    from tilebench.neuron_diag.intervals import aggregate
+    from tilebench.core.neuron_intervals import aggregate
 
     profile_dir.mkdir(parents=True, exist_ok=False)
     cfg = NeuronConfig(modes=[ProfileMode.RUNTIME], profile_output_dir=str(profile_dir))

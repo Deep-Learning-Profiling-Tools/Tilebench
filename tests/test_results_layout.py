@@ -406,8 +406,8 @@ def test_neuron_speedup_is_eager_over_nki_and_never_invented():
 def test_neuron_formal_path_has_no_xla_or_compile():
     import ast
     import inspect
-    from tilebench.core import engine, neuron_native
-    for mod in (engine, neuron_native):
+    from tilebench.core import engine, neuron_intervals, neuron_native
+    for mod in (engine, neuron_native, neuron_intervals):
         tree = ast.parse(inspect.getsource(mod))
         imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         imported |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
