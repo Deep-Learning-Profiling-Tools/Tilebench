@@ -1,0 +1,1791 @@
+{
+ "figure": "fig_a4_within_device_matrix",
+ "rq": "Evaluation Appendix",
+ "script": "scripts/paper_figures/plot_appendix.py",
+ "source_git_commit": "63b6f692c5c5eddf28f30e0cd01b6a41a31ac264",
+ "source_data_files": {
+  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
+  "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
+  "comparison_manifest.json": "2e9c7b5b8111d55d3d4be617d142103557b485c85007b78eaff06cd0b97ef09b"
+ },
+ "known_limitations": {
+  "B200": [
+   "Formal Triton/cuTile columns come from the paper campaign with a historical cuda-tile version (1.3.0 per developer_guide); benchmark source commit not recorded.",
+   "Frozen columns used a fixed 64 MB L2 eviction for 41 operators (< 126.5 MB L2) and config warmup/repeat 20/100.",
+   "TileLang column measured in a later campaign (direct runtime, PR #319) with a different environment.",
+   "9 Triton/cuTile NCU reports exclude auxiliary PyTorch launches (fill/copy) that the formal run() timing includes.",
+   "No B200 NCU report records its source commit.",
+   "13 TileLang reports are reduced (8, kernel replay) or targeted (5) collections without per-opcode or PC-sampling data."
+  ],
+  "GH200": [
+   "CUDA 13.1 and cuda-tile 1.5.0 (tileiras 13.4.92) differ from B200; NCU 2025.4.0.",
+   "Formal protocol warmup 1 / repeat 3 with a 120 MiB eviction (B200 frozen: 20/100, 64 MB for 41 operators).",
+   "TileLang uses fragment-accumulator kernel bodies on sm_90 for 9 operators whose Blackwell path uses TMEM.",
+   "Triton matmul_fp32_fp16_fp8, matmul_int8, batched_matmul, streamk_matmul cache a transposed B operand outside the timed region."
+  ],
+  "MI300X": [
+   "Formal CSV timing uses warmup 20 / repeat 100 (config at 4d08985a/005ab63b), not the later 1/3 configuration.",
+   "Formal run uses ROCm eager timing (HIP-graph request falls back to eager) with a 512 MiB flush.",
+   "matmul_fp32_fp16_fp8 FP8 E4M3FN is unsupported and remains missing (109 operator/dtype pairs).",
+   "Three diagnosis records are not fully traced (batch_normalization secondary M6; batch_normalization and softmax primary M3; destindex secondary M2).",
+   "Only Triton (and the PyTorch reference) exist on MI300X."
+  ]
+ },
+ "metric_formula": "slowdown = GM_cases(latency_DSL) / min_DSL GM_cases(latency_DSL), cases valid for all three NVIDIA DSLs on the device",
+ "aggregation_order": [
+  "GM over matched cases",
+  "ratio to the per-operator minimum"
+ ],
+ "near_parity_threshold": 1.05,
+ "case_coverage": {
+  "dequantize_rowwise|B200": 20,
+  "dequantize_rowwise|GH200": 20,
+  "dropout|B200": 60,
+  "dropout|GH200": 60,
+  "fused_activation|B200": 20,
+  "fused_activation|GH200": 20,
+  "leaky_relu|B200": 60,
+  "leaky_relu|GH200": 60,
+  "mul2|B200": 80,
+  "mul2|GH200": 80,
+  "quantize_global|B200": 20,
+  "quantize_global|GH200": 20,
+  "relu|B200": 80,
+  "relu|GH200": 80,
+  "rope|B200": 40,
+  "rope|GH200": 40,
+  "sigmoid|B200": 60,
+  "sigmoid|GH200": 60,
+  "swiglu|B200": 60,
+  "swiglu|GH200": 60,
+  "vector_add|B200": 80,
+  "vector_add|GH200": 80,
+  "weight_dequant|B200": 60,
+  "weight_dequant|GH200": 60,
+  "argmax|B200": 40,
+  "argmax|GH200": 40,
+  "batch_normalization|B200": 60,
+  "batch_normalization|GH200": 60,
+  "cross_entropy|B200": 40,
+  "cross_entropy|GH200": 40,
+  "histogramming|B200": 20,
+  "histogramming|GH200": 20,
+  "kl_divergence|B200": 20,
+  "kl_divergence|GH200": 20,
+  "l2_norm|B200": 60,
+  "l2_norm|GH200": 60,
+  "layernorm|B200": 60,
+  "layernorm|GH200": 60,
+  "mean_reduction|B200": 60,
+  "mean_reduction|GH200": 60,
+  "moe_topk_gating|B200": 60,
+  "moe_topk_gating|GH200": 60,
+  "rmsnorm|B200": 60,
+  "rmsnorm|GH200": 60,
+  "softmax|B200": 40,
+  "softmax|GH200": 40,
+  "batched_matmul|B200": 60,
+  "batched_matmul|GH200": 60,
+  "block_sparse_attention|B200": 20,
+  "block_sparse_attention|GH200": 20,
+  "flash_attention|B200": 20,
+  "flash_attention|GH200": 20,
+  "flash_decode|B200": 20,
+  "flash_decode|GH200": 20,
+  "linear_self_attention|B200": 20,
+  "linear_self_attention|GH200": 20,
+  "matmul_fp32_fp16_fp8|B200": 60,
+  "matmul_fp32_fp16_fp8|GH200": 60,
+  "matmul_int8|B200": 20,
+  "matmul_int8|GH200": 20,
+  "streamk_matmul|B200": 60,
+  "streamk_matmul|GH200": 60,
+  "1d_conv|B200": 40,
+  "1d_conv|GH200": 40,
+  "2d_conv|B200": 40,
+  "2d_conv|GH200": 40,
+  "2d_max_pooling|B200": 60,
+  "2d_max_pooling|GH200": 60,
+  "3d_conv|B200": 40,
+  "3d_conv|GH200": 40,
+  "gaussian_blur|B200": 40,
+  "gaussian_blur|GH200": 40,
+  "jacobi_stencil_2d|B200": 60,
+  "jacobi_stencil_2d|GH200": 60,
+  "bitonic_sort|B200": 40,
+  "bitonic_sort|GH200": 40,
+  "destindex|B200": 80,
+  "destindex|GH200": 80,
+  "interleave|B200": 80,
+  "interleave|GH200": 80,
+  "matrix_copy|B200": 80,
+  "matrix_copy|GH200": 80,
+  "matrix_transpose|B200": 80,
+  "matrix_transpose|GH200": 80,
+  "radix_sort|B200": 20,
+  "radix_sort|GH200": 20,
+  "reverse_array|B200": 80,
+  "reverse_array|GH200": 80,
+  "top_k_selection|B200": 20,
+  "top_k_selection|GH200": 20
+ },
+ "excluded_cases": {
+  "invalid_or_missing_rows": 0
+ },
+ "selection_criteria": "all 45 operators",
+ "profiling_evidence_ids": [],
+ "plotted_values": [
+  {
+   "operator": "dequantize_rowwise",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "dequantize_rowwise",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1547603961041133
+  },
+  {
+   "operator": "dequantize_rowwise",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0265290947953303
+  },
+  {
+   "operator": "dequantize_rowwise",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "dequantize_rowwise",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.1271293252525802
+  },
+  {
+   "operator": "dequantize_rowwise",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.034909451497581
+  },
+  {
+   "operator": "dropout",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0056290682183933
+  },
+  {
+   "operator": "dropout",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0120249228636726
+  },
+  {
+   "operator": "dropout",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "dropout",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0078033888705662
+  },
+  {
+   "operator": "dropout",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.027748750182405
+  },
+  {
+   "operator": "dropout",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "fused_activation",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "fused_activation",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0104908473559249
+  },
+  {
+   "operator": "fused_activation",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.010832561075894
+  },
+  {
+   "operator": "fused_activation",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "fused_activation",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0101124777217712
+  },
+  {
+   "operator": "fused_activation",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0124001822015847
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0034871621182804
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0127945042115376
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0022346774726167
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0162051676908979
+  },
+  {
+   "operator": "leaky_relu",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mul2",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0306801647381347
+  },
+  {
+   "operator": "mul2",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.078635380415932
+  },
+  {
+   "operator": "mul2",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mul2",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mul2",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0435122779281878
+  },
+  {
+   "operator": "mul2",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0005213427789592
+  },
+  {
+   "operator": "quantize_global",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "quantize_global",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0053635600602993
+  },
+  {
+   "operator": "quantize_global",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0397643542345265
+  },
+  {
+   "operator": "quantize_global",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "quantize_global",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0148555292628967
+  },
+  {
+   "operator": "quantize_global",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0051957014654962
+  },
+  {
+   "operator": "relu",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.029377336576997
+  },
+  {
+   "operator": "relu",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0909628063978731
+  },
+  {
+   "operator": "relu",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "relu",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0082843198855644
+  },
+  {
+   "operator": "relu",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0274629083164712
+  },
+  {
+   "operator": "relu",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "rope",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0041061493237065
+  },
+  {
+   "operator": "rope",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1467472143502955
+  },
+  {
+   "operator": "rope",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "rope",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0013276229429853
+  },
+  {
+   "operator": "rope",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0417162731293472
+  },
+  {
+   "operator": "rope",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "sigmoid",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "sigmoid",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.3069391903124277
+  },
+  {
+   "operator": "sigmoid",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0193899348164392
+  },
+  {
+   "operator": "sigmoid",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "sigmoid",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0878052451752596
+  },
+  {
+   "operator": "sigmoid",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0066280271741617
+  },
+  {
+   "operator": "swiglu",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "swiglu",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.2294686071163976
+  },
+  {
+   "operator": "swiglu",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0679038011257973
+  },
+  {
+   "operator": "swiglu",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "swiglu",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.1165086333495777
+  },
+  {
+   "operator": "swiglu",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0107719063002696
+  },
+  {
+   "operator": "vector_add",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0247119943923575
+  },
+  {
+   "operator": "vector_add",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.033954522161472
+  },
+  {
+   "operator": "vector_add",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "vector_add",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0018822530125024
+  },
+  {
+   "operator": "vector_add",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0244895522995259
+  },
+  {
+   "operator": "vector_add",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0930404817750288
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.8907845365651543
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0104915063448274
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.2192324109725727
+  },
+  {
+   "operator": "weight_dequant",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "argmax",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.192182024641632
+  },
+  {
+   "operator": "argmax",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1517390231137252
+  },
+  {
+   "operator": "argmax",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "argmax",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0465842190962966
+  },
+  {
+   "operator": "argmax",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0925060941852378
+  },
+  {
+   "operator": "argmax",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.1439232295080184
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.274284964495233
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.1423069318634378
+  },
+  {
+   "operator": "batch_normalization",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0272506730323467
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.4114979121631703
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0630736234798641
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0558475165839578
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.3535506768998227
+  },
+  {
+   "operator": "cross_entropy",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "histogramming",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 3.978215699115222
+  },
+  {
+   "operator": "histogramming",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 6.4634105502714165
+  },
+  {
+   "operator": "histogramming",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "histogramming",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 4.292805129432461
+  },
+  {
+   "operator": "histogramming",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 7.076741535508898
+  },
+  {
+   "operator": "histogramming",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.114945848832621
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0668482602826312
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0149858908725098
+  },
+  {
+   "operator": "kl_divergence",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0020673776829825
+  },
+  {
+   "operator": "l2_norm",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0572255117503933
+  },
+  {
+   "operator": "l2_norm",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.2115757932423867
+  },
+  {
+   "operator": "l2_norm",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "l2_norm",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0828405703881379
+  },
+  {
+   "operator": "l2_norm",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0647058627675072
+  },
+  {
+   "operator": "l2_norm",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "layernorm",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.155737566526435
+  },
+  {
+   "operator": "layernorm",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.3971481261119585
+  },
+  {
+   "operator": "layernorm",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "layernorm",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0889289813353784
+  },
+  {
+   "operator": "layernorm",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.1444468971872674
+  },
+  {
+   "operator": "layernorm",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0066694536540126
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1462173738309838
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0113653094033817
+  },
+  {
+   "operator": "mean_reduction",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0000298356174215
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.9601858101773637
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0340123946273159
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0355696669907002
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 2.017718278325114
+  },
+  {
+   "operator": "moe_topk_gating",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.1107513812531702
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1918060043571672
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.1028753859203242
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.09901295845241
+  },
+  {
+   "operator": "rmsnorm",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "softmax",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "softmax",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.5216079333501307
+  },
+  {
+   "operator": "softmax",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.1197500278789116
+  },
+  {
+   "operator": "softmax",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "softmax",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.2532120031054303
+  },
+  {
+   "operator": "softmax",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0375062974868257
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.1309164016241828
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.3169900287105307
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.150784319932867
+  },
+  {
+   "operator": "batched_matmul",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.1730895389217388
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 2.6894604300160734
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 2.720967411821279
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 2.1717060430019655
+  },
+  {
+   "operator": "block_sparse_attention",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.7150896286521535
+  },
+  {
+   "operator": "flash_attention",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0623120926957361
+  },
+  {
+   "operator": "flash_attention",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "flash_attention",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.7833169893256757
+  },
+  {
+   "operator": "flash_attention",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.1621767370942246
+  },
+  {
+   "operator": "flash_attention",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "flash_attention",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.5755424879686128
+  },
+  {
+   "operator": "flash_decode",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0076543573336592
+  },
+  {
+   "operator": "flash_decode",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 3.402855791847893
+  },
+  {
+   "operator": "flash_decode",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "flash_decode",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.015619904657424
+  },
+  {
+   "operator": "flash_decode",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 3.1290484492678963
+  },
+  {
+   "operator": "flash_decode",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 2.015003464078746
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 3.281357211752991
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.227682165963578
+  },
+  {
+   "operator": "linear_self_attention",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 2.8651423522610373
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.2695384223165602
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 2.114085940193623
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.6051717313260103
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 2.3864794192989875
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0522562958700206
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0709230643177357
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.9846929994833868
+  },
+  {
+   "operator": "matmul_int8",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.968324321616665
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 2.0500931788324395
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.5604073612173188
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.4332644709471394
+  },
+  {
+   "operator": "streamk_matmul",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.1552399004575387
+  },
+  {
+   "operator": "1d_conv",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "1d_conv",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.7597734915522463
+  },
+  {
+   "operator": "1d_conv",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 5.548314721382267
+  },
+  {
+   "operator": "1d_conv",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "1d_conv",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.2374734690787583
+  },
+  {
+   "operator": "1d_conv",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 5.654138250123393
+  },
+  {
+   "operator": "2d_conv",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "2d_conv",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.5607790955370044
+  },
+  {
+   "operator": "2d_conv",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 3.870029742495266
+  },
+  {
+   "operator": "2d_conv",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "2d_conv",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.4778089209102925
+  },
+  {
+   "operator": "2d_conv",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 4.713548278805908
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.2717301786856792
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.6572815689206974
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0464122509445999
+  },
+  {
+   "operator": "2d_max_pooling",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.1314945907746157
+  },
+  {
+   "operator": "3d_conv",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "3d_conv",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 2.1857678765225095
+  },
+  {
+   "operator": "3d_conv",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 4.105992152791541
+  },
+  {
+   "operator": "3d_conv",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "3d_conv",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 2.0789716942565795
+  },
+  {
+   "operator": "3d_conv",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 4.403609580413726
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.2144590158677924
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.379514269964794
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0721927528813382
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.3319569467548427
+  },
+  {
+   "operator": "gaussian_blur",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.1939361907769461
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0334533282989344
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.1152881814337396
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0232543342205156
+  },
+  {
+   "operator": "jacobi_stencil_2d",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0043033909918329
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0016704370977874
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0160662163622218
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.089046535328648
+  },
+  {
+   "operator": "bitonic_sort",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "destindex",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "destindex",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 2.0955437566107156
+  },
+  {
+   "operator": "destindex",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0653706517503627
+  },
+  {
+   "operator": "destindex",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "destindex",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.6396497735569826
+  },
+  {
+   "operator": "destindex",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0684405412614795
+  },
+  {
+   "operator": "interleave",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "interleave",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0184284892611482
+  },
+  {
+   "operator": "interleave",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.039171357464273
+  },
+  {
+   "operator": "interleave",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "interleave",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0161920749557556
+  },
+  {
+   "operator": "interleave",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0478699217452474
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0111109206271096
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0121635105659388
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0296026776121663
+  },
+  {
+   "operator": "matrix_copy",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.0036314839811658
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0034548674097863
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.2400863751932742
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0090028690696036
+  },
+  {
+   "operator": "matrix_transpose",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.1342437221641164
+  },
+  {
+   "operator": "radix_sort",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "radix_sort",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.8746584983725305
+  },
+  {
+   "operator": "radix_sort",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.7786088927880455
+  },
+  {
+   "operator": "radix_sort",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "radix_sort",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.8535034909400152
+  },
+  {
+   "operator": "radix_sort",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.7648262399669892
+  },
+  {
+   "operator": "reverse_array",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "reverse_array",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.0085752239996564
+  },
+  {
+   "operator": "reverse_array",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.1719551950894722
+  },
+  {
+   "operator": "reverse_array",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "reverse_array",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0506578346705915
+  },
+  {
+   "operator": "reverse_array",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.1311495815502315
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "B200",
+   "dsl": "triton",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "B200",
+   "dsl": "cutile",
+   "slowdown": 1.129516967111085
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "B200",
+   "dsl": "tilelang",
+   "slowdown": 1.0617314103297493
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "GH200",
+   "dsl": "triton",
+   "slowdown": 1.309442107458755
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "GH200",
+   "dsl": "cutile",
+   "slowdown": 1.0
+  },
+  {
+   "operator": "top_k_selection",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "slowdown": 1.2632864315473245
+  }
+ ],
+ "outputs": {
+  "pdf": {
+   "path": "appendix/fig_a4_within_device_matrix.pdf",
+   "sha256": "b104c967e3cf8a99c27dcda8909d6688fd18934313befc707d258d3ae14ae05e"
+  },
+  "svg": {
+   "path": "appendix/fig_a4_within_device_matrix.svg",
+   "sha256": "391eb56a19ece145b5ff76cabb8634793974578b022dcdabb5657388d0586f4b"
+  },
+  "png": {
+   "path": "previews/fig_a4_within_device_matrix.png",
+   "sha256": "761171eac1247331ef7b1a4ed2d452795fa85bcacdfdd739ff2278e32e096b19"
+  }
+ },
+ "layout": {
+  "width_in": 3.35,
+  "height_in": 8.4,
+  "min_font_pt": 5.5,
+  "max_font_pt": 7.0,
+  "n_text_objects": 333,
+  "content_overflow_in": {
+   "left": 0.0,
+   "bottom": 0.0,
+   "right": 0.0,
+   "top": 0.0
+  }
+ },
+ "code_sha256": {
+  "scripts/paper_figures/plot_style.py": "2f864de0944ad73284143dfd428c1340e8689a0b507f740b208f6debec678fce",
+  "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
+  "scripts/paper_figures/plot_appendix.py": "ef2dea723272dbafdeff44daff28a1c1379503ba2e7ffa4399bfff44707e24f9"
+ }
+}

@@ -1,0 +1,1133 @@
+{
+ "figure": "fig_rq3_within_device_dsl",
+ "rq": "RQ3",
+ "script": "scripts/paper_figures/plot_rq3.py",
+ "source_git_commit": "63b6f692c5c5eddf28f30e0cd01b6a41a31ac264",
+ "source_data_files": {
+  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
+  "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
+  "comparison_manifest.json": "2e9c7b5b8111d55d3d4be617d142103557b485c85007b78eaff06cd0b97ef09b"
+ },
+ "metric_formula": "x = GM_cases(cutile_ms/triton_ms), y = GM_cases(tilelang_ms/triton_ms) over cases valid for all three DSLs on the device; >1 = slower than Triton",
+ "aggregation_order": [
+  "geometric mean over matched input cases within an operator"
+ ],
+ "winner_definition": "per operator, the DSL with the lowest GM latency over the matched cases; 'within 5%' = runner-up / winner <= 1.05 (no uncertainty analysis; near parity is not significant)",
+ "axes": {
+  "x": "cuTile/Triton latency ratio (log2)",
+  "y": "TileLang/Triton latency ratio (log2)",
+  "limits": [
+   0.125,
+   8
+  ],
+  "shared_between_panels": true
+ },
+ "case_coverage": {
+  "B200": {
+   "dequantize_rowwise": 20,
+   "dropout": 60,
+   "fused_activation": 20,
+   "leaky_relu": 60,
+   "mul2": 80,
+   "quantize_global": 20,
+   "relu": 80,
+   "rope": 40,
+   "sigmoid": 60,
+   "swiglu": 60,
+   "vector_add": 80,
+   "weight_dequant": 60,
+   "argmax": 40,
+   "batch_normalization": 60,
+   "cross_entropy": 40,
+   "histogramming": 20,
+   "kl_divergence": 20,
+   "l2_norm": 60,
+   "layernorm": 60,
+   "mean_reduction": 60,
+   "moe_topk_gating": 60,
+   "rmsnorm": 60,
+   "softmax": 40,
+   "batched_matmul": 60,
+   "block_sparse_attention": 20,
+   "flash_attention": 20,
+   "flash_decode": 20,
+   "linear_self_attention": 20,
+   "matmul_fp32_fp16_fp8": 60,
+   "matmul_int8": 20,
+   "streamk_matmul": 60,
+   "1d_conv": 40,
+   "2d_conv": 40,
+   "2d_max_pooling": 60,
+   "3d_conv": 40,
+   "gaussian_blur": 40,
+   "jacobi_stencil_2d": 60,
+   "bitonic_sort": 40,
+   "destindex": 80,
+   "interleave": 80,
+   "matrix_copy": 80,
+   "matrix_transpose": 80,
+   "radix_sort": 20,
+   "reverse_array": 80,
+   "top_k_selection": 20
+  },
+  "GH200": {
+   "dequantize_rowwise": 20,
+   "dropout": 60,
+   "fused_activation": 20,
+   "leaky_relu": 60,
+   "mul2": 80,
+   "quantize_global": 20,
+   "relu": 80,
+   "rope": 40,
+   "sigmoid": 60,
+   "swiglu": 60,
+   "vector_add": 80,
+   "weight_dequant": 60,
+   "argmax": 40,
+   "batch_normalization": 60,
+   "cross_entropy": 40,
+   "histogramming": 20,
+   "kl_divergence": 20,
+   "l2_norm": 60,
+   "layernorm": 60,
+   "mean_reduction": 60,
+   "moe_topk_gating": 60,
+   "rmsnorm": 60,
+   "softmax": 40,
+   "batched_matmul": 60,
+   "block_sparse_attention": 20,
+   "flash_attention": 20,
+   "flash_decode": 20,
+   "linear_self_attention": 20,
+   "matmul_fp32_fp16_fp8": 60,
+   "matmul_int8": 20,
+   "streamk_matmul": 60,
+   "1d_conv": 40,
+   "2d_conv": 40,
+   "2d_max_pooling": 60,
+   "3d_conv": 40,
+   "gaussian_blur": 40,
+   "jacobi_stencil_2d": 60,
+   "bitonic_sort": 40,
+   "destindex": 80,
+   "interleave": 80,
+   "matrix_copy": 80,
+   "matrix_transpose": 80,
+   "radix_sort": 20,
+   "reverse_array": 80,
+   "top_k_selection": 20
+  }
+ },
+ "excluded_cases": {
+  "invalid_or_missing_rows": 0
+ },
+ "selection_criteria": "all 45 operators; labels on the 7 operators farthest from (1x, 1x) per panel",
+ "labelled_operators": {
+  "B200": [
+   "1d_conv",
+   "3d_conv",
+   "histogramming",
+   "2d_conv",
+   "block_sparse_attention",
+   "linear_self_attention",
+   "flash_decode"
+  ],
+  "GH200": [
+   "1d_conv",
+   "3d_conv",
+   "2d_conv",
+   "histogramming",
+   "flash_decode",
+   "linear_self_attention",
+   "matmul_fp32_fp16_fp8"
+  ]
+ },
+ "winners": {
+  "B200": {
+   "counts": {
+    "triton": 22,
+    "cutile": 5,
+    "tilelang": 18
+   },
+   "winner_within_5pct": {
+    "triton": 8,
+    "cutile": 3,
+    "tilelang": 8
+   }
+  },
+  "GH200": {
+   "counts": {
+    "triton": 26,
+    "cutile": 2,
+    "tilelang": 17
+   },
+   "winner_within_5pct": {
+    "triton": 14,
+    "cutile": 0,
+    "tilelang": 11
+   }
+  }
+ },
+ "profiling_evidence_ids": [],
+ "known_limitations": {
+  "B200": [
+   "Formal Triton/cuTile columns come from the paper campaign with a historical cuda-tile version (1.3.0 per developer_guide); benchmark source commit not recorded.",
+   "Frozen columns used a fixed 64 MB L2 eviction for 41 operators (< 126.5 MB L2) and config warmup/repeat 20/100.",
+   "TileLang column measured in a later campaign (direct runtime, PR #319) with a different environment.",
+   "9 Triton/cuTile NCU reports exclude auxiliary PyTorch launches (fill/copy) that the formal run() timing includes.",
+   "No B200 NCU report records its source commit.",
+   "13 TileLang reports are reduced (8, kernel replay) or targeted (5) collections without per-opcode or PC-sampling data."
+  ],
+  "GH200": [
+   "CUDA 13.1 and cuda-tile 1.5.0 (tileiras 13.4.92) differ from B200; NCU 2025.4.0.",
+   "Formal protocol warmup 1 / repeat 3 with a 120 MiB eviction (B200 frozen: 20/100, 64 MB for 41 operators).",
+   "TileLang uses fragment-accumulator kernel bodies on sm_90 for 9 operators whose Blackwell path uses TMEM.",
+   "Triton matmul_fp32_fp16_fp8, matmul_int8, batched_matmul, streamk_matmul cache a transposed B operand outside the timed region."
+  ],
+  "MI300X": [
+   "Formal CSV timing uses warmup 20 / repeat 100 (config at 4d08985a/005ab63b), not the later 1/3 configuration.",
+   "Formal run uses ROCm eager timing (HIP-graph request falls back to eager) with a 512 MiB flush.",
+   "matmul_fp32_fp16_fp8 FP8 E4M3FN is unsupported and remains missing (109 operator/dtype pairs).",
+   "Three diagnosis records are not fully traced (batch_normalization secondary M6; batch_normalization and softmax primary M3; destindex secondary M2).",
+   "Only Triton (and the PyTorch reference) exist on MI300X."
+  ],
+  "figure": [
+   "B200 TileLang measured in a later campaign than B200 Triton/cuTile",
+   "different benchmark protocols on B200 and GH200; only within-device ratios are plotted"
+  ]
+ },
+ "plotted_values": [
+  {
+   "device": "B200",
+   "operator": "dequantize_rowwise",
+   "x_cutile_over_triton": 1.1547603961041133,
+   "y_tilelang_over_triton": 1.0265290947953303,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0265290947953303,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "dropout",
+   "x_cutile_over_triton": 1.0063600534704216,
+   "y_tilelang_over_triton": 0.9944024408240646,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0056290682183933,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "fused_activation",
+   "x_cutile_over_triton": 1.0104908473559249,
+   "y_tilelang_over_triton": 1.010832561075894,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0104908473559249,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "leaky_relu",
+   "x_cutile_over_triton": 0.9965249559237815,
+   "y_tilelang_over_triton": 1.0092749986692509,
+   "n_cases": 60,
+   "winner": "cutile",
+   "runner_up_ratio": 1.0034871621182804,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "mul2",
+   "x_cutile_over_triton": 1.0465277370405022,
+   "y_tilelang_over_triton": 0.9702330889952369,
+   "n_cases": 80,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0306801647381347,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "quantize_global",
+   "x_cutile_over_triton": 1.0053635600602993,
+   "y_tilelang_over_triton": 1.0397643542345265,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0053635600602993,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "relu",
+   "x_cutile_over_triton": 1.0598278858806696,
+   "y_tilelang_over_triton": 0.9714610614270119,
+   "n_cases": 80,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.029377336576997,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "rope",
+   "x_cutile_over_triton": 1.14205775467331,
+   "y_tilelang_over_triton": 0.9959106421900991,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0041061493237065,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "sigmoid",
+   "x_cutile_over_triton": 1.3069391903124277,
+   "y_tilelang_over_triton": 1.0193899348164392,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0193899348164392,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "swiglu",
+   "x_cutile_over_triton": 1.2294686071163976,
+   "y_tilelang_over_triton": 1.0679038011257973,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0679038011257973,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "vector_add",
+   "x_cutile_over_triton": 1.0090196346092304,
+   "y_tilelang_over_triton": 0.9758839610274969,
+   "n_cases": 80,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0247119943923575,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "weight_dequant",
+   "x_cutile_over_triton": 1.729839441531607,
+   "y_tilelang_over_triton": 0.9148791985966185,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0930404817750288,
+   "category": "Point-wise"
+  },
+  {
+   "device": "B200",
+   "operator": "argmax",
+   "x_cutile_over_triton": 0.9660764877409859,
+   "y_tilelang_over_triton": 0.8387980856367957,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.1517390231137252,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "batch_normalization",
+   "x_cutile_over_triton": 1.1139602130846498,
+   "y_tilelang_over_triton": 0.8741845380918463,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.1439232295080184,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "cross_entropy",
+   "x_cutile_over_triton": 1.4114979121631703,
+   "y_tilelang_over_triton": 1.0630736234798641,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.0630736234798641,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "histogramming",
+   "x_cutile_over_triton": 1.624700880776504,
+   "y_tilelang_over_triton": 0.251368974342544,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 3.978215699115222,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "kl_divergence",
+   "x_cutile_over_triton": 0.9568610541934847,
+   "y_tilelang_over_triton": 0.896904545675494,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0668482602826312,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "l2_norm",
+   "x_cutile_over_triton": 1.1459956081048817,
+   "y_tilelang_over_triton": 0.945871991250336,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0572255117503933,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "layernorm",
+   "x_cutile_over_triton": 1.208880083660413,
+   "y_tilelang_over_triton": 0.8652483305578589,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.155737566526435,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "mean_reduction",
+   "x_cutile_over_triton": 1.1386233779821566,
+   "y_tilelang_over_triton": 0.9933747332554854,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0066694536540126,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "moe_topk_gating",
+   "x_cutile_over_triton": 1.9601858101773637,
+   "y_tilelang_over_triton": 1.0340123946273159,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0340123946273159,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "rmsnorm",
+   "x_cutile_over_triton": 1.0729727862346206,
+   "y_tilelang_over_triton": 0.9002914755521453,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.1107513812531702,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "softmax",
+   "x_cutile_over_triton": 1.5216079333501307,
+   "y_tilelang_over_triton": 1.1197500278789116,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.1197500278789116,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "B200",
+   "operator": "batched_matmul",
+   "x_cutile_over_triton": 1.1309164016241828,
+   "y_tilelang_over_triton": 1.3169900287105307,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.1309164016241828,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "block_sparse_attention",
+   "x_cutile_over_triton": 2.6894604300160734,
+   "y_tilelang_over_triton": 2.720967411821279,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 2.6894604300160734,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "flash_attention",
+   "x_cutile_over_triton": 0.9413429507917844,
+   "y_tilelang_over_triton": 1.6787128769289528,
+   "n_cases": 20,
+   "winner": "cutile",
+   "runner_up_ratio": 1.0623120926957361,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "flash_decode",
+   "x_cutile_over_triton": 3.3770069737525326,
+   "y_tilelang_over_triton": 0.9924037867965825,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0076543573336592,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "linear_self_attention",
+   "x_cutile_over_triton": 2.015003464078746,
+   "y_tilelang_over_triton": 3.281357211752991,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 2.015003464078746,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "matmul_fp32_fp16_fp8",
+   "x_cutile_over_triton": 0.7876878575878575,
+   "y_tilelang_over_triton": 1.6652398249877267,
+   "n_cases": 60,
+   "winner": "cutile",
+   "runner_up_ratio": 1.2695384223165602,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "matmul_int8",
+   "x_cutile_over_triton": 1.0177397545835363,
+   "y_tilelang_over_triton": 0.9503388137708274,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0522562958700206,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "streamk_matmul",
+   "x_cutile_over_triton": 2.0500931788324395,
+   "y_tilelang_over_triton": 1.5604073612173188,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.5604073612173188,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "B200",
+   "operator": "1d_conv",
+   "x_cutile_over_triton": 1.7597734915522463,
+   "y_tilelang_over_triton": 5.548314721382267,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.7597734915522463,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "2d_conv",
+   "x_cutile_over_triton": 1.5607790955370044,
+   "y_tilelang_over_triton": 3.870029742495266,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.5607790955370044,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "2d_max_pooling",
+   "x_cutile_over_triton": 1.3031707485572779,
+   "y_tilelang_over_triton": 0.786330321289922,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.2717301786856792,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "3d_conv",
+   "x_cutile_over_triton": 2.1857678765225095,
+   "y_tilelang_over_triton": 4.105992152791541,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 2.1857678765225095,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "gaussian_blur",
+   "x_cutile_over_triton": 1.2144590158677924,
+   "y_tilelang_over_triton": 1.379514269964794,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.2144590158677924,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "jacobi_stencil_2d",
+   "x_cutile_over_triton": 0.8655850591365536,
+   "y_tilelang_over_triton": 0.8375656988412895,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0334533282989344,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "B200",
+   "operator": "bitonic_sort",
+   "x_cutile_over_triton": 0.9957150488284392,
+   "y_tilelang_over_triton": 0.9973783281848273,
+   "n_cases": 40,
+   "winner": "cutile",
+   "runner_up_ratio": 1.0016704370977874,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "destindex",
+   "x_cutile_over_triton": 2.0955437566107156,
+   "y_tilelang_over_triton": 1.0653706517503627,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0653706517503627,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "interleave",
+   "x_cutile_over_triton": 1.0184284892611482,
+   "y_tilelang_over_triton": 1.039171357464273,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0184284892611482,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "matrix_copy",
+   "x_cutile_over_triton": 0.9890111753315667,
+   "y_tilelang_over_triton": 1.0010410232125437,
+   "n_cases": 80,
+   "winner": "cutile",
+   "runner_up_ratio": 1.0111109206271096,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "matrix_transpose",
+   "x_cutile_over_triton": 1.0034548674097863,
+   "y_tilelang_over_triton": 1.2400863751932742,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0034548674097863,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "radix_sort",
+   "x_cutile_over_triton": 1.8746584983725305,
+   "y_tilelang_over_triton": 1.7786088927880455,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.7786088927880455,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "reverse_array",
+   "x_cutile_over_triton": 1.0085752239996564,
+   "y_tilelang_over_triton": 1.1719551950894722,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0085752239996564,
+   "category": "Data Layout"
+  },
+  {
+   "device": "B200",
+   "operator": "top_k_selection",
+   "x_cutile_over_triton": 1.129516967111085,
+   "y_tilelang_over_triton": 1.0617314103297493,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0617314103297493,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "dequantize_rowwise",
+   "x_cutile_over_triton": 1.1271293252525802,
+   "y_tilelang_over_triton": 1.034909451497581,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.034909451497581,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "dropout",
+   "x_cutile_over_triton": 1.0197909250277393,
+   "y_tilelang_over_triton": 0.9922570325157258,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0078033888705662,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "fused_activation",
+   "x_cutile_over_triton": 1.0101124777217712,
+   "y_tilelang_over_triton": 1.0124001822015847,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0101124777217712,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "leaky_relu",
+   "x_cutile_over_triton": 1.0139393402885553,
+   "y_tilelang_over_triton": 0.9977703051761769,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0022346774726167,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "mul2",
+   "x_cutile_over_triton": 1.0435122779281878,
+   "y_tilelang_over_triton": 1.0005213427789592,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0005213427789592,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "quantize_global",
+   "x_cutile_over_triton": 1.0148555292628967,
+   "y_tilelang_over_triton": 1.0051957014654962,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0051957014654962,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "relu",
+   "x_cutile_over_triton": 1.019021012280627,
+   "y_tilelang_over_triton": 0.9917837461892648,
+   "n_cases": 80,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0082843198855644,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "rope",
+   "x_cutile_over_triton": 1.0403351003816876,
+   "y_tilelang_over_triton": 0.9986741373027509,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0013276229429853,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "sigmoid",
+   "x_cutile_over_triton": 1.0878052451752596,
+   "y_tilelang_over_triton": 1.0066280271741617,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0066280271741617,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "swiglu",
+   "x_cutile_over_triton": 1.1165086333495777,
+   "y_tilelang_over_triton": 1.0107719063002696,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0107719063002696,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "vector_add",
+   "x_cutile_over_triton": 1.0225648265742275,
+   "y_tilelang_over_triton": 0.9981212832078392,
+   "n_cases": 80,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0018822530125024,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "weight_dequant",
+   "x_cutile_over_triton": 1.2065736360148216,
+   "y_tilelang_over_triton": 0.989617422532548,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0104915063448274,
+   "category": "Point-wise"
+  },
+  {
+   "device": "GH200",
+   "operator": "argmax",
+   "x_cutile_over_triton": 1.04387785927882,
+   "y_tilelang_over_triton": 0.9554892781237222,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0465842190962966,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "batch_normalization",
+   "x_cutile_over_triton": 1.1423069318634378,
+   "y_tilelang_over_triton": 1.0272506730323467,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0272506730323467,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "cross_entropy",
+   "x_cutile_over_triton": 1.2819565852454153,
+   "y_tilelang_over_triton": 0.9471064564657553,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0558475165839578,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "histogramming",
+   "x_cutile_over_triton": 1.6485121784329617,
+   "y_tilelang_over_triton": 0.23294791397442424,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 4.292805129432461,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "kl_divergence",
+   "x_cutile_over_triton": 1.0149858908725098,
+   "y_tilelang_over_triton": 1.0020673776829825,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.0020673776829825,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "l2_norm",
+   "x_cutile_over_triton": 0.9832526522218037,
+   "y_tilelang_over_triton": 0.9234969831630485,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0647058627675072,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "layernorm",
+   "x_cutile_over_triton": 1.0509839638796334,
+   "y_tilelang_over_triton": 0.9183335342711488,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0889289813353784,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "mean_reduction",
+   "x_cutile_over_triton": 1.0113653094033817,
+   "y_tilelang_over_triton": 1.0000298356174215,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0000298356174215,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "moe_topk_gating",
+   "x_cutile_over_triton": 1.9484138466400578,
+   "y_tilelang_over_triton": 0.9656520771856292,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0355696669907002,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "rmsnorm",
+   "x_cutile_over_triton": 0.9964978568592398,
+   "y_tilelang_over_triton": 0.9067207526492423,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.09901295845241,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "softmax",
+   "x_cutile_over_triton": 1.2532120031054303,
+   "y_tilelang_over_triton": 1.0375062974868257,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.0375062974868257,
+   "category": "Reduction/Normalization"
+  },
+  {
+   "device": "GH200",
+   "operator": "batched_matmul",
+   "x_cutile_over_triton": 1.150784319932867,
+   "y_tilelang_over_triton": 1.1730895389217388,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.150784319932867,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "block_sparse_attention",
+   "x_cutile_over_triton": 2.1717060430019655,
+   "y_tilelang_over_triton": 1.7150896286521535,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.7150896286521535,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "flash_attention",
+   "x_cutile_over_triton": 0.8604543251315518,
+   "y_tilelang_over_triton": 1.3556823482011189,
+   "n_cases": 20,
+   "winner": "cutile",
+   "runner_up_ratio": 1.1621767370942246,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "flash_decode",
+   "x_cutile_over_triton": 3.080924699209541,
+   "y_tilelang_over_triton": 0.9846203244089701,
+   "n_cases": 20,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.015619904657424,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "linear_self_attention",
+   "x_cutile_over_triton": 1.227682165963578,
+   "y_tilelang_over_triton": 2.8651423522610373,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.227682165963578,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "matmul_fp32_fp16_fp8",
+   "x_cutile_over_triton": 1.6051717313260103,
+   "y_tilelang_over_triton": 2.3864794192989875,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.6051717313260103,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "matmul_int8",
+   "x_cutile_over_triton": 1.9846929994833868,
+   "y_tilelang_over_triton": 1.968324321616665,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.968324321616665,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "streamk_matmul",
+   "x_cutile_over_triton": 1.4332644709471394,
+   "y_tilelang_over_triton": 1.1552399004575387,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.1552399004575387,
+   "category": "Matrix Multiplication/Attention"
+  },
+  {
+   "device": "GH200",
+   "operator": "1d_conv",
+   "x_cutile_over_triton": 1.2374734690787583,
+   "y_tilelang_over_triton": 5.654138250123393,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.2374734690787583,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "2d_conv",
+   "x_cutile_over_triton": 1.4778089209102925,
+   "y_tilelang_over_triton": 4.713548278805908,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 1.4778089209102925,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "2d_max_pooling",
+   "x_cutile_over_triton": 1.0464122509445999,
+   "y_tilelang_over_triton": 1.1314945907746157,
+   "n_cases": 60,
+   "winner": "triton",
+   "runner_up_ratio": 1.0464122509445999,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "3d_conv",
+   "x_cutile_over_triton": 2.0789716942565795,
+   "y_tilelang_over_triton": 4.403609580413726,
+   "n_cases": 40,
+   "winner": "triton",
+   "runner_up_ratio": 2.0789716942565795,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "gaussian_blur",
+   "x_cutile_over_triton": 1.2422737825595553,
+   "y_tilelang_over_triton": 0.9326681208324414,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0721927528813382,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "jacobi_stencil_2d",
+   "x_cutile_over_triton": 0.9174797610650623,
+   "y_tilelang_over_triton": 0.896629244931536,
+   "n_cases": 60,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0232543342205156,
+   "category": "Stencil/Convolution"
+  },
+  {
+   "device": "GH200",
+   "operator": "bitonic_sort",
+   "x_cutile_over_triton": 1.0718263414245917,
+   "y_tilelang_over_triton": 0.9841878254551725,
+   "n_cases": 40,
+   "winner": "tilelang",
+   "runner_up_ratio": 1.0160662163622218,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "destindex",
+   "x_cutile_over_triton": 1.6396497735569826,
+   "y_tilelang_over_triton": 1.0684405412614795,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0684405412614795,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "interleave",
+   "x_cutile_over_triton": 1.0161920749557556,
+   "y_tilelang_over_triton": 1.0478699217452474,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0161920749557556,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "matrix_copy",
+   "x_cutile_over_triton": 1.0296026776121663,
+   "y_tilelang_over_triton": 1.0036314839811658,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0036314839811658,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "matrix_transpose",
+   "x_cutile_over_triton": 1.0090028690696036,
+   "y_tilelang_over_triton": 1.1342437221641164,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0090028690696036,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "radix_sort",
+   "x_cutile_over_triton": 1.8535034909400152,
+   "y_tilelang_over_triton": 1.7648262399669892,
+   "n_cases": 20,
+   "winner": "triton",
+   "runner_up_ratio": 1.7648262399669892,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "reverse_array",
+   "x_cutile_over_triton": 1.0506578346705915,
+   "y_tilelang_over_triton": 1.1311495815502315,
+   "n_cases": 80,
+   "winner": "triton",
+   "runner_up_ratio": 1.0506578346705915,
+   "category": "Data Layout"
+  },
+  {
+   "device": "GH200",
+   "operator": "top_k_selection",
+   "x_cutile_over_triton": 0.7636840103918059,
+   "y_tilelang_over_triton": 0.9647516483176144,
+   "n_cases": 20,
+   "winner": "cutile",
+   "runner_up_ratio": 1.2632864315473245,
+   "category": "Data Layout"
+  }
+ ],
+ "outputs": {
+  "pdf": {
+   "path": "main/fig_rq3_within_device_dsl.pdf",
+   "sha256": "9fbde59dbba310b4aeb69f2faa9c9f9cd898261bcbaaf2563a9163639c24e57c"
+  },
+  "svg": {
+   "path": "main/fig_rq3_within_device_dsl.svg",
+   "sha256": "2fdde9021d69df273b489b170cd9ad954895be3260ab548ced924ba5b1300c1a"
+  },
+  "png": {
+   "path": "previews/fig_rq3_within_device_dsl.png",
+   "sha256": "376b56aac42d9f4c80fe75bffeb28a11e5860d09bee5924c0cf47b0c1a7143d1"
+  }
+ },
+ "layout": {
+  "width_in": 7.0,
+  "height_in": 3.75,
+  "min_font_pt": 5.8,
+  "max_font_pt": 7.5,
+  "n_text_objects": 51,
+  "content_overflow_in": {
+   "left": 0.0,
+   "bottom": 0.0,
+   "right": 0.0,
+   "top": 0.0
+  }
+ },
+ "code_sha256": {
+  "scripts/paper_figures/plot_style.py": "2f864de0944ad73284143dfd428c1340e8689a0b507f740b208f6debec678fce",
+  "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
+  "scripts/paper_figures/plot_rq3.py": "3a08cc5e7c9b8e258c8b4a90a1056e1bb952fc78718430f92e4429581c407cac"
+ }
+}

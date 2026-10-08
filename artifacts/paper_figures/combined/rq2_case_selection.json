@@ -1,0 +1,74 @@
+{
+ "figure": "fig_rq2_cross_device_diagnosis",
+ "max_cases": 6,
+ "selected": [
+  {
+   "case": "matmul_fp32_fp16_fp8/fp32",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp32",
+   "dsls": [
+    "triton",
+    "cutile"
+   ],
+   "why": "largest cross-device reversal of the cuTile/Triton ranking (B200 cuTile faster, GH200 slower) with dynamic WGMMA/STS/LDSM counts; MI300X descriptor lowering traced (M1) with a controlled descriptor-vs-pointer experiment"
+  },
+  {
+   "case": "block_sparse_attention/fp16",
+   "operator": "block_sparse_attention",
+   "dtype": "fp16",
+   "dsls": [
+    "triton",
+    "cutile"
+   ],
+   "why": "cuTile gap shrinks from B200 to GH200 together with its shared-memory footprint; MI300X Triton descriptor + 512-register/scratch kernel (M1, traced)"
+  },
+  {
+   "case": "destindex/int8",
+   "operator": "destindex",
+   "dtype": "int8",
+   "dsls": [
+    "triton",
+    "cutile"
+   ],
+   "why": "architecture-invariant scatter lowering on NVIDIA (sectors/request); the same non-vectorized scatter appears for Triton on MI300X (static ISA, M5 traced)"
+  },
+  {
+   "case": "flash_decode/fp32",
+   "operator": "flash_decode",
+   "dtype": "fp32",
+   "dsls": [
+    "triton",
+    "cutile"
+   ],
+   "why": "16-CTA/WG runtime loop on every device; cuTile instruction expansion persists while its stall composition differs (no GH200 dependency-chain claim)"
+  },
+  {
+   "case": "1d_conv/fp16",
+   "operator": "1d_conv",
+   "dtype": "fp16",
+   "dsls": [
+    "triton",
+    "tilelang"
+   ],
+   "why": "TileLang gathered staging stays uncoalesced on both NVIDIA devices; MI300X Triton is VALU-bound on index math while its PyTorch baseline pays MIOpen transposes (baseline effect)"
+  },
+  {
+   "case": "vector_add/fp32",
+   "operator": "vector_add",
+   "dtype": "fp32",
+   "dsls": [
+    "triton"
+   ],
+   "why": "parity on NVIDIA but a streaming cache-policy gap on MI300X (ATT-traced nt loads in ATen; controlled cache-modifier ablation)"
+  }
+ ],
+ "not_selected": {
+  "weight_dequant/bf16": "GH200 Triton instruction inflation is attributable to a different autotuned winner (config effect, not architecture); kept for Figure A5 as a confounder example"
+ },
+ "selection_rules": [
+  "formal latency only (benchmark_cases_normalized) at the SAME case_id_v2 that the profiles captured",
+  "at least one high-confidence device-native evidence item per device",
+  "cover matrix paths, scatter/indexing, runtime loops, gathered staging and cache policy",
+  "no cross-vendor numeric counter axis"
+ ]
+}

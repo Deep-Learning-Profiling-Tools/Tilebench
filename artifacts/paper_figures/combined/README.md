@@ -45,6 +45,9 @@ Every row resolves to exactly one case under every config listed, and all resolu
 | `metric_semantic_groups.csv` | organisational semantic labels for the device-native metric groups (labels only, never a shared numeric scale) |
 | `comparison_manifest.json` | identity rule, DSL support, explicit exclusions, case intersections, aggregation protocol, sanity aggregates, source-package hashes, device limitations |
 | `qa_combined.json` | the validation gate |
+| `figure_evidence.csv` | figure-level evidence rows (one metric of one profiled case/device/DSL, with measurement kind, scope, source file, confidence); written by `build_figure_evidence.py` for Figures 3 and A5 |
+| `execution_path_matrix.csv` | categorical execution paths of 15 operator/dtype pairs × 7 device/DSL cells for Figure A3 (dynamic SASS, static SASS or static ISA) |
+| `rq2_case_selection.json` | the six RQ2 cases, the selection rules and the case not selected (with the reason) |
 
 ## Coverage and intersections (autotune, valid)
 

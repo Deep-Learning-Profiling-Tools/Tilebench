@@ -1,0 +1,86 @@
+% Optional inclusion snippets for the TileArena figure drafts (NOT part of the manuscript; copy what you need).
+% Requires \usepackage{graphicx}. Set the figure directory relative to the paper's main .tex file:
+\providecommand{\tilearenafigdir}{artifacts/paper_figures/plots}
+% Figures are designed at 7.0in / 3.35in; ACL's \textwidth is 6.30in and \columnwidth 3.03in, so width=\textwidth
+% scales them by ~0.90 (smallest text ~4.95pt). Captions are shortened from figure_captions.md.
+
+% ---------------------------------------------------------------- Figure 2 (RQ1)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/main/fig_rq1_cross_accelerator.pdf}
+  \caption{Speedup of each tile DSL over the PyTorch baseline on the same accelerator. Each cell is the geometric mean
+  (GM), over the operators of a category (row; \emph{Overall}: all 45), of the per-operator GM of
+  \texttt{torch\_ms}/\texttt{dsl\_ms} over valid autotuned input cases. cuTile and TileLang do not run on MI300X (N/A).
+  Speedups are relative to each device's own PyTorch baseline and benchmark protocol, not absolute hardware speed.}
+  \label{fig:rq1-cross-accelerator}
+\end{figure*}
+
+% ---------------------------------------------------------------- Figure 3 (RQ2)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/main/fig_rq2_cross_device_diagnosis.pdf}
+  \caption{Cross-device diagnosis of six input cases. (A)~Speedup over the local PyTorch baseline (formal autotuned
+  latency) at the exact input case captured by the profiles, which is identical on all devices; marker = device,
+  colour = DSL. (B)~Device-native evidence for the same cases: Nsight Compute on B200/GH200; static ISA, ROCm counters
+  and diagnosis records on MI300X. Counters are not comparable across vendors.}
+  \label{fig:rq2-cross-device-diagnosis}
+\end{figure*}
+
+% ---------------------------------------------------------------- Figure 4 (RQ3)
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/main/fig_rq3_within_device_dsl.pdf}
+  \caption{Within-device comparison of the NVIDIA tile DSLs. Each point is one operator: cuTile/Triton (x) and
+  TileLang/Triton (y) latency ratio, each a GM over the input cases valid for all three DSLs on the device ($<1$:
+  faster than Triton). Boxes count the operators each DSL wins and the wins within 5\% of the runner-up (no
+  significance test). Only within-device ratios are compared.}
+  \label{fig:rq3-within-device-dsl}
+\end{figure*}
+
+% ---------------------------------------------------------------- Appendix A1--A5
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a1_performance_atlas.pdf}
+  \caption{Performance atlas. Left: per-operator GM speedup over the local PyTorch baseline. Right: $2^{\Delta}$ with
+  $\Delta=\log_2(S_{\text{dev2}}/S_{\text{dev1}})$, both $S$ over the input cases valid on both devices; not an
+  absolute hardware speedup.}
+  \label{fig:a1-performance-atlas}
+\end{figure*}
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a2_shape_dtype.pdf}
+  \caption{Shape and dtype sensitivity. Each cell is one input case (speedup over local PyTorch, log$_2$ colour);
+  rows are device/DSL pairs (T: Triton, C: cuTile, TL: TileLang). Operators with a median within-(device, DSL, dtype)
+  log$_2$-speedup range $\geq 0.5$ and matmul with all dtypes are shown; FP8 is unsupported on MI300X.}
+  \label{fig:a2-shape-dtype}
+\end{figure*}
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a3_execution_paths.pdf}
+  \caption{Execution paths in the profiles of 15 operator/dtype pairs. Colour: matrix-instruction class; line~1:
+  operand load path; line~2: staging and flags. Dashed cells are static SASS/ISA only (instructions present, not
+  executed counts); an absent flag was not observed in the available evidence.}
+  \label{fig:a3-execution-paths}
+\end{figure*}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{\tilearenafigdir/appendix/fig_a4_within_device_matrix.pdf}
+  \caption{Slowdown of each DSL relative to the fastest DSL on the same device (GM latency over the cases valid for
+  all three DSLs). Outlined: fastest; $\leq1.05\times$ drawn neutral.}
+  \label{fig:a4-within-device-matrix}
+\end{figure}
+
+\begin{figure*}[p]
+  \centering
+  \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a5_profiling_evidence.pdf}
+  \caption{Profiling evidence per mechanism at the profiled input case. (A)~Dynamic warp-instruction count relative to
+  Triton on the same NVIDIA device ($\dagger$: configuration confounder). (B)~Operand delivery: B200 TMA bytes, GH200
+  STS per WGMMA, MI300X diagnostic latencies (not formal). (C)~1d\_conv sectors per request and occupancy; MI300X
+  vector\_add cache-policy diagnostic. n/c: not collected. No axis mixes vendors.}
+  \label{fig:a5-profiling-evidence}
+\end{figure*}
+
+% Figure 5 (RQ4) and the appendix LLM figure: TODO (no finalized LLM results; see plot_manifest.json).
