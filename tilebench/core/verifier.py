@@ -58,8 +58,7 @@ def verify(
 
 def config_tolerance(verify_cfg: dict, arch: str | None) -> tuple[float | None, float | None]:
     """(atol, rtol) of an operator config's `verify:` section on `arch`
-    (tilebench.hardware.detect_arch() on a GPU, neuron_native.NEURON_ARCH = "trn2"
-    on the native Trainium stack). An `arch_overrides: {<arch>: {...}}`
+    (tilebench.hardware.detect_arch()). An `arch_overrides: {<arch>: {...}}`
     entry for that architecture replaces the operator-level values it names;
     a value given nowhere is None, i.e. the per-dtype default."""
     cfg = {**verify_cfg, **(verify_cfg.get("arch_overrides") or {}).get(arch, {})}
