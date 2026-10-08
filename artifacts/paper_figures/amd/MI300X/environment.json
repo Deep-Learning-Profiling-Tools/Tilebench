@@ -1,0 +1,200 @@
+{
+ "architecture": "gfx942",
+ "cache": {
+  "detect_arch": "cdna3",
+  "flush_buffer_mb": 512,
+  "last_level_cache_bytes": 268435456,
+  "llc_mib": 256.0,
+  "torch_L2_cache_size_bytes": 4194304
+ },
+ "category_source": "TileBench paper table_tex/benchmark_list.tex (TileBench_EMNLP_26 @ 6a661c9), column Category",
+ "device": "MI300X",
+ "dsls_available": [
+  "triton"
+ ],
+ "dsls_not_available_on_this_device": {
+  "cutile": "NVIDIA only",
+  "tilelang": "no MI300X formal results in this suite"
+ },
+ "extraction": {
+  "base_commit": "04d7e45526add29f567930ccbedaa6ac5b7f96ea",
+  "case_id_rule": "sha256(f'{operator}|{dtype}|{params_json}'), params_json = json.dumps(params, sort_keys=True, separators=(',', ':')) of the CSV params cell; see scripts/paper_figures/case_identity.py",
+  "scripts": {
+   "scripts/paper_figures/case_identity.py": "5374903c62819425f3c7d4087d978f0f5fad139db1e28f136b092a50e902c165",
+   "scripts/paper_figures/extract_mi300x.py": "1d1f68b6825cbf47e6e062f946b65c8a4c04679aa61015012d28a7c4b0a5180d",
+   "scripts/paper_figures/mi300x_common.py": "75125c9a0600469c46f836dddbb55af7c00a0e5df389c1b65804fb34eeea95d6",
+   "scripts/paper_figures/vendor_mi300x_diagnosis.py": "42c482341ff03a590c95425a7025c229cbcd59321f3fa554dada8e9c62529595"
+  }
+ },
+ "formal_benchmark": {
+  "csv_dir": "results/MI300X/csv",
+  "csv_files": 90,
+  "csv_last_commit_in_this_branch": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+  "formal_csv_source": {
+   "autotune": "4d08985ae819e9063ae40e7cddd2af2451f458a6",
+   "default": "005ab63b26e01a2124c666f7f66e405f3db547c0",
+   "results_commit": "5e714117a9b22c3c2a2c631dad66bdaa35dbf758"
+  },
+  "known_exclusion": {
+   "dtype": "fp8_e4m3fn",
+   "operator": "matmul_fp32_fp16_fp8",
+   "reason": "FP8 E4M3FN is UNSUPPORTED_DTYPE in the MI300X formal run (gfx942 FP8 is E4M3FNUZ; the PyTorch reference torch._scaled_mm rejects e4m3fn on gfx942). No formal CSV row, no autotune winner, no profile. Not replaced by another dtype."
+  },
+  "timing_logs_archive_commit": "8e991537 (archive: MI300X logs from source 4d08985a)"
+ },
+ "gpu": {
+  "compute_units": 304,
+  "gcnArchName": "gfx942:sramecc+:xnack-",
+  "hbm_amd_smi": "196288 MB",
+  "hbm_total_memory_bytes_torch": 205822885888,
+  "marketing_name_rocminfo": "AMD Instinct MI300X VF",
+  "num_xcc_kfd": "8",
+  "rocminfo_cache_L1_L2_L3": [
+   "L1:                      32(0x20) KB",
+   "L2:                      4096(0x1000) KB",
+   "L3:                      262144(0x40000) KB"
+  ],
+  "wavefront_size": 64
+ },
+ "input_files_sha256": {
+  "outputs/profiling/MI300X/analysis_2026-10-05/data/torch_kernels.json": "25aff016f2c6eaee3d87052fb7f82dd09cf64ffaa5025875b43d566b933f8d89",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/cache_ablation_fp32.json": "9254b69fd692397a46ad11b1f97790c446f0803ccee1bafc21a5a26cb8d2c243",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/flush_variants_fp32.json": "4ab7d4ac8fbca75a530d1400ef4986b298e2c596adada5d585e33d2fc363249b",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/gemm_fp16.json": "27fbfcf13c83a0262dd15e047d493f69fd2dce4e650ff78b5f5b4798aac298cb",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/gemm_fp32.json": "0d6d64acb9c3977c9171825848e8c6012a95e38d09c40fcfbb8b025beb61aef1",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/stream_vadd_fp16.json": "629bbbea182d780e348d33470778060b3c665359e8dd0a4230ee83d822c576df",
+  "outputs/profiling/MI300X/analysis_2026-10-05/exp/stream_vadd_fp32.json": "8d03000dd5f77e99451d4400524a49ef27dfb62d886b07cda7033eaa2d60b20d",
+  "outputs/profiling/MI300X/kernel_counts.json": "c2278d93366c6ba828775072650d45c223195ca844e25ef299a7d53e3f7ccb1f",
+  "outputs/profiling/MI300X/ncu_catalogue.json": "6f878b66bc7331779dad198bff7de96dbe7831c7416cbc95f803ce89e06e70ee",
+  "outputs/profiling/MI300X/rocprof_compute_sweep/PROVENANCE.md": "84007c5f923b6273aa1520497faa4f3ba0fa3c4ad170c1ad7901e66a979e68e4",
+  "outputs/profiling/MI300X/rocprof_compute_sweep/report_manifest.json": "2a82da923e4f4699d5ff7cb93106197c5874b87c2d34c167156a33ecc2716011",
+  "outputs/profiling/MI300X/rocprof_compute_sweep/winner_replay_audit_post_fix.json": "1ea3ceb4a721edf737afa60c4d669e09411a46532465c62410f04f1bde43805b",
+  "outputs/rocprof_compute/MI300X/coverage.json": "e4e4a6ba19d64710bd3c6f3378c2b1f4fb1ed7a210c3dd68cb810119af3a339c",
+  "outputs/rocprof_compute/MI300X/sweep_log.json": "6a91669ade5f88278296d1aba699d398c650862960e5f3c30fa74f39bca7bc06",
+  "results/MI300X/logs/metadata/environment.json": "8fe6aee53f9e9fbc9ed95edfe91295023102241d4ca691ff3920c3242c117cb2",
+  "scripts/paper_figures/data/mi300x_diagnosis_2026-10-05.json": "23f9cf3ebfb0881b138816c59c5f833b63c6aa6afcca8563cdcb25d9bbddd30b"
+ },
+ "local_roots": {
+  "outputs": "/root/Tilebench/outputs",
+  "results_logs": "/root/Tilebench/results/MI300X/logs"
+ },
+ "profiling": {
+  "archive_commit": "63748286 (archive: MI300X profiling from source 124fdc94)",
+  "coverage": {
+   "complete": true,
+   "excluded": [
+    {
+     "backend": "triton",
+     "dtype": "fp8_e4m3fn",
+     "op": "matmul_fp32_fp16_fp8",
+     "reason": "no autotune winner on this GPU (the autotune run has no result for this dtype, e.g. UNSUPPORTED_DTYPE)"
+    }
+   ],
+   "expected_valid_pairs": 109,
+   "successful_pairs": 109
+  },
+  "hf_commits": [
+   "ff3600e1831dc3bed6925f301214cad6db8234cb",
+   "f61b73dceeba479c9c56a99ad22d8004e5291544",
+   "698524992ea40275e50b05e92d6ec9c69691b7d0",
+   "8b51e7eed7fc9dfcaf8e909b21194ea96f23e355",
+   "645591bbb808b4ceeecae2c4ec61b78151ad6249"
+  ],
+  "hf_dataset": "bcui2/NCU_report",
+  "hf_folder": "AMD_MI300X",
+  "hf_revision": "645591bbb808b4ceeecae2c4ec61b78151ad6249",
+  "pc_sampling": "stochastic, interval 65536",
+  "profiler": {
+   "rocm_version": "7.14.0",
+   "rocprof_compute_git": "418cd5f",
+   "rocprof_compute_version": "3.7.0 (release)",
+   "tool": "/opt/rocm/bin/rocprof-compute"
+  },
+  "profiling_source": {
+   "101 pairs (full campaign 2026-10-02)": "5b82f8afed59f83c3f39696338e7ce51dec38de7",
+   "8 replaced pairs (2026-10-04)": "124fdc948c322b591018adc00ddd5be71bc26289"
+  },
+  "pytorch_side": "rocprofv3 kernel trace of one call per pair + 9 ATT decodes; no PyTorch counter profiles"
+ },
+ "reference": "pytorch",
+ "rocprof_sysinfo": {
+  "amd_gpu_kernel_version": "6.19.14.31400000",
+  "compute_partition": "SPX",
+  "cu_per_gpu": "304",
+  "cur_mclk": "1300",
+  "cur_sclk": "2100",
+  "gpu_arch": "gfx942",
+  "gpu_l1": "32",
+  "gpu_l2": "4096",
+  "gpu_model": "MI300X_A1",
+  "max_mclk": "1300",
+  "max_sclk": "2100",
+  "max_waves_per_cu": "32",
+  "memory_partition": "NPS1",
+  "num_hbm_channels": "128",
+  "num_xcd": "8",
+  "rocm_version": "7.14.0",
+  "se_per_gpu": "32",
+  "simd_per_cu": "4",
+  "total_l2_chan": "128",
+  "vbios": "113-M3000100-103",
+  "wave_size": "64"
+ },
+ "schema": "tilearena-paper-figures-environment/1",
+ "software": {
+  "amdgpu_driver": "6.19.14.31400000",
+  "hsa_runtime_rocminfo": "1.21",
+  "kernel": "6.8.0-138-generic",
+  "os": "PRETTY_NAME=\"Ubuntu 24.04.4 LTS\"",
+  "proton_backend": "roctracer",
+  "python": "3.12.14",
+  "system_rocm_version": "7.14.0",
+  "torch": "2.10.0+rocm7.1",
+  "torch_hip": "7.1.25424",
+  "triton": "3.6.0"
+ },
+ "timing": {
+  "cli_overrides_recorded_in_provenance": {
+   "{\"autotune\":true}": 45,
+   "{\"keep_proton_files\":true,\"proton_output_dir\":\"/tmp/tilebench_mi300x_formal/proton_audit/bitonic_sort\"}": 1,
+   "{\"keep_proton_files\":true,\"proton_output_dir\":\"/tmp/tilebench_mi300x_formal/proton_audit/flash_decode\"}": 1,
+   "{\"keep_proton_files\":true,\"proton_output_dir\":\"/tmp/tilebench_mi300x_formal/proton_audit/l2_norm\"}": 1,
+   "{\"keep_proton_files\":true,\"proton_output_dir\":\"/tmp/tilebench_mi300x_formal/proton_audit/radix_sort\"}": 1,
+   "{}": 41
+  },
+  "effective": {
+   "effective_use_cuda_graph": false,
+   "requested_use_cuda_graph": true,
+   "timing_execution_mode": "eager",
+   "timing_note": "ROCm HIP Graph timing fallback: Proton/roctracer does not reliably attribute child kernels in graph replay"
+  },
+  "engine": "TileBench Proton timer (roctracer backend), kernel-time sum of the operator",
+  "flush": "512 MiB buffer write before each iteration, outside the timed scope",
+  "formal_settings_at_measurement_commits": [
+   {
+    "mode": "autotune",
+    "operators": 45,
+    "settings": {
+     "flush_l2": true,
+     "repeat": 100,
+     "use_cuda_graph": true,
+     "warmup": 20
+    },
+    "source_git_sha": "4d08985ae819e9063ae40e7cddd2af2451f458a6"
+   },
+   {
+    "mode": "default",
+    "operators": 45,
+    "settings": {
+     "flush_l2": true,
+     "repeat": 100,
+     "use_cuda_graph": true,
+     "warmup": 20
+    },
+    "source_git_sha": "005ab63b26e01a2124c666f7f66e405f3db547c0"
+   }
+  ],
+  "note": "warmup/repeat come from config.yaml at the measurement source commits (engine defaults 20/100 when absent); the current branch's config.yaml values are NOT the ones used for the MI300X CSVs"
+ },
+ "vendor": "amd"
+}

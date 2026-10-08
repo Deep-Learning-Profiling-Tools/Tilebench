@@ -1,0 +1,797 @@
+{
+ "clusters": {
+  "C": "Control / near-parity / preserved fusion",
+  "M1": "Tensor-descriptor (TMA-style) operands lowered to scalar masked gathers",
+  "M2": "Load cache policy under the write-flush protocol (streaming kernels)",
+  "M3": "PyTorch vendor-library / baseline path change",
+  "M4": "Implicit-GEMM address generation is VALU-bound (absorbed)",
+  "M5": "Narrow per-lane VMEM access and lost store vectorization",
+  "M6": "Grid under-subscription of 304 CUs",
+  "M7": "Device-scope atomics serviced at the Infinity Fabric"
+ },
+ "description": "Hand-written per-operator MI300X diagnosis from the 2026-10-05 analysis, copied verbatim. Field meanings are given in the docstring of the source diag.py (copied below).",
+ "operators": {
+  "1d_conv": {
+   "alternative_explanation": "Triton winner simply better tuned: tune gain 1.57/1.89 on MI300X, but the B200 relation was also autotuned",
+   "b200_table5": {
+    "Q_o": "1.76",
+    "primary_diagnosis": "Implicit GEMM indexing",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "MIOpen igemm + 2 transposes (54%/36% of traced time FP16/FP32); PyTorch MI/B 1.91/3.16; Triton MI/B 0.67/0.71; Triton VALU util 85/70%, int32 67-68% of VALU",
+   "mech": "M3",
+   "nature": "vendor library; AMD architecture",
+   "pri": "High",
+   "primary": "PyTorch path: MIOpen layout transposes + igemm; Triton implicit GEMM wins",
+   "pt": "MIOpen NHWC igemm + 2 batched transposes",
+   "rel": "reversal",
+   "secondary": "Triton kernel VALU-bound on index reconstruction (M4)"
+  },
+  "2d_conv": {
+   "alternative_explanation": "Triton tile not optimal; no evidence Triton can reach Winograd arithmetic count with implicit GEMM",
+   "b200_table5": {
+    "Q_o": "1.56",
+    "primary_diagnosis": "Implicit GEMM indexing",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "PyTorch = single MIOpen Winograd F(2,3) asm kernel; FP32 Winograd slower than B200 (MI/B 2.63)",
+   "mech": "M3",
+   "nature": "algorithm choice; vendor library",
+   "pri": "Medium",
+   "primary": "Algorithm: Winograd (PyTorch) vs implicit GEMM (Triton)",
+   "pt": "MIOpen Winograd F(2,3) asm kernel",
+   "rel": "weaker",
+   "secondary": "Triton VALU-bound index reconstruction (M4)"
+  },
+  "2d_max_pooling": {
+   "alternative_explanation": "Cache policy (M2) could also contribute; not ablated",
+   "b200_table5": {
+    "Q_o": "1.30",
+    "primary_diagnosis": "Gather lowering",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "18 ushort loads/lane, coalescing 30%, 72-75% PC samples on VMEM loads (ARBITER_NOT_WIN 58-63%); Triton MI/B 1.5-1.7 vs PyTorch 0.93-1.09",
+   "mech": "M5",
+   "nature": "compiler lowering; memory behavior",
+   "pri": "Low",
+   "primary": "Window gather issued as 2-byte per-lane loads; VMEM arbitration stalls",
+   "pt": "ATen max_pool_forward_nchw",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "3d_conv": {
+   "alternative_explanation": "CK kernel choice may be shape-specific; only the profiled shape traced",
+   "b200_table5": {
+    "Q_o": "2.19",
+    "primary_diagnosis": "Implicit GEMM indexing",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "CK grouped conv XDL + 4 transposes (32%/8%); PyTorch MI/B 2.76/7.88; Triton MI/B 0.49/0.53",
+   "mech": "M3",
+   "nature": "vendor library",
+   "pri": "High",
+   "primary": "PyTorch path: CK conv + transposes; FP32 CK path 7.9x slower than B200 cuDNN",
+   "pt": "CK grouped-conv XDL + 4 batched transposes",
+   "rel": "reversal",
+   "secondary": "Triton VALU-bound index reconstruction (M4)"
+  },
+  "argmax": {
+   "alternative_explanation": "Row-loop structure / grid shape rather than policy; nt verified only for the mean instantiation of reduce_kernel",
+   "b200_table5": {
+    "Q_o": "0.97",
+    "primary_diagnosis": "Reduction parity",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Low",
+   "evidence": "ATen reduce_kernel; VMEM latency 7,100-16,000 cycles; reversal FP32 1.79 -> 0.79",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Memory-latency-bound row reduction; PyTorch reduce path uses nt loads",
+   "pt": "ATen reduce_kernel<512,1>",
+   "rel": "reversal",
+   "secondary": "VMEM latency 7,100-16,000 cycles; 66-68% of PC samples on s_waitcnt"
+  },
+  "batch_normalization": {
+   "alternative_explanation": "Triton-side slowness (MI/B 3.0-3.1 FP16/BF16) partly offsets; PyTorch kernel not counter-profiled",
+   "b200_table5": {
+    "Q_o": "1.11",
+    "primary_diagnosis": "Register/SMEM placement",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen BN statistics kernel 90% of reference; PyTorch MI/B 2.7-4.0; Triton block-sum grid 313 WGs, VGPR 164-234",
+   "mech": "M3",
+   "nature": "vendor library; resource pressure",
+   "pri": "Medium",
+   "primary": "PyTorch BN statistics kernel slow on ROCm (2.7-4.0x B200)",
+   "pt": "ATen batch_norm_collect_statistics (channels-last) + transform",
+   "rel": "changes",
+   "secondary": "Triton block-sum kernel launches 313 WGs (M6)"
+  },
+  "batched_matmul": {
+   "alternative_explanation": "Small per-batch GEMMs (640^2) also limit hipBLASLt comparison; no batched pointer experiment",
+   "b200_table5": {
+    "Q_o": "1.13",
+    "primary_diagnosis": "Register/SMEM pressure",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "ushort/dword scalar loads, coalescing 25%, MFMA 3.5-4.0%, PC 48-78% on VMEM loads; same signature as the experiment-verified matmul",
+   "mech": "M1",
+   "nature": "compiler lowering; AMD architecture",
+   "pri": "High",
+   "primary": "Descriptor loads -> scalar 2/4-byte gathers; MFMA util 3.5-4.0%",
+   "pt": "hipBLASLt (Tensile Cijk MT320x160)",
+   "rel": "new",
+   "secondary": "-"
+  },
+  "bitonic_sort": {
+   "alternative_explanation": "Higher per-launch overhead on ROCm for 300 launches (kernel time only, so excluded by Proton)",
+   "b200_table5": {
+    "Q_o": "1.00",
+    "primary_diagnosis": "Matched network control",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch: 15,903 eager kernels; Triton step loads ushort/dword, 43% ARBITER_NOT_WIN; Triton MI/B 1.7-2.3 vs PyTorch 1.08-1.10",
+   "mech": "C",
+   "nature": "algorithm choice; memory behavior",
+   "pri": "Low",
+   "primary": "Eager reference dominates (huge Triton win on both GPUs)",
+   "pt": "Eager Python network (15,903 kernels)",
+   "rel": "weaker",
+   "secondary": "Partner loads narrow & masked -> VMEM issue-bound (M5)"
+  },
+  "block_sparse_attention": {
+   "alternative_explanation": "Inductor's flex kernel exploits block mask differently (algorithmic difference within Triton)",
+   "b200_table5": {
+    "Q_o": "2.69",
+    "primary_diagnosis": "SMEM staging/reuse mismatch",
+    "pytorch_path": "Compiled"
+   },
+   "conf": "High",
+   "evidence": "ushort loads x160, 512 regs, 20 B scratch, occupancy 1, MFMA 2.5%; Inductor Triton 0.24 ms vs 0.56 ms",
+   "mech": "M1",
+   "nature": "compiler lowering; resource pressure",
+   "pri": "High",
+   "primary": "Descriptor loads + 512-register kernel with scratch spill; Inductor Triton 2.35x faster",
+   "pt": "Inductor-generated Triton (compiled flex_attention)",
+   "rel": "reversal",
+   "secondary": "Occupancy 1 (register pressure, secondary)"
+  },
+  "cross_entropy": {
+   "alternative_explanation": "FP16 gap could reflect PyTorch FP16 path improvement (MI/B 1.23)",
+   "b200_table5": {
+    "Q_o": "1.41",
+    "primary_diagnosis": "Reduction granularity",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 3 kernels (softmax_warp_forward, nll_loss, fill); Triton 1 kernel/row, DPP reductions; FP16 1 element/lane",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Low",
+   "primary": "Fusion of 3 eager kernels into one row-wise kernel preserved",
+   "pt": "Eager: softmax_warp_forward + nll_loss + fill",
+   "rel": "weaker",
+   "secondary": "FP16: 1 element/lane (2-byte loads) at wave64 granularity"
+  },
+  "dequantize_rowwise": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.15",
+    "primary_diagnosis": "Load width/conversion cost",
+    "pytorch_path": "Eager"
+   },
+   "conf": "High",
+   "evidence": "PyTorch 3 elementwise kernels; Triton dwordx2/x4, 65% HBM; ratio 6.41 vs 5.95",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Control",
+   "primary": "Fusion of eager chain; Triton at 65% HBM",
+   "pt": "Eager: 3 ATen elementwise kernels",
+   "rel": "same",
+   "secondary": "-"
+  },
+  "destindex": {
+   "alternative_explanation": "Load policy (M2) also affects the load side; not ablated",
+   "b200_table5": {
+    "Q_o": "2.10",
+    "primary_diagnosis": "Index/scatter",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "LLIR: 4 x buffer.store.i8 per lane (INT8), short stores (FP16); B200: 128-bit stores (paper); Triton HBM 48-75% vs 55-97%",
+   "mech": "M5",
+   "nature": "compiler lowering",
+   "pri": "Medium",
+   "primary": "Scatter store not vectorized on gfx942 (per-element byte/short stores)",
+   "pt": "ATen index_copy (index_elementwise_kernel x2)",
+   "rel": "weaker",
+   "secondary": "Streaming load policy (M2)"
+  },
+  "dropout": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.01",
+    "primary_diagnosis": "Fusion control",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 2 vectorized kernels; Triton single kernel at 60-63% HBM; B200 1.5-1.6 -> 1.09-1.14",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "Fusion advantage eroded by streaming load-policy gap",
+   "pt": "Eager: 2 ATen vectorized kernels (nt loads)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "flash_attention": {
+   "alternative_explanation": "AOTriton uses a different tiling/pipelining (not only load lowering); spill share not isolated",
+   "b200_table5": {
+    "Q_o": "0.94",
+    "primary_diagnosis": "State placement",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "ushort loads x128, 512 regs, 268 B scratch, occupancy 1, MFMA 7.5%; AOTriton attn_fwd 45.5 ms vs 142.9 ms",
+   "mech": "M1",
+   "nature": "compiler lowering; resource pressure",
+   "pri": "High",
+   "primary": "Descriptor loads + 512 registers, 268 B scratch spill, occupancy 1",
+   "pt": "AOTriton attn_fwd (Triton, shipped with PyTorch)",
+   "rel": "changes",
+   "secondary": "AOTriton (also Triton) 3.1x faster: abstraction not the limit"
+  },
+  "flash_decode": {
+   "alternative_explanation": "PyTorch eager kernels parallelize over sequence; Triton design choice (split) rather than DSL",
+   "b200_table5": {
+    "Q_o": "3.38",
+    "primary_diagnosis": "Runtime loop dependency",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "grid 16 WGs x 2 waves, ~30 resident waves; T/P 6.34 -> 0.59 with seq_len; PyTorch 20 kernels",
+   "mech": "M6",
+   "nature": "configuration; AMD architecture",
+   "pri": "Medium",
+   "primary": "16-workgroup grid: serial latency-bound loop; Triton loses at long seq",
+   "pt": "Eager: 20 ATen kernels",
+   "rel": "stronger",
+   "secondary": "-"
+  },
+  "fused_activation": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.01",
+    "primary_diagnosis": "Fusion control",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 3 vectorized kernels; Triton 65% HBM; 1.80 -> 1.24",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "Fusion advantage eroded by streaming load-policy gap",
+   "pt": "Eager: 3 ATen vectorized kernels",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "gaussian_blur": {
+   "alternative_explanation": "cuDNN choice on B200 may be suboptimal for this filter; not examined",
+   "b200_table5": {
+    "Q_o": "1.21",
+    "primary_diagnosis": "Gather lowering",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "MIOpen igemm 99% of reference; PyTorch MI/B 0.29/0.40; Triton VALU util 77-87%, 50 2/4-byte loads/lane",
+   "mech": "M3",
+   "nature": "vendor library",
+   "pri": "Medium",
+   "primary": "PyTorch path faster than on B200 (MIOpen 2.5-3.4x faster than B200 path)",
+   "pt": "MIOpen igemm (NHWC)",
+   "rel": "weaker",
+   "secondary": "Triton 7x7 taps as 2/4-byte loads, VALU 77-87% (M5)"
+  },
+  "histogramming": {
+   "alternative_explanation": "Contention on few bins / partial layout; no LDS-privatized control experiment",
+   "b200_table5": {
+    "Q_o": "1.62",
+    "primary_diagnosis": "Privatization/atomic primitive",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "67.1 M vL1D atomics -> 4.19 M L2 = 4.19 M fabric atomic requests (100% atomic traffic), latency ~367 cyc, 64% PC on atomics; T/P 2.27 -> 0.27",
+   "mech": "M7",
+   "nature": "AMD architecture",
+   "pri": "High",
+   "primary": "All L2 atomics forwarded to Infinity Fabric; 64% of PC samples on atomics",
+   "pt": "ATen bincount (10 kernels incl. kernelHistogram1D)",
+   "rel": "reversal",
+   "secondary": "256-WG partial grid (M6)"
+  },
+  "interleave": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.02",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "ATen manual_unroll scalar dword without nt (ATT, FP32); Triton dwordx4; 1.8-2.2x",
+   "mech": "C",
+   "nature": "memory behavior",
+   "pri": "Control",
+   "primary": "Triton vectorized copy beats non-vectorized ATen copy",
+   "pt": "ATen elementwise_kernel_manual_unroll x2 (scalar dword, no nt)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "jacobi_stencil_2d": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "0.87",
+    "primary_diagnosis": "Reusable SMEM tile",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 6 kernels; Triton ushort/dword neighbour loads, 34-56% HBM",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Low",
+   "primary": "Fusion of eager stencil preserved; 2/4-byte neighbour loads",
+   "pt": "Eager: 6 kernels (manual_unroll + copy)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "kl_divergence": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "0.96",
+    "primary_diagnosis": "Streaming parity",
+    "pytorch_path": "Eager"
+   },
+   "conf": "High",
+   "evidence": "PyTorch 4 kernels; Triton 67% HBM; ratio 2.65 vs 2.84",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Control",
+   "primary": "Fusion preserved, similar ratio on both GPUs",
+   "pt": "Eager: 4 ATen kernels",
+   "rel": "same",
+   "secondary": "-"
+  },
+  "l2_norm": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.15",
+    "primary_diagnosis": "Fixed loop/conversion cost",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 5-6 kernels; Triton 57-60% HBM; 6.00 -> 3.08 (op g.m.)",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "Fusion preserved but halved; Triton at 57-60% HBM",
+   "pt": "Eager: 5-6 ATen kernels",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "layernorm": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.21",
+    "primary_diagnosis": "Fixed issue cost + wider write back",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen vectorized_layer_norm without nt (ATT FP16); Triton 73-82% HBM",
+   "mech": "C",
+   "nature": "parity",
+   "pri": "Control",
+   "primary": "Both near the memory floor (Triton 73-82% HBM)",
+   "pt": "ATen vectorized_layer_norm_kernel (no nt loads)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "leaky_relu": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.00",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATen vectorized kernel (nt inferred); Triton 63-75% HBM; 1.0 -> 0.73-0.83",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Streaming load-policy gap (0.73-0.83x)",
+   "pt": "ATen vectorized_elementwise_kernel (nt loads)",
+   "rel": "new",
+   "secondary": "-"
+  },
+  "linear_self_attention": {
+   "alternative_explanation": "PyTorch uses 15 kernels incl. hipBLASLt; GEMM stages affected by M1",
+   "b200_table5": {
+    "Q_o": "2.02",
+    "primary_diagnosis": "Runtime loop and stage pipeline",
+    "pytorch_path": "Mixed"
+   },
+   "conf": "Medium",
+   "evidence": "z_kernel 8 WGs (36%), kv_gemm 64 WGs (49%), descriptor dword loads; B200: 8-CTA column reduction ~57%",
+   "mech": "M6",
+   "nature": "configuration; compiler lowering",
+   "pri": "Medium",
+   "primary": "z_kernel (8 WGs, 36%) and kv_gemm (64 WGs, 49%) under-fill 304 CUs",
+   "pt": "Eager: 15 kernels incl. hipBLASLt GEMMs",
+   "rel": "stronger",
+   "secondary": "Descriptor GEMM stages (M1)"
+  },
+  "matmul_fp32_fp16_fp8": {
+   "alternative_explanation": "Search space without AMD knobs; ruled out by same-config experiment",
+   "b200_table5": {
+    "Q_o": "0.79",
+    "primary_diagnosis": "Tensor pipeline scheduling",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "TTIR pointer rewrite with runtime i64 strides; TTGIR threadsPerWarp=[64,1]; ushort loads; MFMA 3.7-4.5%; experiment 6.7x/3.35x",
+   "mech": "M1",
+   "nature": "compiler lowering; AMD architecture",
+   "pri": "High",
+   "primary": "Descriptor loads -> scalar gathers; pointer variant 3.4-6.7x faster",
+   "pt": "hipBLASLt (Tensile Cijk)",
+   "rel": "new",
+   "secondary": "64 KB LDS invalidates B200-sized configs"
+  },
+  "matmul_int8": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.02",
+    "primary_diagnosis": "Hardware path control",
+    "pytorch_path": "Emulation"
+   },
+   "conf": "High",
+   "evidence": "Reference = FP32 Cijk GEMM (62%) + unpack; PyTorch MI/B 0.59; Triton ubyte loads, MFMA 2.7%",
+   "mech": "M3",
+   "nature": "AMD architecture; compiler lowering",
+   "pri": "High",
+   "primary": "FP32 reference runs on FP32 MFMA (1.7x faster than B200 ref); Triton int8 descriptor path",
+   "pt": "FP32 hipBLASLt GEMM + unpack (emulation)",
+   "rel": "reversal",
+   "secondary": "Descriptor lowering (M1)"
+  },
+  "matrix_copy": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "0.99",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATen vectorized kernel (nt inferred); Triton 64-68% HBM (16/32-bit); INT8 parity",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Streaming load-policy gap (0.78-0.82x); INT8 parity",
+   "pt": "ATen vectorized_elementwise_kernel (nt loads; int8 path without nt)",
+   "rel": "new",
+   "secondary": "-"
+  },
+  "matrix_transpose": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.00",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen manual_unroll scalar dword, no nt (ATT FP32); Triton LDS 16-64 KB + dwordx4",
+   "mech": "C",
+   "nature": "memory behavior",
+   "pri": "Control",
+   "primary": "LDS-staged vectorized transpose beats scalar ATen copy",
+   "pt": "ATen manual_unroll copy (scalar dword, no nt)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "mean_reduction": {
+   "alternative_explanation": "Row-loop memory-level parallelism; not ablated with .cg",
+   "b200_table5": {
+    "Q_o": "1.14",
+    "primary_diagnosis": "Dtype specific register pressure",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen reduce_kernel with nt loads (ATT FP32); Triton VMEM latency 10,200-16,600 cycles; 89% PC on VMEM loads",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Memory-latency-bound row reduction vs nt-load ATen reduce",
+   "pt": "ATen reduce_kernel<512,1> (nt loads)",
+   "rel": "reversal",
+   "secondary": "89% of PC samples on vector-memory loads (bf16, fp32)"
+  },
+  "moe_topk_gating": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.96",
+    "primary_diagnosis": "Reduction granularity",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "Triton single-wave rows, DPP 38-44 + 8 ds_bpermute; PyTorch gatherTopK + sort + softmax",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Control",
+   "primary": "Single-wave per-row program (DPP/ds_bpermute) preserved",
+   "pt": "ATen gatherTopK + bitonic KV sort + softmax",
+   "rel": "same",
+   "secondary": "-"
+  },
+  "mul2": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.05",
+    "primary_diagnosis": "Fixed issue cost",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATen vectorized kernel (nt inferred); Triton 64-65% HBM; INT8 parity",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Streaming load-policy gap (0.72-0.77x); INT8 parity",
+   "pt": "ATen vectorized_elementwise_kernel (nt loads; int8 without nt)",
+   "rel": "new",
+   "secondary": "-"
+  },
+  "quantize_global": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.01",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen vectorized float16 copy (nt inferred); 59% HBM",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "Streaming load-policy gap (0.65x)",
+   "pt": "ATen vectorized float16_copy",
+   "rel": "new",
+   "secondary": "-"
+  },
+  "radix_sort": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.87",
+    "primary_diagnosis": "Scatter lowering",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "rocPRIM radix sort 90% of reference; Triton 66% HBM; ratios 0.62 vs 0.69",
+   "mech": "C",
+   "nature": "algorithm choice; vendor library",
+   "pri": "Control",
+   "primary": "Vendor sort algorithm wins on both GPUs by a similar margin",
+   "pt": "rocPRIM radix sort",
+   "rel": "same",
+   "secondary": "-"
+  },
+  "relu": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.06",
+    "primary_diagnosis": "Fixed issue cost",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATen vectorized kernel with nt (ATT FP16); INT8 kernel without nt; FP16 1.12 -> 0.85",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Medium",
+   "primary": "Streaming load-policy gap (0.78-0.87x); INT8 Triton wins",
+   "pt": "ATen vectorized_elementwise_kernel (nt loads verified fp16)",
+   "rel": "reversal",
+   "secondary": "-"
+  },
+  "reverse_array": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.01",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "ATen flip scalar dword, no nt (ATT FP32); Triton ushort/ubyte for 16/8-bit",
+   "mech": "C",
+   "nature": "memory behavior",
+   "pri": "Control",
+   "primary": "Triton wins vs non-vectorized flip; 16/8-bit reversal uses narrow loads",
+   "pt": "ATen flip (index_elementwise, scalar dword, no nt)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "rmsnorm": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.07",
+    "primary_diagnosis": "Fixed template cost",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATen vectorized_layer_norm (RMS) without nt (inferred); Triton 73-84% HBM",
+   "mech": "C",
+   "nature": "parity",
+   "pri": "Control",
+   "primary": "Near parity on both; Triton 73-84% HBM",
+   "pt": "ATen vectorized_layer_norm_kernel (RMS variant)",
+   "rel": "parity",
+   "secondary": "-"
+  },
+  "rope": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.14",
+    "primary_diagnosis": "Memory floor parity",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 7 kernels (cat/neg/mul/add); Triton 65-82% HBM",
+   "mech": "M2",
+   "nature": "programming-model expressibility; memory behavior",
+   "pri": "Low",
+   "primary": "Fusion preserved (3.6-4.3x) but smaller than B200 (8-13x)",
+   "pt": "Eager: 7 kernels (cat/neg/mul/add)",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "sigmoid": {
+   "alternative_explanation": "PyTorch FP16 sigmoid compute-bound; not profiled",
+   "b200_table5": {
+    "Q_o": "1.31",
+    "primary_diagnosis": "Fixed issue cost",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Low",
+   "evidence": "FP32 0.71 vs FP16/BF16 ~1.0; ATen FP16 sigmoid itself below the memory floor (inferred)",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "FP32 load-policy gap (0.71x); FP16/BF16 near parity",
+   "pt": "ATen vectorized_elementwise_kernel",
+   "rel": "changes",
+   "secondary": "Dtype trend opposite to B200's cuTile trend"
+  },
+  "softmax": {
+   "alternative_explanation": "Online-softmax two-pass structure vs PyTorch; PyTorch kernel not counter-profiled",
+   "b200_table5": {
+    "Q_o": "1.52",
+    "primary_diagnosis": "Reduction/normalization lowering",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Low",
+   "evidence": "ATen cunn_SoftMaxForwardGmem (no nt) PyTorch MI/B 0.68 FP16; Triton VALU util 47%, 42% HBM",
+   "mech": "M3",
+   "nature": "vendor library; compiler lowering",
+   "pri": "Medium",
+   "primary": "ATen softmax relatively stronger on MI300X; Triton kernel partly VALU-bound",
+   "pt": "ATen cunn_SoftMaxForwardGmem (no nt loads)",
+   "rel": "gone",
+   "secondary": "-"
+  },
+  "streamk_matmul": {
+   "alternative_explanation": "B200 first_wave loop diagnosis; first_wave is only 8% here",
+   "b200_table5": {
+    "Q_o": "2.05",
+    "primary_diagnosis": "First wave runtime loop",
+    "pytorch_path": "Vendor"
+   },
+   "conf": "High",
+   "evidence": "full_tiles 92% of profile, ushort/dword scalar loads, MFMA 2.9-7.9%; first_wave 6.4 M fabric atomics; FP32 164 B spill",
+   "mech": "M1",
+   "nature": "compiler lowering; AMD architecture",
+   "pri": "High",
+   "primary": "Descriptor loads -> scalar gathers in full_tiles (92% of time)",
+   "pt": "hipBLASLt (Tensile Cijk MT512x128)",
+   "rel": "changes",
+   "secondary": "first_wave fabric atomics (M7); FP32 spill"
+  },
+  "swiglu": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.23",
+    "primary_diagnosis": "Fixed issue cost",
+    "pytorch_path": "Eager"
+   },
+   "conf": "Medium",
+   "evidence": "PyTorch 2 vectorized kernels; Triton 72-82% HBM; 1.64-1.91 -> 1.16-1.27",
+   "mech": "M2",
+   "nature": "memory behavior",
+   "pri": "Low",
+   "primary": "Fusion preserved but eroded by load-policy gap",
+   "pt": "Eager: 2 ATen vectorized kernels",
+   "rel": "weaker",
+   "secondary": "-"
+  },
+  "top_k_selection": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.13",
+    "primary_diagnosis": "Primitive availability",
+    "pytorch_path": "ATen"
+   },
+   "conf": "Medium",
+   "evidence": "tl.topk: DPP 412 + 80 ds_bpermute, LDS conflicts 4.5/access; PyTorch rocPRIM merge sort (21 kernels)",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Control",
+   "primary": "tl.topk lowers to DPP/ds_bpermute network; similar sweep ratio",
+   "pt": "rocPRIM merge sort (torch.topk)",
+   "rel": "same",
+   "secondary": "LDS bank conflicts 4.5/access"
+  },
+  "vector_add": {
+   "alternative_explanation": "Load width / per-lane work: ruled out by config sweep",
+   "b200_table5": {
+    "Q_o": "1.01",
+    "primary_diagnosis": "Parity control",
+    "pytorch_path": "ATen"
+   },
+   "conf": "High",
+   "evidence": "ATT: ATen dwordx4 nt loads; Triton default 0.62x in all configs; .cg loads 1.0-1.08x; read-only flush 0.90x",
+   "mech": "M2",
+   "nature": "memory behavior; compiler lowering",
+   "pri": "High",
+   "primary": "Streaming load-policy gap (0.63-0.66x); recovered by .cg loads",
+   "pt": "ATen vectorized_elementwise_kernel (nt loads verified)",
+   "rel": "new",
+   "secondary": "best default-policy config 0.625x of 26 tried (20 grid configs + persistent)"
+  },
+  "weight_dequant": {
+   "alternative_explanation": "-",
+   "b200_table5": {
+    "Q_o": "1.73",
+    "primary_diagnosis": "Index/gather",
+    "pytorch_path": "Eager"
+   },
+   "conf": "High",
+   "evidence": "constexpr N -> multiply-high index math (3 v_int_mul); Triton 74-85% HBM; PyTorch 8 kernels",
+   "mech": "C",
+   "nature": "programming-model expressibility",
+   "pri": "Control",
+   "primary": "Fusion preserved; constexpr index math stays cheap (74-85% HBM)",
+   "pt": "Eager: 8 kernels (index + elementwise)",
+   "rel": "weaker",
+   "secondary": "-"
+  }
+ },
+ "relationship_classes": {
+  "changes": "Bottleneck changes",
+  "gone": "B200 mechanism disappears",
+  "incomp": "Not comparable (cuTile absent / different path)",
+  "new": "New AMD/MI300X mechanism",
+  "parity": "Parity/control on both",
+  "reversal": "Performance reversal",
+  "same": "Same mechanism, similar severity",
+  "stronger": "Same mechanism, stronger on MI300X",
+  "weaker": "Same mechanism, weaker on MI300X"
+ },
+ "schema": "tilearena-mi300x-diagnosis/1",
+ "source_docstring": "Hand-written per-operator diagnosis for MI300X (evidence in data/*.json, exp/*.json, att/*).\nFields:\n  b200: (primary diagnosis, PyTorch path, Q_o) copied from the B200 paper Table 5 (tab:app-rq3-map).\n  pt:   PyTorch path on MI300X (from the rocprofv3 kernel trace of one reference call).\n  mech: MI300X mechanism cluster id (see CLUSTERS).\n  primary / secondary: short text for the diagnosis map.\n  nature: one or more of the requested categories.\n  rel:  B200 -> MI300X relationship class.\n  conf: High / Medium / Low.   pri: High / Medium / Low / Control.\n",
+ "source_files": {
+  "outputs/profiling/MI300X/analysis_2026-10-05/scripts/diag.py": "9ab4d5cf632abb950fcd9df1d1d2fef3558a3e5b4eb687bb0caa040bc96758cc",
+  "outputs/profiling/MI300X/analysis_2026-10-05/scripts/diag_evidence.py": "40f14f90c6511fb9897f1ea82786fde0bcf8190a17f3dc0f77eee95daf07d76a"
+ }
+}
