@@ -15,7 +15,7 @@ from tilebench.core.engine import run_benchmark_suite  # noqa: E402
 from tilebench.backends import parse_backends  # noqa: E402
 from tilebench import provenance  # noqa: E402
 from tilebench.core import tilelang_log  # noqa: E402
-from tilebench.paths import (autotune_log_path, hardware_label,  # noqa: E402
+from tilebench.paths import (autotune_log_path, hardware_label, is_neuron_hardware,  # noqa: E402
                              provenance_log_path, results_csv_dir, results_logs_dir,
                              tilelang_autotuner_log_path,
                              timing_log_path)
@@ -96,6 +96,9 @@ def _split(results: list[dict], active: list[str]) -> tuple[list[dict], list[dic
     for b in active:
         timing_keys |= {f"{b}_ms", f"{b}_stats", f"{b}_ok", f"{b}_err", f"speedup_{b}"}
         autotune_keys.add(f"{b}_autotune_cfg")
+    if "nki" in active:
+        timing_keys |= {"torch_status", "nki_status", "requested_warmup", "requested_repeat",
+                        "actual_warmup", "actual_repeat", "actual_autotune"}
     timing = [{k: v for k, v in r.items() if k in timing_keys} for r in results]
     autotune = [{k: v for k, v in r.items() if k in autotune_keys} for r in results]
     return timing, autotune
@@ -123,9 +126,15 @@ def _detected_device() -> str | None:
         return None
 
 
+def _neuron_identity() -> dict | None:
+    """The Neuron device of this host (None without one); see neuron_native.hardware_identity."""
+    from tilebench.core.neuron_native import hardware_identity
+    return hardware_identity()
+
+
 def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str],
                     fmt_params) -> None:
-    """In-place merge of a torch+{tilelang,nki} run into the frozen summary CSV
+    """In-place merge of a torch+tilelang run into the frozen summary CSV
     of the run's namespace, results/<gpu>/csv/.
 
     The frozen torch/triton/cutile columns are never touched. Rows are matched
@@ -135,10 +144,9 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
       speedup_tilelang uses the preserved CSV torch_ms baseline divided by the
       direct TileLang time. The raw JSON retains the new run's torch timing and
       speedup; merging does not make separate runs share timing conditions.
-    - nki (run on the Neuron host, not on <gpu>): torch_nki_ms (torch timed on
-      the Neuron device) and nki_ms are appended as-is — cross-hardware, so no
-      scaling. NKI compares against its own torch reference:
-      speedup_nki = torch_nki_ms / nki_ms, never the GPU's torch_ms / nki_ms.
+    NKI never merges into a GPU namespace: it runs on AWS Trainium and is
+    written to its own Neuron namespace (e.g. results/TRN2/), with its own
+    PyTorch eager baseline from the same device.
     """
     path = Path(csv_path)
     if not path.exists():
@@ -162,11 +170,7 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
             f"refusing to merge"
         )
 
-    new_cols = []
-    if "tilelang" in active:
-        new_cols += ["tilelang_ms", "speedup_tilelang"]
-    if "nki" in active:
-        new_cols += ["torch_nki_ms", "nki_ms", "speedup_nki"]
+    new_cols = ["tilelang_ms", "speedup_tilelang"]
     for c in new_cols:
         if c not in header:
             header.append(c)
@@ -174,17 +178,11 @@ def _merge_into_csv(csv_path: str, timing_results: list[dict], active: list[str]
     for r, key in zip(timing_results, keys):
         old = index[key]
         torch_frozen = float(old["torch_ms"])
-        torch_new = r["torch_ms"]
-        if "tilelang" in active:
-            tl = r["tilelang_ms"]
-            old["tilelang_ms"] = f"{tl:.4f}" if tl > 0 else "nan"
-            old["speedup_tilelang"] = (
-                f"{torch_frozen / tl:.2f}" if tl > 0 and torch_frozen > 0 else "0.00"
-            )
-        if "nki" in active:
-            old["torch_nki_ms"] = f"{torch_new:.4f}" if torch_new > 0 else "nan"
-            old["nki_ms"] = f"{r['nki_ms']:.4f}" if r["nki_ms"] > 0 else "nan"
-            old["speedup_nki"] = f"{r['speedup_nki']:.2f}"
+        tl = r["tilelang_ms"]
+        old["tilelang_ms"] = f"{tl:.4f}" if tl > 0 else "nan"
+        old["speedup_tilelang"] = (
+            f"{torch_frozen / tl:.2f}" if tl > 0 and torch_frozen > 0 else "0.00"
+        )
 
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=header, restval="")
@@ -201,9 +199,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run TileBench benchmarks")
     parser.add_argument("--gpu", type=hardware_label, required=True, metavar="LABEL",
                         help="Hardware label of the campaign, e.g. B200 or GH200. Required, with no "
-                             "default: it names the result namespace results/<gpu>/. With "
-                             "--tile-language nki it still only names the namespace; NKI itself "
-                             "runs on AWS Trainium.")
+                             "default: it names the result namespace results/<gpu>/. NKI runs "
+                             "(--tile-language nki) take the label of the Neuron device they run "
+                             "on, e.g. TRN2, and never write into a GPU namespace.")
     parser.add_argument("--operator", type=str, default="vector_add",
                         help="Operator to benchmark")
     parser.add_argument("--output", type=str, default=None,
@@ -234,7 +232,8 @@ def main():
                         help="Comma-separated backends to run. GPU backends: triton, cutile, "
                              "tilelang (or 'all', the default). torch always runs as the "
                              "speedup baseline. 'nki' (AWS Trainium) only runs when named "
-                             "explicitly; its columns are merged into results/<gpu>/csv/.")
+                             "explicitly and alone, with a Neuron label (--gpu TRN2): PyTorch "
+                             "eager vs NKI on the same device, written to results/TRN2/.")
     parser.add_argument("--keep-proton-files", action="store_true",
                         help="Keep intermediate Proton .hatchet files for inspection")
     parser.add_argument("--proton-output-dir", type=str, default=None,
@@ -249,6 +248,18 @@ def main():
     except ValueError as e:
         parser.error(f"--tile-language: {e} (or 'all')")
     enabled_backends = set(active)
+    identity = None
+    if "nki" in active:
+        if active != ["nki"]:
+            parser.error("--tile-language nki runs alone: its PyTorch baseline is measured on the "
+                         "Neuron device, not on the GPU of the other backends")
+        if not is_neuron_hardware(args.gpu):
+            parser.error(f"--gpu {args.gpu}: NKI results are recorded under the Neuron hardware "
+                         "namespace they were measured on (e.g. --gpu TRN2), never in a GPU namespace")
+        identity = _neuron_identity()
+        if identity is not None and identity["label"] != args.gpu.upper():
+            parser.error(f"--gpu {args.gpu} does not match the Neuron device of this host "
+                         f"({identity['instance_type']} -> {identity['label']})")
 
     overrides: dict = {}
     if args.warmup is not None:
@@ -293,8 +304,8 @@ def main():
         print(f"Warning: --gpu {args.gpu} does not appear in the detected device name "
               f"'{device}'; results are written to results/{args.gpu}/ regardless")
     if "nki" in active:
-        print(f"NKI runs on AWS Trainium; --gpu {args.gpu} only names the campaign its "
-              f"measurements are recorded with")
+        print("NKI vs PyTorch eager on " + (f"{identity['instance_type']}" if identity
+                                            else "an undetected Neuron device"))
     print(f"Starting benchmark for operator: {args.operator}")
     print(f"Tile-language backends: torch (baseline) + "
           f"{', '.join(sorted(enabled_backends)) or '(none)'}")
@@ -391,18 +402,29 @@ def main():
     #   results/<gpu>/csv/<op>_autotune.csv  (--autotune)
     Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
 
-    # tilelang/nki runs never overwrite the frozen torch/triton/cutile CSV:
-    # when only those backends ran and the summary CSV of this namespace already
-    # exists, the results are MERGED into it in place (see _merge_into_csv for
-    # the direct tilelang times and the nki torch_nki_ms column). The
-    # plain writer below only ever runs for triton/cutile sweeps or when
-    # no summary CSV exists yet.
-    if active and set(active) <= {"tilelang", "nki"} and Path(csv_path).exists():
+    # tilelang runs never overwrite the frozen torch/triton/cutile CSV: when only
+    # tilelang ran and the summary CSV of this namespace already exists, the
+    # results are MERGED into it in place (see _merge_into_csv for the direct
+    # tilelang times). The plain writer below runs for triton/cutile sweeps,
+    # for nki runs (their own Neuron namespace) or when no summary CSV exists yet.
+    if active == ["tilelang"] and Path(csv_path).exists():
         _merge_into_csv(csv_path, timing_results, active, fmt_params)
         return
-    if active and set(active) <= {"tilelang", "nki"}:
+    if active == ["tilelang"]:
         print(f"Note: {csv_path} does not exist yet — writing a fresh "
-              f"torch+{'/'.join(active)} CSV (nothing to merge into)")
+              f"torch+tilelang CSV (nothing to merge into)")
+    nki = active == ["nki"]
+    if nki:
+        # where and on what the Neuron numbers were measured (logs, not version controlled)
+        prov = results_logs_dir(args.gpu) / "hardware_provenance" / Path(default_output).name
+        prov.parent.mkdir(parents=True, exist_ok=True)
+        identity = _neuron_identity() or identity      # again: the run put its neuronx-cc on PATH
+        prov.write_text(json.dumps({"hardware": identity or {"label": args.gpu, "detected": False},
+                                    "operator": args.operator,
+                                    "baseline": "PyTorch eager (torch.compile disabled)",
+                                    "speedup_nki": "torch_eager_device_ms / nki_device_ms",
+                                    "timing": "mean device busy sum per run()"}, indent=1))
+        print(f"Provenance      → {prov}")
     # Direct cuTile/Triton latency ratio (>1 means cuTile slower), emitted
     # whenever both backends ran so the committed 8-column CSVs are
     # reproducible by this script alone.
@@ -414,6 +436,7 @@ def main():
             + [f"{b}_ms" for b in active]
             + [f"speedup_{b}" for b in active]
             + (["triton_vs_cutile"] if ratio else [])
+            + (["torch_status", "nki_status"] if nki else [])
         )
         for r in timing_results:
             writer.writerow(
@@ -421,6 +444,7 @@ def main():
                 + [f"{r[f'{b}_ms']:.4f}" for b in active]
                 + [f"{r[f'speedup_{b}']:.2f}" for b in active]
                 + ([f"{r['cutile_ms'] / r['triton_ms']:.4f}"] if ratio else [])
+                + ([r.get("torch_status") or "", r.get("nki_status") or ""] if nki else [])
             )
     print(f"Summary CSV     → {csv_path}")
 
