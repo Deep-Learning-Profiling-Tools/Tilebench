@@ -96,8 +96,8 @@ def test_append_jsonl_locked_no_partial_lines(tmp_path):
 
 
 def test_operator_source_files_cover_transitive_repo_imports():
-    """streamk_matmul's kernel lives in matmul_fp32_fp16_fp8/impl_nki.py; that
-    file must enter the spec identity or manifest reuse could profile a stale
+    """streamk_matmul's kernel imports tilebench/core/nki_autotune.py; that file
+    must enter the spec identity or manifest reuse could profile a stale
     artifact after the helper changes."""
     import importlib
     import pytest
@@ -108,5 +108,5 @@ def test_operator_source_files_cover_transitive_repo_imports():
     files = _operator_source_files("streamk_matmul", (impl, impl_torch))
     assert "tilebench/benchmarks/operators/streamk_matmul/impl_nki.py" in files
     assert "tilebench/benchmarks/operators/streamk_matmul/impl_torch.py" in files
-    assert "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_nki.py" in files
+    assert "tilebench/core/nki_autotune.py" in files
     assert all(not f.startswith("/") for f in files)  # repo-relative, stable
