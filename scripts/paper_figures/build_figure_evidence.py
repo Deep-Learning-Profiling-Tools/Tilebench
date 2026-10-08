@@ -25,19 +25,29 @@ csv.field_size_limit(1 << 30)
 
 RQ2_CASES = [
     {"case": "matmul_fp32_fp16_fp8/fp32", "operator": "matmul_fp32_fp16_fp8", "dtype": "fp32", "dsls": ["triton", "cutile"],
-     "why": "largest cross-device reversal of the cuTile/Triton ranking (B200 cuTile faster, GH200 slower) with dynamic WGMMA/STS/LDSM counts; MI300X descriptor lowering traced (M1) with a controlled descriptor-vs-pointer experiment"},
-    {"case": "block_sparse_attention/fp16", "operator": "block_sparse_attention", "dtype": "fp16", "dsls": ["triton", "cutile"],
-     "why": "cuTile gap shrinks from B200 to GH200 together with its shared-memory footprint; MI300X Triton descriptor + 512-register/scratch kernel (M1, traced)"},
+     "mechanism": "matrix operand delivery",
+     "why": "the cuTile/Triton ranking reverses between B200 and GH200; dynamic TMA bytes and shared-memory store counts differ by device; "
+            "MI300X lowers the same TensorDescriptor source to 32-bit pointer loads (static ISA) with a diagnostic pointer-load variant",
+     "caveats": ["Triton reads a transposed B copy prepared outside the timed region; cuTile loads B as [K, N]",
+                 "cuTile winner tile differs (256x256x64 on B200, 128x128x32 on GH200) and cuda-tile differs (1.3.0 vs 1.5.0)"]},
     {"case": "destindex/int8", "operator": "destindex", "dtype": "int8", "dsls": ["triton", "cutile"],
-     "why": "architecture-invariant scatter lowering on NVIDIA (sectors/request); the same non-vectorized scatter appears for Triton on MI300X (static ISA, M5 traced)"},
-    {"case": "flash_decode/fp32", "operator": "flash_decode", "dtype": "fp32", "dsls": ["triton", "cutile"],
-     "why": "16-CTA/WG runtime loop on every device; cuTile instruction expansion persists while its stall composition differs (no GH200 dependency-chain claim)"},
+     "mechanism": "indexing overhead",
+     "why": "identical store sectors but 16x more (byte-wide) store instructions and ~17x more instructions for cuTile on both NVIDIA devices; "
+            "Triton keeps 128-bit stores on NVIDIA but compiles to per-lane byte stores on MI300X (static ISA)",
+     "caveats": ["the PyTorch baseline (ATen index_copy) differs between vendors"]},
     {"case": "1d_conv/fp16", "operator": "1d_conv", "dtype": "fp16", "dsls": ["triton", "tilelang"],
-     "why": "TileLang gathered staging stays uncoalesced on both NVIDIA devices; MI300X Triton is VALU-bound on index math while its PyTorch baseline pays MIOpen transposes (baseline effect)"},
-    {"case": "vector_add/fp32", "operator": "vector_add", "dtype": "fp32", "dsls": ["triton"],
-     "why": "parity on NVIDIA but a streaming cache-policy gap on MI300X (ATT-traced nt loads in ATen; controlled cache-modifier ablation)"},
+     "mechanism": "memory access and latency hiding",
+     "why": "TileLang touches 7-10x more L1 load sectors than Triton with the same 16-bit load width and DRAM traffic, at lower occupancy and issue "
+            "activity; on MI300X Triton's speedup rises because the PyTorch baseline runs MIOpen implicit GEMM plus layout transposes",
+     "caveats": ["TileLang uses a different kernel body on Hopper", "the MI300X change is a baseline (PyTorch path) effect"]},
 ]
-NOT_SELECTED = {"weight_dequant/bf16": "GH200 Triton instruction inflation is attributable to a different autotuned winner (config effect, not architecture); kept for Figure A5 as a confounder example"}
+NOT_SELECTED = {
+    "weight_dequant/bf16": "GH200 Triton instruction inflation is attributable to a different autotuned winner (config effect, not architecture); kept for Figure A5 as a confounder example",
+    "block_sparse_attention/fp16": "moved to the appendix (A3 execution paths); evidence kept as 'supporting' rows",
+    "flash_decode/fp32": "moved to the appendix (A5 instruction expansion); evidence kept as 'supporting' rows",
+    "vector_add/fp32": "moved to the appendix (A5 MI300X load policy); evidence kept as 'supporting' rows",
+}
+SUPPORTING = ("block_sparse_attention/fp16", "flash_decode/fp32", "vector_add/fp32")
 
 A3_ROWS = [("matmul_fp32_fp16_fp8", "fp32"), ("matmul_fp32_fp16_fp8", "fp16"), ("matmul_fp32_fp16_fp8", "fp8_e4m3fn"),
            ("matmul_int8", "int8"), ("batched_matmul", "fp32"), ("streamk_matmul", "fp16"), ("flash_attention", "fp16"),
@@ -112,6 +122,19 @@ def build_evidence(root, NV, A):
                pid, srcN.format(dev=dev.replace("", ""), f=f).replace("{dev}", dev), "high" if v is not None else "missing", note)
         return v
 
+    def mix(fig, case, dev, dsl, op, dt, prefix):
+        """Dynamic warp-level opcode-with-modifier counts of one opcode (e.g. STG -> 'STG.E.128:128000'), as text."""
+        d = NV[dev]
+        pid = d.pid(dsl, op, dt)
+        c = defaultdict(int)
+        for r in d.mix.get(pid, []):
+            n = r["instruction_name"]
+            if r["count_kind"] == "dynamic_warp_inst_executed_with_modifier" and (n == prefix or n.startswith(prefix + ".")):
+                c[n] += int(float(r["count"]))
+        nv_row(ev, fig, case, dev, dsl, f"opcode_mix[{prefix}]", ";".join(f"{k}:{v}" for k, v in sorted(c.items())) or None, "text",
+               "dynamic_sass_count", "sum over the profiled run() launches", pid, srcN.format(dev=dev, f="instruction_mix.csv"),
+               "high" if c else "missing")
+
     # ---------------- Figure 3 / A5 NVIDIA evidence
     for dev in ("B200", "GH200"):
         F = "rq2"
@@ -123,29 +146,35 @@ def build_evidence(root, NV, A):
             nvm(F, c, dev, dsl, "matmul_fp32_fp16_fp8", "fp32", "fam:wgmma")
             nvm(F, c, dev, dsl, "matmul_fp32_fp16_fp8", "fp32", "fam:tcgen05")
             nvm(F, c, dev, dsl, "matmul_fp32_fp16_fp8", "fp32", "launch__shared_mem_per_block", mode="dom", unit="byte/block", kind="launch_config")
+        c = "destindex/int8"
+        for dsl in ("triton", "cutile", "tilelang"):
+            nvm(F, c, dev, dsl, "destindex", "int8", "smsp__inst_executed.sum", unit="warp inst")
+            nvm(F, c, dev, dsl, "destindex", "int8", "l1tex__t_requests_pipe_lsu_mem_global_op_st.sum", unit="requests")
+            nvm(F, c, dev, dsl, "destindex", "int8", "l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum", unit="sectors")
+            nvm(F, c, dev, dsl, "destindex", "int8", "opc:STG")
+            mix(F, c, dev, dsl, "destindex", "int8", "STG")
+        c = "1d_conv/fp16"
+        for dsl in ("triton", "tilelang", "cutile"):
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum", unit="requests")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", unit="sectors")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "dram__bytes_read.sum", unit="byte")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "l1tex__t_sector_hit_rate.pct", mode="dom", unit="%")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "sm__warps_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "sm__maximum_warps_per_active_cycle_pct", mode="dom", unit="%", kind="launch_config")
+            nvm(F, c, dev, dsl, "1d_conv", "fp16", "smsp__issue_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
+            mix(F, c, dev, dsl, "1d_conv", "fp16", "LDG")
+        F = "supporting"
         c = "block_sparse_attention/fp16"
         for dsl in ("triton", "cutile"):
             nvm(F, c, dev, dsl, "block_sparse_attention", "fp16", "launch__shared_mem_per_block", mode="dom", unit="byte/block", kind="launch_config")
             nvm(F, c, dev, dsl, "block_sparse_attention", "fp16", "smsp__inst_executed.sum")
             nvm(F, c, dev, dsl, "block_sparse_attention", "fp16", "fam:legacy_mma")
-        c = "destindex/int8"
-        for dsl in ("triton", "cutile"):
-            nvm(F, c, dev, dsl, "destindex", "int8", "ratio:l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum/l1tex__t_requests_pipe_lsu_mem_global_op_st.sum",
-                unit="sectors/request")
-            nvm(F, c, dev, dsl, "destindex", "int8", "smsp__inst_executed.sum", unit="warp inst")
         c = "flash_decode/fp32"
         for dsl in ("triton", "cutile"):
             nvm(F, c, dev, dsl, "flash_decode", "fp32", "smsp__inst_executed.sum", unit="warp inst")
             nvm(F, c, dev, dsl, "flash_decode", "fp32", "smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio", mode="dom",
                 unit="cycles/issue", kind="ncu_stall_ratio")
             nvm(F, c, dev, dsl, "flash_decode", "fp32", "launch__grid_size", mode="dom", unit="CTAs", kind="launch_config")
-        c = "1d_conv/fp16"
-        for dsl in ("triton", "tilelang", "cutile"):
-            nvm(F, c, dev, dsl, "1d_conv", "fp16", "ratio:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum/l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum",
-                unit="sectors/request")
-            nvm(F, c, dev, dsl, "1d_conv", "fp16", "sm__warps_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
-            nvm(F, c, dev, dsl, "1d_conv", "fp16", "sm__maximum_warps_per_active_cycle_pct", mode="dom", unit="%", kind="launch_config")
-            nvm(F, c, dev, dsl, "1d_conv", "fp16", "smsp__issue_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
         c = "vector_add/fp32"
         nvm(F, c, dev, "triton", "vector_add", "fp32", "gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed", mode="dom", unit="%")
         nvm(F, c, dev, "triton", "vector_add", "fp32", "ratio:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum/l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum",
@@ -165,8 +194,12 @@ def build_evidence(root, NV, A):
                 nvm(F, f"matmul_fp32_fp16_fp8/{dt}", dev, dsl, "matmul_fp32_fp16_fp8", dt,
                     "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum", unit="byte")
         for dsl in ("triton", "cutile", "tilelang"):
-            nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16",
-                "ratio:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum/l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum", unit="sectors/request")
+            nvm(F, "flash_decode/fp32", dev, dsl, "flash_decode", "fp32", "smsp__inst_executed.sum", unit="warp inst")
+            nvm(F, "flash_decode/fp32", dev, dsl, "flash_decode", "fp32", "launch__grid_size", mode="dom", unit="CTAs", kind="launch_config")
+        for dsl in ("triton", "cutile", "tilelang"):
+            nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum", unit="requests")
+            nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", unit="sectors")
+            nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "dram__bytes_read.sum", unit="byte")
             nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "smsp__issue_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
             nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "sm__warps_active.avg.pct_of_peak_sustained_active", mode="dom", unit="%")
             nvm(F, "1d_conv/fp16", dev, dsl, "1d_conv", "fp16", "sm__maximum_warps_per_active_cycle_pct", mode="dom", unit="%", kind="launch_config")
@@ -181,33 +214,41 @@ def build_evidence(root, NV, A):
 
     for fig in ("rq2", "a5"):
         amd_metric(fig, "matmul_fp32_fp16_fp8/fp32", "matmul_fp32_fp16_fp8", "fp32", "2.1.10 | MFMA Utilization | Avg*")
-        amd_metric(fig, "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "2.1.10 | MFMA Utilization | Avg*")
-        amd_metric(fig, "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "7.1.9 | Scratch Allocation | Avg*")
-        amd_metric(fig, "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "dispatch.Arch_VGPR")
         amd_metric(fig, "1d_conv/fp16", "1d_conv", "fp16", "SQ_INSTS_VALU_INT32")
         amd_metric(fig, "1d_conv/fp16", "1d_conv", "fp16", "SQ_INSTS_VALU")
-        amd_metric(fig, "vector_add/fp32", "vector_add", "fp32", "17.1.5 | HBM Bandwidth | Avg*")
         amd_metric(fig, "destindex/int8", "destindex", "int8", "2.1.15 | Wavefront Occupancy | Avg*")
+    amd_metric("supporting", "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "2.1.10 | MFMA Utilization | Avg*")
+    amd_metric("supporting", "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "7.1.9 | Scratch Allocation | Avg*")
+    amd_metric("supporting", "block_sparse_attention/fp16", "block_sparse_attention", "fp16", "dispatch.Arch_VGPR")
+    amd_metric("a5", "vector_add/fp32", "vector_add", "fp32", "17.1.5 | HBM Bandwidth | Avg*")
     # static ISA facts from execution_paths (text, static)
     for op, dt in (("matmul_fp32_fp16_fp8", "fp32"), ("block_sparse_attention", "fp16"), ("destindex", "int8"), ("flash_decode", "fp32"),
                    ("1d_conv", "fp16"), ("vector_add", "fp32")):
+        fig = "supporting" if f"{op}/{dt}" in SUPPORTING else "rq2"
         for r in A.paths[A.pid(op, dt)]:
-            nv_row(ev, "rq2", f"{op}/{dt}", "MI300X", "triton", f"execution_paths.access_path[{r['stage']}]", r["access_path"], "text",
+            nv_row(ev, fig, f"{op}/{dt}", "MI300X", "triton", f"execution_paths.access_path[{r['stage']}]", r["access_path"], "text",
                    "static_isa+source", "kernel binary", A.pid(op, dt), srcA.format(f="execution_paths.csv"), "high")
-            nv_row(ev, "rq2", f"{op}/{dt}", "MI300X", "triton", f"execution_paths.resource_summary[{r['stage']}]", r["resource_summary"], "text",
+            nv_row(ev, fig, f"{op}/{dt}", "MI300X", "triton", f"execution_paths.resource_summary[{r['stage']}]", r["resource_summary"], "text",
                    "launch_record+static_isa", "kernel launch", A.pid(op, dt), srcA.format(f="execution_paths.csv"), "high")
+    for op, dt in (("1d_conv", "fp16"), ("destindex", "int8"), ("matmul_fp32_fp16_fp8", "fp32")):
+        pid = f"MI300X.torch.{op}.{dt}.kernel_trace"
+        rows = A.paths.get(pid, [])
+        nv_row(ev, "rq2", f"{op}/{dt}", "MI300X", "pytorch", "kernel_trace.kernels",
+               ";".join(f"{r['stage']}={r['notes'].removeprefix('kernel ')[:60]}" for r in rows) or None, "text", "kernel_trace",
+               "PyTorch reference run()", pid, srcA.format(f="execution_paths.csv"), "medium" if rows else "missing")
     # diagnostic experiments (not formal)
     for x in A.exp:
-        if x["experiment_id"] in ("gemm_desc_vs_ptr_fp32", "gemm_desc_vs_ptr_fp16", "cache_modifier_ablation_fp32") and x["latency_ms"]:
+        if x["experiment_id"] in ("gemm_desc_vs_ptr_fp32", "gemm_desc_vs_ptr_fp16", "cache_modifier_ablation_fp32",
+                                  "flush_protocol_variants_fp32") and x["latency_ms"]:
             nv_row(ev, "a5", f"{x['operator']}/{x['dtype']}", "MI300X", "triton" if "torch" not in x["variant"] else "pytorch",
                    f"diagnostic:{x['experiment_id']}:{x['variant']}", x["latency_ms"], "ms", "diagnostic_experiment",
                    x["measurement_protocol"][:200], "", srcA.format(f="diagnostic_experiments.csv"), "medium",
                    f"changed_factor={x['changed_factor']}; other_changes={x['other_configuration_changes']}; notes={x['notes']}")
     for r in A.diag:
-        if r["operator"] not in {c["operator"] for c in RQ2_CASES}:
+        if r["operator"] not in {c["operator"] for c in RQ2_CASES} | {c.split("/")[0] for c in SUPPORTING}:
             continue
         for dt in r["dtype"].split(";"):              # MI300X records list several dtypes in one row
-            nv_row(ev, "rq2", f"{r['operator']}/{dt.strip()}", "MI300X", "triton", f"diagnosis:{r['mechanism_id']}:{r.get('mechanism_role', '')}",
+            nv_row(ev, "supporting" if f"{r['operator']}/{dt.strip()}" in SUPPORTING else "rq2", f"{r['operator']}/{dt.strip()}", "MI300X", "triton", f"diagnosis:{r['mechanism_id']}:{r.get('mechanism_role', '')}",
                    r["mechanism_hypothesis"], "text", "diagnosis_record", "operator-level diagnosis", r["supporting_profile_ids"][:120],
                    srcA.format(f="diagnosis_evidence.csv"), r.get("trace_check_status", ""), r["observation"][:300])
     return ev
@@ -311,10 +352,12 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(mat[0].keys()), lineterminator="\n")
         w.writeheader()
         w.writerows(mat)
-    json.dump({"figure": "fig_rq2_cross_device_diagnosis", "max_cases": 6, "selected": RQ2_CASES, "not_selected": NOT_SELECTED,
-               "selection_rules": ["formal latency only (benchmark_cases_normalized) at the SAME case_id_v2 that the profiles captured",
-                                   "at least one high-confidence device-native evidence item per device",
-                                   "cover matrix paths, scatter/indexing, runtime loops, gathered staging and cache policy",
+    json.dump({"figure": "fig_rq2_cross_device_diagnosis", "max_cases": 3, "selected": RQ2_CASES, "not_selected": NOT_SELECTED,
+               "selection_rules": ["three distinct mechanisms (matrix operand delivery, indexing overhead, memory access and latency hiding), "
+                                   "not the three largest speedup gaps",
+                                   "formal latency only (benchmark_cases_normalized) at the SAME case_id_v2 that the profiles captured",
+                                   "full (not reduced) NCU reports for every NVIDIA DSL shown, plus MI300X static ISA or kernel trace",
+                                   "each case shows a change across devices (RQ2), with its confounders stated",
                                    "no cross-vendor numeric counter axis"]},
               open(out / "rq2_case_selection.json", "w"), indent=1)
     print("evidence rows", len(ev), "missing", sum(1 for e in ev if e["confidence"] == "missing"), "path cells", len(mat))

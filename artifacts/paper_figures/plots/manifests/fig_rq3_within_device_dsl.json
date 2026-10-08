@@ -2,7 +2,7 @@
  "figure": "fig_rq3_within_device_dsl",
  "rq": "RQ3",
  "script": "scripts/paper_figures/plot_rq3.py",
- "source_git_commit": "63b6f692c5c5eddf28f30e0cd01b6a41a31ac264",
+ "source_git_commit": "ae5fd54094261ba387f12730ca5fd42c9b053ca4",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
@@ -12,7 +12,7 @@
  "aggregation_order": [
   "geometric mean over matched input cases within an operator"
  ],
- "winner_definition": "per operator, the DSL with the lowest GM latency over the matched cases; 'within 5%' = runner-up / winner <= 1.05 (no uncertainty analysis; near parity is not significant)",
+ "winner_definition": "per operator, the DSL with the lowest GM latency over the matched cases; numerical winner, no uncertainty analysis. 'winner_within_5pct' (runner-up / winner <= 1.05) is recorded here and reported in the caption, not drawn",
  "axes": {
   "x": "cuTile/Triton latency ratio (log2)",
   "y": "TileLang/Triton latency ratio (log2)",
@@ -121,7 +121,10 @@
  "excluded_cases": {
   "invalid_or_missing_rows": 0
  },
- "selection_criteria": "all 45 operators; labels on the 7 operators farthest from (1x, 1x) per panel",
+ "selection_criteria": "all 45 operators; labels on operators at least 2x from Triton on either axis",
+ "algorithm_differences": {
+  "histogramming": "TileLang privatizes the histogram in shared memory; Triton and cuTile update global partial rows atomically"
+ },
  "labelled_operators": {
   "B200": [
    "1d_conv",
@@ -130,7 +133,9 @@
    "2d_conv",
    "block_sparse_attention",
    "linear_self_attention",
-   "flash_decode"
+   "flash_decode",
+   "streamk_matmul",
+   "destindex"
   ],
   "GH200": [
    "1d_conv",
@@ -139,7 +144,8 @@
    "histogramming",
    "flash_decode",
    "linear_self_attention",
-   "matmul_fp32_fp16_fp8"
+   "matmul_fp32_fp16_fp8",
+   "block_sparse_attention"
   ]
  },
  "winners": {
@@ -1101,33 +1107,34 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq3_within_device_dsl.pdf",
-   "sha256": "9fbde59dbba310b4aeb69f2faa9c9f9cd898261bcbaaf2563a9163639c24e57c"
+   "sha256": "6a11e97a1f9f052d5b7936dc9134ce1d757eef4606c74f90396d4b8e221bad03"
   },
   "svg": {
    "path": "main/fig_rq3_within_device_dsl.svg",
-   "sha256": "2fdde9021d69df273b489b170cd9ad954895be3260ab548ced924ba5b1300c1a"
+   "sha256": "bda6dd5f382d58edb6847f37447031680123e7b5c63818b75f2c3c68c0b3852f"
   },
   "png": {
    "path": "previews/fig_rq3_within_device_dsl.png",
-   "sha256": "376b56aac42d9f4c80fe75bffeb28a11e5860d09bee5924c0cf47b0c1a7143d1"
+   "sha256": "1bedb3aa38ba936e00ba17d7e0c4b7950558be1cc23b2b24641defd4f79d6675"
   }
  },
  "layout": {
-  "width_in": 7.0,
-  "height_in": 3.75,
-  "min_font_pt": 5.8,
-  "max_font_pt": 7.5,
-  "n_text_objects": 51,
+  "width_in": 6.3,
+  "height_in": 3.55,
+  "min_font_pt": 7.0,
+  "max_font_pt": 8.0,
+  "n_text_objects": 53,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
    "right": 0.0,
    "top": 0.0
-  }
+  },
+  "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "2f864de0944ad73284143dfd428c1340e8689a0b507f740b208f6debec678fce",
+  "scripts/paper_figures/plot_style.py": "19c6d4a084f347e58a111d1ee05e4755c1f86b7ac09eb6ffbda4ad6f11f13fcc",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq3.py": "3a08cc5e7c9b8e258c8b4a90a1056e1bb952fc78718430f92e4429581c407cac"
+  "scripts/paper_figures/plot_rq3.py": "0295fcb591df90a18d42533a551a61a38366fcc3fdc5a5d48efcc6ed5b210948"
  }
 }

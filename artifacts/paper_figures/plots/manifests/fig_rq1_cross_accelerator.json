@@ -2,7 +2,7 @@
  "figure": "fig_rq1_cross_accelerator",
  "rq": "RQ1",
  "script": "scripts/paper_figures/plot_rq1.py",
- "source_git_commit": "63b6f692c5c5eddf28f30e0cd01b6a41a31ac264",
+ "source_git_commit": "ae5fd54094261ba387f12730ca5fd42c9b053ca4",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
@@ -13,7 +13,16 @@
   "geometric mean over input cases within an operator",
   "geometric mean over operators (category or all 45)"
  ],
- "colour_scale": "diverging, log2(speedup) in [-2, 2] centred at 0 (1x)",
+ "colour_scale": "diverging, log2(speedup) in [-2, 2] centred at 0 (1x); printed values are not clipped",
+ "columns": [
+  "B200:triton",
+  "B200:cutile",
+  "B200:tilelang",
+  "GH200:triton",
+  "GH200:cutile",
+  "GH200:tilelang",
+  "MI300X:triton"
+ ],
  "case_coverage": {
   "B200:triton": 2200,
   "B200:cutile": 2200,
@@ -28,10 +37,10 @@
   "known_unsupported": {
    "MI300X/triton/matmul_fp32_fp16_fp8/fp8_e4m3fn": "UNSUPPORTED_DTYPE on gfx942 (FP8 there is E4M3FNUZ; the PyTorch reference rejects e4m3fn); no CSV row, no winner, no profile"
   },
-  "not_available": "cuTile and TileLang on MI300X (N/A cells, not zero)",
+  "not_shown": "cuTile and TileLang do not run on MI300X (no column)",
   "nki": "no finalized NKI results; not shown"
  },
- "selection_criteria": "all 45 operators; all supported device/DSL combinations; autotuned results",
+ "selection_criteria": "all 45 operators; the seven supported device/DSL combinations; autotuned results",
  "profiling_evidence_ids": [],
  "known_limitations": {
   "B200": [
@@ -107,20 +116,6 @@
    "n_operators": 12
   },
   {
-   "row": "Point-wise",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Point-wise",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "triton",
@@ -168,20 +163,6 @@
    "dsl": "triton",
    "speedup": 1.7120158698473464,
    "n_operators": 11
-  },
-  {
-   "row": "Reduction/Normalization",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Reduction/Normalization",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
   },
   {
    "row": "Matrix Multiplication/Attention",
@@ -233,20 +214,6 @@
    "n_operators": 8
   },
   {
-   "row": "Matrix Multiplication/Attention",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Matrix Multiplication/Attention",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
    "row": "Stencil/Convolution",
    "device": "B200",
    "dsl": "triton",
@@ -294,20 +261,6 @@
    "dsl": "triton",
    "speedup": 1.763954855813741,
    "n_operators": 6
-  },
-  {
-   "row": "Stencil/Convolution",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Stencil/Convolution",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
   },
   {
    "row": "Data Layout",
@@ -359,20 +312,6 @@
    "n_operators": 8
   },
   {
-   "row": "Data Layout",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Data Layout",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
    "row": "Overall",
    "device": "B200",
    "dsl": "triton",
@@ -420,138 +359,39 @@
    "dsl": "triton",
    "speedup": 1.270165835657553,
    "n_operators": 45
-  },
-  {
-   "row": "Overall",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Overall",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  }
- ],
- "na_cells": [
-  {
-   "row": "Point-wise",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Point-wise",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Reduction/Normalization",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Reduction/Normalization",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Matrix Multiplication/Attention",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Matrix Multiplication/Attention",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Stencil/Convolution",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Stencil/Convolution",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Data Layout",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Data Layout",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Overall",
-   "device": "MI300X",
-   "dsl": "cutile",
-   "speedup": null,
-   "n_operators": null
-  },
-  {
-   "row": "Overall",
-   "device": "MI300X",
-   "dsl": "tilelang",
-   "speedup": null,
-   "n_operators": null
   }
  ],
  "outputs": {
   "pdf": {
    "path": "main/fig_rq1_cross_accelerator.pdf",
-   "sha256": "86c421ccdf99e93839eacc6493e03ce41109329a8c47a687478e73ecbe581780"
+   "sha256": "c2f4e7688ccdef1ebc9aa48d9b926a6e61c44872c087cd64400207a6852145ea"
   },
   "svg": {
    "path": "main/fig_rq1_cross_accelerator.svg",
-   "sha256": "b3ba024e7af49330f99e45e7659577909e735571b5da73138ac4aa27ce5246cc"
+   "sha256": "e41e9a0388ef2e1e81404a51e02b66bff50ed7dd92e5a0cef6d5ee4115473e22"
   },
   "png": {
    "path": "previews/fig_rq1_cross_accelerator.png",
-   "sha256": "042792621095d9b61990e9a4f3734f49b2a42daf27fdc5927b43d87be3212ea9"
+   "sha256": "c0ececd15afaceb5d9b2fcba0525dbf200fa3630ec2b4a10fb68249a91ce2835"
   }
  },
  "layout": {
-  "width_in": 7.0,
-  "height_in": 2.3,
-  "min_font_pt": 6.0,
-  "max_font_pt": 7.5,
-  "n_text_objects": 78,
+  "width_in": 6.3,
+  "height_in": 2.2,
+  "min_font_pt": 7.0,
+  "max_font_pt": 8.0,
+  "n_text_objects": 64,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
    "right": 0.0,
    "top": 0.0
-  }
+  },
+  "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "2f864de0944ad73284143dfd428c1340e8689a0b507f740b208f6debec678fce",
+  "scripts/paper_figures/plot_style.py": "19c6d4a084f347e58a111d1ee05e4755c1f86b7ac09eb6ffbda4ad6f11f13fcc",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq1.py": "4c2353ff7c59f9c8a1320550be154a49ac53de523e77179c4262df337e032bda"
+  "scripts/paper_figures/plot_rq1.py": "1ec4d4260402c393e86e5376d52d66fd3c8182561f4211b6513ebc79694bc73f"
  }
 }

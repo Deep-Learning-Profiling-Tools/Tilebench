@@ -2,7 +2,7 @@
  "figure": "fig_a3_execution_paths",
  "rq": "Evaluation Appendix",
  "script": "scripts/paper_figures/plot_appendix.py",
- "source_git_commit": "63b6f692c5c5eddf28f30e0cd01b6a41a31ac264",
+ "source_git_commit": "ae5fd54094261ba387f12730ca5fd42c9b053ca4",
  "source_data_files": {
   "execution_path_matrix.csv": "5f2777971d8dd838674944ab34554d7e997411a2dce957284b96cf64aa9ec472"
  },
@@ -29,12 +29,24 @@
    "Only Triton (and the PyTorch reference) exist on MI300X."
   ]
  },
- "metric_formula": "categorical: matrix-instruction class, operand path, staging and flags derived from execution_paths.csv (NVIDIA dynamic opcode-with-modifier counts or static SASS; MI300X static ISA + source form)",
+ "metric_formula": "categorical: matrix-instruction family (colour), operand load path and on-chip staging (labels), derived from execution_paths.csv (NVIDIA dynamic opcode-with-modifier counts or static SASS; MI300X static ISA + source form)",
  "aggregation_order": [
   "union over the kernels (stages) of the profiled run"
  ],
  "selection_criteria": "15 representative operator/dtype pairs covering GEMM, attention, convolution, scatter, histogram, pooling and streaming",
- "evidence_semantics": "absence of a flag means it was not observed in the available evidence; static-only cells (dashed) show code paths present in the binary, not executed counts",
+ "evidence_semantics": "absence of a label or flag means it was not observed in the available evidence; static-only cells (dashed) show code present in the binary, not executed counts; TMA = UTMALDG operand loads only; atom.shared counts only > 64 shared atomics per CTA (tcgen05 TMEM-allocator bookkeeping excluded)",
+ "secondary_flags_table": {
+  "path": "tables/fig_a3_secondary_flags.csv",
+  "sha256": "379986a906201a2e712ef07d70449e6010e94f30bd1c1c95a26b4f2f08ab8cb1",
+  "columns": [
+   "spill",
+   "atom.global",
+   "atom.shared",
+   "atomic",
+   "ldsm/stsm",
+   "convert_layout"
+  ]
+ },
  "case_coverage": 105,
  "excluded_cases": {
   "MI300X matmul fp8": "unsupported"
@@ -1515,21 +1527,21 @@
  "outputs": {
   "pdf": {
    "path": "appendix/fig_a3_execution_paths.pdf",
-   "sha256": "794e08ad4b6f47125ae1db88c253c619191423b2dc6232d56f47094edd5cd6ed"
+   "sha256": "88d8531d1cf874c4680d1ff71efea27f6d59b982b4a1a9eb0af916034975d2ff"
   },
   "svg": {
    "path": "appendix/fig_a3_execution_paths.svg",
-   "sha256": "b87a2504020291d758e9ed6215b49b8fc053bc677268fd0d56a5dac9cbc8a68a"
+   "sha256": "e7af272361c7122bd0a2e6236ebe3b410d9f0f81994ab0a430a04cba4dba611d"
   },
   "png": {
    "path": "previews/fig_a3_execution_paths.png",
-   "sha256": "43e97bf9265b534e0ec4eb7be5a6df1cbf2c2211dd380417fef1943a1fdd4d4c"
+   "sha256": "07bc85a52adb4348d25141c388e519431c67f18b772852c74c5209694e02914e"
   }
  },
  "layout": {
-  "width_in": 7.0,
-  "height_in": 7.6,
-  "min_font_pt": 5.5,
+  "width_in": 6.3,
+  "height_in": 5.6,
+  "min_font_pt": 6.0,
   "max_font_pt": 7.0,
   "n_text_objects": 242,
   "content_overflow_in": {
@@ -1537,11 +1549,12 @@
    "bottom": 0.0,
    "right": 0.0,
    "top": 0.0
-  }
+  },
+  "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "2f864de0944ad73284143dfd428c1340e8689a0b507f740b208f6debec678fce",
+  "scripts/paper_figures/plot_style.py": "19c6d4a084f347e58a111d1ee05e4755c1f86b7ac09eb6ffbda4ad6f11f13fcc",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_appendix.py": "ef2dea723272dbafdeff44daff28a1c1379503ba2e7ffa4399bfff44707e24f9"
+  "scripts/paper_figures/plot_appendix.py": "a7181190478bca795a3b592a9d28644fd768e7ccbafc0e35252221349020b54e"
  }
 }

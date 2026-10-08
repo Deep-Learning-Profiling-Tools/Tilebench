@@ -1,7 +1,8 @@
-"""QA for the paper figure drafts (CPU only; reads artifacts/paper_figures/{combined,plots}, never the device packages' raw data).
+"""QA for the paper figure drafts (CPU only; reads artifacts/paper_figures/{combined,plots} and, for counter attribution, the
+NVIDIA/AMD packages' derived tables; never a raw report).
 
 Every plotted number is recomputed here from benchmark_cases_normalized.csv.gz / figure_evidence.csv WITHOUT the
-figure_data.Data helper, then compared with the figure manifests and with the text actually rendered into the SVGs.
+figure_data.Data helper, then compared with the figure manifests and with the text rendered into the SVGs.
 Writes plots/qa_plots.json; exits 1 if any check fails.
 
   python scripts/paper_figures/validate_plots.py [--skip-reproducibility]
@@ -27,19 +28,28 @@ PF = REPO / "artifacts" / "paper_figures"
 COMBINED, PLOTS = PF / "combined", PF / "plots"
 csv.field_size_limit(1 << 30)
 
-FIGURES = {  # name -> (subdir, design width in inches)
-    "fig_rq1_cross_accelerator": ("main", 7.0), "fig_rq2_cross_device_diagnosis": ("main", 7.0),
-    "fig_rq3_within_device_dsl": ("main", 7.0), "fig_a1_performance_atlas": ("appendix", 7.0),
-    "fig_a2_shape_dtype": ("appendix", 7.0), "fig_a3_execution_paths": ("appendix", 7.0),
-    "fig_a4_within_device_matrix": ("appendix", 3.35), "fig_a5_profiling_evidence": ("appendix", 7.0)}
-ALLOWED_WIDTHS = (3.35, 7.0)
-MIN_FONT_PT, MIN_DPI = 5.5, 300
+ACL_TEXT_IN, ACL_COLUMN_IN = 6.30, 3.03          # acl.sty: A4, 2.5 cm margins, 0.6 cm column separation
+FIGURES = {  # name -> (subdir, design width in inches, minimum font in pt at that width)
+    "fig_rq1_cross_accelerator": ("main", ACL_TEXT_IN, 7.0), "fig_rq2_cross_device_diagnosis": ("main", ACL_TEXT_IN, 7.0),
+    "fig_rq3_within_device_dsl": ("main", ACL_TEXT_IN, 7.0), "fig_a1_performance_atlas": ("appendix", ACL_TEXT_IN, 6.0),
+    "fig_a2_shape_dtype": ("appendix", ACL_TEXT_IN, 6.0), "fig_a3_execution_paths": ("appendix", ACL_TEXT_IN, 6.0),
+    "fig_a4_within_device_matrix": ("appendix", ACL_TEXT_IN, 6.0), "fig_a5_profiling_evidence": ("appendix", ACL_TEXT_IN, 6.0)}
+MIN_DPI = 300
 FORMAL_ONLY = ("fig_rq1_cross_accelerator", "fig_rq3_within_device_dsl", "fig_a1_performance_atlas", "fig_a2_shape_dtype",
                "fig_a4_within_device_matrix")
 FORMAL_INPUTS = {"benchmark_cases_normalized.csv.gz", "category_mapping.csv", "comparison_manifest.json"}
 VENDOR = {"B200": "NVIDIA", "GH200": "NVIDIA", "MI300X": "AMD"}
 STATIC_KINDS = ("static", "static_isa", "static_sass", "static_isa+source", "launch_record+static_isa")
+DYNAMIC_NV_KINDS = ("ncu_counter", "dynamic_sass_count")
 SUPPORT = {"B200": ("triton", "cutile", "tilelang"), "GH200": ("triton", "cutile", "tilelang"), "MI300X": ("triton",)}
+RQ2_COUNTERS = {  # Figure 3 axis label -> (evidence metric, divisor)
+    "TMA load bytes (GB)": ("l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum", 1e9),
+    "Shared-memory stores (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STS*]", 1e6),
+    "Executed instructions (M)": ("smsp__inst_executed.sum", 1e6),
+    "Global store instructions (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STG*]", 1e6),
+    "L1 global-load sectors (M)": ("l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", 1e6),
+    "Achieved occupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0)}
+SCRIPTS = ["plot_style.py", "figure_data.py", "plot_rq1.py", "plot_rq2.py", "plot_rq3.py", "plot_appendix.py"]
 TOL = 1e-9
 
 results = []
@@ -73,10 +83,7 @@ def close(a, b):
 
 def svg_texts(p):
     body = Path(p).read_text()
-    out = []
-    for m in re.finditer(r"<text\b([^>]*)>(.*?)</text>", body, re.S):
-        out.append((re.sub(r"<[^>]+>", "", m.group(2)).strip(), m.group(1)))
-    return out
+    return [re.sub(r"<[^>]+>", "", m.group(2)).strip() for m in re.finditer(r"<text\b([^>]*)>(.*?)</text>", body, re.S)]
 
 
 def svg_font_sizes(p):
@@ -107,7 +114,6 @@ def walk_numbers(o):
             yield from walk_numbers(v)
 
 
-# ------------------------------------------------------------------------------------------- independent recomputation
 def load_formal():
     V = defaultdict(dict)       # (dev, dsl, op) -> {case_id_v2: (torch_ms, dsl_ms)}
     params = {}
@@ -129,8 +135,30 @@ def S_op(V, dev, dsl, op, ids=None):
 
 
 def matched(V, op, pairs):
-    sets = [set(V.get((d, s, op), {})) for d, s in pairs]
-    return sorted(set.intersection(*sets))
+    return sorted(set.intersection(*[set(V.get((d, s, op), {})) for d, s in pairs]))
+
+
+def winners(V, ops):
+    out = {}
+    for dev in ("B200", "GH200"):
+        cnt, near = Counter(), Counter()
+        for op in ops:
+            ids = matched(V, op, [(dev, s) for s in SUPPORT[dev]])
+            lat = {s: gm([V[(dev, s, op)][i][1] for i in ids]) for s in SUPPORT[dev]}
+            w = min(lat, key=lat.get)
+            cnt[w] += 1
+            near[w] += sorted(lat.values())[1] / lat[w] <= 1.05
+        out[dev] = (cnt, near)
+    return out
+
+
+def build_into(td):
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", PYTHONPATH=f"{REPO}:{HERE}", MPLBACKEND="Agg")
+    subprocess.run([sys.executable, str(HERE / "build_figure_evidence.py"), "--repo", str(REPO), "--out", f"{td}/combined"], check=True,
+                   env=env, capture_output=True)
+    code = ("import sys; sys.path.insert(0, %r); import plot_rq1, plot_rq2, plot_rq3, plot_appendix; o = %r; "
+            "plot_rq1.main(o); plot_rq2.main(o); plot_rq3.main(o); plot_appendix.main(o)") % (str(HERE), f"{td}/plots")
+    subprocess.run([sys.executable, "-c", code], check=True, env=env, capture_output=True)
 
 
 def main():
@@ -138,13 +166,13 @@ def main():
     ap.add_argument("--skip-reproducibility", action="store_true")
     a = ap.parse_args()
     M = {}
-    for name, (sub, width) in FIGURES.items():
+    for name, (sub, _, _) in FIGURES.items():
         mp = PLOTS / "manifests" / f"{name}.json"
         M[name] = json.load(open(mp)) if mp.exists() else None
 
-    # 1. outputs exist and match the manifest hashes
+    # 01. outputs exist and match the manifest hashes
     bad = []
-    for name, (sub, _) in FIGURES.items():
+    for name, (sub, _, _) in FIGURES.items():
         m = M[name]
         if m is None:
             bad.append(f"{name}: manifest missing")
@@ -158,36 +186,46 @@ def main():
     if bad:
         return finish()
 
-    # 2. physical size / resolution / canvas
+    # 02. regenerated by the current code (manifest code hashes == current scripts)
+    cur = {f"scripts/paper_figures/{f}": sha(HERE / f) for f in SCRIPTS}
+    bad = [f"{n}: {k}" for n in FIGURES for k, h in M[n]["code_sha256"].items() if cur.get(k, sha(REPO / k)) != h]
+    check("02.every_output_regenerated_by_current_code", not bad, "; ".join(bad[:5]) or "all manifests pin the current plotting code")
+
+    # 03. final ACL dimensions, resolution, canvas
     bad = []
-    for name, (sub, width) in FIGURES.items():
+    for name, (sub, width, _) in FIGURES.items():
         L = M[name]["layout"]
         w, h = pdf_size_in(PLOTS / sub / f"{name}.pdf")
-        if not (abs(w - width) < 0.01 and width in ALLOWED_WIDTHS and abs(h - L["height_in"]) < 0.01):
+        if not (abs(w - width) < 0.005 and abs(h - L["height_in"]) < 0.005):
             bad.append(f"{name}: pdf {w:.3f}x{h:.3f} in, expected width {width}")
         pw, ph = png_size_px(PLOTS / "previews" / f"{name}.png")
         if pw / width < MIN_DPI - 0.5 or ph / L["height_in"] < MIN_DPI - 0.5:
             bad.append(f"{name}: png {pw}x{ph} px < {MIN_DPI} dpi")
         if any(v > 0.0 for v in L["content_overflow_in"].values()):
             bad.append(f"{name}: content outside canvas {L['content_overflow_in']}")
-    check("02.width_3.35_or_7.0in_png_300dpi_no_content_outside_canvas", not bad, "; ".join(bad))
+    check("03.acl_width_6.30in_png_300dpi_no_content_outside_canvas", not bad, "; ".join(bad))
 
-    # 3. fonts: rendered sizes (from the SVG files) and embedding (PDF)
-    bad = []
-    for name, (sub, _) in FIGURES.items():
+    # 04. fonts at the final printed size (figures are drawn at the ACL width, so no scaling) and embedding
+    bad, mins = [], {}
+    for name, (sub, _, fmin) in FIGURES.items():
         sizes = svg_font_sizes(PLOTS / sub / f"{name}.svg")
-        if not sizes or min(sizes) < MIN_FONT_PT:
-            bad.append(f"{name}: min font {min(sizes) if sizes else None} pt")
+        mins[name] = min(sizes)
+        if min(sizes) < fmin:
+            bad.append(f"{name}: min font {min(sizes)} pt < {fmin}")
         pdf = (PLOTS / sub / f"{name}.pdf").read_bytes()
         if b"/Type3" in pdf or b"CIDFontType2" not in pdf:
             bad.append(f"{name}: PDF fonts not embedded as TrueType (Type 42)")
-    check("03.min_font_5.5pt_and_truetype_embedded", not bad, "; ".join(bad))
+    check("04.fonts_main>=7pt_appendix>=6pt_truetype_embedded", not bad, "; ".join(bad) or json.dumps(mins))
 
-    # 4. all plotted numbers finite
+    # 05. no text overlaps (rendered text boxes, recorded at save time; re-derived by the rebuilds in check 22)
+    bad = [f"{n}: {M[n]['layout']['text_overlaps'][:3]}" for n in FIGURES if M[n]["layout"]["text_overlaps"]]
+    check("05.no_text_label_overlap", not bad, "; ".join(bad))
+
+    # 06. all plotted numbers finite
     bad = [n for n in FIGURES if any(not math.isfinite(x) for x in walk_numbers(M[n]["plotted_values"]))]
-    check("04.plotted_values_finite", not bad, ", ".join(bad))
+    check("06.plotted_values_finite", not bad, ", ".join(bad))
 
-    # 5. source data unchanged since plotting (combined inputs, device packages, results CSVs)
+    # 07. original extraction artifacts and inputs unchanged
     bad = []
     for n in FIGURES:
         for f, h in M[n]["source_data_files"].items():
@@ -206,148 +244,127 @@ def main():
                          "results"], capture_output=True, text=True).stdout.strip()
     if st:
         bad.append("uncommitted changes under device packages/results: " + st.replace("\n", " | "))
-    check("05.source_data_unchanged", not bad, "; ".join(bad[:8]))
+    check("07.original_extraction_artifacts_unchanged", not bad, "; ".join(bad[:8]))
 
     V, cats, params = load_formal()
     ops = sorted(cats)
-
-    # 6. formal-latency figures use only the formal benchmark CSV (no profiler duration, no diagnostic latency)
-    bad = []
-    for n in FORMAL_ONLY:
-        if M[n]["profiling_evidence_ids"] or not set(M[n]["source_data_files"]) <= FORMAL_INPUTS:
-            bad.append(n)
     ev = {r["evidence_id"]: r for r in read_csv(COMBINED / "figure_evidence.csv")}
     profile_ids = {r["profile_id"] for r in read_csv(COMBINED / "profile_index_normalized.csv")}
-    EVIDENCE_FIGS = ("fig_rq2_cross_device_diagnosis", "fig_a5_profiling_evidence")   # A3 cites profile_ids instead
-    a5_axes = M["fig_a5_profiling_evidence"]["axes_evidence"]
-    dur = [i for ids in a5_axes.values() for i in ids if "time_duration" in ev[i]["metric_name"]]
-    diag_outside = [i for n in EVIDENCE_FIGS if n != "fig_a5_profiling_evidence" for i in M[n]["profiling_evidence_ids"]
-                    if ev[i]["measurement_kind"] == "diagnostic_experiment"]
-    diag_wrong_axis = [k for k, ids in a5_axes.items() if any(ev[i]["measurement_kind"] == "diagnostic_experiment" for i in ids) and "diagnostic" not in k]
-    a5_txt = " ".join(t for t, _ in svg_texts(PLOTS / "appendix" / "fig_a5_profiling_evidence.svg"))
-    check("06.no_profiler_or_diagnostic_latency_used_as_formal_latency",
-          not (bad or dur or diag_outside or diag_wrong_axis) and a5_txt.count("diagnostic run") >= 2,
-          f"formal-only violations {bad}; profiler durations {dur}; diagnostic outside A5 {diag_outside}; unlabeled diagnostic axes {diag_wrong_axis}")
+    rq2, a5 = M["fig_rq2_cross_device_diagnosis"], M["fig_a5_profiling_evidence"]
+    a5_axes = a5["axes_evidence"]
 
-    # 7. RQ1 recomputed + rendered labels + N/A cells (never zero)
+    # 08. formal latency only (no profiler duration, no diagnostic latency) in performance plots
+    bad = [n for n in FORMAL_ONLY if M[n]["profiling_evidence_ids"] or not set(M[n]["source_data_files"]) <= FORMAL_INPUTS]
+    dur = [i for n in ("fig_rq2_cross_device_diagnosis", "fig_a5_profiling_evidence") for i in M[n]["profiling_evidence_ids"]
+           if "time_duration" in ev[i]["metric_name"]]
+    check("08.no_profiler_duration_as_benchmark_latency", not bad and not dur, f"formal-only violations {bad}; profiler durations used {dur}")
+
+    # 09. RQ1 aggregation recomputed; exactly the seven supported columns; rendered labels
     m = M["fig_rq1_cross_accelerator"]
     bad, labels = [], Counter()
+    cols = {(c["device"], c["dsl"]) for c in m["plotted_values"]}
+    if cols != {(d, s) for d in SUPPORT for s in SUPPORT[d]}:
+        bad.append(f"columns {sorted(cols)}")
     for c in m["plotted_values"]:
         rows_ops = ops if c["row"] == "Overall" else [o for o in ops if cats[o] == c["row"]]
-        if c["dsl"] not in SUPPORT[c["device"]]:
-            exp = None
-        else:
-            exp = gm([S_op(V, c["device"], c["dsl"], o)[0] for o in rows_ops])
-        if not close(exp, c["speedup"]):
-            bad.append(f"{c['row']}/{c['device']}/{c['dsl']}: {c['speedup']} vs {exp}")
-        if exp is not None:
-            labels[f"{exp:.2f}"] += 1
-    t = Counter(x for x, _ in svg_texts(PLOTS / "main" / "fig_rq1_cross_accelerator.svg"))
-    miss = labels - t
-    na = sum(1 for c in m["plotted_values"] if c["speedup"] is None)
-    check("07.rq1_values_recomputed_labels_match_na_not_zero", not bad and not miss and t["N/A"] == na == 12,
-          f"value mismatches {bad[:3]}; labels missing in SVG {dict(miss)}; N/A cells {na}, N/A texts {t['N/A']}")
+        exp = gm([S_op(V, c["device"], c["dsl"], o)[0] for o in rows_ops])
+        if not close(exp, c["speedup"]) or c["n_operators"] != len(rows_ops):
+            bad.append(f"{c['row']}/{c['device']}/{c['dsl']}")
+        labels[f"{exp:.2f}"] += 1
+    miss = labels - Counter(svg_texts(PLOTS / "main" / "fig_rq1_cross_accelerator.svg"))
+    check("09.rq1_operator_balanced_gm_recomputed_7_columns_labels_match", not bad and not miss, f"mismatches {bad[:3]}; labels missing {dict(miss)}")
 
-    # 8. RQ3 recomputed (matched intersections, winners) + rendered winner text
+    # 10. RQ3 + A4: per-operator winners over the explicit three-DSL intersection; rendered winner text
     m = M["fig_rq3_within_device_dsl"]
+    W_ = winners(V, ops)
     bad = []
-    win = {}
     for p in m["plotted_values"]:
         dev, op = p["device"], p["operator"]
-        ids = matched(V, op, [(dev, "triton"), (dev, "cutile"), (dev, "tilelang")])
-        lat = {s: gm([V[(dev, s, op)][i][1] for i in ids]) for s in ("triton", "cutile", "tilelang")}
-        w = min(lat, key=lat.get)
-        ru = sorted(lat.values())[1] / lat[w]
-        win.setdefault(dev, Counter())[w] += 1
-        win.setdefault(dev + "_near", Counter())[w] += ru <= 1.05
+        ids = matched(V, op, [(dev, s) for s in SUPPORT[dev]])
+        lat = {s: gm([V[(dev, s, op)][i][1] for i in ids]) for s in SUPPORT[dev]}
         if not (len(ids) == p["n_cases"] > 0 and close(lat["cutile"] / lat["triton"], p["x_cutile_over_triton"])
-                and close(lat["tilelang"] / lat["triton"], p["y_tilelang_over_triton"]) and w == p["winner"]):
+                and close(lat["tilelang"] / lat["triton"], p["y_tilelang_over_triton"]) and min(lat, key=lat.get) == p["winner"]):
             bad.append(f"{dev}/{op}")
-    txt = " ".join(x for x, _ in svg_texts(PLOTS / "main" / "fig_rq3_within_device_dsl.svg"))
-    for dev in ("B200", "GH200"):
-        c, n = win[dev], win[dev + "_near"]
-        if f"Triton {c['triton']} · TileLang {c['tilelang']} · cuTile {c['cutile']}" not in txt or \
-                f"Triton {n['triton']} · TileLang {n['tilelang']} · cuTile {n['cutile']}" not in txt:
+    txt = " ".join(svg_texts(PLOTS / "main" / "fig_rq3_within_device_dsl.svg"))
+    for dev, (cnt, near) in W_.items():
+        if f"fastest: Triton {cnt['triton']}, TileLang {cnt['tilelang']}, cuTile {cnt['cutile']}" not in txt:
             bad.append(f"{dev} winner text")
-        if dict(c) != {k: v for k, v in m["winners"][dev]["counts"].items() if v}:
-            bad.append(f"{dev} winner counts")
-    check("08.rq3_values_recomputed_over_explicit_3dsl_intersection_winner_text_matches", not bad,
-          "; ".join(bad[:5]) or "B200 " + str(dict(win["B200"])) + ", GH200 " + str(dict(win["GH200"])))
+        if any(m["winners"][dev]["counts"][s] != cnt[s] or m["winners"][dev]["winner_within_5pct"][s] != near[s] for s in SUPPORT[dev]):
+            bad.append(f"{dev} winner counts in manifest")
+    for c in M["fig_a4_within_device_matrix"]["plotted_values"]:
+        dev, op = c["device"], c["operator"]
+        ids = matched(V, op, [(dev, s) for s in SUPPORT[dev]])
+        lat = {s: gm([V[(dev, s, op)][i][1] for i in ids]) for s in SUPPORT[dev]}
+        if not close(lat[c["dsl"]] / min(lat.values()), c["slowdown"]):
+            bad.append(f"A4 {dev}/{op}/{c['dsl']}")
+    check("10.per_operator_dsl_winners_correct_rq3_a4", not bad,
+          "; ".join(bad[:5]) or " | ".join(f"{d}: {dict(c)} (within 5%: {dict(n)})" for d, (c, n) in W_.items()))
 
-    # 9. A1 recomputed: per-op speedups and matched-case deltas (+ rendered labels)
+    # 11. A1 deltas over matched cases + A2 per-case values
     m = M["fig_a1_performance_atlas"]
     bad, labels = [], Counter()
     for c in m["plotted_values"]["left"]:
         exp = S_op(V, c["device"], c["dsl"], c["operator"])[0]
         if not close(exp, c["speedup"]):
-            bad.append(f"S {c}")
-        if exp is not None:
-            labels[f"{exp:.2f}"] += 1
+            bad.append(f"S {c['operator']}/{c['device']}/{c['dsl']}")
+        labels[f"{exp:.2f}"] += 1
     nm = m["case_coverage"]["right_matched_cases"]
     for c in m["plotted_values"]["right"]:
         ids = matched(V, c["operator"], [(c["from"], c["dsl"]), (c["to"], c["dsl"])])
-        exp = math.log2(S_op(V, c["to"], c["dsl"], c["operator"], ids)[0] / S_op(V, c["from"], c["dsl"], c["operator"], ids)[0]) if ids else None
+        exp = math.log2(S_op(V, c["to"], c["dsl"], c["operator"], ids)[0] / S_op(V, c["from"], c["dsl"], c["operator"], ids)[0])
         if not close(exp, c["delta_log2"]) or nm[f"{c['operator']}|{c['dsl']}|{c['to']}/{c['from']}"] != len(ids):
-            bad.append(f"Δ {c}")
-        if exp is not None:
-            labels[f"{2 ** exp:.2f}"] += 1
-    t = Counter(x for x, _ in svg_texts(PLOTS / "appendix" / "fig_a1_performance_atlas.svg"))
-    miss = labels - t
-    na_exp = sum(1 for c in m["plotted_values"]["left"] if c["speedup"] is None) + sum(1 for c in m["plotted_values"]["right"] if c["delta_log2"] is None)
-    check("09.a1_values_recomputed_deltas_over_matched_cases_labels_match", not bad and not miss and t["N/A"] == na_exp,
-          f"mismatches {bad[:3]}; missing labels {dict(list(miss.items())[:5])}; N/A {t['N/A']} vs {na_exp}")
-
-    # 10. A2 per-case values + A4 slowdowns recomputed
-    bad = []
+            bad.append(f"Δ {c['operator']}/{c['dsl']}/{c['to']}")
+        labels[f"{2 ** exp:.2f}"] += 1
+    miss = labels - Counter(svg_texts(PLOTS / "appendix" / "fig_a1_performance_atlas.svg"))
     for c in M["fig_a2_shape_dtype"]["plotted_values"]:
         tv = V[(c["device"], c["dsl"], c["operator"])].get(c["case_id_v2"])
         if tv is None or not close(tv[0] / tv[1], c["speedup"]) or params[c["case_id_v2"]] != (c["operator"], c["dtype"]):
             bad.append(f"A2 {c['operator']}/{c['dtype']}/{c['device']}/{c['dsl']}")
-    m = M["fig_a4_within_device_matrix"]
-    for dev in ("B200", "GH200"):
-        for op in ops:
-            ids = matched(V, op, [(dev, s) for s in SUPPORT[dev]])
-            lat = {s: gm([V[(dev, s, op)][i][1] for i in ids]) for s in SUPPORT[dev]}
-            best = min(lat.values())
-            if m["case_coverage"][f"{op}|{dev}"] != len(ids):
-                bad.append(f"A4 coverage {op}|{dev}")
-            for c in m["plotted_values"]:
-                if c["operator"] == op and c["device"] == dev and not close(lat[c["dsl"]] / best, c["slowdown"]):
-                    bad.append(f"A4 {op}/{dev}/{c['dsl']}")
-    check("10.a2_case_values_and_a4_slowdowns_recomputed", not bad, "; ".join(bad[:5]))
+    check("11.cross_device_deltas_over_matched_case_id_v2_a1_a2", not bad and not miss, f"{bad[:4]}; missing labels {dict(list(miss.items())[:4])}")
 
-    # 11. RQ2 panel A: formal latency at ONE case_id_v2 per case (same on every device, = the profiled case)
-    m = M["fig_rq2_cross_device_diagnosis"]
+    # 12. Figure 3: one profiled case_id_v2 per case on every device; formal latency at that case
     bad = []
-    by = defaultdict(set)
     prof = defaultdict(set)
     for r in read_csv(COMBINED / "profile_index_normalized.csv"):
         prof[(r["device"], r["dsl"], r["operator"], r["dtype"])].add(r["case_id_v2"])
-    for c in m["plotted_values"]:
+    by = defaultdict(set)
+    for c in rq2["plotted_values"]["speedup"]:
         op, dt = c["case"].split("/")
-        if c["dsl"] not in SUPPORT[c["device"]]:
-            continue
         by[c["case"]].add(c["case_id_v2"])
         tv = V[(c["device"], c["dsl"], op)].get(c["case_id_v2"])
-        if c["speedup"] is None:
-            if tv is not None:
-                bad.append(f"{c['case']}/{c['device']}/{c['dsl']} has data but plotted as missing")
-            continue
-        if tv is None or not close(tv[0] / tv[1], c["speedup"]) or tv != (c["torch_ms"], c["dsl_ms"]):
-            bad.append(f"{c['case']}/{c['device']}/{c['dsl']}")
+        if tv is None or tv != (c["torch_ms"], c["dsl_ms"]) or not close(tv[0] / tv[1], c["speedup"]):
+            bad.append(f"{c['case']}/{c['device']}/{c['dsl']} latency")
         if c["case_id_v2"] not in prof[(c["device"], c["dsl"], op, dt)]:
             bad.append(f"{c['case']}/{c['device']}/{c['dsl']} not the profiled case")
     multi = [k for k, v in by.items() if len(v) != 1]
-    check("11.rq2_formal_speedup_at_single_profiled_case_id_v2", not bad and not multi, f"{bad[:4]} multi-id cases {multi}")
+    sel = json.load(open(COMBINED / "rq2_case_selection.json"))
+    if [s["case"] for s in sel["selected"]] != ["matmul_fp32_fp16_fp8/fp32", "destindex/int8", "1d_conv/fp16"] or len(by) != 3:
+        bad.append("Figure 3 must show exactly the three mechanism cases")
+    check("12.fig3_exact_profiled_case_formal_latency", not bad and not multi, f"{bad[:4]} multi-id {multi}")
 
-    # 12. evidence values equal figure_evidence.csv; A5 axes vendor-homogeneous and never mix static with dynamic
+    # 13. device-native counter units and denominators (Figure 3 bars and A5 panel A) recomputed from figure_evidence.csv
     bad = []
-    for n in EVIDENCE_FIGS:
-        for i in M[n]["profiling_evidence_ids"]:
-            if i not in ev:
-                bad.append(f"{n}: unknown evidence {i}")
+    for case, metrics in rq2["plotted_values"]["counters"].items():
+        for lab, vals in metrics.items():
+            if lab == "speedup":
+                continue
+            metric, div = RQ2_COUNTERS[lab]
+            for k, v in vals.items():
+                dev, dsl = k.split(":")
+                r = ev[f"rq2:{case}:{dev}:{dsl}:{metric}"]
+                if VENDOR[dev] != "NVIDIA" or r["measurement_kind"] not in DYNAMIC_NV_KINDS or not close(float(r["value"]) / div, v):
+                    bad.append(f"{case} {lab} {k}")
+    ax_a = [ev[i] for i in a5_axes["A_nvidia_dynamic_instruction_ratio"]]
+    if {(r["metric_name"], r["measurement_kind"]) for r in ax_a} != {("smsp__inst_executed.sum", "ncu_counter")}:
+        bad.append("A5 panel A ratio built from different counters")
+    check("13.counter_units_and_denominators_recomputed", not bad, "; ".join(bad[:5]) or "Figure 3 bars and A5 panel A")
+
+    # 14. no cross-vendor numeric axis; static and dynamic counts never share an axis; evidence traceable
+    bad = []
+    for n in ("fig_rq2_cross_device_diagnosis", "fig_a5_profiling_evidence"):
+        bad += [f"{n}: unknown evidence {i}" for i in M[n]["profiling_evidence_ids"] if i not in ev]
     bad += [f"A3: unknown profile {i}" for i in M["fig_a3_execution_paths"]["profiling_evidence_ids"] if i not in profile_ids]
-    for r in M["fig_a5_profiling_evidence"]["plotted_values"]:
+    for r in a5["plotted_values"]:
         if ev[r["evidence_id"]] != r:
             bad.append(f"A5 value differs {r['evidence_id']}")
     for axis, ids in a5_axes.items():
@@ -357,71 +374,137 @@ def main():
             bad.append(f"{axis}: vendors {vend}")
         if kinds & set(STATIC_KINDS) and kinds - set(STATIC_KINDS):
             bad.append(f"{axis}: static+dynamic {kinds}")
-    ax_a = [ev[i] for i in a5_axes["A_nvidia_dynamic_instruction_ratio"]]
-    if {(r["metric_name"], r["measurement_kind"]) for r in ax_a} != {("smsp__inst_executed.sum", "ncu_counter")}:
-        bad.append("A5 panel A ratio built from different counters")
-    check("12.evidence_traceable_no_cross_vendor_axis_no_static_dynamic_mix", not bad, "; ".join(bad[:5]) or
+    if M["fig_a3_execution_paths"]["plotted_values"] != read_csv(COMBINED / "execution_path_matrix.csv"):
+        bad.append("A3 cells differ from execution_path_matrix.csv")
+    check("14.no_cross_vendor_axis_static_dynamic_distinct", not bad, "; ".join(bad[:5]) or
           ", ".join(f"{k}:{sorted({VENDOR[ev[i]['device']] for i in v})}" for k, v in a5_axes.items()))
 
-    # 13. missing evidence drawn as 'n/c', never as a zero bar
-    a5 = M["fig_a5_profiling_evidence"]
+    # 15. MI300X diagnostic latency only in A5, on axes and titles labelled 'diagnostic'
+    diag_out = [i for i in rq2["profiling_evidence_ids"] if ev[i]["measurement_kind"] == "diagnostic_experiment"]
+    diag_axes = [k for k, ids in a5_axes.items() if any(ev[i]["measurement_kind"] == "diagnostic_experiment" for i in ids)]
+    t5 = svg_texts(PLOTS / "appendix" / "fig_a5_profiling_evidence.svg")
+    ok = not diag_out and all("diagnostic" in k for k in diag_axes) and sum("(diagnostic)" in t for t in t5) >= len(diag_axes) == 2
+    check("15.mi300x_diagnostic_latency_labelled_separately", ok, f"diagnostic axes {diag_axes}; in Figure 3: {diag_out}")
+
+    # 16. cache-modifier names: Triton modifiers vs emitted gfx942 bits, from the source experiment records
+    exp = {r["variant"]: r for r in read_csv(PF / "amd" / "MI300X" / "diagnostic_experiments.csv")
+           if r["experiment_id"] == "cache_modifier_ablation_fp32"}
+
+    def isa(v):
+        ld, stv = exp[v]["other_configuration_changes"].split("emitted VMEM: ")[1].split(" | ")
+        return ld.strip(), stv.strip()
+    bad = []
+    if not isa("load.cg_store(default)")[0].endswith("sc0 nt") or isa("load.cg_store(default)")[1].endswith("nt"):
+        bad.append(".cg load must emit 'sc0 nt' on loads only")
+    if not isa("load(default)_store.cs")[1].endswith("sc0 nt") or isa("load(default)_store.cs")[0].endswith("nt"):
+        bad.append(".cs store must emit 'sc0 nt' on stores only")
+    if isa("load(default)_store.cg") != isa("load(default)_store(default)"):
+        bad.append(".cg store should leave the ISA unchanged")
+    conf = a5["confounders"]["MI300X vector_add"]
+    for s_ in (".cs -> sc0 nt", ".wt -> sc0 sc1", ".cg -> no ISA change"):
+        if s_ not in conf:
+            bad.append(f"manifest lacks '{s_}'")
+    if any(re.search(r"\bst\.cg\b|\bld\.cs\b", t) for t in t5):
+        bad.append("figure text names a store .cg / load .cs modifier")
+    if not any(".cg loads" in t for t in t5):
+        bad.append("A5 legend lacks '.cg loads'")
+    check("16.cache_modifier_names_match_emitted_isa", not bad, "; ".join(bad) or "ld.cg -> loads sc0 nt; st.cs -> stores sc0 nt; st.cg -> unchanged")
+
+    # 17. STS/WGMMA attribution: same profile, single launch, both dynamic warp-level; recomputed from instruction_mix.csv
+    bad = []
+    mix = defaultdict(list)
+    for r in read_csv(PF / "nvidia" / "GH200" / "instruction_mix.csv"):
+        mix[r["profile_id"]].append(r)
+    for i in a5_axes["B_gh200_sts_per_wgmma"]:
+        r = ev[i]
+        rows = mix[r["profile_id"]]
+        if len({x["launch_id"] for x in rows}) != 1:
+            bad.append(f"{r['profile_id']}: several launches")
+        if "[STS*]" in r["metric_name"]:
+            v = sum(int(float(x["count"])) for x in rows if x["count_kind"] == "dynamic_warp_inst_executed_with_modifier"
+                    and (x["instruction_name"] == "STS" or x["instruction_name"].startswith("STS.")))
+        else:
+            v = sum(int(float(x["count"])) for x in rows if x["count_kind"] == "dynamic_warp_inst_executed_family_total" and x["instruction_family"] == "wgmma")
+        if v != int(float(r["value"])) or r["measurement_kind"] != "dynamic_sass_count":
+            bad.append(f"{i}: {v} vs {r['value']}")
+    fp8 = [ev[i] for i in a5_axes["B_gh200_sts_per_wgmma"] if ev[i]["case"].endswith("fp8_e4m3fn") and ev[i]["dsl"] == "cutile"]
+    ratio = float(next(r["value"] for r in fp8 if "[STS*]" in r["metric_name"])) / float(next(r["value"] for r in fp8 if "wgmma" in r["metric_name"]))
+    check("17.sts_per_wgmma_same_launch_dynamic_warp_level", not bad, "; ".join(bad[:4]) or f"GH200 FP8 cuTile = {ratio:.2f} STS per WGMMA")
+
+    # 18. histogramming algorithm caveat (TileLang shared-memory privatization) in Figure 4 and its caption
+    caps = (PLOTS / "figure_captions.md").read_text() if (PLOTS / "figure_captions.md").exists() else ""
+    t4 = svg_texts(PLOTS / "main" / "fig_rq3_within_device_dsl.svg")
+    ok = ("histogramming" in M["fig_rq3_within_device_dsl"].get("algorithm_differences", {}) and "histogramming†" in t4
+          and re.search(r"histogramming[^.]*shared memory", caps, re.S) is not None)
+    check("18.histogramming_algorithm_caveat", ok, "marker + manifest + caption")
+
+    # 19. missing counters shown as missing (n/c), never as zero
     axis_rows = [ev[i] for ids in a5_axes.values() for i in ids]
     missing = [r for r in axis_rows if r["value"] in ("", None)]
     zeros = [r["evidence_id"] for r in axis_rows if r["value"] not in ("", None) and float(r["value"]) == 0.0]
-    nc = sum(1 for x, _ in svg_texts(PLOTS / "appendix" / "fig_a5_profiling_evidence.svg") if x == "n/c")
-    check("13.missing_evidence_shown_as_nc_not_zero", nc >= len(missing) > 0,
-          f"{len(missing)} missing evidence rows, {nc} 'n/c' labels; genuine measured zeros: {zeros}")
+    nc = sum(1 for x in t5 if x == "n/c")
+    check("19.missing_counters_shown_as_missing_not_zero", nc >= len(missing) > 0,
+          f"{len(missing)} missing evidence rows, {nc} 'n/c' labels; measured zeros (genuine): {len(zeros)}")
 
-    # 14. A3 cells reproduce execution_path_matrix.csv; static-only cells are listed as such
-    rows = read_csv(COMBINED / "execution_path_matrix.csv")
-    a3 = M["fig_a3_execution_paths"]["plotted_values"]
-    st = [r for r in a3 if r["evidence_kind"] in STATIC_KINDS]
-    check("14.a3_cells_equal_execution_path_matrix", a3 == rows, f"{len(a3)} cells, {len(st)} static-only (dashed)")
-
-    # 15. scope: no NKI, no RQ4 numbers, no placeholder figures
+    # 20. captions and LaTeX snippets reference every figure; caption numbers match the data
     bad = []
-    for n in FIGURES:
-        txt = " ".join(x for x, _ in svg_texts(PLOTS / FIGURES[n][0] / f"{n}.svg"))
+    tex = (PLOTS / "latex" / "figures.tex").read_text() if (PLOTS / "latex" / "figures.tex").exists() else ""
+    for n, (sub, _, _) in FIGURES.items():
+        if f"`{sub}/{n}`" not in caps:
+            bad.append(f"caption missing for {n}")
+        if f"{sub}/{n}.pdf" not in tex:
+            bad.append(f"LaTeX snippet missing for {n}")
+    for c in M["fig_rq1_cross_accelerator"]["plotted_values"]:
+        if c["row"] == "Overall" and f"{c['speedup']:.2f}" not in caps:
+            bad.append(f"RQ1 overall {c['device']}/{c['dsl']} not in caption")
+    for dev, (cnt, near) in W_.items():
+        if f"{dev}: Triton {cnt['triton']}, TileLang {cnt['tilelang']}, cuTile {cnt['cutile']}" not in caps:
+            bad.append(f"RQ3 {dev} counts not in caption")
+        if f"{dev}: {near['triton']}, {near['tilelang']} and {near['cutile']}" not in caps:
+            bad.append(f"RQ3 {dev} within-5% counts not in caption")
+    check("20.captions_and_latex_reference_every_figure_numbers_match", not bad, "; ".join(bad[:6]))
+
+    # 21. scope: no NKI, no RQ4 numbers, no unexpected figure files; top manifest consistent
+    bad = []
+    for n, (sub, _, _) in FIGURES.items():
+        txt = " ".join(svg_texts(PLOTS / sub / f"{n}.svg"))
         if re.search(r"\bNKI\b|Trainium|trn2", txt) or re.search(r'"(nki|trn2)"', json.dumps(M[n]["plotted_values"])):
             bad.append(n)
     extra = sorted(p.name for p in PLOTS.rglob("*") if p.is_file() and p.suffix in (".pdf", ".svg", ".png") and p.stem not in FIGURES)
-    top = PLOTS / "plot_manifest.json"
-    todo_ok = True
+    top, ok = PLOTS / "plot_manifest.json", True
     if top.exists():
         tm = json.load(open(top))
         todo = [f for f in tm["figures"] if f.get("status") == "todo"]
-        todo_ok = {f["id"] for f in todo} == {"fig5_rq4_llm", "appendix_llm"} and all("outputs" not in f for f in todo)
+        ok = {f["id"] for f in todo} == {"fig5_rq4_llm", "appendix_llm"} and all("outputs" not in f for f in todo)
         for f in tm["figures"]:
             if f.get("status") == "generated":
-                for ext, o in f["outputs"].items():
-                    if sha(PLOTS / o["path"]) != o["sha256"]:
-                        todo_ok = False
-    check("15.no_nki_no_rq4_numbers_no_extra_figures_top_manifest_consistent", not bad and not extra and todo_ok,
-          f"NKI in {bad}; unexpected files {extra}; top manifest {'ok' if todo_ok else 'inconsistent'}")
+                ok &= all(sha(PLOTS / o["path"]) == o["sha256"] for o in f["outputs"].values())
+    check("21.no_nki_no_rq4_numbers_no_extra_figures_top_manifest", not bad and not extra and ok,
+          f"NKI in {bad}; unexpected files {extra}; top manifest {'ok' if ok else 'inconsistent'}")
 
-    # 16. reproducibility: regenerate everything into a temp dir and compare hashes
+    # 22. reproducibility: two independent rebuilds into temp dirs, byte-identical to each other and to the committed outputs
     if a.skip_reproducibility:
-        results.append({"check": "16.reproducible_byte_identical", "status": "skipped", "detail": "--skip-reproducibility"})
-        print("[SKIP] 16.reproducible_byte_identical")
+        results.append({"check": "22.two_rebuilds_byte_identical", "status": "skipped", "detail": "--skip-reproducibility"})
+        print("[SKIP] 22.two_rebuilds_byte_identical")
     else:
-        with tempfile.TemporaryDirectory() as td:
-            env = dict(os.environ, CUDA_VISIBLE_DEVICES="", PYTHONPATH=f"{REPO}:{HERE}", MPLBACKEND="Agg")
-            py = sys.executable
-            subprocess.run([py, str(HERE / "build_figure_evidence.py"), "--repo", str(REPO), "--out", f"{td}/combined"], check=True,
-                           env=env, capture_output=True)
-            code = ("import sys; sys.path.insert(0, %r); import plot_rq1, plot_rq2, plot_rq3, plot_appendix; o = %r; "
-                    "plot_rq1.main(o); plot_rq2.main(o); plot_rq3.main(o); plot_appendix.main(o)") % (str(HERE), f"{td}/plots")
-            subprocess.run([py, "-c", code], check=True, env=env, capture_output=True)
-            diff = [f for f in ("figure_evidence.csv", "execution_path_matrix.csv", "rq2_case_selection.json")
-                    if sha(f"{td}/combined/{f}") != sha(COMBINED / f)]
-            for name, (sub, _) in FIGURES.items():
-                for rel in (f"{sub}/{name}.pdf", f"{sub}/{name}.svg", f"previews/{name}.png"):
-                    if sha(f"{td}/plots/{rel}") != sha(PLOTS / rel):
-                        diff.append(rel)
-                a_, b_ = json.load(open(f"{td}/plots/manifests/{name}.json")), M[name]
-                if a_["plotted_values"] != b_["plotted_values"]:
-                    diff.append(f"{name}.json plotted_values")
-        check("16.reproducible_byte_identical", not diff, f"differs: {diff}" if diff else "3 evidence files + 24 figure files + plotted values identical")
+        diff = []
+        with tempfile.TemporaryDirectory() as t1, tempfile.TemporaryDirectory() as t2:
+            build_into(t1)
+            build_into(t2)
+            for f in ("figure_evidence.csv", "execution_path_matrix.csv", "rq2_case_selection.json"):
+                if not (sha(f"{t1}/combined/{f}") == sha(f"{t2}/combined/{f}") == sha(COMBINED / f)):
+                    diff.append(f)
+            rels = [f"{sub}/{n}.{e}" for n, (sub, _, _) in FIGURES.items() for e in ("pdf", "svg")] + [f"previews/{n}.png" for n in FIGURES]
+            rels.append("tables/fig_a3_secondary_flags.csv")
+            for rel in rels:
+                if not (sha(f"{t1}/plots/{rel}") == sha(f"{t2}/plots/{rel}") == sha(PLOTS / rel)):
+                    diff.append(rel)
+            for n in FIGURES:
+                x1, x2 = json.load(open(f"{t1}/plots/manifests/{n}.json")), json.load(open(f"{t2}/plots/manifests/{n}.json"))
+                if not (x1["plotted_values"] == x2["plotted_values"] == M[n]["plotted_values"] and x1["layout"] == x2["layout"] == M[n]["layout"]):
+                    diff.append(f"{n}.json")
+        check("22.two_rebuilds_byte_identical", not diff, f"differs: {diff}" if diff else
+              f"2 rebuilds: 3 evidence files + {len(rels)} figure/table files + plotted values and layout identical")
     return finish()
 
 

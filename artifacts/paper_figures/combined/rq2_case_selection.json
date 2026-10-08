@@ -1,6 +1,6 @@
 {
  "figure": "fig_rq2_cross_device_diagnosis",
- "max_cases": 6,
+ "max_cases": 3,
  "selected": [
   {
    "case": "matmul_fp32_fp16_fp8/fp32",
@@ -10,17 +10,12 @@
     "triton",
     "cutile"
    ],
-   "why": "largest cross-device reversal of the cuTile/Triton ranking (B200 cuTile faster, GH200 slower) with dynamic WGMMA/STS/LDSM counts; MI300X descriptor lowering traced (M1) with a controlled descriptor-vs-pointer experiment"
-  },
-  {
-   "case": "block_sparse_attention/fp16",
-   "operator": "block_sparse_attention",
-   "dtype": "fp16",
-   "dsls": [
-    "triton",
-    "cutile"
-   ],
-   "why": "cuTile gap shrinks from B200 to GH200 together with its shared-memory footprint; MI300X Triton descriptor + 512-register/scratch kernel (M1, traced)"
+   "mechanism": "matrix operand delivery",
+   "why": "the cuTile/Triton ranking reverses between B200 and GH200; dynamic TMA bytes and shared-memory store counts differ by device; MI300X lowers the same TensorDescriptor source to 32-bit pointer loads (static ISA) with a diagnostic pointer-load variant",
+   "caveats": [
+    "Triton reads a transposed B copy prepared outside the timed region; cuTile loads B as [K, N]",
+    "cuTile winner tile differs (256x256x64 on B200, 128x128x32 on GH200) and cuda-tile differs (1.3.0 vs 1.5.0)"
+   ]
   },
   {
    "case": "destindex/int8",
@@ -30,17 +25,11 @@
     "triton",
     "cutile"
    ],
-   "why": "architecture-invariant scatter lowering on NVIDIA (sectors/request); the same non-vectorized scatter appears for Triton on MI300X (static ISA, M5 traced)"
-  },
-  {
-   "case": "flash_decode/fp32",
-   "operator": "flash_decode",
-   "dtype": "fp32",
-   "dsls": [
-    "triton",
-    "cutile"
-   ],
-   "why": "16-CTA/WG runtime loop on every device; cuTile instruction expansion persists while its stall composition differs (no GH200 dependency-chain claim)"
+   "mechanism": "indexing overhead",
+   "why": "identical store sectors but 16x more (byte-wide) store instructions and ~17x more instructions for cuTile on both NVIDIA devices; Triton keeps 128-bit stores on NVIDIA but compiles to per-lane byte stores on MI300X (static ISA)",
+   "caveats": [
+    "the PyTorch baseline (ATen index_copy) differs between vendors"
+   ]
   },
   {
    "case": "1d_conv/fp16",
@@ -50,25 +39,25 @@
     "triton",
     "tilelang"
    ],
-   "why": "TileLang gathered staging stays uncoalesced on both NVIDIA devices; MI300X Triton is VALU-bound on index math while its PyTorch baseline pays MIOpen transposes (baseline effect)"
-  },
-  {
-   "case": "vector_add/fp32",
-   "operator": "vector_add",
-   "dtype": "fp32",
-   "dsls": [
-    "triton"
-   ],
-   "why": "parity on NVIDIA but a streaming cache-policy gap on MI300X (ATT-traced nt loads in ATen; controlled cache-modifier ablation)"
+   "mechanism": "memory access and latency hiding",
+   "why": "TileLang touches 7-10x more L1 load sectors than Triton with the same 16-bit load width and DRAM traffic, at lower occupancy and issue activity; on MI300X Triton's speedup rises because the PyTorch baseline runs MIOpen implicit GEMM plus layout transposes",
+   "caveats": [
+    "TileLang uses a different kernel body on Hopper",
+    "the MI300X change is a baseline (PyTorch path) effect"
+   ]
   }
  ],
  "not_selected": {
-  "weight_dequant/bf16": "GH200 Triton instruction inflation is attributable to a different autotuned winner (config effect, not architecture); kept for Figure A5 as a confounder example"
+  "weight_dequant/bf16": "GH200 Triton instruction inflation is attributable to a different autotuned winner (config effect, not architecture); kept for Figure A5 as a confounder example",
+  "block_sparse_attention/fp16": "moved to the appendix (A3 execution paths); evidence kept as 'supporting' rows",
+  "flash_decode/fp32": "moved to the appendix (A5 instruction expansion); evidence kept as 'supporting' rows",
+  "vector_add/fp32": "moved to the appendix (A5 MI300X load policy); evidence kept as 'supporting' rows"
  },
  "selection_rules": [
+  "three distinct mechanisms (matrix operand delivery, indexing overhead, memory access and latency hiding), not the three largest speedup gaps",
   "formal latency only (benchmark_cases_normalized) at the SAME case_id_v2 that the profiles captured",
-  "at least one high-confidence device-native evidence item per device",
-  "cover matrix paths, scatter/indexing, runtime loops, gathered staging and cache policy",
+  "full (not reduced) NCU reports for every NVIDIA DSL shown, plus MI300X static ISA or kernel trace",
+  "each case shows a change across devices (RQ2), with its confounders stated",
   "no cross-vendor numeric counter axis"
  ]
 }

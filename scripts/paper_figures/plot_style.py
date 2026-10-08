@@ -1,4 +1,8 @@
-"""Shared Matplotlib style for the TileArena paper figures (ACL/NAACL two-column)."""
+"""Shared Matplotlib style for the TileArena paper figures (ACL/NAACL two-column).
+
+Figures are drawn at their final printed size: the ACL template (acl.sty: A4 paper, 2.5 cm margins, 0.6 cm column
+separation) gives a 16.0 cm = 6.30 in text width and a 7.7 cm = 3.03 in column width, so 1 pt in a figure is 1 pt on
+the page when it is included at \\textwidth or \\columnwidth."""
 import hashlib
 import json
 import os
@@ -11,8 +15,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm  # noqa: E402
 
-SINGLE_COL_IN = 3.35
-DOUBLE_COL_IN = 7.0
+SINGLE_COL_IN = 3.03
+DOUBLE_COL_IN = 6.30
 
 DSL_COLORS = {
     "triton": "#416B87",    # muted steel blue
@@ -39,8 +43,9 @@ CATEGORY_MARKERS = {"Point-wise": "o", "Reduction/Normalization": "s", "Matrix M
 DIVERGING = LinearSegmentedColormap.from_list("tilearena_div", [NEGATIVE, NEUTRAL, POSITIVE], N=256)
 SEQUENTIAL = LinearSegmentedColormap.from_list("tilearena_seq", ["#F7F5F0", "#E7C9B5", "#C98E70", "#9C5B47"], N=256)
 
-BASE_FONT_PT = 7.0
-MIN_FONT_PT = 5.5   # validate_plots fails below this
+BASE_FONT_PT = 7.5
+MIN_FONT_MAIN_PT = 7.0       # main-paper figures (validate_plots fails below this)
+MIN_FONT_APPENDIX_PT = 6.0   # dense appendix figures
 
 
 def _font_family():
@@ -57,6 +62,7 @@ def apply():
         "font.family": "sans-serif", "font.sans-serif": [fam, "DejaVu Sans"], "font.size": BASE_FONT_PT,
         "axes.titlesize": BASE_FONT_PT + 0.5, "axes.labelsize": BASE_FONT_PT, "xtick.labelsize": BASE_FONT_PT - 0.5,
         "ytick.labelsize": BASE_FONT_PT - 0.5, "legend.fontsize": BASE_FONT_PT - 0.5, "legend.frameon": False,
+        "axes.titlepad": 3.0, "axes.labelpad": 2.0, "xtick.major.pad": 2.0, "ytick.major.pad": 2.0,
         "axes.edgecolor": "#9A9FA4", "axes.linewidth": 0.6, "axes.labelcolor": INK, "text.color": INK,
         "xtick.color": "#5F656B", "ytick.color": "#5F656B", "xtick.major.width": 0.5, "ytick.major.width": 0.5,
         "xtick.major.size": 2.5, "ytick.major.size": 2.5, "xtick.minor.size": 1.5, "ytick.minor.size": 1.5,
@@ -81,6 +87,26 @@ def collect_font_sizes(fig):
     return sizes
 
 
+def text_overlaps(fig, renderer, tol_pt=0.5):
+    """Pairs of visible, non-empty text artists whose rendered boxes intersect by more than tol_pt in both directions."""
+    boxes = []
+    for t in fig.findobj(matplotlib.text.Text):
+        if not (t.get_visible() and t.get_text().strip()) or t.get_alpha() == 0:
+            continue
+        bb = t.get_window_extent(renderer)
+        if bb.width > 0 and bb.height > 0:
+            boxes.append((t.get_text().strip()[:40], bb))
+    tol = tol_pt * fig.dpi / 72
+    out = []
+    for i in range(len(boxes)):
+        a, A = boxes[i]
+        for j in range(i + 1, len(boxes)):
+            b, B = boxes[j]
+            if min(A.x1, B.x1) - max(A.x0, B.x0) > tol and min(A.y1, B.y1) - max(A.y0, B.y0) > tol:
+                out.append([a, b])
+    return out
+
+
 def save(fig, out_root, sub, name):
     """Write PDF (vector, TrueType embedded), SVG (text kept as text) and a 300-dpi PNG preview at the exact design size
     (no tight bbox, so 1 pt in the figure is 1 pt on the page); deterministic metadata. Records how far any drawn
@@ -90,6 +116,7 @@ def save(fig, out_root, sub, name):
     w, h = (float(v) for v in fig.get_size_inches())
     bb = fig.get_tightbbox(fig.canvas.get_renderer())
     overflow = {"left": max(0.0, -bb.x0), "bottom": max(0.0, -bb.y0), "right": max(0.0, bb.x1 - w), "top": max(0.0, bb.y1 - h)}
+    overlaps = text_overlaps(fig, fig.canvas.get_renderer())
     paths = {}
     for ext in ("pdf", "svg"):
         p = out_root / sub / f"{name}.{ext}"
@@ -104,7 +131,8 @@ def save(fig, out_root, sub, name):
     sizes = collect_font_sizes(fig)
     return paths, {"width_in": round(w, 3), "height_in": round(h, 3),
                    "min_font_pt": min(sizes) if sizes else None, "max_font_pt": max(sizes) if sizes else None,
-                   "n_text_objects": len(sizes), "content_overflow_in": {k: round(v, 3) for k, v in overflow.items()}}
+                   "n_text_objects": len(sizes), "content_overflow_in": {k: round(v, 3) for k, v in overflow.items()},
+                   "text_overlaps": overlaps}
 
 
 def sha256(path):
