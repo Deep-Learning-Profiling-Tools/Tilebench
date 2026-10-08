@@ -183,7 +183,8 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
         repeat = int(overrides.get("repeat", neuron_native.NEURON_DEFAULT_REPEAT))
         autotune = bool(overrides.get("autotune", False))
 
-    verify_atol, verify_rtol = config_tolerance(config.get("verify", {}), detect_arch())
+    verify_atol, verify_rtol = config_tolerance(config.get("verify", {}),
+                                                detect_arch() if HAS_CUDA else neuron_native.NEURON_ARCH)
     use_cuda_graph    = bool(bench_cfg.get("use_cuda_graph", False))
     proton_scope_name = str(bench_cfg.get("proton_scope_name", "launch"))
     proton_backend    = bench_cfg.get("proton_backend")

@@ -59,3 +59,35 @@ def test_the_engine_verifies_with_the_present_architecture(fake_operator, monkey
     monkeypatch.setattr(engine, "detect_arch", lambda: arch)
     engine.run_benchmark_suite("fakeop", enabled_backends={"triton"})
     assert fake_operator == [(atol, 0.01)]
+
+
+def test_the_neuron_engine_verifies_with_the_trn2_override(tmp_path, monkeypatch):
+    """On a Trainium host (no CUDA) the engine resolves `arch_overrides.trn2` for both the
+    PyTorch eager baseline and NKI; a GPU architecture key never applies there."""
+    from tilebench.core import neuron_native
+    cfg = {"benchmark": {"warmup": 1, "repeat": 3},
+           "verify": {"arch_overrides": {"trn2": {"atol": "1e-3", "rtol": "1e-3"},
+                                         "cdna3": {"atol": 9.0}}},
+           "test_cases": [{"n": 1, "dtype": "fp32"}]}
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(cfg))
+    used = []
+
+    def fake_measure(fn, kw, inputs, ref, *, atol, rtol, **_):
+        used.append((atol, rtol))
+        return {"ok": True, "unsupported": False, "err": "", "ms": 1.0,
+                "stats": {"actual_warmup": 1, "actual_repeat": 3}}
+
+    for backend in ("torch", "nki"):
+        monkeypatch.setitem(sys.modules, f"tilebench.benchmarks.operators.fakeop.impl_{backend}",
+                            types.SimpleNamespace(run=lambda n, **kw: n, get_last_config=lambda: None))
+    monkeypatch.setattr(engine, "operator_config", lambda op: path)
+    monkeypatch.setattr(engine, "get_generator", lambda op: (lambda n, dtype: (n,)))
+    monkeypatch.setattr(engine, "infer_problem_size", lambda op, params: params["n"])
+    monkeypatch.setattr(engine, "HAS_CUDA", False)
+    monkeypatch.setattr(engine, "detect_arch", lambda: "cdna3")          # never consulted here
+    monkeypatch.setattr(neuron_native, "prepare_environment", lambda cache: {"neuronx_cc": None})
+    monkeypatch.setattr(neuron_native, "NativeNeuron", lambda: object())
+    monkeypatch.setattr(neuron_native, "measure", fake_measure)
+    engine.run_benchmark_suite("fakeop", enabled_backends={"nki"}, logs_dir=tmp_path)
+    assert used == [(1e-3, 1e-3), (1e-3, 1e-3)]                          # torch eager, then NKI

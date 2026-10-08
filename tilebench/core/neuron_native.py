@@ -47,6 +47,10 @@ from pathlib import Path
 NEURON_DEFAULT_WARMUP = 1
 NEURON_DEFAULT_REPEAT = 3
 
+#: Architecture key of this stack (prepare_environment compiles for --target trn2): the engine
+#: resolves an operator config's ``verify.arch_overrides`` with it, as detect_arch() does on a GPU.
+NEURON_ARCH = "trn2"
+
 # Operators whose native PyTorch eager baseline is unresolved: the NKI side is still verified
 # and timed, but torch is not run and no speedup is formed.
 BASELINE_UNRESOLVED = {

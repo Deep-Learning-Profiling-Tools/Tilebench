@@ -504,7 +504,9 @@ Before 124fdc94 the CDNA3 path returned the fallback unconditionally. The six MI
 
 ### 2d_conv tolerance
 
-`2d_conv` verifies with `atol: 1e-1` and `rtol: 1e-2` on B200 and GH200. On CDNA3, `verify.arch_overrides.cdna3` raises `atol` to `2e-1` for the ROCm/MIOpen fp16 reference. `verifier.config_tolerance` resolves the override by `detect_arch()`. `2d_conv` is the only operator with an override.
+`2d_conv` verifies with `atol: 1e-1` and `rtol: 1e-2` on B200 and GH200. On CDNA3, `verify.arch_overrides.cdna3` raises `atol` to `2e-1` for the ROCm/MIOpen fp16 reference. `verifier.config_tolerance` resolves the override by `detect_arch()`. `2d_conv` is the only operator with a GPU override.
+
+On the native Trainium stack the engine resolves the key `trn2` (`neuron_native.NEURON_ARCH`) instead of `detect_arch()`, for the PyTorch eager baseline and NKI alike; no GPU key applies there. `cross_entropy` uses it (`arch_overrides.trn2`: `atol` = `rtol` = `1e-3`, added with its NKI implementation): the tolerance its formal Trn2 results were verified with. The GPU tolerances of every operator are unchanged.
 
 ### Profiling inventory
 
