@@ -497,6 +497,26 @@ Dataset revision 7cb81050 holds the current reports of all three folders. For GH
 - **Peak metadata exists only for B200** (and Trainium2). Roofline and percentage-of-peak metrics are unavailable for GH200 and MI300X until a measured `<gpu>.json` is added.
 - **Timing modes differ.** The final-measurement repeat count differs between campaigns, and MI300X is timed eagerly while the NVIDIA GPUs replay CUDA graphs. State both whenever latencies are compared across GPUs.
 
+### Trn2 (NKI) results
+
+`results/TRN2/csv/` holds the formal AWS Trainium2 measurement: PyTorch eager against NKI on the same device, on the native PyTorch Neuron stack (`torch.device("neuron")`, NKI 0.7, logical NeuronCore config 2). It is its own namespace: its `torch_ms` is PyTorch on Trainium2, never comparable with a GPU's `torch_ms`, and no GPU CSV carries NKI columns.
+
+- **Protocol.** Warmup 1 / repeat 3 for both backends (the Neuron engine applies it whatever `config.yaml` says), no autotune, torch.compile disabled, no torch-xla. A latency is the mean device busy sum of one `run()` (the durations of its device executions added up). `speedup_nki = torch_ms / nki_ms`.
+- **`<op>_default.csv`.** 45 files, 2200 cases, the same case grid and `params` strings as B200 (`kl_divergence`: `fp32` here, `float32` in B200). The first seven columns are what `run_bench.py --gpu TRN2 --tile-language nki` wrote at measurement time; `na_scope` and `na_reason` are the classification of the cases without a speedup, added afterwards. Files use LF line endings.
+- **Validity.** `speedup_nki` is a number exactly when `torch_status` and `nki_status` are both `ok`; otherwise it is `nan`, the failed side's latency is `nan`, and `na_scope` / `na_reason` say why. 1968 of the 2200 cases have a speedup. A case without one is N/A in every table and aggregate; it is never filled in, never replaced by another measurement (an older torch-xla or torch.compile run, another dtype), and never counted as a slowdown.
+
+| `na_scope` | `na_reason` | Cases | Operators |
+|---|---|---|---|
+| `operator` | `pytorch_cpu_fallback` (the PyTorch op runs as a whole-op CPU fallback, no device execution) | 120 | `argmax` 40, `2d_max_pooling` 60, `radix_sort` 20 |
+| `operator` | `pytorch_correctness_failure` (eager SDPA fp16 fails the operator tolerance) | 20 | `flash_attention` |
+| `operator` | `pytorch_compiler_runtime_failure` (`flex_attention` has no eager path without torch.compile); 2 cases also `nki_compile_failure` | 20 | `block_sparse_attention` |
+| `dtype` | `pytorch_cpu_round_trip` (int8 strided copy / `contiguous()` bounces through the host) | 40 | `interleave` int8 20, `matrix_transpose` int8 20 |
+| `dtype` | `nki_unsupported+pytorch_cpu_fallback` (fp8 e4m3fn is not supported by the NKI compiler on Trn2; `_scaled_mm` falls back to the CPU) | 20 | `matmul_fp32_fp16_fp8` fp8_e4m3fn |
+| `input` | `pytorch_compiler_runtime_failure` (compiler or runtime failure of the PyTorch op at that size) | 12 | `reverse_array` 10, `top_k_selection` 1, `gaussian_blur` 1 |
+
+  In the five `operator` rows the NKI implementation still ran and verified (except the two `block_sparse_attention` cases), so its latency is recorded; only the speedup is N/A.
+- **Autotune.** `autotune_selected_cases/nki_autotune_largest_case_per_dtype.csv` covers selected cases only: the largest configured case of each dtype for 29 operators, 72 rows (for `gaussian_blur` fp16 also 9728, the largest case with a valid default baseline). It is not a sweep, so TRN2 has no `<op>_autotune.csv`. `default_nki_ms` and `speedup_default` repeat the default CSV; `torch_ms`, `autotune_nki_ms` and `speedup_autotune` come from the autotune run (same protocol, NKI with its autotuned configuration, `selected_config`); `autotune_gain = default_nki_ms / autotune_nki_ms`.
+
 ## Pre-Merge Checklist
 
 - [ ] Operator semantics match the PyTorch reference.
