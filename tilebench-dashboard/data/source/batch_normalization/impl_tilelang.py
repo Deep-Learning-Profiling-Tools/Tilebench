@@ -80,7 +80,7 @@ def compute_mean_invstd_kernel(
         T.copy(mean_local, mean[channel_id])
         T.copy(inv_std_local, inv_std[channel_id])
 
-@tilelang.autotune(configs=apply_batch_norm_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=apply_batch_norm_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def apply_batch_norm_kernel(
     input,

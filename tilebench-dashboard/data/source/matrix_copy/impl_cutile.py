@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import torch
 import cuda.tile as ct
 
-from core.cutile_autotune import CutileAutotuner
+from tilebench.core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 

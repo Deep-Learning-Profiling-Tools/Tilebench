@@ -2,7 +2,7 @@
   --ground:#F7F8FA; --surface:#FFFFFF; --surface-2:#F1F3F7;
   --ink:#14181F; --ink-2:#3C4553; --muted:#5B6472; --faint:#8A93A1;
   --line:#DFE3E9; --line-strong:#C7CDD8;
-  --accent:#4C3FBF; --accent-soft:#EEECFB;
+  --accent:#C2530E; --accent-soft:#FDEEE2; --on-accent:#FFFFFF;
   --win:#0E7A5F; --win-soft:#E2F3ED;
   --parity:#5B6472; --parity-soft:#EDEFF3;
   --behind:#B26A00; --behind-soft:#FBF0DE;
@@ -14,7 +14,7 @@
     --ground:#0E1116; --surface:#161B22; --surface-2:#1C222B;
     --ink:#E6EAF0; --ink-2:#C3CBD6; --muted:#8B95A5; --faint:#6B7688;
     --line:#262D38; --line-strong:#38424F;
-    --accent:#8B7DFF; --accent-soft:#221F3D;
+    --accent:#FF8F4A; --accent-soft:#33200F; --on-accent:#1A0F06;
     --win:#3DD9A4; --win-soft:#10291F;
     --parity:#8B95A5; --parity-soft:#1E242D;
     --behind:#E0A33E; --behind-soft:#2B2113;
@@ -26,7 +26,7 @@
   --ground:#0E1116; --surface:#161B22; --surface-2:#1C222B;
   --ink:#E6EAF0; --ink-2:#C3CBD6; --muted:#8B95A5; --faint:#6B7688;
   --line:#262D38; --line-strong:#38424F;
-  --accent:#8B7DFF; --accent-soft:#221F3D;
+  --accent:#FF8F4A; --accent-soft:#33200F; --on-accent:#1A0F06;
   --win:#3DD9A4; --win-soft:#10291F;
   --parity:#8B95A5; --parity-soft:#1E242D;
   --behind:#E0A33E; --behind-soft:#2B2113;
@@ -42,7 +42,7 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 .wrap{max-width:1120px; margin:0 auto; padding:40px 24px 72px; display:flex; flex-direction:column; gap:40px}
-@media(max-width:640px){.wrap{padding:28px 16px 56px; gap:32px}}
+@media(max-width:640px){.wrap{padding:28px 16px 56px; gap:32px} .segbtn{padding:6px 9px; font-size:12.5px}}
 
 h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif; text-wrap:balance; margin:0}
 h1{font-size:clamp(30px,5vw,44px); font-weight:700; letter-spacing:-.015em; line-height:1.08}
@@ -61,6 +61,8 @@ code{overflow-wrap:anywhere; word-break:break-word}
 .wrap{max-width:1180px; margin:0 auto; padding:40px 24px 72px; display:flex; flex-direction:column; gap:40px}
 @media(max-width:640px){.wrap{padding:28px 16px 56px; gap:32px}}
 header{display:flex; flex-direction:column; gap:14px; border-bottom:1px solid var(--line); padding-bottom:28px}
+.logo{width:min(300px,78%); height:auto; border-radius:14px; margin-bottom:4px}
+h1 .pp{color:var(--accent)}
 .status{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:2px}
 .chip{
   display:inline-flex; align-items:center; gap:7px;
@@ -74,29 +76,39 @@ header{display:flex; flex-direction:column; gap:14px; border-bottom:1px solid va
 section{display:flex; flex-direction:column; gap:16px}
 .sechead{display:flex; flex-direction:column; gap:4px}
 
+/* ---------- hardware selector ---------- */
+.hwbar{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin-top:6px}
+.seg{display:inline-flex; max-width:100%; overflow-x:auto; border:1px solid var(--line-strong); border-radius:7px;
+  background:var(--surface)}
+.segbtn{font:inherit; font-size:13px; font-weight:500; color:var(--ink-2); background:none; border:none;
+  border-left:1px solid var(--line-strong); padding:6px 12px; cursor:pointer; white-space:nowrap}
+.segbtn:first-child{border-left:none}
+.segbtn:hover{background:var(--surface-2)}
+.segbtn.on{background:var(--accent); color:var(--on-accent); font-weight:600}
+.hwmeta{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+a.chip{text-decoration:none}
+img.hf{width:16px; height:16px; flex:none; vertical-align:-3px; margin-right:2px}
+a.chip:hover{border-color:var(--accent)}
+a{color:var(--accent)}
+.dbody .badge{font-family:"IBM Plex Mono",monospace; font-size:11px; padding:2px 6px;
+  border-radius:3px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line)}
+
 /* ---------- pooled headline ---------- */
-.pooled{display:grid; grid-template-columns:repeat(2,1fr); gap:14px}
-@media(max-width:760px){.pooled{grid-template-columns:1fr}}
+.pooled{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px}
+.panel{overflow-x:auto}
+@media(max-width:900px){.pooled{grid-template-columns:1fr}}
 .panel{
   background:var(--surface); border:1px solid var(--line); border-radius:10px;
   padding:18px 20px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px;
 }
 .panel h3{font-size:13px; font-family:"IBM Plex Mono",monospace; letter-spacing:.1em;
   text-transform:uppercase; color:var(--muted); font-weight:500}
-.bars{display:flex; flex-direction:column; gap:9px}
-.bar{display:grid; grid-template-columns:74px 1fr 62px; gap:10px; align-items:center; font-size:13px}
-.bar .track{height:9px; background:var(--surface-2); border-radius:5px; overflow:hidden}
-.bar .fill{height:100%; border-radius:5px; background:var(--accent)}
-.bar .fill.tl{background:var(--win)}
-.bar .val{text-align:right; font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
-.ratio{border-top:1px solid var(--line); padding-top:11px; font-size:13px; color:var(--muted);
-  display:flex; justify-content:space-between; gap:12px}
-.ratio b{font-family:"IBM Plex Mono",monospace; color:var(--ink); font-weight:600}
-
+.sumcap{font-size:12.5px; color:var(--muted); margin-bottom:6px}
+.sumcap b{color:var(--ink)}
 /* ---------- table ---------- */
 .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface);
   box-shadow:var(--shadow)}
-table{border-collapse:collapse; width:100%; min-width:860px; font-size:13.5px}
+table{border-collapse:collapse; width:100%; font-size:13.5px}
 thead th{
   position:sticky; top:0; background:var(--surface-2); z-index:1;
   font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600;
@@ -113,16 +125,35 @@ tbody tr{cursor:pointer}
 tbody tr:hover{background:var(--surface-2)}
 tbody tr.sel{background:var(--accent-soft)}
 td.sep{border-left:1px solid var(--line)}
+thead th.sep{border-left:1px solid var(--line-strong)}
 .opname{display:flex; align-items:center; gap:8px}
 .opname .star{color:var(--behind); font-size:12px}
 .opname .badge{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:1px 5px;
   border-radius:3px; background:var(--surface-2); color:var(--muted); border:1px solid var(--line)}
 .partial td{background:repeating-linear-gradient(135deg,transparent,transparent 6px,var(--surface-2) 6px,var(--surface-2) 12px)}
-.v{font-weight:600; padding:1px 6px; border-radius:4px; display:inline-block; min-width:52px}
+.v{padding:1px 6px; border-radius:4px; display:inline-block; min-width:58px; margin-right:-6px}
 .v.win{color:var(--win); background:var(--win-soft)}
 .v.parity{color:var(--parity); background:var(--parity-soft)}
 .v.behind{color:var(--behind); background:var(--behind-soft)}
 .v.loss{color:var(--loss); background:var(--loss-soft)}
+.v.lead{font-weight:600; color:var(--accent); background:var(--accent-soft)}
+.v.slow{color:var(--loss)}
+.legend{display:flex; flex-wrap:wrap; gap:8px 22px; font-size:12.5px; color:var(--muted); margin-top:6px}
+.legend .v{font-family:"IBM Plex Mono",monospace; min-width:0; margin:0 4px 0 0; background:var(--surface); border:1px solid var(--line)}
+.legend .v.lead{background:var(--accent-soft); border-color:transparent}
+.legend .badge{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:1px 5px; border-radius:3px; background:var(--surface-2); border:1px solid var(--line); margin-right:4px}
+td.best{font-weight:600}
+td.best.torch{color:var(--faint); font-weight:400}
+table.sum{font-size:13px; border:1px solid var(--line); border-radius:8px; border-collapse:separate;
+  border-spacing:0; overflow:hidden}
+table.sum thead th{position:static; padding:8px 10px; font-size:10.5px; white-space:normal}
+table.sum tbody td{padding:7px 10px; white-space:nowrap}
+table.sum tbody tr{cursor:default}
+table.sum tbody tr:hover{background:none}
+table.sum tbody td:first-child{font-weight:600}
+table.sum.h2h td.ahead{background:var(--win-soft); color:var(--win)}
+table.sum .of{color:var(--faint)}
+table.sum .v{margin-right:0}
 .muted{color:var(--faint)}
 .sortbtn{background:none; border:none; font:inherit; color:inherit; cursor:pointer; padding:0;
   text-transform:inherit; letter-spacing:inherit}
@@ -136,7 +167,7 @@ td.sep{border-left:1px solid var(--line)}
   position:fixed; top:0; right:0; height:100dvh; width:min(560px,100vw);
   background:var(--surface); border-left:1px solid var(--line-strong);
   transform:translateX(100%); transition:transform .22s cubic-bezier(.4,0,.2,1);
-  z-index:41; display:flex; flex-direction:column;
+  z-index:41; display:flex; flex-direction:column; overflow:hidden;
 }
 .drawer.open{transform:none}
 .dhead{padding:18px 20px; border-bottom:1px solid var(--line); display:flex;
@@ -162,7 +193,7 @@ textarea,input[type=text],input[type=password]{width:100%; background:var(--grou
   border:1px solid var(--line-strong); border-radius:6px; padding:9px 11px; font:inherit;
   font-size:13.5px; resize:vertical}
 textarea:focus,input:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent}
-button.act{background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 14px;
+button.act{background:var(--accent); color:var(--on-accent); border:none; border-radius:6px; padding:8px 14px;
   font:inherit; font-size:13px; font-weight:600; cursor:pointer}
 button.act:disabled{opacity:.5; cursor:not-allowed}
 button.ghost{background:var(--surface); color:var(--ink-2); border:1px solid var(--line-strong);
@@ -197,7 +228,7 @@ button.ghost{background:var(--surface); color:var(--ink-2); border:1px solid var
 .composerinput{min-height:34px; max-height:120px; resize:none; border:none!important;
   background:transparent!important; padding:7px 2px; outline:none!important}
 .composerinput:focus{outline:none; border-color:transparent}
-.sendbtn{height:34px; background:var(--accent); color:#fff; border:none; border-radius:6px;
+.sendbtn{height:34px; background:var(--accent); color:var(--on-accent); border:none; border-radius:6px;
   padding:0 12px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer}
 .sendbtn:hover:not(:disabled){filter:brightness(.96)}
 .chatmeta{display:flex; gap:8px; align-items:center; flex-wrap:wrap; flex:none}

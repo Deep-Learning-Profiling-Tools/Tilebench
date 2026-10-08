@@ -1,25 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { marked } from "marked";
-import type { Note, Operator, ProfileEntry } from "@/lib/types";
-import { num, when } from "./format";
+import type { Operator, Platform, ProfileEntry } from "@/lib/types";
+import { leader } from "@/lib/metrics";
+import { label, sourceUrl, times, versus } from "./format";
 import Agent from "./Agent";
 
 interface Detail {
   operator: Operator;
-  notes: Note[];
   profile: (ProfileEntry & { report_present: boolean }) | null;
   source: string[];
 }
 
-type Tab = "results" | "notes" | "profile" | "source" | "chat";
+type Tab = "results" | "profile" | "source" | "chat";
 
-export default function Drawer({ op, onClose }: { op: string | null; onClose: () => void }) {
+export default function Drawer({
+  op,
+  platform,
+  home,
+  dataset,
+  onClose,
+}: {
+  op: string | null;
+  platform: Platform;
+  /** NCU write-ups exist for the home platform only */
+  home: boolean;
+  dataset: string;
+  onClose: () => void;
+}) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [tab, setTab] = useState<Tab>("results");
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [file, setFile] = useState<string | null>(null);
@@ -67,34 +78,12 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
     [op]
   );
 
-  async function addNote() {
-    if (!op || !draft.trim()) return;
-    setSaving(true);
-    setWarn(null);
-    try {
-      const r = await fetch(`/api/notes/${op}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: draft }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "failed");
-      setDetail((prev) => (prev ? { ...prev, notes: d.notes } : prev));
-      setDraft("");
-      if (!d.durable) {
-        setWarn(
-          "Saved to this server instance only. Notes are not durable until a KV store is attached — see the README."
-        );
-      }
-    } catch (e) {
-      setWarn(e instanceof Error ? e.message : "failed to save note");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const o = detail?.operator;
-  const tabs: Tab[] = ["results", "notes", "profile", "source", "chat"];
+  const o = platform.operators.find((x) => x.op === op);
+  const reports = (op && platform.reports[op]) || [];
+  const tabs: Tab[] = home
+    ? ["results", "profile", "source", "chat"]
+    : ["results", "source", "chat"];
+  const shown = tabs.includes(tab) ? tab : "results";
 
   return (
     <>
@@ -102,7 +91,7 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
       <aside className={`drawer${op ? " open" : ""}`} aria-hidden={!op}>
         <div className="dhead">
           <div>
-            <div className="eyebrow">kernel</div>
+            <div className="eyebrow">kernel · {platform.name}</div>
             <h2 className="mono">{op ?? ""}</h2>
           </div>
           <button ref={closeRef} className="closex" onClick={onClose} aria-label="Close">
@@ -112,17 +101,17 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
 
         <div className="tabs">
           {tabs.map((t) => (
-            <button key={t} className={`tab${tab === t ? " on" : ""}`} onClick={() => setTab(t)}>
+            <button key={t} className={`tab${shown === t ? " on" : ""}`} onClick={() => setTab(t)}>
               {t}
-              {t === "notes" && detail?.notes.length ? ` (${detail.notes.length})` : ""}
             </button>
           ))}
         </div>
 
-        <div className={`dbody${tab === "chat" ? " chatbody" : ""}`}>
-          {!detail && op && <p className="muted">loading…</p>}
+        <div className={`dbody${shown === "chat" ? " chatbody" : ""}`}>
+          {warn && <div className="warnbox">{warn}</div>}
+          {!detail && !warn && op && shown !== "results" && <p className="muted">loading…</p>}
 
-          {tab === "results" && o && (
+          {shown === "results" && o && (
             <>
               {(["default", "autotune"] as const).map((m) => {
                 const s = o[m];
@@ -133,61 +122,64 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
                     </div>
                     {s ? (
                       <dl className="kv">
-                        <dt>triton</dt>
-                        <dd>{num(s.triton)}×</dd>
-                        <dt>cutile</dt>
-                        <dd>{num(s.cutile)}×</dd>
-                        <dt>tilelang</dt>
-                        <dd>{num(s.tilelang)}×</dd>
-                        <dt>tl ÷ triton</dt>
-                        <dd>{num(s.tl_over_triton)}</dd>
-                        <dt>tl ÷ cutile</dt>
-                        <dd>{num(s.tl_over_cutile)}</dd>
+                        {platform.backends.map((b) => (
+                          <Fragment key={b}>
+                            <dt>{label(b)}</dt>
+                            <dd>
+                              {times(s[b])} <span className="muted">· {versus(s[b])}</span>
+                            </dd>
+                          </Fragment>
+                        ))}
+                        <dt>fastest</dt>
+                        <dd>
+                          {label(leader(s).name)} · {times(leader(s).margin)} the next fastest
+                        </dd>
                         <dt>cases</dt>
                         <dd>{s.cases}</dd>
                       </dl>
                     ) : (
-                      <p className="muted">
-                        excluded — {o.autotune_excluded_reason ?? "no data"}
-                      </p>
+                      <p className="muted">no data</p>
                     )}
                   </div>
                 );
               })}
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 8 }}>
+                  {platform.profiler} reports
+                </div>
+                {reports.length ? (
+                  <>
+                    <div className="row">
+                      {reports.map((r) => (
+                        <span key={r} className="badge">
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 13, margin: "10px 0 0" }}>
+                      <a
+                        href={`https://huggingface.co/datasets/${dataset}/tree/main/${platform.hf_path}/${op}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img className="hf" src="/huggingface.svg" alt="" width={16} height={16} />
+                        {reports.length} reports on Hugging Face ↗
+                      </a>
+                    </p>
+                  </>
+                ) : (
+                  <p className="muted">No reports published for this kernel.</p>
+                )}
+              </div>
               <p className="muted" style={{ fontSize: 12.5 }}>
-                Backend figures are geomean speedup vs torch. default and autotune are separate
-                measurements and are never blended.
+                Each number is PyTorch time ÷ backend time on {platform.name}, as a geometric mean over the
+                kernel&apos;s cases. default and
+                autotune are separate measurements and are never blended.
               </p>
             </>
           )}
 
-          {tab === "notes" && detail && (
-            <>
-              {warn && <div className="warnbox">{warn}</div>}
-              {detail.notes.length === 0 && <p className="muted">No notes on this kernel yet.</p>}
-              {detail.notes.map((n) => (
-                <div className="note" key={n.ts}>
-                  <time>{when(n.ts)}</time>
-                  {n.body}
-                </div>
-              ))}
-              <div>
-                <textarea
-                  rows={4}
-                  value={draft}
-                  placeholder="What did you find?"
-                  onChange={(e) => setDraft(e.target.value)}
-                />
-                <div className="row" style={{ marginTop: 8 }}>
-                  <button className="act" onClick={addNote} disabled={saving || !draft.trim()}>
-                    {saving ? "saving…" : "add note"}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {tab === "profile" && detail && (
+          {shown === "profile" && detail && (
             <>
               {!detail.profile && (
                 <p className="muted">
@@ -218,7 +210,7 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
             </>
           )}
 
-          {tab === "source" && detail && (
+          {shown === "source" && detail && (
             <>
               <div className="row">
                 {detail.source.map((f) => (
@@ -231,12 +223,20 @@ export default function Drawer({ op, onClose }: { op: string | null; onClose: ()
                   </button>
                 ))}
               </div>
+              {op && (
+                <p style={{ fontSize: 13, margin: 0 }}>
+                  <a href={sourceUrl(op, file ?? undefined)} target="_blank" rel="noreferrer">
+                    <img className="hf" src="/github.svg" alt="" width={16} height={16} />
+                    {file ? `${file} on GitHub ↗` : "This kernel on GitHub ↗"}
+                  </a>
+                </p>
+              )}
               {file && (code === null ? <p className="muted">loading…</p> : <pre className="src">{code}</pre>)}
               {!file && <p className="muted">Pick a file to read its source.</p>}
             </>
           )}
 
-          {tab === "chat" && detail && <Agent op={op} embedded />}
+          {shown === "chat" && detail && <Agent op={op} platform={platform.id} embedded />}
         </div>
       </aside>
     </>

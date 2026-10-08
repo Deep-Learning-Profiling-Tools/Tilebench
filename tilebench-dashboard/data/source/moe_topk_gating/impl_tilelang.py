@@ -15,7 +15,7 @@ def moe_topk_gating_configs():
         for nt in threads
     ]
 
-@tilelang.autotune(configs=moe_topk_gating_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=moe_topk_gating_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def moe_topk_gating_kernel(logits, topk_w, topk_idx, dtype, BLOCK_SIZE_E: int, BLOCK_SIZE_K: int, threads: int = 128):
     

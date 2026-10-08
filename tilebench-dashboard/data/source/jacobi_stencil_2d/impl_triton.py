@@ -65,6 +65,8 @@ _jacobi_stencil_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["rows", "cols"],
+    warmup=1,
+    rep=3,
 )(jacobi_stencil_kernel)
 
 

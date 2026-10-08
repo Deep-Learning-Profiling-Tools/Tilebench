@@ -12,7 +12,7 @@ def cross_entropy_config():
         for nt in threads
     ]
 
-@tilelang.autotune(configs=cross_entropy_config(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=cross_entropy_config(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def cross_entropy_kernel(logits, targets, output, dtype,
                          BLOCK_CLASSES : int = 1208, threads : int = 256):

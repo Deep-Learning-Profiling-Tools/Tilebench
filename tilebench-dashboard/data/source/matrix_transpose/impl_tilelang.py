@@ -15,7 +15,7 @@ def matrix_transpose_config():
         for nt in threads
     ]
 
-@tilelang.autotune(configs=matrix_transpose_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=matrix_transpose_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def matrix_transpose_kernel(
     x, output, dtype, 

@@ -52,3 +52,32 @@ export interface PooledStats {
   cases: number;
   operators: number;
 }
+
+/** One mode on one platform. A backend is absent when that hardware has no results for it. */
+export type PlatformStats = Partial<Record<Backend, number>> & { cases: number };
+
+export interface PlatformOperator {
+  op: string;
+  default: PlatformStats | null;
+  autotune: PlatformStats | null;
+}
+
+export interface Platform {
+  id: string;
+  name: string;
+  note: string;
+  /** folder in the profiling-report dataset */
+  hf_path: string;
+  profiler: string;
+  backends: Backend[];
+  operators: PlatformOperator[];
+  /** op -> report names (`<backend>_<dtype>`) present in the dataset */
+  reports: Record<string, string[]>;
+}
+
+export interface PlatformData {
+  results_source: string;
+  reports_dataset: string;
+  reports_revision: string | null;
+  platforms: Platform[];
+}

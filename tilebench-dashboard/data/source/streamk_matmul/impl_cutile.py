@@ -5,7 +5,7 @@ import torch
 
 from triton.testing import do_bench
 
-from core.cutile_autotune import CutileAutotuner
+from tilebench.core.cutile_autotune import CutileAutotuner
 
 ConstInt = ct.Constant[int]
 

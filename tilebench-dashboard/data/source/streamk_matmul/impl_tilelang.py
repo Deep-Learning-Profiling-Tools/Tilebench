@@ -5,6 +5,8 @@ import tilelang
 import tilelang.language as T
 from triton.testing import do_bench
 
+from tilebench.hardware import supports_tmem
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128,
@@ -18,13 +20,22 @@ _autotune_cache: dict = {}
 _last_autotune_config: dict = {}
 
 
+_WRONG = frozenset({
+    (128, 256, 32, 256), (128, 256, 64, 128), (128, 256, 64, 256),
+})
+
+
 def streamk_configs():
+    def produces_wrong_results(bm, bn, bk, nt):
+        return (bm, bn, bk, nt) in _WRONG
+
     return [
         dict(BLOCK_M=bm, BLOCK_N=bn, BLOCK_K=bk, GROUP_M=8, threads=nt, num_stages=3)
         for bm in [64, 128]
         for bn in [128, 256]
         for bk in [32, 64]
         for nt in [128, 256]
+        if not produces_wrong_results(bm, bn, bk, nt)
     ]
 
 
@@ -36,82 +47,237 @@ def _streamk_partition(M: int, N: int, BLOCK_M: int, BLOCK_N: int, NUM_SMS: int)
     return total_tiles, streamk_tiles
 
 
-@tilelang.jit(
-    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
-)
-def first_wave_kernel(
-    A,
-    B,
-    C,
-    dtype,
-    NUM_SMS: int,
-    BLOCK_M: int = 128,
-    BLOCK_N: int = 128,
-    BLOCK_K: int = 32,
-    GROUP_M: int = 8,
-    threads: int = 256,
-    num_stages: int = 3,
-):
-    M, K, N = T.const("M, K, N")
-    A: T.Tensor((M, K), dtype)
-    B: T.Tensor((K, N), dtype)
-    C: T.Tensor((M, N), "float32")
+if supports_tmem():
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+    )
+    def first_wave_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        NUM_SMS: int,
+        BLOCK_M: int = 128,
+        BLOCK_N: int = 128,
+        BLOCK_K: int = 32,
+        GROUP_M: int = 8,
+        threads: int = 256,
+        num_stages: int = 3,
+    ):
+        M, K, N = T.const("M, K, N")
+        A: T.Tensor((M, K), dtype)
+        B: T.Tensor((K, N), dtype)
+        C: T.Tensor((M, N), "float32")
 
-    grid_m = T.ceildiv(M, BLOCK_M)
-    grid_n = T.ceildiv(N, BLOCK_N)
-    total_tiles = grid_m * grid_n
-    iters_per_tile = T.ceildiv(K, BLOCK_K)
-    streamk_tiles = total_tiles % NUM_SMS
-    if total_tiles - streamk_tiles > NUM_SMS:
-        streamk_tiles += NUM_SMS
+        grid_m = T.ceildiv(M, BLOCK_M)
+        grid_n = T.ceildiv(N, BLOCK_N)
+        total_tiles = grid_m * grid_n
+        iters_per_tile = T.ceildiv(K, BLOCK_K)
+        streamk_tiles = total_tiles % NUM_SMS
+        if total_tiles - streamk_tiles > NUM_SMS:
+            streamk_tiles += NUM_SMS
 
-    total_iters_streamk = streamk_tiles * iters_per_tile
-    total_full_iters = total_iters_streamk // NUM_SMS
-    total_partial_iters = total_iters_streamk % NUM_SMS
+        total_iters_streamk = streamk_tiles * iters_per_tile
+        total_full_iters = total_iters_streamk // NUM_SMS
+        total_partial_iters = total_iters_streamk % NUM_SMS
 
-    with T.Kernel(NUM_SMS, threads=threads) as pid:
-        a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
-        b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
-        acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
-        use_tmem = dtype != T.tfloat32
-        if use_tmem:
-            acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
-            mbar = T.alloc_barrier(1)
+        with T.Kernel(NUM_SMS, threads=threads) as pid:
+            a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+            b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
+            acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
+            use_tmem = dtype != T.tfloat32
+            if use_tmem:
+                acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
+                mbar = T.alloc_barrier(1)
 
-        start_iter = T.alloc_var("int32")
-        last_iter = T.alloc_var("int32")
-        end_iter = T.alloc_var("int32")
-        tile_id = T.alloc_var("int32")
-        pid_m = T.alloc_var("int32")
-        pid_n = T.alloc_var("int32")
-        group_id = T.alloc_var("int32")
-        first_pid_m = T.alloc_var("int32")
-        group_size_m = T.alloc_var("int32")
+            start_iter = T.alloc_var("int32")
+            last_iter = T.alloc_var("int32")
+            end_iter = T.alloc_var("int32")
+            tile_id = T.alloc_var("int32")
+            pid_m = T.alloc_var("int32")
+            pid_n = T.alloc_var("int32")
+            group_id = T.alloc_var("int32")
+            first_pid_m = T.alloc_var("int32")
+            group_size_m = T.alloc_var("int32")
 
-        start_iter = pid * total_full_iters + T.min(pid, total_partial_iters)
-        last_iter = (pid + 1) * total_full_iters + T.min(pid + 1, total_partial_iters)
+            start_iter = pid * total_full_iters + T.min(pid, total_partial_iters)
+            last_iter = (pid + 1) * total_full_iters + T.min(pid + 1, total_partial_iters)
 
-        while start_iter < last_iter:
-            end_iter = T.min(
-                start_iter + (iters_per_tile - start_iter % iters_per_tile),
-                last_iter,
-            )
-            tile_id = start_iter // iters_per_tile
+            while start_iter < last_iter:
+                end_iter = T.min(
+                    start_iter + (iters_per_tile - start_iter % iters_per_tile),
+                    last_iter,
+                )
+                tile_id = start_iter // iters_per_tile
 
+                group_id = tile_id // (GROUP_M * grid_n)
+                first_pid_m = group_id * GROUP_M
+                group_size_m = T.min(grid_m - first_pid_m, GROUP_M)
+                pid_m = first_pid_m + (tile_id % group_size_m)
+                pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
+
+                for current_iter in T.Pipelined(
+                    start_iter,
+                    end_iter,
+                    num_stages=1 if use_tmem else num_stages,
+                ):
+                    if not use_tmem and current_iter == start_iter:
+                        T.clear(acc)
+                    k_tile = current_iter % iters_per_tile
+                    T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
+                    T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
+                    if use_tmem:
+                        T.gemm(
+                            a_shared,
+                            b_shared,
+                            acc_tmem,
+                            mbar=mbar,
+                            clear_accum=current_iter == start_iter,
+                        )
+                        T.sync_threads()
+                    else:
+                        T.gemm(a_shared, b_shared, acc)
+
+                if use_tmem:
+                    T.copy(acc_tmem, acc)
+                    T.sync_threads()
+                T.atomic_add(C[pid_m * BLOCK_M, pid_n * BLOCK_N], acc)
+                T.sync_threads()
+                start_iter = end_iter
+else:
+    # Hopper (sm_90) and any other architecture without tensor memory: every
+    # dtype accumulates in a register fragment, as the tf32 path above does.
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+    )
+    def first_wave_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        NUM_SMS: int,
+        BLOCK_M: int = 128,
+        BLOCK_N: int = 128,
+        BLOCK_K: int = 32,
+        GROUP_M: int = 8,
+        threads: int = 256,
+        num_stages: int = 3,
+    ):
+        M, K, N = T.const("M, K, N")
+        A: T.Tensor((M, K), dtype)
+        B: T.Tensor((K, N), dtype)
+        C: T.Tensor((M, N), "float32")
+
+        grid_m = T.ceildiv(M, BLOCK_M)
+        grid_n = T.ceildiv(N, BLOCK_N)
+        total_tiles = grid_m * grid_n
+        iters_per_tile = T.ceildiv(K, BLOCK_K)
+        streamk_tiles = total_tiles % NUM_SMS
+        if total_tiles - streamk_tiles > NUM_SMS:
+            streamk_tiles += NUM_SMS
+
+        total_iters_streamk = streamk_tiles * iters_per_tile
+        total_full_iters = total_iters_streamk // NUM_SMS
+        total_partial_iters = total_iters_streamk % NUM_SMS
+
+        with T.Kernel(NUM_SMS, threads=threads) as pid:
+            a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+            b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
+            acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
+
+            start_iter = T.alloc_var("int32")
+            last_iter = T.alloc_var("int32")
+            end_iter = T.alloc_var("int32")
+            tile_id = T.alloc_var("int32")
+            pid_m = T.alloc_var("int32")
+            pid_n = T.alloc_var("int32")
+            group_id = T.alloc_var("int32")
+            first_pid_m = T.alloc_var("int32")
+            group_size_m = T.alloc_var("int32")
+
+            start_iter = pid * total_full_iters + T.min(pid, total_partial_iters)
+            last_iter = (pid + 1) * total_full_iters + T.min(pid + 1, total_partial_iters)
+
+            while start_iter < last_iter:
+                end_iter = T.min(
+                    start_iter + (iters_per_tile - start_iter % iters_per_tile),
+                    last_iter,
+                )
+                tile_id = start_iter // iters_per_tile
+
+                group_id = tile_id // (GROUP_M * grid_n)
+                first_pid_m = group_id * GROUP_M
+                group_size_m = T.min(grid_m - first_pid_m, GROUP_M)
+                pid_m = first_pid_m + (tile_id % group_size_m)
+                pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
+
+                for current_iter in T.Pipelined(
+                    start_iter,
+                    end_iter,
+                    num_stages=num_stages,
+                ):
+                    if current_iter == start_iter:
+                        T.clear(acc)
+                    k_tile = current_iter % iters_per_tile
+                    T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
+                    T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
+                    T.gemm(a_shared, b_shared, acc)
+
+                T.atomic_add(C[pid_m * BLOCK_M, pid_n * BLOCK_N], acc)
+                T.sync_threads()
+                start_iter = end_iter
+
+
+if supports_tmem():
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+    )
+    def full_tiles_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        NUM_SMS: int,
+        BLOCK_M: int = 128,
+        BLOCK_N: int = 128,
+        BLOCK_K: int = 32,
+        GROUP_M: int = 8,
+        threads: int = 256,
+        num_stages: int = 3,
+    ):
+        M, K, N = T.const("M, K, N")
+        A: T.Tensor((M, K), dtype)
+        B: T.Tensor((K, N), dtype)
+        C: T.Tensor((M, N), "float32")
+
+        grid_m = T.ceildiv(M, BLOCK_M)
+        grid_n = T.ceildiv(N, BLOCK_N)
+        total_tiles = grid_m * grid_n
+        streamk_tiles = total_tiles % NUM_SMS
+        if total_tiles - streamk_tiles > NUM_SMS:
+            streamk_tiles += NUM_SMS
+
+        blocking_tiles = total_tiles - streamk_tiles
+
+        with T.Kernel(blocking_tiles, threads=threads) as pid:
+            a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+            b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
+            acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
+            use_tmem = dtype != T.tfloat32
+            if use_tmem:
+                acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
+                mbar = T.alloc_barrier(1)
+            else:
+                T.clear(acc)
+
+            tile_id = pid + streamk_tiles
             group_id = tile_id // (GROUP_M * grid_n)
             first_pid_m = group_id * GROUP_M
             group_size_m = T.min(grid_m - first_pid_m, GROUP_M)
             pid_m = first_pid_m + (tile_id % group_size_m)
             pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
 
-            if not use_tmem:
-                T.clear(acc)
-            for current_iter in T.Pipelined(
-                start_iter,
-                end_iter,
-                num_stages=1 if use_tmem else num_stages,
-            ):
-                k_tile = current_iter % iters_per_tile
+            for k_tile in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
                 T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
                 T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
                 if use_tmem:
@@ -120,7 +286,7 @@ def first_wave_kernel(
                         b_shared,
                         acc_tmem,
                         mbar=mbar,
-                        clear_accum=current_iter == start_iter,
+                        clear_accum=k_tile == 0,
                     )
                     T.sync_threads()
                 else:
@@ -128,79 +294,59 @@ def first_wave_kernel(
 
             if use_tmem:
                 T.copy(acc_tmem, acc)
-                T.sync_threads()
-            T.atomic_add(C[pid_m * BLOCK_M, pid_n * BLOCK_N], acc)
-            if use_tmem:
-                T.sync_threads()
-            start_iter = end_iter
+            T.copy(acc, C[pid_m * BLOCK_M, pid_n * BLOCK_N])
+else:
+    # Hopper (sm_90) and any other architecture without tensor memory: every
+    # dtype accumulates in a register fragment, as the tf32 path above does.
+    @tilelang.jit(
+        pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
+    )
+    def full_tiles_kernel(
+        A,
+        B,
+        C,
+        dtype,
+        NUM_SMS: int,
+        BLOCK_M: int = 128,
+        BLOCK_N: int = 128,
+        BLOCK_K: int = 32,
+        GROUP_M: int = 8,
+        threads: int = 256,
+        num_stages: int = 3,
+    ):
+        M, K, N = T.const("M, K, N")
+        A: T.Tensor((M, K), dtype)
+        B: T.Tensor((K, N), dtype)
+        C: T.Tensor((M, N), "float32")
 
+        grid_m = T.ceildiv(M, BLOCK_M)
+        grid_n = T.ceildiv(N, BLOCK_N)
+        total_tiles = grid_m * grid_n
+        streamk_tiles = total_tiles % NUM_SMS
+        if total_tiles - streamk_tiles > NUM_SMS:
+            streamk_tiles += NUM_SMS
 
-@tilelang.jit(
-    pass_configs={tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True}
-)
-def full_tiles_kernel(
-    A,
-    B,
-    C,
-    dtype,
-    NUM_SMS: int,
-    BLOCK_M: int = 128,
-    BLOCK_N: int = 128,
-    BLOCK_K: int = 32,
-    GROUP_M: int = 8,
-    threads: int = 256,
-    num_stages: int = 3,
-):
-    M, K, N = T.const("M, K, N")
-    A: T.Tensor((M, K), dtype)
-    B: T.Tensor((K, N), dtype)
-    C: T.Tensor((M, N), "float32")
+        blocking_tiles = total_tiles - streamk_tiles
 
-    grid_m = T.ceildiv(M, BLOCK_M)
-    grid_n = T.ceildiv(N, BLOCK_N)
-    total_tiles = grid_m * grid_n
-    streamk_tiles = total_tiles % NUM_SMS
-    if total_tiles - streamk_tiles > NUM_SMS:
-        streamk_tiles += NUM_SMS
-
-    blocking_tiles = total_tiles - streamk_tiles
-
-    with T.Kernel(blocking_tiles, threads=threads) as pid:
-        a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
-        b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
-        acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
-        use_tmem = dtype != T.tfloat32
-        if use_tmem:
-            acc_tmem = T.alloc_tmem((BLOCK_M, BLOCK_N), "float32")
-            mbar = T.alloc_barrier(1)
-        else:
+        with T.Kernel(blocking_tiles, threads=threads) as pid:
+            a_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+            b_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
+            acc = T.alloc_fragment((BLOCK_M, BLOCK_N), "float32")
             T.clear(acc)
 
-        tile_id = pid + streamk_tiles
-        group_id = tile_id // (GROUP_M * grid_n)
-        first_pid_m = group_id * GROUP_M
-        group_size_m = T.min(grid_m - first_pid_m, GROUP_M)
-        pid_m = first_pid_m + (tile_id % group_size_m)
-        pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
+            tile_id = pid + streamk_tiles
+            group_id = tile_id // (GROUP_M * grid_n)
+            first_pid_m = group_id * GROUP_M
+            group_size_m = T.min(grid_m - first_pid_m, GROUP_M)
+            pid_m = first_pid_m + (tile_id % group_size_m)
+            pid_n = (tile_id % (GROUP_M * grid_n)) // group_size_m
 
-        for k_tile in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
-            T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
-            T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
-            if use_tmem:
-                T.gemm(
-                    a_shared,
-                    b_shared,
-                    acc_tmem,
-                    mbar=mbar,
-                    clear_accum=k_tile == 0,
-                )
-                T.sync_threads()
-            else:
+            for k_tile in T.Pipelined(T.ceildiv(K, BLOCK_K), num_stages=num_stages):
+                T.copy(A[pid_m * BLOCK_M, k_tile * BLOCK_K], a_shared)
+                T.copy(B[k_tile * BLOCK_K, pid_n * BLOCK_N], b_shared)
                 T.gemm(a_shared, b_shared, acc)
 
-        if use_tmem:
-            T.copy(acc_tmem, acc)
-        T.copy(acc, C[pid_m * BLOCK_M, pid_n * BLOCK_N])
+            T.copy(acc, C[pid_m * BLOCK_M, pid_n * BLOCK_N])
 
 
 def _compile_first_wave(a, b, c, dtype, NUM_SMS, cfg):

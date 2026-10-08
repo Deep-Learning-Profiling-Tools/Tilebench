@@ -49,6 +49,8 @@ _gaussian_blur_kernel_autotuned = triton.autotune(
         for nw in [4, 8]
     ],
     key=["input_rows", "input_cols", "kernel_rows", "kernel_cols"],
+    warmup=1,
+    rep=3,
 )(gaussian_blur_kernel)
 
 

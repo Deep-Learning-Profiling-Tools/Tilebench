@@ -19,7 +19,7 @@ def jacobi_stencil_configs():
         for bc in BLOCK_SIZE_C
         for nt in threads
     ]
-@tilelang.autotune(configs=jacobi_stencil_configs(), warmup=20, rep=100, timeout=60)
+@tilelang.autotune(configs=jacobi_stencil_configs(), warmup=1, rep=3, timeout=60)
 @tilelang.jit
 def jacobi_stencil_kernel(input, output, dtype,
                           BLOCK_SIZE_R: int = 1, 
@@ -32,26 +32,22 @@ def jacobi_stencil_kernel(input, output, dtype,
 
     with T.Kernel(T.ceildiv(M, BLOCK_SIZE_R), T.ceildiv(N, BLOCK_SIZE_C), threads=threads) as (pid_r, pid_c):
         local_tile_out = T.alloc_fragment((BLOCK_SIZE_R, BLOCK_SIZE_C), dtype)
-        top_tile = T.alloc_fragment((BLOCK_SIZE_R, BLOCK_SIZE_C), dtype)
-        bottom_tile = T.alloc_fragment((BLOCK_SIZE_R, BLOCK_SIZE_C), dtype)
-        left_tile = T.alloc_fragment((BLOCK_SIZE_R, BLOCK_SIZE_C), dtype)
-        right_tile = T.alloc_fragment((BLOCK_SIZE_R, BLOCK_SIZE_C), dtype)
         start_r = pid_r * BLOCK_SIZE_R 
         start_c = pid_c * BLOCK_SIZE_C
         T.copy(input[start_r, start_c], local_tile_out)
-        T.copy(input[start_r - 1, start_c], top_tile)
-        T.copy(input[start_r + 1, start_c], bottom_tile)
-        T.copy(input[start_r, start_c - 1], left_tile)
-        T.copy(input[start_r, start_c + 1], right_tile)
+        quarter = T.cast(0.25, dtype)
         for i, j in T.Parallel(BLOCK_SIZE_R, BLOCK_SIZE_C):
             gb_r = i + start_r 
             gb_c = j + start_c
             is_inner = gb_r >= 1 and gb_c >= 1 and gb_r < M - 1 and gb_c < N - 1
-            avg = 0.25 * (
-                bottom_tile[i, j] +
-                top_tile[i, j] +
-                right_tile[i, j] +
-                left_tile[i, j]
+            # top + bottom + left + right, matching the torch reference and the
+            # Triton/cuTile kernels: fp16 adds round at each step, so summing the
+            # neighbours in a different order drifts by 1 ULP on ~31% of points.
+            avg = quarter * (
+                input[gb_r - 1, gb_c] +
+                input[gb_r + 1, gb_c] +
+                input[gb_r, gb_c - 1] +
+                input[gb_r, gb_c + 1]
             )
             local_tile_out[i, j] = T.Select(is_inner, avg, local_tile_out[i, j])
         T.copy(local_tile_out, output[start_r, start_c])

@@ -12,20 +12,32 @@ const MAX_MESSAGE_CHARS = 8_000;
 const MAX_TOOL_ROUNDS = 10;
 const MAX_OUTPUT_TOKENS = 4096;
 
-const SYSTEM_PROMPT = `You are the TileBench performance analysis agent.
+const SYSTEM_PROMPT = `You are the TileBench++ performance analysis agent.
 
-You answer from the deployed dashboard agent corpus only: benchmark board data, TileLang benchmark implementation source, the pinned TileLang compiler source snapshot, and exported Nsight Compute JSON/source data.
+TileBench++ benchmarks the same 45 GPU kernels written in Triton, cuTile and TileLang against PyTorch on several hardware platforms: NVIDIA B200, NVIDIA GH200 and AMD Instinct MI300X (Triton only on MI300X). Treat the backends even-handedly; none of them is the subject by default.
+
+You answer only from evidence the tools return: per-platform benchmark results, each backend's implementation source, and the exported profiling reports (Nsight Compute on B200 and GH200, rocprof-compute on MI300X), one per platform, operator, backend and dtype.
+
+Reading the benchmark numbers:
+- Every board figure is a speedup over PyTorch on the same hardware and inputs: PyTorch time divided by backend time, as a geometric mean over the kernel's cases. 2.0 means twice as fast as PyTorch; 0.5 means half as fast. State this when you quote a figure, and write figures with a x suffix.
+- default and autotune are separate measurements. Never average or blend them; always say which one a number is.
+- Speedups are relative to PyTorch on that platform, so they do not compare absolute latency across platforms.
+
+Explaining performance:
+- A claim about why a kernel is fast or slow must rest on profiler measurements, not on reading the code alone. Call get_profile_summary for the reports involved, then query_profile_metrics or compare_profile_metrics for the specific counters, and quote the values with their metric names.
+- Each profiling report is one representative input size at the autotuned configuration, while board speedups are means over many sizes. Say so when you connect the two.
+- Separate what the measurements show from what you infer. If the evidence does not single out a cause, say that the cause is not established and list what the data rules in or out.
+- You cannot run code, re-profile, or see compiler internals for any backend. Do not explain behaviour by describing what a compiler "must have" generated; point to the measured instruction hotspots, which are assembly-level on B200 and GH200 and carry Python source lines only on MI300X, and say when a report has none.
+- Metric names differ between Nsight Compute and rocprof-compute and between GPU generations. Compare backends within one platform first; treat cross-platform metric comparisons with care.
 
 Rules:
-- Use tools before making factual claims about operators, TileLang benchmark source, TileLang compiler internals, NCU metrics, or NCU JSON reports.
-- If a selected operator is provided, treat it as the default subject and call get_operator or find_ncu_reports for that operator before analyzing it.
-- For questions about why TileLang generated/lowered/scheduled/codegenerated something, use the TileLang compiler source tools instead of guessing from benchmark code alone.
-- Prefer exact tool data over summaries. For NCU questions, find reports first, list metric names when needed, then fetch exact metric values or source records.
+- Use tools before making any factual claim about operators, results, source or profiler data.
+- For any question about a platform, or comparing platforms, call get_platform_results. If a platform is selected, answer for that platform unless asked otherwise.
+- If a selected operator is provided, treat it as the default subject and call get_operator for it before analyzing it.
+- To explain a gap between backends, read both implementations with read_source and compare their profiles, rather than reasoning from one side.
 - Read large files in chunks with offset/next_offset when the first chunk is insufficient.
-- The agent cannot access legacy profile write-ups or raw .ncu-rep files. Only exported NCU JSON reports returned by find_ncu_reports are queryable.
-- If NCU JSON or an exposed source file is missing, say exactly what is missing instead of guessing.
-- Cite the concrete op/backend/dtype/report_json/file names you used.
-- Do not claim a B200 result or current source relationship unless the tools expose that evidence.`;
+- If a report, metric or source file is missing, say exactly what is missing instead of guessing.
+- Cite the concrete platform/op/backend/dtype, metric names and file names you used.`;
 
 type JsonObject = Record<string, unknown>;
 
@@ -64,7 +76,7 @@ function openRouterHeaders(key: string): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${key}`,
     "Content-Type": "application/json",
-    "X-OpenRouter-Title": process.env.OPENROUTER_APP_TITLE ?? "TileBench Dashboard",
+    "X-OpenRouter-Title": process.env.OPENROUTER_APP_TITLE ?? "TileBench++ Dashboard",
   };
   const referer = process.env.OPENROUTER_SITE_URL ?? process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (referer) headers["HTTP-Referer"] = referer.startsWith("http") ? referer : `https://${referer}`;
@@ -176,11 +188,17 @@ async function complete(
 }
 
 /**
- * POST /api/agent  { question?: string, messages?: Array<{role, content}>, contextOp?: string, apiKey?: string }
+ * POST /api/agent  { question?, messages?: Array<{role, content}>, contextOp?, contextPlatform?, apiKey? }
  * Streams Server-Sent Events: `meta`, zero or more `tool`, `delta`, then `done`.
  */
 export async function POST(req: Request) {
-  let payload: { question?: unknown; messages?: unknown; contextOp?: unknown; apiKey?: unknown };
+  let payload: {
+    question?: unknown;
+    messages?: unknown;
+    contextOp?: unknown;
+    contextPlatform?: unknown;
+    apiKey?: unknown;
+  };
   try {
     payload = await req.json();
   } catch {
@@ -197,6 +215,11 @@ export async function POST(req: Request) {
 
   const contextOp = typeof payload.contextOp === "string" ? payload.contextOp.trim() : "";
   if (contextOp && !/^[a-z0-9_]+$/.test(contextOp)) return fail(400, "bad context operator");
+  const contextPlatform =
+    typeof payload.contextPlatform === "string" ? payload.contextPlatform.trim() : "";
+  if (contextPlatform && !/^[A-Za-z0-9_]{1,24}$/.test(contextPlatform)) {
+    return fail(400, "bad context platform");
+  }
   const parsedMessages = parseClientMessages(payload.messages);
   if (parsedMessages.error) return fail(400, parsedMessages.error);
 
@@ -219,6 +242,12 @@ export async function POST(req: Request) {
 
       const messages: ChatMessage[] = [
         { role: "system", content: SYSTEM_PROMPT },
+        ...(contextPlatform
+          ? [{
+              role: "system" as const,
+              content: `Selected platform: ${contextPlatform}. The user is looking at this platform's results.`,
+            }]
+          : []),
         ...(contextOp
           ? [{
               role: "system" as const,

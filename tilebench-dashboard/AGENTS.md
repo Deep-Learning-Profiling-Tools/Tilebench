@@ -28,7 +28,7 @@ route, so adding a tool means wiring a tool to a route, not reshaping the app.
 
 | | state |
 |---|---|
-| Board + 42 kernels | **done**, live |
+| Board + 45 kernels | **done locally**, deployment pending |
 | API routes (11) | **done**, live |
 | Source browsing (225 files, 4 backends) | **done**, live |
 | NCU write-ups (7 kernels, prose) | **done**, live |
@@ -47,8 +47,8 @@ established / not-established distinction. Treat the numbers as pre-publication.
 
 ### Known gap driving current work
 
-NCU coverage is the weak point: **7 of 42 kernels profiled**, and only 2 `(kernel, backend)`
-pairs have current TileLang captures. An agent asked about the other 35 kernels has no
+NCU coverage is the weak point: **7 of 45 kernels profiled**, and only 2 `(kernel, backend)`
+pairs have current TileLang captures. An agent asked about the other 38 kernels has no
 profile to reason from. Options discussed: re-capture on B200, or capture locally on an
 RTX 4060 — noting 4060 is cc 8.9 (Ada, no TMEM, no `wgmma`), so local captures can support
 tooling development but cannot back B200 claims in the paper.
@@ -57,10 +57,49 @@ Current queryable NCU payload is a **local RTX 4060 smoke corpus** for
 `vector_add/fp32` with Triton and TileLang reports. It exists to validate the
 agent/tool/export loop and should be replaced by B200 captures for paper claims.
 
+## Multi-platform board (added 2026-10-05)
+
+The page is now TileBench++: a platform switcher over B200, GH200 and MI300X, driven by
+`data/platforms.json` (`scripts/sync_platforms.py`). Numbers were aggregated from
+`results/<GPU>/csv` at Tilebench `origin/main` `ea04fb36`; report counts come from the file
+listing of the `bcui2/NCU_report` Hugging Face dataset (revision `21037737`), nothing downloaded.
+MI300X has Triton only. Notes, NCU write-ups and `/api/operators` are still B200-only
+(`data/operators.csv`); B200 figures in both files are identical.
+
+The agent was widened the same day, at the user's request to make the site less
+TileLang-centric: it has a `get_platform_results` tool over `data/platforms.json`, receives the
+selected platform as `contextPlatform`, and can read every backend's `impl_*.py` plus
+`config.yaml` (previously `impl_tilelang.py` only). Notes and NCU write-ups remain outside its
+reach. This supersedes the narrower file list under "Agent pipeline" below.
+
+`data/source/` was refreshed from Tilebench `origin/main` `ea04fb36` on 2026-10-05 (169 of 225
+files had drifted from the older integration-tree snapshot). The source tab links each file to
+`blob/main` in the GitHub repo, so re-copy the files whenever main moves.
+
+## Agent corpus rebuilt around real profiler data (2026-10-05)
+
+At the user's request the agent no longer has the TileLang compiler snapshot
+(`data/tilelang_compiler/` deleted, its three tools removed): without a shell it produced
+speculation, not causal answers. In its place the agent reads **every published profiling
+report**, exported offline by `scripts/export_profiles.py` from the gated Hugging Face dataset
+`bcui2/NCU_report` into `data/profiles_json/<PLATFORM>/<op>/<backend>_<dtype>.json.gz`
+(+ `manifest.json`, `metric_descriptions.json`): Nsight Compute raw metrics, rule findings and
+hottest SASS instructions for B200/GH200; rocprof-compute metrics and source-line-attributed
+hot instructions for MI300X. Tools: `find_profiles`, `get_profile_summary`,
+`query_profile_metrics`, `compare_profile_metrics`, `get_profile_hotspots`.
+
+- The export needs a stored HF token with access to the dataset, and `ncu`. The system
+  `ncu` 2024.3.2 opens B200 reports but yields no units and no SASS for them; use 2025+
+  (`conda create -p <dir> -c nvidia nsight-compute`, then `--ncu <dir>/nsight-compute-*/ncu`).
+- The older RTX 4060 smoke corpus (`data/ncu_json`, `data/ncu_source`) was deleted at the
+  user's request on 2026-10-05, and the old `find_ncu_*` tools are gone. Mentions of it further
+  down this file are historical.
+- The "Agent pipeline" section below describes the previous tool set.
+
 ## What this is
 
 A Next.js 16 dashboard over the TileBench results: TileLang vs Triton, cuTile and torch
-across 42 GPU kernels on a B200 (sm_100). Built API-first so NCU reports, compiler source
+across 45 GPU kernels on a B200 (sm_100). Built API-first so NCU reports, compiler source
 and a query agent can grow into it without reshaping the app.
 
 Sibling repo, referenced throughout: `../Tilebench` (branch
@@ -100,14 +139,15 @@ the project setting.
 
 ## Data provenance
 
-`data/operators.json` was reconstructed from the published artifact's `rowsdata` array
-(`[triton, cutile, tilelang, tl_over_triton, tl_over_cutile, cases]`) plus two later
-published updates, applied algebraically. Pooled results reproduce the board exactly:
-default 2.084 / 1.717 / 1.919, tl/tri 0.920; autotune 2.385 / 1.984 / 2.279, tl/tri 0.956.
+`data/operators.csv` is the authoritative dashboard table. `scripts/sync_dashboard_data.py`
+aggregates all 45 operators directly from their per-case result CSVs and emits
+`operators.json` for compatibility. The integration tree takes 34 merged operators from
+`origin/main` and overlays the 11 feature branches that remain unmerged. Current pooled results
+are: default 1.785 / 1.418 / 1.474, tl/tri 0.826; autotune 2.047 / 1.668 / 1.804,
+tl/tri 0.881.
 
-**Known error in the published artifact, not fixed:** its default panel shows 2,020 cases.
-The true figure is 2,080 — `batched_matmul` contributes a default with no autotune. Ratios
-are unaffected; only the case-count label is wrong. `data/` and README carry 2,080.
+**Known error in the old published artifact:** its default panel shows 2,020 cases. The
+current complete CSV set has 2,200 cases in each mode across all 45 operators.
 
 ## NCU reports — read this before building on them
 
@@ -179,7 +219,7 @@ model is `openai/gpt-5.6-luna`; override with `TILEBENCH_AGENT_MODEL`.
   `get_ncu_rule_results`, `get_ncu_source`, `compare_ncu_metrics`).
 - Tools are Vercel-safe: no shell, no `ncu`, no `.ncu-rep` import at runtime. Agent file
   access is constrained to exported `data/ncu_json`, exported `data/ncu_source`,
-  `operators.json`, `source/<op>/impl_tilelang.py`, and the pinned
+  `operators.csv`, `operators.json`, `source/<op>/impl_tilelang.py`, and the pinned
   `data/tilelang_compiler` source snapshot; large reads are pageable through `offset` /
   `next_offset`.
 - The TileLang compiler snapshot is from `tile-ai/tilelang` main commit

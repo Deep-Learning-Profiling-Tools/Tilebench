@@ -4,6 +4,8 @@ from triton import language as tl
 from triton.testing import do_bench
 from triton.tools.tensor_descriptor import TensorDescriptor
 
+from tilebench.hardware import detect_arch
+
 
 _DEFAULT_CONFIG = {
     "BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 64, "GROUP_M": 8,
@@ -22,6 +24,36 @@ _SEARCH_SPACE = [
 
 
 _DT_IDS = {torch.float16: 0, torch.bfloat16: 1, torch.float32: 2}
+
+
+# Hardware-compatibility fallback, not AMD performance tuning. On CDNA3
+# (MI300X) the default above needs 131072 B of LDS for fp32, over gfx942's
+# 65536 B, so the non-autotuned path cannot launch. This keeps its 128x128
+# output tile, GROUP_M, num_warps and num_stages (fixed at 3 in the search
+# space) and only lowers the K tile from 64 to 32 (fp32: 65536 B). It is a
+# candidate of _SEARCH_SPACE, which is unchanged on every architecture.
+_CDNA3_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "BLOCK_K": 32}
+# fp32 on Hopper: the 128x128x64 default tile needs 262168 B of shared memory,
+# above sm_90's 232448 B per-block limit. Only BLOCK_K drops to 32, which gives
+# a config already in _SEARCH_SPACE: a legality fallback, not a tuned choice.
+_HOPPER_FP32_DEFAULT_CONFIG = {**_DEFAULT_CONFIG, "BLOCK_K": 32}
+_BUILTIN_DEFAULT_CONFIG = _DEFAULT_CONFIG
+
+
+def _default_config(dtype=None) -> dict:
+    """Fixed config of the non-autotuned path, by the GPU actually present.
+
+    A config written into _DEFAULT_CONFIG (a profiler harness replaying an
+    autotune winner) is used as given: the architecture fallbacks only
+    replace the builtin default."""
+    if _DEFAULT_CONFIG is not _BUILTIN_DEFAULT_CONFIG:
+        return _DEFAULT_CONFIG
+    arch = detect_arch()
+    if arch == "cdna3":
+        return _CDNA3_DEFAULT_CONFIG
+    if arch == "hopper" and dtype == torch.float32:
+        return _HOPPER_FP32_DEFAULT_CONFIG
+    return _DEFAULT_CONFIG
 
 
 _autotune_cache: dict = {}
@@ -236,7 +268,7 @@ def run(a: torch.Tensor, b: torch.Tensor,
         _last_autotune_config.clear()
         _last_autotune_config.update(cfg)
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = _default_config(a.dtype)
     BLK_M, BLK_N = cfg["BLOCK_M"], cfg["BLOCK_N"]
 
 

@@ -62,6 +62,8 @@ _fwd_kernel_flash_decode_stage2_autotuned = triton.autotune(
         for ns in [2, 3, 4]
     ],
     key=["head_dim"],
+    warmup=1,
+    rep=3,
 )(fwd_kernel_flash_decode_stage2)
 
 

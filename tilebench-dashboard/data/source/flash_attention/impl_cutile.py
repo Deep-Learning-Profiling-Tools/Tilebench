@@ -5,7 +5,7 @@ import cuda.tile as ct
 import math
 from cuda.tile import RoundingMode as RMd
 
-from core.cutile_autotune import CutileAutotuner
+from tilebench.core.cutile_autotune import CutileAutotuner
 
 INV_LOG_2 = 1.0 / math.log(2)
 ConstInt = ct.Constant[int]

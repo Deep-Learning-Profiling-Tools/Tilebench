@@ -133,7 +133,15 @@ function MarkdownBlock({ content }: { content: string }) {
 
 /** Streams /api/agent over SSE. Retrieval stays server-side so tool access is
  *  over the deployed corpus; a pasted key is used only for the model call. */
-export default function Agent({ op, embedded = false }: { op?: string | null; embedded?: boolean }) {
+export default function Agent({
+  op,
+  platform,
+  embedded = false,
+}: {
+  op?: string | null;
+  platform?: string;
+  embedded?: boolean;
+}) {
   const [q, setQ] = useState("");
   const [apiKey, setApiKey] = useState("");
   const historyKey = useMemo(() => makeThreadKey(op), [op]);
@@ -202,6 +210,7 @@ export default function Agent({ op, embedded = false }: { op?: string | null; em
         body: JSON.stringify({
           messages: requestMessages,
           contextOp: op ?? undefined,
+          contextPlatform: platform,
           apiKey: apiKey.trim() || undefined,
         }),
         signal: ctl.signal,
@@ -347,7 +356,7 @@ export default function Agent({ op, embedded = false }: { op?: string | null; em
             className="composerinput"
             rows={1}
             value={q}
-            placeholder={op ? `Ask about ${op}` : "Ask about TileBench"}
+            placeholder={op ? `Ask about ${op}` : "Ask about TileBench++"}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();

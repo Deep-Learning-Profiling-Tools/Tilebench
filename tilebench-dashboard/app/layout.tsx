@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TileBench — TileLang Comparison Board",
+  title: "TileBench++ — GPU Kernel DSL Benchmark",
   description:
-    "TileLang vs Triton, cuTile and torch across 42 GPU kernels on a B200, with NCU profiles and a performance query agent.",
+    "TileBench++ benchmarks Triton, cuTile and TileLang against torch across 45 GPU kernels on NVIDIA B200, NVIDIA GH200 and AMD MI300X, with profiling reports, kernel source and a performance query agent.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

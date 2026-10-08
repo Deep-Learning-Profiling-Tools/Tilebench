@@ -4,9 +4,9 @@ import { notesStore } from "@/lib/store";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-async function ncuJsonCount(): Promise<number> {
+async function profileReportCount(): Promise<number> {
   try {
-    const raw = await fs.readFile(path.join(process.cwd(), "data", "ncu_json", "manifest.json"), "utf8");
+    const raw = await fs.readFile(path.join(process.cwd(), "data", "profiles_json", "manifest.json"), "utf8");
     const manifest = JSON.parse(raw) as { reports?: unknown[] };
     return Array.isArray(manifest.reports) ? manifest.reports.length : 0;
   } catch {
@@ -14,24 +14,12 @@ async function ncuJsonCount(): Promise<number> {
   }
 }
 
-async function tileLangCompilerCount(): Promise<number> {
-  try {
-    const raw = await fs.readFile(path.join(process.cwd(), "data", "tilelang_compiler", "manifest.json"), "utf8");
-    const manifest = JSON.parse(raw) as { total_files?: unknown; files?: unknown[] };
-    if (typeof manifest.total_files === "number") return manifest.total_files;
-    return Array.isArray(manifest.files) ? manifest.files.length : 0;
-  } catch {
-    return 0;
-  }
-}
-
 export async function GET() {
-  const [ops, profiles, src, ncuReports, tilelangCompilerFiles] = await Promise.all([
+  const [ops, profiles, src, profileReports] = await Promise.all([
     getOperators(),
     getProfiles(),
     getSourceIndex(),
-    ncuJsonCount(),
-    tileLangCompilerCount(),
+    profileReportCount(),
   ]);
   const store = notesStore();
   return ok({
@@ -39,8 +27,7 @@ export async function GET() {
     operators: ops.length,
     cases: ops.reduce((a, o) => a + (o.default?.cases ?? 0) + (o.autotune?.cases ?? 0), 0),
     profiled: profiles.filter((p) => p.has_report).length,
-    ncu_json_reports: ncuReports,
-    tilelang_compiler_files: tilelangCompilerFiles,
+    queryable_profile_reports: profileReports,
     source_operators: Object.keys(src).length,
     notes_store: { kind: store.kind, durable: store.durable },
     agent: {

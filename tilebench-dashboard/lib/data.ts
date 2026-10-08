@@ -1,7 +1,7 @@
 import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Operator, ProfileEntry, Note } from "./types";
+import type { Operator, ProfileEntry, Note, PlatformData } from "./types";
 
 const DATA = path.join(process.cwd(), "data");
 
@@ -11,8 +11,43 @@ async function readJson<T>(rel: string): Promise<T> {
 
 let opsCache: Operator[] | null = null;
 export async function getOperators(): Promise<Operator[]> {
-  if (!opsCache) opsCache = await readJson<Operator[]>("operators.json");
+  if (!opsCache) {
+    const text = await fs.readFile(path.join(DATA, "operators.csv"), "utf8");
+    const [header, ...lines] = text.trim().split(/\r?\n/);
+    const keys = header.split(",");
+    const value = (row: string[], key: string) => row[keys.indexOf(key)] ?? "";
+    const mode = (row: string[], name: "default" | "autotune") => {
+      const cases = value(row, `${name}_cases`);
+      if (!cases) return null;
+      return {
+        triton: Number(value(row, `${name}_triton`)),
+        cutile: Number(value(row, `${name}_cutile`)),
+        tilelang: Number(value(row, `${name}_tilelang`)),
+        tl_over_triton: Number(value(row, `${name}_tl_over_triton`)),
+        tl_over_cutile: Number(value(row, `${name}_tl_over_cutile`)),
+        cases: Number(cases),
+      };
+    };
+    opsCache = lines.map((line) => {
+      const row = line.split(",");
+      return {
+        op: value(row, "op"),
+        tier: value(row, "tier") as Operator["tier"],
+        target: value(row, "target") === "true",
+        default: mode(row, "default"),
+        autotune: mode(row, "autotune"),
+        autotune_excluded_reason: value(row, "autotune_excluded_reason") || null,
+      };
+    });
+  }
   return opsCache;
+}
+
+/** Every measured platform: board aggregates plus profiling-report coverage. */
+let platCache: PlatformData | null = null;
+export async function getPlatforms(): Promise<PlatformData> {
+  if (!platCache) platCache = await readJson<PlatformData>("platforms.json");
+  return platCache;
 }
 
 export async function getOperator(op: string): Promise<Operator | null> {

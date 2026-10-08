@@ -2,7 +2,8 @@ import torch
 import tilelang 
 import tilelang.language as T
 from tilelang.autotuner import set_autotune_inputs
-_DEFAULT_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_NOPE_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
+_DEFAULT_ROPE_CONFIG = {"BLOCK_SIZE": 1024, "threads": 128}
 _last_autotune_config: dict = {}
 _out_cache = torch.utils.weak.WeakTensorKeyDictionary()
 def _cached_out(o: torch.Tensor) -> torch.Tensor:
@@ -22,7 +23,7 @@ def destindex_config():
     ]
 
 
-@tilelang.autotune(configs=destindex_config(), warmup = 20, rep = 100, timeout = 60)
+@tilelang.autotune(configs=destindex_config(), warmup = 1, rep = 3, timeout = 60)
 @tilelang.jit
 def copy_by_dest_kernel(
         kv,
@@ -43,13 +44,14 @@ def copy_by_dest_kernel(
     with T.Kernel(T.ceildiv(n_elements, BLOCK_SIZE), threads=threads) as pid:
         for local_idx in T.Parallel(BLOCK_SIZE):
             offs = pid * BLOCK_SIZE + local_idx
-            d = offs % head_dim
-            tmp = offs // head_dim
-            head = tmp % head_num
-            token = tmp // head_num
-            dest_index = T.Cast("int32", dest[token])
-            dst_off = (dest_index * head_num + head) * head_dim + d
-            out[dst_off] = kv[offs]
+            if offs < n_elements:
+                d = offs % head_dim
+                tmp = offs // head_dim
+                head = tmp % head_num
+                token = tmp // head_num
+                dest_index = T.Cast("int32", dest[token])
+                dst_off = (dest_index * head_num + head) * head_dim + d
+                out[dst_off] = kv[offs]
 
 
 
@@ -74,14 +76,13 @@ def _launch_copy(
                 kv_flat, dest_loc, out_flat, dtype=dtype, dest_dtype=dest_dtype,
                 head_num=head_num, head_dim=head_dim,
             )
-        _last_autotune_config[label] = {
-            "shape": tuple(kv.shape),
-            **dict(kernel.config or {}),
-        }
+        _last_autotune_config.update({
+            f"{label}_{key}": value for key, value in dict(kernel.config or {}).items()
+        })
         kernel(kv_flat, dest_loc, out_flat)
 
     else:
-        cfg = _DEFAULT_CONFIG
+        cfg = {"nope": _DEFAULT_NOPE_CONFIG, "rope": _DEFAULT_ROPE_CONFIG}[label]
         copy_by_dest_kernel(
             kv_flat, dest_loc, out_flat, dtype=dtype, dest_dtype=dest_dtype,
             head_num=head_num, head_dim=head_dim,

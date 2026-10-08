@@ -17,8 +17,8 @@ def flash_decode_stage2_configs():
     ]
 
 
-@tilelang.autotune(configs=flash_decode_stage2_configs(), warmup=20, rep=100, timeout=60)
-@tilelang.jit
+@tilelang.autotune(configs=flash_decode_stage2_configs(), warmup=1, rep=3, timeout=60)
+@tilelang.jit(pass_configs={tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True})
 def flash_decode_stage2_kernel(
     mid_o,
     mid_o_lse,
@@ -45,6 +45,7 @@ def flash_decode_stage2_kernel(
         exp_logic = T.alloc_var("float32")
 
         T.fill(acc, 0.0)
+        T.fill(out, T.Cast(dtype, 0.0))
 
         cur_batch_seq_len = b_seqlen[cur_batch]
         block_n_size = T.Select(
@@ -66,8 +67,9 @@ def flash_decode_stage2_kernel(
             sum_exp = sum_exp * old_scale + exp_logic
             max_logic = new_max_logic
 
-        for d in T.Parallel(BLOCK_DMODEL):
-            out[d] = T.cast(acc[d] / sum_exp, dtype)
+        if cur_batch_seq_len > 0:
+            for d in T.Parallel(BLOCK_DMODEL):
+                out[d] = T.cast(acc[d] / sum_exp, dtype)
 
         T.copy(out, output[cur_batch, cur_head, 0:BLOCK_DMODEL])
 

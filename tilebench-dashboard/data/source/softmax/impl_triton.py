@@ -43,8 +43,8 @@ _softmax_kernel_autotuned = triton.autotune(
         for bs in [512, 1024, 2048]
         for nw in [4, 8]
     ],
-    warmup=5,
-    rep=20,
+    warmup=1,
+    rep=3,
     key=["n_cols"],
 )(softmax_online_kernel)
 

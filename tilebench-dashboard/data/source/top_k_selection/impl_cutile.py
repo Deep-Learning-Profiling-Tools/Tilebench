@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import cuda.tile as ct
 import torch
 
-from core.cutile_autotune import CutileAutotuner
+from tilebench.core.cutile_autotune import CRASH_ISOLATION_TIMEOUT_SEC, CutileAutotuner
 
 ConstInt = ct.Constant[int]
 
@@ -217,6 +217,7 @@ def _tune(x: torch.Tensor, k: int, K2: int, stream) -> SimpleNamespace:
             kernel=_tuners[B].kernel,
             args_fn=lambda cfg: (x, scratch, K2),
             hints_fn=lambda cfg: {"occupancy": cfg.occupancy},
+            single_run_timeout_sec=CRASH_ISOLATION_TIMEOUT_SEC,
         )
 
         mean_us = result.best.mean_us
