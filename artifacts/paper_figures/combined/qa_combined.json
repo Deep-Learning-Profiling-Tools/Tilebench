@@ -1,0 +1,382 @@
+{
+ "status": "pass",
+ "repo_head": "8e0a8c176e258107bbd4111eb36100dde5e4e9e9",
+ "checks": [
+  {
+   "check": "1:all_45_operators_on_all_devices",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "B200": [],
+    "GH200": [],
+    "MI300X": []
+   }
+  },
+  {
+   "check": "2:dsl_support_matrix",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "B200": [
+     "cutile",
+     "tilelang",
+     "triton"
+    ],
+    "GH200": [
+     "cutile",
+     "tilelang",
+     "triton"
+    ],
+    "MI300X": [
+     "triton"
+    ]
+   }
+  },
+  {
+   "check": "3:nvidia_110_pairs_per_dsl",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "B200:triton": [
+     110,
+     110
+    ],
+    "B200:cutile": [
+     110,
+     110
+    ],
+    "B200:tilelang": [
+     110,
+     110
+    ],
+    "GH200:triton": [
+     110,
+     110
+    ],
+    "GH200:cutile": [
+     110,
+     110
+    ],
+    "GH200:tilelang": [
+     110,
+     110
+    ]
+   }
+  },
+  {
+   "check": "4:mi300x_109_triton_pairs",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "autotune": 109,
+    "default": 109
+   }
+  },
+  {
+   "check": "5:mi300x_fp8_omission_explicit",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "coverage_row": [
+     {
+      "device": "MI300X",
+      "dsl": "triton",
+      "operator": "matmul_fp32_fp16_fp8",
+      "dtype": "fp8_e4m3fn",
+      "category": "Matrix Multiplication/Attention",
+      "status": "unsupported_dtype",
+      "n_cases_autotune": "0",
+      "n_valid_autotune": "0",
+      "n_profiles": "0",
+      "profile_kinds": "",
+      "note": "UNSUPPORTED_DTYPE on gfx942 (FP8 there is E4M3FNUZ; the PyTorch reference rejects e4m3fn); no CSV row, no winner, no profile"
+     }
+    ],
+    "benchmark_rows": 0
+   }
+  },
+  {
+   "check": "6:rows_map_to_exactly_one_full_case",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "duplicates": [],
+    "recompute_mismatch": 0,
+    "rows_source_vs_normalized": {
+     "B200": [
+      13200,
+      13200
+     ],
+     "GH200": [
+      13200,
+      13200
+     ],
+     "MI300X": [
+      4360,
+      4360
+     ]
+    },
+    "build_problems": []
+   }
+  },
+  {
+   "check": "7:joins_use_canonical_full_params",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "case_ids_with_conflicting_params": 0,
+    "swept_not_subset_of_full": [],
+    "nvidia_source_id_equals_v2": true,
+    "operators_with_multiple_param_keysets": {},
+    "mi300x_source_ids_differ_from_v2": 4360
+   }
+  },
+  {
+   "check": "8:categories_identical_across_devices",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "counts": {
+     "Point-wise": 12,
+     "Reduction/Normalization": 11,
+     "Matrix Multiplication/Attention": 8,
+     "Stencil/Convolution": 6,
+     "Data Layout": 8
+    },
+    "mi300x_short_labels_consistent": true
+   }
+  },
+  {
+   "check": "9:csv_latency_strings_unchanged",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "rows_checked": 30760,
+    "csv_files": 270,
+    "bad": []
+   }
+  },
+  {
+   "check": "10:no_profiler_duration_in_formal_metrics",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "benchmark_columns": [
+     "device",
+     "vendor",
+     "architecture",
+     "dsl",
+     "operator",
+     "category",
+     "dtype",
+     "mode",
+     "case_id_v2",
+     "params_full_json",
+     "source_case_id",
+     "source_params_json",
+     "csv_params_label",
+     "torch_ms",
+     "dsl_ms",
+     "validity",
+     "validity_source",
+     "source_csv",
+     "source_csv_sha256",
+     "source_git_sha",
+     "params_config_commits",
+     "notes"
+    ],
+    "suspicious": []
+   }
+  },
+  {
+   "check": "11:profiles_linked_to_benchmark_cases",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "profiles": 1105,
+    "unlinked": []
+   }
+  },
+  {
+   "check": "12:static_dynamic_counts_distinguishable",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "B200": [
+     "dynamic_thread_inst_executed_true",
+     "dynamic_warp_inst_executed",
+     "dynamic_warp_inst_executed_family_total",
+     "dynamic_warp_inst_executed_with_modifier",
+     "static_sass_instruction_count"
+    ],
+    "GH200": [
+     "dynamic_thread_inst_executed_true",
+     "dynamic_warp_inst_executed",
+     "dynamic_warp_inst_executed_family_total",
+     "dynamic_warp_inst_executed_with_modifier",
+     "static_sass_instruction_count"
+    ],
+    "MI300X": [
+     "dynamic_att_hitcount_traced_waves",
+     "dynamic_hw_counter_total_summed_over_dispatches",
+     "static_isa_opcode_count"
+    ]
+   }
+  },
+  {
+   "check": "13:no_missing_metric_as_zero",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "non_collected_with_value": {},
+    "valid_rows_with_nonpositive_latency": 0,
+    "validity_counts": {
+     "B200|valid|valid": 13200,
+     "GH200|valid|valid": 13200,
+     "MI300X|valid|verified_ok": 4360
+    }
+   }
+  },
+  {
+   "check": "14:historical_differences_documented",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "missing_terms": {
+     "B200": [],
+     "GH200": [],
+     "MI300X": []
+    }
+   }
+  },
+  {
+   "check": "15:source_packages_preserved",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "nvidia": {
+     "changed_vs_extraction_commit": [],
+     "worktree_changes": []
+    },
+    "amd": {
+     "changed_vs_extraction_commit": [],
+     "worktree_changes": []
+    }
+   }
+  },
+  {
+   "check": "report:case_intersections_explicit",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "triton_B200_GH200_MI300X": 2180,
+    "triton_B200_GH200": 2200,
+    "triton_B200_MI300X": 2180,
+    "cutile_B200_GH200": 2200,
+    "tilelang_B200_GH200": 2200,
+    "per_device_valid_autotune": {
+     "B200:triton": 2200,
+     "B200:cutile": 2200,
+     "B200:tilelang": 2200,
+     "GH200:triton": 2200,
+     "GH200:cutile": 2200,
+     "GH200:tilelang": 2200,
+     "MI300X:triton": 2180
+    }
+   }
+  },
+  {
+   "check": "sanity:overall_speedups_match_previous",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "recomputed": {
+     "B200|triton": 2.0178,
+     "B200|cutile": 1.5806,
+     "B200|tilelang": 1.7097,
+     "GH200|triton": 1.8533,
+     "GH200|cutile": 1.5276,
+     "GH200|tilelang": 1.5662,
+     "MI300X|triton": 1.2702
+    },
+    "differences": {}
+   }
+  },
+  {
+   "check": "sanity:winner_counts_match_previous",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "recomputed": {
+     "B200": {
+      "counts": {
+       "tilelang": 18,
+       "triton": 22,
+       "cutile": 5
+      },
+      "winner_within_5pct_of_runner_up": {
+       "tilelang": 8,
+       "triton": 8,
+       "cutile": 3
+      }
+     },
+     "GH200": {
+      "counts": {
+       "tilelang": 17,
+       "triton": 26,
+       "cutile": 2
+      },
+      "winner_within_5pct_of_runner_up": {
+       "tilelang": 11,
+       "triton": 14
+      }
+     }
+    },
+    "differences": {}
+   }
+  },
+  {
+   "check": "external:device_qa_and_cpu_tests",
+   "status": "pass",
+   "gating": true,
+   "detail": {
+    "amd_unit_tests": {
+     "returncode": 0,
+     "tail": [
+      ".........                                                                [100%]",
+      "9 passed in 8.13s"
+     ],
+     "skipped_raw_dependent": [],
+     "note": "with the raw-report directory absent the package tests run validate_mi300x with raw=None, so the raw-dependent validator checks are NOT executed (listed under amd_validator_no_raw.raw_dependent_checks_not_rerun_locally); these tests do not certify them"
+    },
+    "amd_validator_no_raw": {
+     "returncode": 0,
+     "all_checks_pass": true,
+     "checks_rerun": 30,
+     "failed": [],
+     "raw_dependent_checks_not_rerun_locally": [
+      "3.report_sha256_recomputed_from_local_reports",
+      "7.derived_metrics_equal_source_kernel_metric_csv",
+      "prior_analysis_values_reproduced"
+     ],
+     "note": "checks that re-read MI300X reports are reported as not rerun locally; their committed results are not re-asserted here"
+    },
+    "nvidia_qa_rerun": {
+     "returncode": 0,
+     "stdout": [
+      "B200 pass failed: []",
+      "GH200 pass failed: []"
+     ],
+     "note": "run on a copy; base ref = MI300X branch so that only paper_figures paths differ"
+    },
+    "repo_cpu_tests": {
+     "returncode": 0,
+     "tail": [
+      "............................................                             [100%]",
+      "44 passed in 20.42s"
+     ]
+    }
+   }
+  }
+ ]
+}
