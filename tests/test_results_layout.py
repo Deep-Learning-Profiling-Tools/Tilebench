@@ -386,8 +386,8 @@ def test_neuron_speedup_is_eager_over_nki_and_never_invented():
     assert neuron_native.speedup(4.0, 2.0) == 2.0                 # torch_eager_ms / nki_ms
     for t, n in ((float("nan"), 2.0), (4.0, float("nan")), (0.0, 2.0)):
         assert math.isnan(neuron_native.speedup(t, n))
-    assert set(neuron_native.BASELINE_UNRESOLVED) == {"bitonic_sort", "radix_sort",
-                                                      "block_sparse_attention", "flash_attention"}
+    assert set(neuron_native.BASELINE_UNRESOLVED) == {"radix_sort", "block_sparse_attention",
+                                                      "flash_attention"}
     assert (neuron_native.NEURON_DEFAULT_WARMUP, neuron_native.NEURON_DEFAULT_REPEAT) == (1, 3)
     st = engine._torch_status
     assert st(None) is None
@@ -424,12 +424,17 @@ def test_measurement_runs_with_torch_compile_disabled_and_restores_it():
 
 
 def test_neuron_path_ignores_config_warmup_repeat_autotune(tmp_path, monkeypatch):
-    """mul2's config.yaml says warmup 20 / repeat 100: on a Neuron host every case still runs
-    1 / 3, without autotune, and each row records the executed counts."""
+    """A config.yaml that says warmup 20 / repeat 100 / autotune: on a Neuron host every case
+    still runs 1 / 3, without autotune, and each row records the executed counts."""
     import torch
+    import yaml
     from tilebench.core import engine, neuron_native
     if torch.cuda.is_available():
         pytest.skip("Neuron path only")
+    cfg = yaml.safe_load(paths.operator_config("mul2").read_text())
+    cfg["benchmark"].update(warmup=20, repeat=100, autotune=True)
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump(cfg))
+    monkeypatch.setattr(engine, "operator_config", lambda op: tmp_path / "config.yaml")
     calls = []
 
     def fake_measure(fn, kw, inputs, ref, *, warmup, repeat, **_):

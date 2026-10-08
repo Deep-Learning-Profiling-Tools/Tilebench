@@ -4,6 +4,7 @@ These use mocks and synthetic data only; passing them says nothing about a
 real Neuron device.
 """
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -29,8 +30,11 @@ def _rec(**kw):
 
 # ---------------------------------------------------------------- imports / isolation
 def _python(code: str) -> subprocess.CompletedProcess:
+    # torch would otherwise import an installed torch_neuronx itself (device-backend
+    # autoload), which the import-blocking tests below must be able to refuse
+    env = {**os.environ, "TORCH_DEVICE_BACKEND_AUTOLOAD": "0"}
     return subprocess.run([sys.executable, "-c", textwrap.dedent(code)], cwd=REPO,
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, env=env)
 
 
 def test_package_imports_without_neuron_backends():
