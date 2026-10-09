@@ -51,7 +51,8 @@ def main():
         from tvm.target import Target
     except ImportError as error:
         parser.error(f"TileLang toolchain not importable in this interpreter: {error}")
-    root = next((p for p in args.impl.resolve().parents if (p / "tilebench").is_dir()), None)
+    impl = args.impl.resolve()
+    root = next((p for p in impl.parents if (p / "tilebench").is_dir()), None)
     if root:
         sys.path.insert(0, str(root))
     digits = args.arch.split("_")[1].rstrip("af")
@@ -61,9 +62,12 @@ def main():
         hardware.device_info = lambda: forced
     except ImportError:
         pass
-    spec = importlib.util.spec_from_file_location("tl_impl", args.impl)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    if root and impl.is_relative_to(root):
+        module = importlib.import_module(".".join(impl.relative_to(root).with_suffix("").parts))
+    else:
+        spec = importlib.util.spec_from_file_location(impl.stem, impl)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
     tensors = []
     for item in args.tensor:
         shape, dtype = item.split(":")

@@ -7,6 +7,7 @@ target). No GPU is needed and nothing is launched.
 """
 
 import argparse
+import importlib
 import importlib.util
 import json
 from pathlib import Path
@@ -27,7 +28,7 @@ def main():
     parser.add_argument("impl", type=Path, help="impl_triton.py of the operator")
     parser.add_argument("kernel", help="name of the @triton.jit function in that file")
     parser.add_argument("--arg", action="append", default=[], metavar="NAME=KIND:VALUE",
-                        help="one per kernel parameter: ptr:i8 | desc:fp16:256x64 | int:20480 | float:1e-5 | const:2048 "
+                        help="one per kernel parameter: ptr:i8 | desc:fp16:256x64 | int:20480 | float:1e-5 | const:2048 | type:fp32 "
                              "(pass runtime integers with their real value: it decides the divisibility and equal-to-1 specialisation)")
     parser.add_argument("--num-warps", type=int, default=4)
     parser.add_argument("--num-stages", type=int)
@@ -51,9 +52,12 @@ def main():
     root = next((p for p in impl.parents if (p / "tilebench").is_dir()), None)
     if root:
         sys.path.insert(0, str(root))
-    spec = importlib.util.spec_from_file_location("triton_impl", impl)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    if root and impl.is_relative_to(root):
+        module = importlib.import_module(".".join(impl.relative_to(root).with_suffix("").parts))
+    else:
+        spec = importlib.util.spec_from_file_location(impl.stem, impl)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
     kernel = getattr(module, args.kernel)
     kernel = getattr(kernel, "fn", kernel) if not hasattr(kernel, "arg_names") else kernel
     given = dict(item.split("=", 1) for item in args.arg)
@@ -71,6 +75,9 @@ def main():
         elif kind == "desc":
             dtype, _, shape = value.partition(":")
             signature[name] = f"tensordesc<{aliases.get(dtype, dtype)}{[int(d) for d in shape.split('x')]}>"
+        elif kind == "type":
+            signature[name] = "constexpr"
+            constexprs[name] = triton.language.core.dtype(aliases.get(value, value))
         elif kind == "const" or (kind == "int" and int(value) == 1):
             signature[name] = "constexpr"
             constexprs[name] = json.loads(value)
@@ -82,7 +89,7 @@ def main():
         elif kind == "float":
             signature[name] = "fp32"
         else:
-            parser.error(f"--arg {name}: use ptr:<dtype>, desc:<dtype>:<AxB>, int:<value>, float:<value> or const:<json>")
+            parser.error(f"--arg {name}: use ptr:<dtype>, desc:<dtype>:<AxB>, int:<value>, float:<value>, const:<json> or type:<dtype>")
     backend, _, arch = args.target.partition(":")
     options = {"num_warps": args.num_warps}
     if args.num_stages is not None:

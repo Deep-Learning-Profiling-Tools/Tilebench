@@ -5,16 +5,19 @@ constants and writes the resulting Tile IR as text. The kernel signature is
 built explicitly from the shapes, so no GPU, NVIDIA driver or tileiras binary is
 needed, no cubin is produced and nothing is launched. Array arguments are
 described the way cuTile describes a contiguous, 16-byte-aligned array passed
-at launch: unit inner stride, and shape, outer strides and base address assumed
-divisible by what the given shape allows (up to 16 bytes).
+at launch: a stride of one element is a constant, and a shape, a stride or the
+base address is assumed divisible by 16 (bytes, for strides and the address)
+only when it is.
 """
 
 import argparse
+import importlib
 import importlib.util
 import inspect
 import json
 import math
 from pathlib import Path
+import re
 import sys
 
 
@@ -38,12 +41,16 @@ def main():
         from cuda.tile.compilation import _signature
     except ImportError as error:
         parser.error(f"cuTile toolchain not importable in this interpreter: {error}")
-    root = next((p for p in args.impl.resolve().parents if (p / "tilebench").is_dir()), None)
+    impl = args.impl.resolve()
+    root = next((p for p in impl.parents if (p / "tilebench").is_dir()), None)
     if root:
         sys.path.insert(0, str(root))
-    spec = importlib.util.spec_from_file_location("ct_impl", args.impl)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    if root and impl.is_relative_to(root):
+        module = importlib.import_module(".".join(impl.relative_to(root).with_suffix("").parts))
+    else:
+        spec = importlib.util.spec_from_file_location(impl.stem, impl)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
     kernel = getattr(module, args.kernel)
     function = kernel._annotated_function.pyfunc
     names = list(inspect.signature(function).parameters)
@@ -55,17 +62,17 @@ def main():
             shape, dtype = item.split(":")
             shape = [int(d) for d in shape.split("x")]
             element = getattr(ct, dtype)
-            size = max(1, int("".join(c for c in dtype if c.isdigit()) or 8) // 8)
+            size = max(1, int(re.search(r"\d+", dtype).group()) // 8)
             strides = [math.prod(shape[i + 1:]) for i in range(len(shape))]
             constraints.append(_signature.ArrayConstraint(
                 element, len(shape), index_dtype=ct.int32, stride_lower_bound_incl=[0] * len(shape),
                 alias_groups=(), may_alias_internally=False,
-                stride_constant=[None] * (len(shape) - 1) + [1],
-                stride_divisible_by=[max(1, math.gcd(s * size, 16) // size) for s in strides],
-                shape_divisible_by=[math.gcd(d, 16) for d in shape], base_addr_divisible_by=16))
+                stride_constant=[1 if s == 1 else None for s in strides],
+                stride_divisible_by=[max(1, 16 // size) if (s * size) % 16 == 0 else 1 for s in strides],
+                shape_divisible_by=[16 if d % 16 == 0 else 1 for d in shape], base_addr_divisible_by=16))
             continue
         value = json.loads(item)
-        if name in function.__annotations__:
+        if "Constant" in str(function.__annotations__.get(name, "")):
             constraints.append(_signature.ConstantConstraint(value))
         elif isinstance(value, bool):
             constraints.append(_signature.ScalarConstraint(ct.bool_))
