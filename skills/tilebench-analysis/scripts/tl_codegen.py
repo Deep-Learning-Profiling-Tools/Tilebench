@@ -15,6 +15,7 @@ the two shows what the passes did; the CUDA shows the final result.
 
 import argparse
 import importlib
+import inspect
 import importlib.util
 import json
 from pathlib import Path
@@ -40,6 +41,7 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--tir", type=Path, help="also write the TIR before TileLang's passes")
     parser.add_argument("--lowered-tir", type=Path, help="also write the device TIR after TileLang's passes")
+    parser.add_argument("--ptx", type=Path, help="also write the PTX nvcc produces from the generated CUDA (needs nvcc)")
     args = parser.parse_args()
     args.arch = {"B200": "sm_100", "GH200": "sm_90"}.get(args.hardware, args.hardware)
     if not args.arch.startswith("sm_"):
@@ -74,10 +76,12 @@ def main():
         tensors.append(torch.zeros([int(d) for d in shape.split("x")], dtype=getattr(torch, dtype)))
     kwargs = dict(item.split("=", 1) for item in args.kw)
     kwargs = {k: parse_value(v) for k, v in kwargs.items()}
-    captured = []
+    captured, calls = [], []
+    compile_cuda = nvcc.compile_cuda
 
     def capture(code, *unused, **ignored):
         captured.append(code)
+        calls.append((unused, ignored))
         raise RuntimeError("source captured")
 
     nvcc.compile_cuda = capture
@@ -110,6 +114,16 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(source)
     written = {}
+    if args.ptx:
+        if not calls:
+            parser.error("the nvcc call was not captured by this TileLang version's compile path")
+        bound = inspect.signature(compile_cuda).bind(source, *calls[0][0], **calls[0][1])
+        bound.arguments.update(target_format="ptx", path_target=str(args.ptx.resolve()))
+        if not bound.arguments.get("arch"):
+            bound.arguments["arch"] = args.arch
+        args.ptx.parent.mkdir(parents=True, exist_ok=True)
+        compile_cuda(*bound.args, **bound.kwargs)
+        written["ptx"] = str(args.ptx)
     if args.lowered_tir:
         if not lowered:
             parser.error("the lowered TIR was not produced by this TileLang version's compile path")
