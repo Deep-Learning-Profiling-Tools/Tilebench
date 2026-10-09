@@ -1,0 +1,21 @@
+# Device-specific binding of a DECLARED arithmetic mode (arithmetic_modes.yaml, unchanged) to the
+# calibrated mode that measures the same instruction path on that device. Used only by the empirical
+# target (metrics/empirical.py): the row keeps the declared mode in `mode` and records the measured mode
+# and this entry in its audit flags. Devices without an entry are unaffected (no aliasing anywhere else).
+schema: tilebench-device-mode-map/1
+devices:
+  MI300X:
+    mma_tf32_f32acc:
+      measured_mode: mma_xf32_f32acc
+      operators: [linear_self_attention]
+      reason: >-
+        The contracts' "fp32 operands rounded to TF32" maps to the XF32 Matrix Core path on CDNA3 (gfx942 has no
+        TF32 format). Triton 3.6.0 lowers tl.dot(..., input_precision="tf32") with fp32 operands on gfx942 to
+        v_mfma_f32_32x32x4_xf32 (linear_self_attention kv_gemm/out_gemm and matmul fp32 AMDGCN, 176 instances);
+        the calibrated mma_xf32_f32acc probe runs hipBLASLt's XF32 kernel (Cijk_..._S_MX_..., rel. RMS error 7.7e-4,
+        i.e. reduced-precision, not IEEE).
+      evidence:
+        - outputs/profiling/MI300X/analysis_2026-10-05/triton_ir/linear_self_attention__fp32__kv_gemm_kernel__PDMHR3V3/kv_gemm_kernel.amdgcn
+        - artifacts/llm_v2/calibration/MI300X/MI300X-20261009T060617Z-eccfca2c/raw/mma_xf32_f32acc.json
+      approved_by: "study owner, MI300X launch instruction (2026-10-09): minimal MI300X-specific mapping of mma_tf32_f32acc to the measured mma_xf32_f32acc ceiling"
+      approved_on: "2026-10-09"

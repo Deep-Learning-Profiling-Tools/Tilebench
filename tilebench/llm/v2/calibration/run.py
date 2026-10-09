@@ -28,7 +28,7 @@ from tilebench.paths import PEAK_PERFORMANCE_ROOT, REPO_ROOT
 CALIBRATION_ROOT = REPO_ROOT / "artifacts" / "llm_v2" / "calibration"
 LEGACY_COMMIT = "db1176977759e30bec453677db54dee79b2e8bd7"
 LEGACY_PATH = "results/peak_performance/peak_performance.json"
-SOURCE_FILES = ("schema.py", "protocol.py", "stats.py", "environment.py", "gpu_probes.py", "run.py")
+SOURCE_FILES = ("schema.py", "protocol.py", "stats.py", "environment.py", "gpu_probes.py", "rocm_probes.py", "run.py")
 
 CUDA_MODES = ["hbm_stream_bw", "mma_fp16_f32acc", "mma_bf16_f32acc", "mma_tf32_f32acc", "gemm_fp32_ieee",
               "mma_fp8_e4m3_f32acc", "mma_int8_i32acc", "fp32_fma_vector", "fp16x2_fma_vector", "bf16x2_fma_vector"]
@@ -143,6 +143,10 @@ def _mode_entry(name: str, result: dict, proto: dict) -> dict:
     if reg["kind"] == "matrix" and name != "gemm_fp32_ieee":
         entry["limitations"] = ["library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of "
                                 "this library on these shapes, not a proof of the hardware maximum"]
+    if result.get("additional_probes"):
+        entry["additional_probes"] = result["additional_probes"]
+        entry.setdefault("limitations", []).append("points of the additional probe(s) enter the same maximum over valid "
+                                                   "points; see each point's id/probe")
     return entry
 
 
@@ -237,6 +241,17 @@ def run_calibration(device: str, out: Path | None = None, *, modes: list[str] | 
                     res = gp.probe_fma(name, proto, dev, int(props.get("multi_processor_count") or 0), backend)
                 else:
                     res = {"status": "not_measured", "reason": "no probe registered for this mode"}
+                if backend == "rocm" and name in ("fp16x2_fma_vector", "mma_int8_i32acc"):
+                    # gfx942: second measurement path (calibration/rocm_probes.py); max over all valid points
+                    from tilebench.llm.v2.calibration import rocm_probes as rp
+                    if name == "fp16x2_fma_vector":
+                        extra = rp.probe_fp16x2_packed(proto, dev, int(props.get("multi_processor_count") or 0))
+                        desc = "rocm_probes.probe_fp16x2_packed: register-resident v_pk_fma_f16 via inline asm"
+                    else:
+                        extra = rp.probe_int8_triton(proto, dev)
+                        desc = "rocm_probes.probe_int8_triton: Triton tl.dot int8 GEMM (v_mfma_i32_*_i8), fixed configs"
+                    res.setdefault("points", []).extend(extra)
+                    res["additional_probes"] = [desc]
             except Exception as e:  # noqa: BLE001  (recorded; the mode fails, others continue)
                 res = {"status": "failed", "points": [], "error": f"{type(e).__name__}: {e}"}
             res["telemetry"] = tele.stop()

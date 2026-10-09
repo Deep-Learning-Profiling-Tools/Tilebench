@@ -33,6 +33,7 @@ from tilebench.paths import REPO_ROOT
 MANIFESTS = Path(__file__).resolve().parent.parent / "manifests"
 CALIBRATION_MANIFEST = MANIFESTS / "calibration.yaml"
 MODES_FILE = MANIFESTS / "arithmetic_modes.yaml"
+DEVICE_MODE_MAP_FILE = MANIFESTS / "device_mode_map.yaml"
 MODES_SCHEMA = "tilebench-arithmetic-modes/2"
 NON_CALIBRATED = tuple(cs.NON_CALIBRATED_DECLARATIONS)
 STATUSES = ("ok", "definition_pending", "peak_unavailable", "profile_missing", "declaration_missing", "expr_missing")
@@ -123,6 +124,15 @@ def approved_overrides(doc: dict, operator: str) -> list[dict]:
         if ov and ov.get("operator") == operator and d.get("status") == "approved":
             out.append({"decision": name, **ov})
     return out
+
+
+def device_mode_map(device: str, path: Path | None = None) -> dict:
+    """{declared mode: entry} of manifests/device_mode_map.yaml for this device ({} when it has none)."""
+    p = Path(path or DEVICE_MODE_MAP_FILE)
+    if not p.is_file():
+        return {}
+    doc = yaml.safe_load(p.read_text()) or {}
+    return dict((doc.get("devices") or {}).get(device) or {})
 
 
 # --------------------------------------------------------------------------- profiles
@@ -265,8 +275,14 @@ def t_emp(device: str, operator: str, dtype: str, params: dict, problem_size: in
     elif decl["mode"] == "no_compute_term":
         rec.audit_flags.append("frozen F is 0")
     else:
+        measured = decl["mode"]
+        dm = device_mode_map(device).get(decl["mode"])
+        if dm and operator in dm.get("operators", [operator]):
+            measured = dm["measured_mode"]
+            rec.audit_flags.append(f"device mode map ({device}): declared {decl['mode']} -> measured {measured} "
+                                   f"(manifests/device_mode_map.yaml; {dm.get('approved_by')})")
         try:
-            p = peak_for_mode(profile, decl["mode"], unit=f"{decl['f_unit']}/s")
+            p = peak_for_mode(profile, measured, unit=f"{decl['f_unit']}/s")
         except PeakUnavailable as e:
             rec.status, rec.reason = "peak_unavailable", str(e)
             return rec
@@ -293,9 +309,12 @@ def scoring_binding(device: str, *, manifest: dict | None = None) -> dict:
     """What a campaign pins at creation: its device's calibration entry and the
     declaration file. Other devices' entries are deliberately not included."""
     e = device_entry(device, manifest)
-    return {"device": device, "profile": e.get("profile"), "profile_sha256": e.get("sha256"),
-            "profile_status": e.get("status"), "arithmetic_modes_sha256": modes_sha256(),
-            "ceiling_basis": cs.CEILING_BASIS}
+    out = {"device": device, "profile": e.get("profile"), "profile_sha256": e.get("sha256"),
+           "profile_status": e.get("status"), "arithmetic_modes_sha256": modes_sha256(),
+           "ceiling_basis": cs.CEILING_BASIS}
+    if device_mode_map(device):        # only devices with a mapping pin it (other devices' bindings are unchanged)
+        out["device_mode_map_sha256"] = sha256_file(DEVICE_MODE_MAP_FILE)
+    return out
 
 
 def case_targets(device: str, operator: str, dtype: str, cases: list[dict], metrics_cfg: dict, modes_doc: dict,
@@ -341,5 +360,7 @@ def scoring_table(device: str, tasks: list[dict], *, modes_doc: dict | None = No
     body = {"device": device, "ceiling_basis": cs.CEILING_BASIS, "declaration_status": modes_doc.get("status"),
             "arithmetic_modes_sha256": modes_sha256(), "profile_sha256": (profile or {}).get("profile_sha256"),
             "calibration_id": (profile or {}).get("calibration_id"), "rows": rows, "status_counts": counts}
+    if device_mode_map(device):
+        body["device_mode_map_sha256"] = sha256_file(DEVICE_MODE_MAP_FILE)
     body["scoring_sha256"] = cs.sha256_json({k: v for k, v in body.items() if k != "status_counts"})
     return body

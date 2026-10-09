@@ -22,6 +22,24 @@ def _sha(p):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+_MI300X_FROZEN_LINE = "  MI300X: {profile: null, sha256: null, status: none, frozen_by: null}\n"
+
+
+def _calibration_without_mi300x() -> bytes:
+    """exp/llm-mi300x registers MI300X's own frozen profile in calibration.yaml. The B200 freeze stays byte-exact:
+    with only the MI300X entry put back to its frozen (empty) line, the file must hash to the frozen digest, so the
+    header and the B200/GH200/Trn2 entries cannot change. The MI300X entry itself must be a frozen MI300X profile."""
+    lines = (ms.MANIFEST_DIR / "calibration.yaml").read_text().splitlines(keepends=True)
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("  MI300X:"))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("  ") and not lines[i].startswith("    "))
+    entry = E.device_entry("MI300X")
+    assert entry["status"] in ("none", "frozen")
+    if entry["status"] == "frozen":
+        assert entry["profile"].startswith("artifacts/llm_v2/calibration/MI300X/") and entry["frozen_by"]
+        assert E.load_profile(entry)["device"] == "MI300X"
+    return "".join(lines[:start] + [_MI300X_FROZEN_LINE] + lines[end:]).encode()
+
+
 def test_frozen_rev4_manifest_matches_the_tree():
     f = json.loads(FROZEN.read_text())
     study, models, folds, modes = ms.load_study(), ms.load_models(), ms.load_folds(), ms.load_arithmetic_modes()
@@ -31,6 +49,9 @@ def test_frozen_rev4_manifest_matches_the_tree():
     assert {k: p[k] for k in protocol_identity(study)} == protocol_identity(study)
     assert f["study_config_hash"] == ms.study_config_hash(study, models, folds, modes)
     for name, digest in f["manifests"].items():
+        if name == "calibration.yaml":      # exp/llm-mi300x: per-device entry check (see _calibration_without_mi300x)
+            assert hashlib.sha256(_calibration_without_mi300x()).hexdigest() == digest, name
+            continue
         assert _sha(ms.MANIFEST_DIR / name) == digest, name
     cs = ms.load_case_sets()
     assert f["case_sets"]["sha256"] == _sha(ms.MANIFEST_DIR / "case_sets.yaml")

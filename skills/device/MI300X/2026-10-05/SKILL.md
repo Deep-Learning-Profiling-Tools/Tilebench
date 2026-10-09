@@ -4,7 +4,7 @@ device: MI300X
 snapshot: "2026-10-05"
 kind: device_context
 arch: cdna3
-revised: 2026-10-05
+revised: 2026-10-09
 ---
 
 # MI300X Device Context (snapshot 2026-10-05)
@@ -13,8 +13,9 @@ Sourced hardware and environment facts only, in AMD native terms (XCD, CU, SIMD,
 LDS, VGPR/AGPR/SGPR, Infinity Cache). Every number carries a unit, a scope and a source tag
 `[S<n>]` (see Sources). `unknown` means no allowed source states the value. Whether a DSL
 (Triton, TileLang) exposes a mechanism listed here is NOT asserted in this file; confirm it in
-the backend Reference Skill. No benchmark-derived guidance. Device facts were captured on the
-campaign host, not on the host that wrote this file: `verified_on_device: false`.
+the backend Reference Skill. No benchmark-derived guidance. Revised 2026-10-09 on the campaign device
+itself (host "7"): limits, LDS per work-group and instruction support marked [S7] come from that
+device's own runtime output and executed code: `verified_on_device: true`.
 
 ## Identity
 
@@ -33,7 +34,8 @@ campaign host, not on the host that wrote this file: `verified_on_device: false`
 | Wavefront size | 64 work-items | per wavefront | [S4][S6-11][S6-14] |
 | Max work-group size | 1024 work-items | per work-group | [S6-14] |
 | Max engine clock | 2,100 MHz | whole device | [S6-12] |
-| Max wavefronts per SIMD / per CU | unknown | — | — |
+| Max resident wavefronts | 8 per SIMD; 32 per CU (KFD `max_waves_per_simd` 8; rocminfo "Max Waves Per CU: 32") | per SIMD / per CU | [S7] |
+| Max resident work-items | 2,048 (rocminfo "Max Work-item Per CU"; torch `max_threads_per_multi_processor` 2048) | per CU | [S7] |
 | Max work-groups per CU | unknown | — | — |
 
 Occupancy rule stated by the vendor: "each Execution Unit (EU) has 512 available VGPRs, which are allocated in blocks of 16" (EU = SIMD); example: "the occupancy is limited to 2 waves per EU because (176 x 3 > 512)" [S6-12].
@@ -49,12 +51,14 @@ Occupancy rule stated by the vendor: "each Execution Unit (EU) has 512 available
 | Vector FP64 | 128 | 81.7 |
 | Matrix FP32 | 256 | 163.4 |
 | Vector FP32 | 256 | 163.4 |
-| "Vector TF32" (as labelled on the page) | 1024 | 653.7 |
+| Matrix TF32, i.e. XF32 (the page labels this row "Vector TF32") | 1024 | 653.7 |
 | Matrix FP16 | 2048 | 1307.4 |
 | Matrix BF16 | 2048 | 1307.4 |
 | Matrix FP8 | 4096 | 2614.9 |
 | Matrix INT8 | 4096 | 2614.9 |
 
+- TF32-precision math on CDNA3 is the XF32 Matrix Core format (`v_mfma_*_xf32`, e.g. `v_mfma_f32_32x32x4_xf32`); there is no vector TF32 instruction [S6-12][S7].
+- Packed vector FMA: `v_pk_fma_f32` (2 fp32 lanes per instruction) and `v_pk_fma_f16` (2 fp16 lanes per instruction) are supported; both were assembled and executed on this device [S7].
 - FP4 / FP6 / microscaling matrix formats: not stated on the fetched pages; capability: unknown.
 
 ## Memory hierarchy
@@ -66,7 +70,7 @@ Occupancy rule stated by the vendor: "each Execution Unit (EU) has 512 available
 | Max architected registers | 256 vector (VGPR) + 256 matrix (AGPR) 32-bit; 104 SGPR | per work-item / per wavefront (HIP table wording "per thread") | [S6-14] |
 | SGPR file | 12.5 KiB | per CU | [S6-11] |
 | LDS (local data share) | 64 KiB ("64 KB") | per CU | [S6-11][S6-12] |
-| Max LDS allocation per work-group | unknown | per work-group | — |
+| Max LDS allocation per work-group | 64 KiB (65,536 B; rocminfo GROUP segment "64(0x40) KB", torch `shared_memory_per_block` 65536) | per work-group | [S7] |
 | L1 vector (data) cache | 32 KiB ("L1: 32(0x20) KB" rocminfo) | per CU | [S4][S6-11][S6-12][S6-13] |
 | L1 scalar cache | 16 KiB | per 2 CUs | [S6-11] |
 | L1 instruction cache | 64 KiB | per 2 CUs | [S6-11] |
@@ -86,7 +90,7 @@ Framework facts [S5][S4]: the runtime-reported L2 (4 MiB per XCD) is NOT the las
 
 ## Limits
 
-- Work-group: 1024 work-items max; wavefront 64 [S6-14]. Registers: 256 VGPR + 256 AGPR + 104 SGPR per work-item [S6-14]; 512 VGPRs per SIMD in blocks of 16 [S6-12]. LDS 64 KiB per CU [S6-11][S6-12]. Max engine clock 2,100 MHz [S6-12]. Memory clock: unknown.
+- Work-group: 1024 work-items max; wavefront 64 [S6-14]. Registers: 256 VGPR + 256 AGPR + 104 SGPR per work-item [S6-14]; 512 VGPRs per SIMD in blocks of 16 [S6-12]. LDS 64 KiB per CU and at most 64 KiB per work-group [S6-11][S6-12][S7]. At most 8 wavefronts per SIMD, 32 wavefronts and 2,048 work-items per CU [S7]. Max engine clock 2,100 MHz [S6-12]. Memory clock: unknown.
 
 ## Software snapshot (host "7", captured 2026-10-01) [S4]
 
@@ -115,4 +119,5 @@ Framework timing mode on this device [S4]: configs requesting `use_cuda_graph: t
 4. **[S6-12]** ROCm "MI300X workload optimization" page (8 XCDs, 40/38 CUs per XCD, 304 CUs, 4 SIMDs per CU, 64 KB LDS per CU, 32 KB L1 per CU, 4 MB L2 per XCD, 256 MB Infinity Cache, 192 GB HBM3, 5.3 TB/s, 2,100 MHz, 1,216 matrix cores, 512 VGPRs per EU in blocks of 16) — https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference-optimization/workload.html (accessed 2026-10-05).
 5. **[S6-13]** ROCm 6.2.4 "AMD Instinct MI300 microarchitecture" page (8 HBM3 stacks, 5.3 TB/s, 4 MB L2 per XCD, 32 KB L1, FLOPS/clock/CU peak table) — https://rocm.docs.amd.com/en/docs-6.2.4/conceptual/gpu-arch/mi300.html (accessed 2026-10-05). The `/en/latest/` spelling of this page returned HTTP 404.
 6. **[S6-14]** HIP "Hardware features" table, CDNA3 column (wavefront 64, 1024 work-items per work-group — table row "Maximum threads per block", 256 vector + 256 matrix registers, 104 scalar registers, Matrix Cores, FP16/BF16/FP8/TF32) — https://rocm.docs.amd.com/projects/HIP/en/latest/reference/hardware_features.html (accessed 2026-10-05).
-7. Failed fetches (2026-10-05): https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html (timeout, 3 attempts); https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/data-sheets/amd-instinct-mi300x-data-sheet.pdf (timeout); https://rocm.docs.amd.com/en/latest/conceptual/gpu-arch/mi300.html (404).
+7. **[S7]** On-device capture on the campaign device (host "7", 2026-10-09, AMD Instinct MI300X VF, gfx942, ROCm 7.14, torch 2.10.0+rocm7.1, triton 3.6.0): `rocminfo` ("Max Waves Per CU: 32", "Max Work-item Per CU: 2048", "Workgroup Max Size: 1024", Pool "Segment: GROUP" "Size: 64(0x40) KB"); `/sys/class/kfd/kfd/topology/nodes/*/properties` (`max_waves_per_simd 8`, `simd_per_cu 4`, `lds_size_in_kb 64`, `num_xcc 8`, `max_engine_clk_fcompute 2100`); `torch.cuda.get_device_properties(0)` (`shared_memory_per_block` 65536, `max_threads_per_multi_processor` 2048, `multi_processor_count` 304); AMDGCN of kernels compiled and executed on the device containing `v_pk_fma_f32`, `v_pk_fma_f16` and `v_mfma_f32_32x32x4_xf32` (calibration MI300X-20261009T060617Z-eccfca2c raw files and the 2026-10-05 MI300X IR dumps).
+8. Failed fetches (2026-10-05): https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html (timeout, 3 attempts); https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/data-sheets/amd-instinct-mi300x-data-sheet.pdf (timeout); https://rocm.docs.amd.com/en/latest/conceptual/gpu-arch/mi300.html (404).
