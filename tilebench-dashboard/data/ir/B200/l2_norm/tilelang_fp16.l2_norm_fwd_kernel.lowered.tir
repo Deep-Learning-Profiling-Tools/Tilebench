@@ -1,0 +1,46 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def l2_norm_fwd_kernel_kernel(X: T.handle("float16", "global"), Y: T.handle("float16", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 512, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `X`, `Y`")
+        Y_1 = T.decl_buffer((M * 10240,), "float16", data=Y)
+        X_1 = T.decl_buffer((M * 10240,), "float16", data=X)
+        bx = T.launch_thread("blockIdx.x", M)
+        acc = T.alloc_buffer((16,), scope="local")
+        X_local_cast = T.alloc_buffer((8,), "float16", scope="local")
+        row_sum = T.alloc_buffer((1,), scope="local")
+        workspace = T.alloc_buffer((128,), scope="shared.dyn")
+        inv_norm = T.alloc_buffer((1,), scope="local")
+        Y_local = T.alloc_buffer((16,), "float16", scope="local")
+        X_local_cast_1 = T.alloc_buffer((8,), "float16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((16,), data=acc.data, scope="local")
+        row_sum_1 = T.decl_buffer((1,), data=row_sum.data, scope="local")
+        inv_norm_1 = T.decl_buffer((1,), data=inv_norm.data, scope="local")
+        for i in T.unroll(4):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        X_2 = T.Buffer((M * 10240,), "float16", data=X)
+        for tile in range(5):
+            for i in T.unroll(2):
+                X_local_cast[0:8] = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+                for vec in range(2):
+                    acc_1[i * 8 + vec * 4:i * 8 + vec * 4 + 4] = acc_1[i * 8 + vec * 4:i * 8 + vec * 4 + 4] + T.Cast("float32x4", X_local_cast[vec * 4:vec * 4 + 4]) * T.Cast("float32x4", X_local_cast[vec * 4:vec * 4 + 4])
+        row_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(16):
+            row_sum_1[0] = row_sum_1[0] + acc_1[rv % 2 * 8 + rv // 2]
+        row_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 128, 1, 0, tl::NamedBarrier<128>>::run", row_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace.data, 0, 128, 2))
+        inv_norm_1[0] = T.rsqrt(row_sum_1[0] + T.float32(9.9999999999999995e-07))
+        for tile in range(5):
+            Y_local_1 = T.decl_buffer((16,), "float16", data=Y_local.data, scope="local")
+            for i in T.unroll(2):
+                X_local_cast_1[0:8] = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+                for vec in range(2):
+                    Y_local_1[i * 8 + vec * 4:i * 8 + vec * 4 + 4] = T.Cast("float16x4", T.Cast("float32x4", X_local_cast_1[vec * 4:vec * 4 + 4]) * T.Broadcast(inv_norm_1[0], 4))
+            for i in T.unroll(2):
+                Y_1[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", i) * T.int64(1024) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)] = Y_local_1[i * 8:i * 8 + 8]

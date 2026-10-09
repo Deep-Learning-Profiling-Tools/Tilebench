@@ -1,0 +1,26 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def histogram_reduce_kernel(partial: T.handle, histogram: T.handle):
+    partial_1 = T.match_buffer(partial, (256, 4096), "int32", strides=(4096, 1))
+    histogram_1 = T.match_buffer(histogram, (4096,), "int32", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 64)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        acc = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        tile = T.sblock_alloc_buffer((128, 64), "int32", scope="local.fragment")
+        tile_sum = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        T.fill(T.region(acc[0], 2, 64), 0)
+        for _tmp in range(2):
+            row_start: T.int32 = _tmp * 128
+            T.fill(T.region(tile[0, 0], 2, 128, 64), 0)
+            T.copy(T.region(partial_1[row_start, bx * 64], 1, 128, 64), T.region(tile[0, 0], 2, 128, 64))
+            T.reduce(T.region(tile[0, 0], 1, 128, 64), T.region(tile_sum[0], 2, 64), "sum", 0, T.bool(True))
+            for local_bin in T.parallel(64):
+                acc[local_bin] = acc[local_bin] + tile_sum[local_bin]
+        T.copy(T.region(acc[0], 1, 64), T.region(histogram_1[bx * 64], 2, 64))

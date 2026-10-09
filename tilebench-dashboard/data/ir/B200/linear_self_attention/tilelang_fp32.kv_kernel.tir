@@ -1,0 +1,33 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def kv_kernel(S: T.handle, PhiK: T.handle, V: T.handle):
+    S_1 = T.match_buffer(S, (256, 256), strides=(256, 1))
+    PhiK_1 = T.match_buffer(PhiK, (10000, 256), strides=(256, 1))
+    V_1 = T.match_buffer(V, (10000, 256), strides=(256, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 8)
+    by = T.launch_thread("blockIdx.y", 8)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {PhiK_1.data: 0.0, V_1.data: 0.0}})
+        k_shared = T.sblock_alloc_buffer((32, 64), "custom[tfloat32]", scope="shared.dyn")
+        v_shared = T.sblock_alloc_buffer((32, 64), "custom[tfloat32]", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((32, 32), scope="local.fragment")
+        d_m: T.int32 = bx * 32
+        d_n: T.int32 = by * 32
+        T.fill(T.region(acc[0, 0], 2, 32, 32), 0)
+        for k_tile in T.serial(157, annotations={"num_stages": 3}):
+            m_start: T.int32 = k_tile * 64
+            for i in T.parallel(32):
+                for j in T.parallel(64):
+                    k_shared[i, j] = T.Cast("custom[tfloat32]", PhiK_1[m_start + j, d_m + i])
+            for i in T.parallel(32):
+                for j in T.parallel(64):
+                    v_shared[i, j] = T.Cast("custom[tfloat32]", V_1[m_start + j, d_n + i])
+            T.gemm(T.region(k_shared[0, 0], 1, 32, 64), T.region(v_shared[0, 0], 1, 32, 64), T.region(acc[0, 0], 3, 32, 32), T.bool(False), T.bool(True), 32, 32, 64, 0, T.bool(False), 64, 64, 0, 0, 1, 0, 0, 0, 0)
+        T.copy(T.region(acc[0, 0], 1, 32, 32), T.region(S_1[d_m, d_n], 2, 32, 32))

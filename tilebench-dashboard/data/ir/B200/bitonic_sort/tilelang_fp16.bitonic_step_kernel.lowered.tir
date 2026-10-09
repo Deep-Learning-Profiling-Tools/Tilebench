@@ -1,0 +1,31 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(work: T.handle("float16", "global"), j: T.int32, k: T.int32):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 32768, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": []})
+        work_1 = T.decl_buffer((16777216,), "float16", data=work)
+        bx = T.launch_thread("blockIdx.x", 32768)
+        a = T.alloc_buffer((1,), "float16", scope="local.var")
+        b = T.alloc_buffer((1,), "float16", scope="local.var")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        for i in T.unroll(4):
+            a_1 = T.decl_buffer((1,), "float16", data=a.data, scope="local.var")
+            b_1 = T.decl_buffer((1,), "float16", data=b.data, scope="local.var")
+            active: T.bool = bx * 512 + i * 128 + tx < T.bitwise_xor(bx * 512 + i * 128 + tx, j) and T.bitwise_xor(bx * 512 + i * 128 + tx, j) < 16777216
+            a_1[0] = T.float16(0.0)
+            b_1[0] = T.float16(0.0)
+            if bx * 512 + i * 128 + tx < T.bitwise_xor(bx * 512 + i * 128 + tx, j) and T.bitwise_xor(bx * 512 + i * 128 + tx, j) < 16777216:
+                a_1[0] = work_1[bx * 512 + i * 128 + tx]
+                b_1[0] = work_1[T.bitwise_xor(T.Cast("int64", bx) * T.int64(512) + T.Cast("int64", i) * T.int64(128) + T.Cast("int64", tx), T.Cast("int64", j))]
+            ascending: T.bool = T.bitwise_and(bx * 512 + i * 128 + tx, k) == 0
+            swap: T.bool = T.Select(T.bitwise_and(bx * 512 + i * 128 + tx, k) == 0, b_1[0] < a_1[0], a_1[0] < b_1[0])
+            new_a: T.float16 = T.Select(swap, b_1[0], a_1[0])
+            new_b: T.float16 = T.Select(swap, a_1[0], b_1[0])
+            if bx * 512 + i * 128 + tx < T.bitwise_xor(bx * 512 + i * 128 + tx, j) and T.bitwise_xor(bx * 512 + i * 128 + tx, j) < 16777216:
+                work_1[bx * 512 + i * 128 + tx] = new_a
+                work_1[T.bitwise_xor(T.Cast("int64", bx) * T.int64(512) + T.Cast("int64", i) * T.int64(128) + T.Cast("int64", tx), T.Cast("int64", j))] = new_b

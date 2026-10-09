@@ -1,0 +1,39 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def argmax_rowwise_kernel(X: T.handle, Out: T.handle):
+    M = T.int32()
+    X_1 = T.match_buffer(X, (M, 20480), "float16", strides=(20480, 1))
+    Out_1 = T.match_buffer(Out, (M,), "int64", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {X_1.data: T.infinity("float16") * T.float16(-1.0)}})
+        x_tile = T.sblock_alloc_buffer((2048,), scope="local.fragment")
+        idx_tile = T.sblock_alloc_buffer((2048,), "int32", scope="local.fragment")
+        tile_max = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        tile_idx = T.sblock_alloc_buffer((1,), "int32", scope="local.fragment")
+        best_val = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        best_idx = T.sblock_alloc_buffer((1,), "int32", scope="local.fragment")
+        best_val[0] = T.infinity("float32") * T.float32(-1.0)
+        best_idx[0] = 0
+        for tile in T.serial(10, annotations={"num_stages": 2}):
+            start: T.int32 = tile * 2048
+            T.fill(T.region(x_tile[0], 2, 2048), T.infinity("float32") * T.float32(-1.0))
+            for i in T.parallel(2048):
+                col: T.int32 = start + i
+                x_tile[i] = T.Cast("float32", X_1[bx, col])
+            T.reduce(T.region(x_tile[0], 1, 2048), T.region(tile_max[0], 2, 1), "max", 0, T.bool(True))
+            for i in T.parallel(2048):
+                col: T.int32 = start + i
+                idx_tile[i] = T.Select(x_tile[i] == tile_max[0], col, 20480)
+            T.reduce(T.region(idx_tile[0], 1, 2048), T.region(tile_idx[0], 2, 1), "min", 0, T.bool(True))
+            better: T.bool = tile_max[0] > best_val[0]
+            best_val[0] = T.Select(better, tile_max[0], best_val[0])
+            best_idx[0] = T.Select(better, tile_idx[0], best_idx[0])
+        Out_1[bx] = T.Cast("int64", best_idx[0])

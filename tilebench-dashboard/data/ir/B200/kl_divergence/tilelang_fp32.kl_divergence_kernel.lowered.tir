@@ -1,0 +1,48 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def kl_divergence_kernel_kernel(log_y_pred: T.handle("float32", "global"), loss: T.handle("float32", "global"), y_true: T.handle("float32", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 1024, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 2]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `log_y_pred`, `y_true`, `loss`")
+        loss_1 = T.decl_buffer((M,), data=loss)
+        log_y_pred_1 = T.decl_buffer((M * 16384,), data=log_y_pred)
+        y_true_1 = T.decl_buffer((M * 16384,), data=y_true)
+        bx = T.launch_thread("blockIdx.x", M)
+        loss_global = T.alloc_buffer((1,), scope="local")
+        y_true_local = T.alloc_buffer((16,), scope="local")
+        local_log_y_pred = T.alloc_buffer((16,), scope="local")
+        loss_local_arr = T.alloc_buffer((16,), scope="local")
+        loss_local = T.alloc_buffer((1,), scope="local")
+        workspace = T.alloc_buffer((256,), scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        loss_global_1 = T.decl_buffer((1,), data=loss_global.data, scope="local")
+        loss_global_1[0] = T.float32(0.0)
+        T.tvm_storage_sync("shared.dyn")
+        for tile in range(4):
+            y_true_local_1 = T.decl_buffer((16,), data=y_true_local.data, scope="local")
+            loss_local_arr_1 = T.decl_buffer((16,), data=loss_local_arr.data, scope="local")
+            local_log_y_pred_1 = T.decl_buffer((16,), data=local_log_y_pred.data, scope="local")
+            loss_local_1 = T.decl_buffer((1,), data=loss_local.data, scope="local")
+            for i in T.unroll(2):
+                y_true_2 = T.Buffer((M * 16384,), data=y_true)
+                y_true_local_1[i * 8:i * 8 + 8] = y_true_2[T.Cast("int64", bx) * T.int64(16384) + T.Cast("int64", tile) * T.int64(4096) + T.Cast("int64", i) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(16384) + T.Cast("int64", tile) * T.int64(4096) + T.Cast("int64", i) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+            for i in T.unroll(2):
+                log_y_pred_2 = T.Buffer((M * 16384,), data=log_y_pred)
+                local_log_y_pred_1[i * 8:i * 8 + 8] = log_y_pred_2[T.Cast("int64", bx) * T.int64(16384) + T.Cast("int64", tile) * T.int64(4096) + T.Cast("int64", i) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(16384) + T.Cast("int64", tile) * T.int64(4096) + T.Cast("int64", i) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+            for i in T.unroll(4):
+                loss_local_arr_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+            for i in T.unroll(16):
+                yt: T.float32 = y_true_local_1[i]
+                loss_local_arr_1[i] = T.Select(T.float32(0.0) < yt, yt * (T.log(yt) - local_log_y_pred_1[i]), T.float32(0.0))
+            loss_local_1[0] = T.float32(0.0)
+            for rv in T.unroll(16):
+                loss_local_1[0] = loss_local_1[0] + loss_local_arr_1[rv % 2 * 8 + rv // 2]
+            loss_local_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 1, 0, tl::NamedBarrier<256>>::run", loss_local_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace.data, 0, 256, 2))
+            loss_global_1[0] = loss_global_1[0] + loss_local_1[0]
+        if tx == 0:
+            loss_1[T.Cast("int64", bx)] = loss_global_1[0]

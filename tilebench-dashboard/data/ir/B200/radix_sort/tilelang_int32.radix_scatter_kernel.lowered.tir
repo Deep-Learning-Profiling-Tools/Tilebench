@@ -1,0 +1,41 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(hist: T.handle("int32", "global"), input: T.handle("int32", "global"), output: T.handle("int32", "global"), shift: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 8192, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 19532, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        output_1 = T.decl_buffer((20000000,), "int32", data=output)
+        hist_1 = T.decl_buffer((78128,), "int32", data=hist)
+        input_1 = T.decl_buffer((20000000,), "int32", data=input)
+        bx = T.launch_thread("blockIdx.x", 19532)
+        block = T.alloc_buffer((8,), "int32", scope="local")
+        digit_vals = T.alloc_buffer((8,), "int32", scope="local")
+        src_buffer = T.alloc_buffer((8,), "int64", scope="local")
+        scan_smem = T.alloc_buffer((1024,), "int64", scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        block_1 = T.decl_buffer((8,), "int32", data=block.data, scope="local")
+        digit_vals_1 = T.decl_buffer((8,), "int32", data=digit_vals.data, scope="local")
+        src_buffer_1 = T.decl_buffer((8,), "int64", data=src_buffer.data, scope="local")
+        scan_smem_1 = T.decl_buffer((1024,), "int64", data=scan_smem.data, scope="shared.dyn")
+        for i in T.unroll(2):
+            valid: T.bool = bx * 4 + i * 2 + tx // 64 < 78125
+            val: T.int32x4 = T.if_then_else(bx * 4 + i * 2 + tx // 64 < 78125, input_1[bx * 1024 + i * 512 + tx * 4:bx * 1024 + i * 512 + tx * 4 + 4], T.Broadcast(0, 4))
+            block_1[i * 4:i * 4 + 4] = val
+            digit_vals_1[i * 4:i * 4 + 4] = T.bitwise_and(T.shift_right(val, T.Broadcast(shift, 4)), T.Broadcast(3, 4))
+            src_buffer_1[i * 4:i * 4 + 4] = T.shift_left(T.Broadcast(T.Cast("int64", bx * 4 + i * 2 + tx // 64 < 78125), 4), T.Cast("int64x4", T.bitwise_and(T.shift_right(val, T.Broadcast(shift, 4)), T.Broadcast(3, 4))) * T.Broadcast(T.int64(16), 4))
+        for i in T.unroll(4):
+            scan_smem_1[i // 2 * 512 + tx * 4 + i % 2 * 2:i // 2 * 512 + tx * 4 + i % 2 * 2 + 2] = src_buffer_1[i * 2:i * 2 + 2]
+        T.tvm_storage_sync("shared.dyn")
+        T.call_extern("int64", "tl::CumSum1D<128, false>::run", T.tvm_access_ptr(T.type_annotation("int64"), scan_smem.data, 0, 1024, 1), T.tvm_access_ptr(T.type_annotation("int64"), scan_smem.data, 0, 1024, 2), 1024)
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(4):
+            src_buffer_1[i * 2:i * 2 + 2] = scan_smem_1[i // 2 * 512 + tx * 4 + i % 2 * 2:i // 2 * 512 + tx * 4 + i % 2 * 2 + 2]
+        for i in T.unroll(8):
+            if bx * 4 + i // 4 * 2 + tx // 64 < 78125:
+                if 0 <= T.if_then_else(0 <= digit_vals_1[i] and digit_vals_1[i] < 4, hist_1[T.Cast("int64", digit_vals_1[T.Cast("int64", i)]) * T.int64(19532) + T.Cast("int64", bx)], 0) + T.Cast("int32", T.bitwise_and(T.shift_right(src_buffer_1[i] - T.shift_left(T.int64(1), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.int64(65535))):
+                    if T.if_then_else(0 <= digit_vals_1[i] and digit_vals_1[i] < 4, hist_1[T.Cast("int64", digit_vals_1[T.Cast("int64", i)]) * T.int64(19532) + T.Cast("int64", bx)], 0) + T.Cast("int32", T.bitwise_and(T.shift_right(src_buffer_1[i] - T.shift_left(T.int64(1), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.int64(65535))) < 20000000:
+                        output_1[T.if_then_else(T.int64(0) <= T.Cast("int64", digit_vals_1[T.Cast("int64", i)]) and T.Cast("int64", digit_vals_1[T.Cast("int64", i)]) < T.int64(4), T.Cast("int64", hist_1[T.Cast("int64", digit_vals_1[T.Cast("int64", i)]) * T.int64(19532) + T.Cast("int64", bx)]), T.int64(0)) + T.bitwise_and(T.shift_right(src_buffer_1[i] - T.shift_left(T.int64(1), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.Cast("int64", digit_vals_1[i]) * T.int64(16)), T.int64(65535))] = block_1[i]

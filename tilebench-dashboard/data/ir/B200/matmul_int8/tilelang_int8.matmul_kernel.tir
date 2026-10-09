@@ -1,0 +1,45 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def matmul_kernel(a: T.handle, b: T.handle, c: T.handle):
+    a_1 = T.match_buffer(a, (2048, 20480), "int8", strides=(20480, 1))
+    b_1 = T.match_buffer(b, (5120, 2048), "uint8", strides=(2048, 1))
+    c_1 = T.match_buffer(c, (2048, 2048), "int32", strides=(2048, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 8)
+    by = T.launch_thread("blockIdx.y", 16)
+    tx = T.launch_thread("threadIdx.x", 512)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        mbar = T.handle("uint64", "shared.barrier")
+        T.sblock_attr({"barrier_init": {mbar: [1]}})
+        a_shared = T.sblock_alloc_buffer((256, 64), "int8", scope="shared.dyn")
+        b_packed_shared = T.sblock_alloc_buffer((64, 128), "uint8", scope="shared.dyn")
+        b_packed_local = T.sblock_alloc_buffer((64, 128), "uint8", scope="local.fragment")
+        b_unpacked_local = T.sblock_alloc_buffer((64, 128), "int8", scope="local.fragment")
+        b_unpacked_shared = T.sblock_alloc_buffer((64, 128), "int8", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((256, 128), "int32", scope="local.fragment")
+        acc_tmem = T.sblock_alloc_buffer((256, 128), "int32", scope="shared.tmem")
+        mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=mbar, scope="shared.barrier")
+        T.attr(None, "threadblock_swizzle_pattern", T.tvm_tuple("rasterization2DRow", 8))
+        start_m: T.int32 = bx * 256
+        start_n: T.int32 = by * 128
+        for kb_tile in T.serial(80, annotations={"num_stages": 3}):
+            T.copy(T.region(b_1[kb_tile * 64, start_n], 1, 64, 128), T.region(b_packed_shared[0, 0], 2, 64, 128))
+            T.copy(T.region(b_packed_shared[0, 0], 1, 64, 128), T.region(b_packed_local[0, 0], 2, 64, 128))
+            for field_i in range(4):
+                k_pos: T.int32 = field_i * 5120 + kb_tile * 64
+                T.copy(T.region(a_1[start_m, k_pos], 1, 256, 64), T.region(a_shared[0, 0], 2, 256, 64))
+                for kk in T.parallel(64):
+                    for nn in T.parallel(128):
+                        field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local[kk, nn]), 2 * field_i), 3)
+                        b_unpacked_local[kk, nn] = T.Cast("int8", field) - T.int8(1)
+                T.copy(T.region(b_unpacked_local[0, 0], 1, 64, 128), T.region(b_unpacked_shared[0, 0], 2, 64, 128))
+                T.tvm_storage_sync("shared")
+                T.gemm(T.region(a_shared[0, 0], 1, 256, 64), T.region(b_unpacked_shared[0, 0], 1, 64, 128), T.region(acc_tmem[0, 0], 3, 256, 128), T.bool(False), T.bool(False), 256, 128, 64, 0, kb_tile + field_i == 0, 64, 128, 0, 0, 1, 0, mbar_1[0], 0, 0)
+                T.tvm_storage_sync("shared")
+        T.copy(T.region(acc_tmem[0, 0], 1, 256, 128), T.region(acc[0, 0], 2, 256, 128))
+        T.copy(T.region(acc[0, 0], 1, 256, 128), T.region(c_1[start_m, start_n], 2, 256, 128))

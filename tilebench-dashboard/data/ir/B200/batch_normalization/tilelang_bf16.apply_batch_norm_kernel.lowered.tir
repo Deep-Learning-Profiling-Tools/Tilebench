@@ -1,0 +1,55 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def apply_batch_norm_kernel_kernel(beta: T.handle("bfloat16", "global"), gamma: T.handle("bfloat16", "global"), input: T.handle("bfloat16", "global"), inv_std: T.handle("float32", "global"), mean: T.handle("float32", "global"), output: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 2500, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1, 2, 3, 4]})
+        output_1 = T.decl_buffer((20480000,), "bfloat16", data=output)
+        input_1 = T.decl_buffer((20480000,), "bfloat16", data=input)
+        beta_1 = T.decl_buffer((1024,), "bfloat16", data=beta)
+        gamma_1 = T.decl_buffer((1024,), "bfloat16", data=gamma)
+        inv_std_1 = T.decl_buffer((1024,), data=inv_std)
+        mean_1 = T.decl_buffer((1024,), data=mean)
+        bx = T.launch_thread("blockIdx.x", 2500)
+        mean_local = T.alloc_buffer((4,), scope="local")
+        inv_std_local = T.alloc_buffer((4,), scope="local")
+        gamma_local_cast = T.alloc_buffer((4,), "bfloat16", scope="local")
+        gamma_local = T.alloc_buffer((4,), scope="local")
+        beta_local_cast_1 = T.alloc_buffer((4,), "bfloat16", scope="local")
+        beta_local = T.alloc_buffer((4,), scope="local")
+        scale = T.alloc_buffer((4,), scope="local")
+        shift = T.alloc_buffer((4,), scope="local")
+        x = T.alloc_buffer((32,), scope="local")
+        input_local_cast_2 = T.alloc_buffer((4,), "bfloat16", scope="local")
+        y = T.alloc_buffer((32,), scope="local")
+        output_local_cast_3 = T.alloc_buffer((4,), "bfloat16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        mean_local_1 = T.decl_buffer((4,), data=mean_local.data, scope="local")
+        inv_std_local_1 = T.decl_buffer((4,), data=inv_std_local.data, scope="local")
+        gamma_local_1 = T.decl_buffer((4,), data=gamma_local.data, scope="local")
+        beta_local_1 = T.decl_buffer((4,), data=beta_local.data, scope="local")
+        scale_1 = T.decl_buffer((4,), data=scale.data, scope="local")
+        shift_1 = T.decl_buffer((4,), data=shift.data, scope="local")
+        mean_local_1[0:4] = mean_1[tx * 4:tx * 4 + 4]
+        inv_std_local_1[0:4] = inv_std_1[tx * 4:tx * 4 + 4]
+        gamma_local_cast[0:4] = gamma_1[tx * 4:tx * 4 + 4]
+        gamma_local_1[0:4] = T.Cast("float32x4", gamma_local_cast[0:4])
+        beta_local_cast_1[0:4] = beta_1[tx * 4:tx * 4 + 4]
+        beta_local_1[0:4] = T.Cast("float32x4", beta_local_cast_1[0:4])
+        for i in T.unroll(4):
+            scale_1[i] = inv_std_local_1[i] * gamma_local_1[i]
+            shift_1[i] = beta_local_1[i] - mean_local_1[i] * scale_1[i]
+        x_1 = T.decl_buffer((32,), data=x.data, scope="local")
+        y_1 = T.decl_buffer((32,), data=y.data, scope="local")
+        for i in T.unroll(8):
+            input_local_cast_2[0:4] = input_1[bx * 8192 + i * 1024 + tx * 4:bx * 8192 + i * 1024 + tx * 4 + 4]
+            x_1[i * 4:i * 4 + 4] = T.Cast("float32x4", input_local_cast_2[0:4])
+        for i in T.unroll(32):
+            y_1[i] = x_1[i] * scale_1[i % 4] + shift_1[i % 4]
+        for i in T.unroll(8):
+            output_local_cast_3[0:4] = T.Cast("bfloat16x4", y_1[i * 4:i * 4 + 4])
+            output_1[bx * 8192 + i * 1024 + tx * 4:bx * 8192 + i * 1024 + tx * 4 + 4] = output_local_cast_3[0:4]

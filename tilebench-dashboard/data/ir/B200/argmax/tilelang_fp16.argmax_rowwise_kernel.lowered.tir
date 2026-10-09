@@ -1,0 +1,55 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def argmax_rowwise_kernel_kernel(Out: T.handle("int64", "global"), X: T.handle("float16", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 1024, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `X`, `Out`")
+        Out_1 = T.decl_buffer((M,), "int64", data=Out)
+        X_1 = T.decl_buffer((M * 20480,), "float16", data=X)
+        bx = T.launch_thread("blockIdx.x", M)
+        buf_dyn_shmem = T.alloc_buffer((1024,), "uint8", scope="shared.dyn")
+        workspace: T.handle("int32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 512)
+        best_val = T.alloc_buffer((1,), scope="local")
+        best_idx = T.alloc_buffer((1,), "int32", scope="local")
+        x_tile = T.alloc_buffer((16,), scope="local")
+        X_local_cast = T.alloc_buffer((16,), "float16", scope="local")
+        tile_max = T.alloc_buffer((1,), scope="local")
+        idx_tile = T.alloc_buffer((16,), "int32", scope="local")
+        tile_idx = T.alloc_buffer((1,), "int32", scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        best_val_1 = T.decl_buffer((1,), data=best_val.data, scope="local")
+        best_idx_1 = T.decl_buffer((1,), "int32", data=best_idx.data, scope="local")
+        best_val_1[0] = T.infinity("float32") * T.float32(-1.0)
+        best_idx_1[0] = 0
+        T.tvm_storage_sync("shared.dyn")
+        for tile in range(10):
+            x_tile_1 = T.decl_buffer((16,), data=x_tile.data, scope="local")
+            idx_tile_1 = T.decl_buffer((16,), "int32", data=idx_tile.data, scope="local")
+            tile_max_1 = T.decl_buffer((1,), data=tile_max.data, scope="local")
+            tile_idx_1 = T.decl_buffer((1,), "int32", data=tile_idx.data, scope="local")
+            for i in T.unroll(4):
+                x_tile_1[i * 4:i * 4 + 4] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 4)
+            X_2 = T.Buffer((M * 20480,), "float16", data=X)
+            X_local_cast[0:16] = X_2[T.Cast("int64", bx) * T.int64(20480) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", tx) * T.int64(16):T.Cast("int64", bx) * T.int64(20480) + T.Cast("int64", tile) * T.int64(2048) + T.Cast("int64", tx) * T.int64(16) + T.int64(16)]
+            for i in range(4):
+                x_tile_1[i * 4:i * 4 + 4] = T.Cast("float32x4", X_local_cast[i * 4:i * 4 + 4])
+            tile_max_1[0] = T.float32("-inf")
+            for rv in T.unroll(16):
+                tile_max_1[0] = T.max(tile_max_1[0], x_tile_1[rv])
+            tile_max_1[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 128, 1, 0, tl::NamedBarrier<128>>::run", tile_max_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 128, 2))
+            for i in T.unroll(16):
+                idx_tile_1[i] = T.Select(x_tile_1[i] == tile_max_1[0], tile * 2048 + tx * 16 + i, 20480)
+            tile_idx_1[0] = 2147483647
+            for rv in T.unroll(16):
+                tile_idx_1[0] = T.min(tile_idx_1[0], idx_tile_1[rv])
+            tile_idx_1[0] = T.call_extern("int32", "tl::AllReduce<tl::MinOp, 128, 1, 0, tl::NamedBarrier<128>>::run", tile_idx_1[0], T.tvm_access_ptr(T.type_annotation("int32"), workspace, 0, 128, 2))
+            better: T.bool = best_val_1[0] < tile_max_1[0]
+            best_val_1[0] = T.Select(better, tile_max_1[0], best_val_1[0])
+            best_idx_1[0] = T.Select(better, tile_idx_1[0], best_idx_1[0])
+        Out_1[T.Cast("int64", bx)] = T.Cast("int64", best_idx_1[0])

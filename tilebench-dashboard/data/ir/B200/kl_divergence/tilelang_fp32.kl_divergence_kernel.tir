@@ -1,0 +1,34 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def kl_divergence_kernel(log_y_pred: T.handle, y_true: T.handle, loss: T.handle):
+    M = T.int32()
+    log_y_pred_1 = T.match_buffer(log_y_pred, (M, 16384), strides=(16384, 1))
+    y_true_1 = T.match_buffer(y_true, (M, 16384), strides=(16384, 1))
+    loss_1 = T.match_buffer(loss, (M,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        y_true_local = T.sblock_alloc_buffer((4096,), scope="local.fragment")
+        loss_local_arr = T.sblock_alloc_buffer((4096,), scope="local.fragment")
+        local_log_y_pred = T.sblock_alloc_buffer((4096,), scope="local.fragment")
+        loss_local = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        loss_global = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        loss_global[0] = T.float32(0.0)
+        for tile in T.serial(4, annotations={"num_stages": 2}):
+            start: T.int32 = tile * 4096
+            end: T.int32 = T.min(start + 4096, 16384)
+            T.copy(T.region(y_true_1[bx, start], 1, 1, end - start), T.region(y_true_local[0], 2, 4096))
+            T.copy(T.region(log_y_pred_1[bx, start], 1, 1, end - start), T.region(local_log_y_pred[0], 2, 4096))
+            T.fill(T.region(loss_local_arr[0], 2, 4096), T.float32(0.0))
+            for i in T.parallel(4096):
+                yt: T.float32 = y_true_local[i]
+                loss_local_arr[i] = T.Select(yt > T.float32(0.0), yt * (T.log(yt) - T.Cast("float32", local_log_y_pred[i])), T.float32(0.0))
+            T.reduce(T.region(loss_local_arr[0], 1, 4096), T.region(loss_local[0], 2, 1), "sum", 0, T.bool(True))
+            loss_global[0] = loss_global[0] + loss_local[0]
+        T.copy(T.region(loss_global[0], 1, 1), T.region(loss_1[bx], 2, 1))

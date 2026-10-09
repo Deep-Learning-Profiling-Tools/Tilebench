@@ -1,0 +1,26 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def dropout_kernel(x: T.handle, x_keep: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (20971520,), strides=(1,))
+    x_keep_1 = T.match_buffer(x_keep, (20971520,), strides=(1,))
+    output_1 = T.match_buffer(output, (20971520,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 20480)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        x_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        x_keep_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        output_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        start: T.int32 = bx * 1024
+        zero: T.float32 = T.float32(0.0)
+        scale_value: T.float32 = T.float32(2.0)
+        T.copy(T.region(x_1[start], 1, 1024), T.region(x_reg[0], 2, 1024))
+        T.copy(T.region(x_keep_1[start], 1, 1024), T.region(x_keep_reg[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            output_reg[local_idx] = T.Select(x_keep_reg[local_idx] != zero, x_reg[local_idx] * scale_value, zero)
+        T.copy(T.region(output_reg[0], 1, 1024), T.region(output_1[start], 2, 1024))

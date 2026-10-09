@@ -1,0 +1,27 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def dequantize_rowwise_kernel_kernel(output: T.handle("float16", "global"), state_x: T.handle("float32", "global"), x: T.handle("int8", "global"), rows: T.int32):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": rows, "blockIdx.y": 8, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2]})
+        T.attr(0 < rows, "tl.assume", "Buffer shape should be greater than 0: shape `rows` from buffer `x`, `state_x`, `output`")
+        output_1 = T.decl_buffer((rows * 8192,), "float16", data=output)
+        x_1 = T.decl_buffer((rows * 8192,), "int8", data=x)
+        state_x_1 = T.decl_buffer((rows,), data=state_x)
+        bx = T.launch_thread("blockIdx.x", rows)
+        x_local = T.alloc_buffer((16,), "int8", scope="local")
+        y_local = T.alloc_buffer((16,), "float16", scope="local")
+        by = T.launch_thread("blockIdx.y", 8)
+        tx = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        x_local_1 = T.decl_buffer((16,), "int8", data=x_local.data, scope="local")
+        y_local_1 = T.decl_buffer((16,), "float16", data=y_local.data, scope="local")
+        scale: T.float32 = state_x_1[T.Cast("int64", bx)] * T.float32(0.007874015748031496)
+        x_2 = T.Buffer((rows * 8192,), "int8", data=x)
+        x_local_1[0:16] = x_2[T.Cast("int64", bx) * T.int64(8192) + T.Cast("int64", by) * T.int64(1024) + T.Cast("int64", tx) * T.int64(16):T.Cast("int64", bx) * T.int64(8192) + T.Cast("int64", by) * T.int64(1024) + T.Cast("int64", tx) * T.int64(16) + T.int64(16)]
+        for i in T.unroll(4):
+            y_local_1[i * 4:i * 4 + 4] = T.Cast("float16x4", T.Cast("float32x4", x_local_1[i * 4:i * 4 + 4]) * T.Broadcast(scale, 4))
+        output_1[T.Cast("int64", bx) * T.int64(8192) + T.Cast("int64", by) * T.int64(1024) + T.Cast("int64", tx) * T.int64(16):T.Cast("int64", bx) * T.int64(8192) + T.Cast("int64", by) * T.int64(1024) + T.Cast("int64", tx) * T.int64(16) + T.int64(16)] = y_local_1[0:16]

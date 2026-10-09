@@ -1,0 +1,23 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def copy_by_dest_kernel(kv: T.handle, dest: T.handle, out: T.handle):
+    kv_1 = T.match_buffer(kv, (2621440,), "float16", strides=(1,))
+    dest_1 = T.match_buffer(dest, (40960,), "int64", strides=(1,))
+    out_1 = T.match_buffer(out, (2621440,), "float16", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 2560)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        for local_idx in T.parallel(1024):
+            offs: T.int32 = bx * 1024 + local_idx
+            if offs < 2621440:
+                d: T.int32 = offs % 64
+                token: T.int32 = offs // 64
+                dest_index: T.int32 = T.Cast("int32", dest_1[token])
+                dst_off: T.int32 = dest_index * 64 + d
+                out_1[dst_off] = kv_1[offs]

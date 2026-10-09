@@ -1,0 +1,17 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def matrix_copy_kernel(A: T.handle, B: T.handle):
+    A_1 = T.match_buffer(A, (26214400,), strides=(1,))
+    B_1 = T.match_buffer(B, (26214400,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 12800)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        for local_idx in T.parallel(2048):
+            idx: T.int32 = local_idx + bx * 2048
+            B_1[idx] = A_1[idx]

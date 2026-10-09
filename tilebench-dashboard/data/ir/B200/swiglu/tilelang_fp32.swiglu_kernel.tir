@@ -1,0 +1,20 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def swiglu_kernel(x: T.handle, y: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (83886080,), strides=(1,))
+    y_1 = T.match_buffer(y, (83886080,), strides=(1,))
+    output_1 = T.match_buffer(output, (83886080,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 40960)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        for local_idx in T.parallel(2048):
+            idx: T.int32 = local_idx + bx * 2048
+            x_f32: T.float32 = x_1[idx]
+            y_f32: T.float32 = y_1[idx]
+            output_1[idx] = x_f32 * T.sigmoid(x_f32) * y_f32

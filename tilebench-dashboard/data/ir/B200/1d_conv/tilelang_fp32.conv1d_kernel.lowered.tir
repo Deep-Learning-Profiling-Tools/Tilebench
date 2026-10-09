@@ -1,0 +1,74 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def conv1d_kernel_kernel(input: T.handle("float32", "global"), output_flat: T.handle("float32", "global"), weight: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 12288, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 40960, "blockIdx.y": 1, "blockIdx.z": 1, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "blockIdx.z", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 2]})
+        output_flat_1 = T.decl_buffer((335544320,), data=output_flat)
+        weight_1 = T.decl_buffer((49152,), data=weight)
+        input_1 = T.decl_buffer((335544320,), data=input)
+        bx = T.launch_thread("blockIdx.x", 40960)
+        buf_dyn_shmem = T.alloc_buffer((12288,), "uint8", scope="shared.dyn")
+        weight_tile: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        input_tile: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 8192)
+        acc = T.alloc_buffer((128,), scope="local")
+        bl_offsets = T.alloc_buffer((8,), "int32", scope="local")
+        batch_ids = T.alloc_buffer((8,), "int32", scope="local")
+        out_ls = T.alloc_buffer((8,), "int32", scope="local")
+        feat_offsets = T.alloc_buffer((4,), "int32", scope="local")
+        in_channel_locals = T.alloc_buffer((4,), "int32", scope="local")
+        kernel_ls = T.alloc_buffer((4,), "int32", scope="local")
+        by = T.launch_thread("blockIdx.y", 1)
+        bz = T.launch_thread("blockIdx.z", 1)
+        thread_binding = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((128,), data=acc.data, scope="local")
+        bl_offsets_1 = T.decl_buffer((8,), "int32", data=bl_offsets.data, scope="local")
+        batch_ids_1 = T.decl_buffer((8,), "int32", data=batch_ids.data, scope="local")
+        out_ls_1 = T.decl_buffer((8,), "int32", data=out_ls.data, scope="local")
+        for i in T.unroll(32):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        for i in T.unroll(8):
+            bl_offsets_1[i] = bx * 64 + i * 8 + thread_binding % 32 // 4
+            batch_ids_1[i] = bl_offsets_1[i] // 2621440
+            out_ls_1[i] = bl_offsets_1[i] % 2621440
+        for feat_block in range(24):
+            input_tile_1 = T.decl_buffer((1024,), data=input_tile, scope="shared.dyn")
+            weight_tile_1 = T.decl_buffer((2048,), data=weight_tile, scope="shared.dyn")
+            feat_offsets_1 = T.decl_buffer((4,), "int32", data=feat_offsets.data, scope="local")
+            in_channel_locals_1 = T.decl_buffer((4,), "int32", data=in_channel_locals.data, scope="local")
+            kernel_ls_1 = T.decl_buffer((4,), "int32", data=kernel_ls.data, scope="local")
+            for i in T.unroll(4):
+                feat_offsets_1[i] = feat_block * 16 + thread_binding % 4 * 4 + i
+                in_channel_locals_1[i] = feat_offsets_1[i] // 3
+                kernel_ls_1[i] = feat_offsets_1[i] % 3
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(4):
+                for vec_s in range(4):
+                    in_l: T.int32 = out_ls_1[i * 2 + thread_binding // 32] + kernel_ls_1[vec_s] - 1
+                    in_channel: T.int32 = in_channel_locals_1[vec_s]
+                    input_tile_1[i * 256 + thread_binding // 4 * 16 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 8 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 4 + vec_s] = T.Select(bl_offsets_1[i * 2 + thread_binding // 32] < 2621440 and feat_offsets_1[vec_s] < 384 and 0 <= in_l and in_l < 2621440, T.if_then_else(0 <= in_channel and in_channel < 128 and 0 <= batch_ids_1[i * 2 + thread_binding // 32] and batch_ids_1[i * 2 + thread_binding // 32] < 1, input_1[T.Cast("int64", batch_ids_1[T.Cast("int64", i) * T.int64(2) + T.Cast("int64", thread_binding) // T.int64(32)]) * T.int64(335544320) + T.Cast("int64", in_channel) * T.int64(2621440) + T.Cast("int64", in_l)], T.float32(0.0)), T.float32(0.0))
+            if thread_binding // 4 == 0:
+                for i in T.unroll(512):
+                    weight_tile_1[i % 128 // 32 * 512 + thread_binding % 4 * 128 + i // 128 * 32 + (i % 32 // 16 + thread_binding % 2) % 2 * 16 + (i // 256 + i % 16 // 8) % 2 * 8 + (i % 256 // 128 + i % 8 // 4) % 2 * 4 + i % 4] = T.Select(feat_offsets_1[i // 128] < 384, T.if_then_else(0 <= kernel_ls_1[i // 128] and kernel_ls_1[i // 128] < 3 and 0 <= in_channel_locals_1[i // 128] and in_channel_locals_1[i // 128] < 128, weight_1[T.Cast("int64", i) % T.int64(128) * T.int64(384) + T.Cast("int64", in_channel_locals_1[T.Cast("int64", i) // T.int64(128)]) * T.int64(3) + T.Cast("int64", kernel_ls_1[T.Cast("int64", i) // T.int64(128)])], T.float32(0.0)), T.float32(0.0))
+            T.attr(0, "lexical_alloc_scope", 1)
+            A_local = T.alloc_buffer((16,), scope="local")
+            B_local = T.alloc_buffer((16,), scope="local")
+            T.tvm_storage_sync("shared.dyn")
+            for ki in range(2):
+                B_local_1 = T.decl_buffer((16,), data=B_local.data, scope="local")
+                for i in range(4):
+                    T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("float32"), input_tile, i * 256 + thread_binding % 16 * 16 + (thread_binding % 8 // 4 + ki) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 4, 8, 1), T.tvm_access_ptr(T.type_annotation("float32"), A_local.data, i * 4, 8, 2))
+                for i, j in T.grid(4, 4):
+                    B_local_1[i * 4 + j] = weight_tile_1[thread_binding // 32 * 1024 + i // 2 * 512 + ki * 256 + j % 2 * 128 + thread_binding % 4 * 32 + (i % 2 + j % 2) % 2 * 16 + (j // 2 + thread_binding % 4 // 2) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 2) % 2 * 4 + thread_binding % 16 // 4]
+                for i, j in T.grid(4, 4):
+                    T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4, acc.data, i * 32 + j * 8, T.bool(False))
+                    T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4 + 2, acc.data, i * 32 + j * 8 + 4, T.bool(False))
+        for i in T.unroll(128):
+            output_idx: T.int32 = batch_ids_1[i // 16] * 335544320 + thread_binding // 32 * 167772160 + i % 16 // 2 * 20971520 + thread_binding % 4 * 5242880 + i % 2 * 2621440 + out_ls_1[i // 16]
+            if 0 <= output_idx:
+                if output_idx < 335544320:
+                    output_flat_1[output_idx] = acc_1[i // 32 * 32 + i % 16 // 2 * 4 + i % 32 // 16 * 2 + i % 2]

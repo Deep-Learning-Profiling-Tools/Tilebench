@@ -1,0 +1,21 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def sigmoid_kernel_kernel(output: T.handle("float16", "global"), x: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 48829, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        output_1 = T.decl_buffer((50000000,), "float16", data=output)
+        x_1 = T.decl_buffer((50000000,), "float16", data=x)
+        bx = T.launch_thread("blockIdx.x", 48829)
+        x_local_cast_1 = T.alloc_buffer((8,), "float16", scope="local")
+        output_local_cast = T.alloc_buffer((8,), "float16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        x_local_cast_1[0:8] = T.if_then_else(bx * 8 + tx // 16 < 390625, x_1[bx * 1024 + tx * 8:bx * 1024 + tx * 8 + 8], T.Broadcast(T.float16(0.0), 8))
+        for i in range(2):
+            output_local_cast[i * 4:i * 4 + 4] = T.Cast("float16x4", T.sigmoid(T.Cast("float32x4", x_local_cast_1[i * 4:i * 4 + 4])))
+        if bx * 8 + tx // 16 < 390625:
+            output_1[bx * 1024 + tx * 8:bx * 1024 + tx * 8 + 8] = output_local_cast[0:8]

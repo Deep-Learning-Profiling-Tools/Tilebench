@@ -1,0 +1,64 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def moe_topk_gating_kernel_kernel(logits: T.handle("bfloat16", "global"), topk_idx: T.handle("int32", "global"), topk_w: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 20480, "threadIdx.x": 32, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        topk_idx_1 = T.decl_buffer((40960,), "int32", data=topk_idx)
+        topk_w_1 = T.decl_buffer((40960,), "bfloat16", data=topk_w)
+        logits_1 = T.decl_buffer((2621440,), "bfloat16", data=logits)
+        bx = T.launch_thread("blockIdx.x", 20480)
+        logits_reg = T.alloc_buffer((4,), scope="local")
+        topk_vals = T.alloc_buffer((1,), scope="local")
+        topk_idxs = T.alloc_buffer((1,), "int32", scope="local")
+        logits_local_cast = T.alloc_buffer((4,), "bfloat16", scope="local")
+        curr_max_val = T.alloc_buffer((1,), scope="local")
+        src_idx = T.alloc_buffer((4,), "int32", scope="local")
+        curr_max_idx = T.alloc_buffer((1,), "int32", scope="local")
+        mx = T.alloc_buffer((1,), scope="local")
+        rs = T.alloc_buffer((1,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 32)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        logits_reg_1 = T.decl_buffer((4,), data=logits_reg.data, scope="local")
+        topk_vals_1 = T.decl_buffer((1,), data=topk_vals.data, scope="local")
+        topk_idxs_1 = T.decl_buffer((1,), "int32", data=topk_idxs.data, scope="local")
+        mx_1 = T.decl_buffer((1,), data=mx.data, scope="local")
+        rs_1 = T.decl_buffer((1,), data=rs.data, scope="local")
+        logits_reg_1[0:4] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 4)
+        topk_vals_1[0] = T.infinity("float32") * T.float32(-1.0)
+        topk_idxs_1[0] = 0
+        logits_local_cast[0:4] = logits_1[bx * 128 + tx * 4:bx * 128 + tx * 4 + 4]
+        logits_reg_1[0:4] = T.Cast("float32x4", logits_local_cast[0:4])
+        for i in range(2):
+            src_idx_1 = T.decl_buffer((4,), "int32", data=src_idx.data, scope="local")
+            curr_max_val_1 = T.decl_buffer((1,), data=curr_max_val.data, scope="local")
+            curr_max_idx_1 = T.decl_buffer((1,), "int32", data=curr_max_idx.data, scope="local")
+            curr_max_val_1[0] = T.float32("-inf")
+            for rv in T.unroll(4):
+                curr_max_val_1[0] = T.max(curr_max_val_1[0], logits_reg_1[rv])
+            curr_max_val_1[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 32, 1, 0, tl::NamedBarrier<32>>::run", curr_max_val_1[0])
+            src_idx_1[0:4] = T.Broadcast(128, 4)
+            for i_1 in T.unroll(4):
+                src_idx_1[i_1] = T.Select(logits_reg_1[i_1] == curr_max_val_1[0], tx * 4 + i_1, 128)
+            curr_max_idx_1[0] = 2147483647
+            for rv in T.unroll(4):
+                curr_max_idx_1[0] = T.min(curr_max_idx_1[0], src_idx_1[rv])
+            curr_max_idx_1[0] = T.call_extern("int32", "tl::AllReduce<tl::MinOp, 32, 1, 0, tl::NamedBarrier<32>>::run", curr_max_idx_1[0])
+            topk_vals_1[0] = T.Select(tx % 2 == i, curr_max_val_1[0], topk_vals_1[0])
+            topk_idxs_1[0] = T.Select(tx % 2 == i, curr_max_idx_1[0], topk_idxs_1[0])
+            for i_1 in T.unroll(4):
+                logits_reg_1[i_1] = T.Select(tx * 4 + i_1 == curr_max_idx_1[0], T.infinity("float32") * T.float32(-1.0), logits_reg_1[i_1])
+        mx_1[0] = T.float32("-inf")
+        mx_1[0] = T.max(mx_1[0], topk_vals_1[0])
+        mx_1[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 2, 1, 0, tl::NamedBarrier<32>>::run", mx_1[0])
+        topk_vals_1[0] = T.exp(topk_vals_1[0] - mx_1[0])
+        rs_1[0] = T.float32(0.0)
+        rs_1[0] = rs_1[0] + topk_vals_1[0]
+        rs_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 2, 1, 0, tl::NamedBarrier<32>>::run", rs_1[0])
+        topk_vals_1[0] = topk_vals_1[0] / rs_1[0]
+        topk_w_1[bx * 2 + tx % 2] = T.Cast("bfloat16", topk_vals_1[0])
+        if tx // 2 == 0:
+            topk_idx_1[bx * 2 + tx % 2] = topk_idxs_1[0]

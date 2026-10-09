@@ -1,0 +1,20 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def matrix_transpose_kernel(x: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (4096, 20480), "float16", strides=(20480, 1))
+    output_1 = T.match_buffer(output, (20480, 4096), "float16", strides=(4096, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 32)
+    by = T.launch_thread("blockIdx.y", 160)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        tile = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        tile_T = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        T.copy(T.region(x_1[bx * 128, by * 128], 1, 128, 128), T.region(tile[0, 0], 2, 128, 128))
+        T.transpose(T.region(tile[0, 0], 1, 128, 128), T.region(tile_T[0, 0], 2, 128, 128))
+        T.copy(T.region(tile_T[0, 0], 1, 128, 128), T.region(output_1[by * 128, bx * 128], 2, 128, 128))

@@ -1,0 +1,35 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def full_tiles_kernel(A: T.handle, B: T.handle, C: T.handle):
+    A_1 = T.match_buffer(A, (8192, 4096), "float16", strides=(4096, 1))
+    B_1 = T.match_buffer(B, (4096, 28672), "float16", strides=(28672, 1))
+    C_1 = T.match_buffer(C, (8192, 28672), strides=(28672, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 6956)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        mbar = T.handle("uint64", "shared.barrier")
+        T.sblock_attr({"barrier_init": {mbar: [1]}})
+        a_shared = T.sblock_alloc_buffer((128, 32), "float16", scope="shared.dyn")
+        b_shared = T.sblock_alloc_buffer((32, 256), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 256), scope="local.fragment")
+        acc_tmem = T.sblock_alloc_buffer((128, 256), scope="shared.tmem")
+        mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=mbar, scope="shared.barrier")
+        tile_id: T.int32 = bx + 212
+        group_id: T.int32 = tile_id // 896
+        first_pid_m: T.int32 = group_id * 8
+        group_size_m: T.int32 = T.min(64 - first_pid_m, 8)
+        pid_m: T.int32 = first_pid_m + tile_id % group_size_m
+        pid_n: T.int32 = tile_id % 896 // group_size_m
+        for k_tile in T.serial(128, annotations={"num_stages": 3}):
+            T.copy(T.region(A_1[pid_m * 128, k_tile * 32], 1, 128, 32), T.region(a_shared[0, 0], 2, 128, 32))
+            T.copy(T.region(B_1[k_tile * 32, pid_n * 256], 1, 32, 256), T.region(b_shared[0, 0], 2, 32, 256))
+            T.gemm(T.region(a_shared[0, 0], 1, 128, 32), T.region(b_shared[0, 0], 1, 32, 256), T.region(acc_tmem[0, 0], 3, 128, 256), T.bool(False), T.bool(False), 128, 256, 32, 0, k_tile == 0, 32, 256, 0, 0, 1, 0, mbar_1[0], 0, 0)
+            T.tvm_storage_sync("shared")
+        T.copy(T.region(acc_tmem[0, 0], 1, 128, 256), T.region(acc[0, 0], 2, 128, 256))
+        T.copy(T.region(acc[0, 0], 1, 128, 256), T.region(C_1[pid_m * 128, pid_n * 256], 2, 128, 256))

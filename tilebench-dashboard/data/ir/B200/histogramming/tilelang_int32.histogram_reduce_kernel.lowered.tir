@@ -1,0 +1,38 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def histogram_reduce_kernel_kernel(histogram: T.handle("int32", "global"), partial: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 512, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 64, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        histogram_1 = T.decl_buffer((4096,), "int32", data=histogram)
+        partial_1 = T.decl_buffer((1048576,), "int32", data=partial)
+        bx = T.launch_thread("blockIdx.x", 64)
+        acc = T.alloc_buffer((8,), "int32", scope="local")
+        tile = T.alloc_buffer((64,), "int32", scope="local")
+        tile_sum = T.alloc_buffer((8,), "int32", scope="local")
+        workspace = T.alloc_buffer((128,), "int32", scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((8,), "int32", data=acc.data, scope="local")
+        for i in T.unroll(2):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(0, 4)
+        for _tmp in range(2):
+            tile_1 = T.decl_buffer((64,), "int32", data=tile.data, scope="local")
+            tile_sum_1 = T.decl_buffer((8,), "int32", data=tile_sum.data, scope="local")
+            for i in T.unroll(16):
+                tile_1[i * 4:i * 4 + 4] = T.Broadcast(0, 4)
+            for i in T.unroll(8):
+                tile_1[i * 8:i * 8 + 8] = partial_1[_tmp * 524288 + i * 65536 + tx // 8 * 4096 + bx * 64 + tx % 8 * 8:_tmp * 524288 + i * 65536 + tx // 8 * 4096 + bx * 64 + tx % 8 * 8 + 8]
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(8):
+                tile_sum_1[i] = 0
+                for rv in T.unroll(8):
+                    tile_sum_1[i] = tile_sum_1[i] + tile_1[rv * 8 + i]
+                tile_sum_1[i] = T.call_extern("int32", "tl::AllReduce<tl::SumOp, 128, 8, 0, tl::NamedBarrier<128>>::run", tile_sum_1[i], T.tvm_access_ptr(T.type_annotation("int32"), workspace.data, 0, 128, 2))
+            for i in T.unroll(8):
+                acc_1[i] = acc_1[i] + tile_sum_1[i]
+        if tx // 8 == 0:
+            histogram_1[bx * 64 + tx % 8 * 8:bx * 64 + tx % 8 * 8 + 8] = acc_1[0:8]

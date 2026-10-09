@@ -1,0 +1,33 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(sums: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 4096, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 1, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": []})
+        sums_1 = T.decl_buffer((77,), "int32", data=sums)
+        bx = T.launch_thread("blockIdx.x", 1)
+        src_buffer = T.alloc_buffer((8,), "int32", scope="local")
+        original = T.alloc_buffer((8,), "int32", scope="local")
+        scan_smem = T.alloc_buffer((1024,), "int32", scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        src_buffer_1 = T.decl_buffer((8,), "int32", data=src_buffer.data, scope="local")
+        original_1 = T.decl_buffer((8,), "int32", data=original.data, scope="local")
+        scan_smem_1 = T.decl_buffer((1024,), "int32", data=scan_smem.data, scope="shared.dyn")
+        for i_s in range(8):
+            valid: T.bool = tx * 8 + i_s < 77
+            src_buffer_1[i_s] = T.if_then_else(tx * 8 + i_s < 77, sums_1[tx * 8 + i_s], 0)
+            original_1[i_s] = src_buffer_1[i_s]
+        for i in T.unroll(2):
+            scan_smem_1[tx * 8 + i * 4:tx * 8 + i * 4 + 4] = src_buffer_1[i * 4:i * 4 + 4]
+        T.tvm_storage_sync("shared.dyn")
+        T.call_extern("int32", "tl::CumSum1D<128, false>::run", T.tvm_access_ptr(T.type_annotation("int32"), scan_smem.data, 0, 1024, 1), T.tvm_access_ptr(T.type_annotation("int32"), scan_smem.data, 0, 1024, 2), 1024)
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(2):
+            src_buffer_1[i * 4:i * 4 + 4] = scan_smem_1[tx * 8 + i * 4:tx * 8 + i * 4 + 4]
+        for i_s in range(8):
+            if tx * 8 + i_s < 77:
+                sums_1[tx * 8 + i_s] = src_buffer_1[i_s] - original_1[i_s]

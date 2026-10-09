@@ -1,0 +1,34 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def gaussian_blur_kernel(input: T.handle, kernel: T.handle, output: T.handle):
+    input_1 = T.match_buffer(input, (10240, 10240), strides=(10240, 1))
+    kernel_1 = T.match_buffer(kernel, (49,), strides=(1,))
+    output_1 = T.match_buffer(output, (10240, 10240), strides=(10240, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 2560)
+    by = T.launch_thread("blockIdx.y", 40)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {input_1.data: 0.0}})
+        acc = T.sblock_alloc_buffer((4, 256), scope="local.fragment")
+        T.fill(T.region(acc[0, 0], 2, 4, 256), T.float32(0.0))
+        row_start: T.int32 = bx * 4
+        col_start: T.int32 = by * 256
+        for kr in T.unroll(7, annotations={"pragma_unroll_explicit": False}):
+            for kc in T.unroll(7, annotations={"pragma_unroll_explicit": False}):
+                w: T.float32 = kernel_1[kr * 7 + kc]
+                for i in T.parallel(4):
+                    for j in T.parallel(256):
+                        row: T.int32 = row_start + i
+                        col: T.int32 = col_start + j
+                        in_r: T.int32 = row + kr - 3
+                        in_c: T.int32 = col + kc - 3
+                        acc[i, j] = acc[i, j] + input_1[in_r, in_c] * w
+        for i in T.parallel(4):
+            for j in T.parallel(256):
+                output_1[row_start + i, col_start + j] = acc[i, j]

@@ -1,0 +1,17 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def reverse_array_kernel_kernel(input: T.handle("bfloat16", "global"), output: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 19532, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        input_1 = T.decl_buffer((20000000,), "bfloat16", data=input)
+        output_1 = T.decl_buffer((20000000,), "bfloat16", data=output)
+        bx = T.launch_thread("blockIdx.x", 19532)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        for i in T.unroll(8):
+            if bx * 4 + i // 2 < 78125:
+                output_1[bx * 1024 + i * 128 + tx] = T.if_then_else(-19999999 <= 0 - tx - i * 128 - bx * 1024, input_1[19999999 - tx - i * 128 - bx * 1024], T.bfloat16(0.0))

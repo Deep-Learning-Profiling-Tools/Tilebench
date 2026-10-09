@@ -1,0 +1,130 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(Q_handle: T.handle, K_handle: T.handle, V_handle: T.handle, row_indices_handle: T.handle, col_indices_handle: T.handle, O_handle: T.handle):
+    Q = T.match_buffer(Q_handle, (2, 8, 10240, 128), "float16", strides=(10485760, 1310720, 128, 1))
+    K = T.match_buffer(K_handle, (2, 2, 10240, 128), "float16", strides=(2621440, 1310720, 128, 1))
+    V = T.match_buffer(V_handle, (2, 2, 10240, 128), "float16", strides=(2621440, 1310720, 128, 1))
+    row_indices = T.match_buffer(row_indices_handle, (161,), "int32", strides=(1,))
+    col_indices = T.match_buffer(col_indices_handle, (25600,), "int32", strides=(1,))
+    O = T.match_buffer(O_handle, (2, 8, 10240, 128), "float16", strides=(10485760, 1310720, 128, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 160)
+    by = T.launch_thread("blockIdx.y", 16)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        pv_mbar = T.handle("uint64", "shared.barrier")
+        qk_mbar = T.handle("uint64", "shared.barrier")
+        T.sblock_attr({"barrier_init": {pv_mbar: [1], qk_mbar: [1]}})
+        q_shared = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        k_shared = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        v_shared = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        o_shared = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        q_shared2 = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        k_shared2 = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        v_shared2 = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        o_shared2 = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        qk = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        qk_tmem = T.sblock_alloc_buffer((64, 64), scope="shared.tmem")
+        p_shared = T.sblock_alloc_buffer((64, 64), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        pv = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        pv_tmem = T.sblock_alloc_buffer((64, 64), scope="shared.tmem")
+        acc2 = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        pv2 = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        pv2_tmem = T.sblock_alloc_buffer((64, 64), scope="shared.tmem")
+        qk_mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=qk_mbar, scope="shared.barrier")
+        pv_mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=pv_mbar, scope="shared.barrier")
+        scores_max = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        scores_max_prev = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        scores_sum = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        logsum = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        alpha = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        start_l = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        end_l = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        l = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        col_idx = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        start_n = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        off_h: T.int32 = by % 8
+        off_b: T.int32 = by // 8
+        off_h_kv: T.int32 = off_h // 4
+        T.copy(T.region(Q[off_b, off_h, bx * 64, 0], 1, 1, 1, 64, 64), T.region(q_shared[0, 0], 2, 64, 64))
+        T.copy(T.region(Q[off_b, off_h, bx * 64, 64], 1, 1, 1, 64, 64), T.region(q_shared2[0, 0], 2, 64, 64))
+        T.fill(T.region(acc[0, 0], 2, 64, 64), T.float32(0.0))
+        T.fill(T.region(acc2[0, 0], 2, 64, 64), T.float32(0.0))
+        T.fill(T.region(logsum[0], 2, 64), T.float32(0.0))
+        T.fill(T.region(scores_max[0], 2, 64), T.infinity("float32") * T.float32(-1.0))
+        start_l[0] = row_indices[bx]
+        end_l[0] = row_indices[bx + 1]
+        l[0] = start_l[0]
+        while l[0] < end_l[0]:
+            col_idx[0] = col_indices[l[0]]
+            start_n[0] = col_idx[0] * 64
+            T.copy(T.region(K[off_b, off_h_kv, start_n[0], 0], 1, 1, 1, 64, 64), T.region(k_shared[0, 0], 2, 64, 64))
+            T.gemm(T.region(q_shared[0, 0], 1, 64, 64), T.region(k_shared[0, 0], 1, 64, 64), T.region(qk_tmem[0, 0], 3, 64, 64), T.bool(False), T.bool(True), 64, 64, 64, 0, T.bool(True), 64, 64, 0, 0, 1, 0, qk_mbar_1[0], 0, 0)
+            T.copy(T.region(K[off_b, off_h_kv, start_n[0], 64], 1, 1, 1, 64, 64), T.region(k_shared2[0, 0], 2, 64, 64))
+            T.gemm(T.region(q_shared2[0, 0], 1, 64, 64), T.region(k_shared2[0, 0], 1, 64, 64), T.region(qk_tmem[0, 0], 3, 64, 64), T.bool(False), T.bool(True), 64, 64, 64, 0, T.bool(False), 64, 64, 0, 0, 1, 0, qk_mbar_1[0], 0, 0)
+            T.tvm_storage_sync("shared")
+            T.copy(T.region(qk_tmem[0, 0], 1, 64, 64), T.region(qk[0, 0], 2, 64, 64))
+            T.tvm_storage_sync("shared")
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    qk[i, j] = T.Select(bx * 64 + i < 10240 and (start_n[0] + j < 10240 and bx * 64 + i >= start_n[0] + j), qk[i, j], T.infinity("float32") * T.float32(-1.0))
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    qk[i, j] = qk[i, j] * T.float32(0.088388347648318433)
+            T.copy(T.region(scores_max[0], 1, 64), T.region(scores_max_prev[0], 2, 64))
+            T.fill(T.region(scores_max[0], 2, 64), T.infinity("float32") * T.float32(-1.0))
+            T.reduce(T.region(qk[0, 0], 1, 64, 64), T.region(scores_max[0], 2, 64), "max", 1, T.bool(False))
+            for i in T.parallel(64):
+                has_prev: T.bool = logsum[i] > T.float32(0.0)
+                has_valid: T.bool = bx * 64 + i < 10240 and (start_n[0] < 10240 and bx * 64 + i >= start_n[0])
+                scores_max[i] = T.max(scores_max[i], scores_max_prev[i])
+                m_safe: T.float32 = T.Select(has_prev or has_valid, scores_max[i], T.float32(0.0))
+                alpha[i] = T.Select(has_prev, T.exp(scores_max_prev[i] - m_safe), T.float32(0.0))
+                scores_max[i] = T.Select(has_prev or has_valid, scores_max[i], scores_max_prev[i])
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    m_safe: T.float32 = T.Select(logsum[i] > T.float32(0.0) or bx * 64 + i < 10240 and (start_n[0] < 10240 and bx * 64 + i >= start_n[0]), scores_max[i], T.float32(0.0))
+                    qk[i, j] = T.Select(bx * 64 + i < 10240 and (start_n[0] + j < 10240 and bx * 64 + i >= start_n[0] + j), T.exp(qk[i, j] - m_safe), T.float32(0.0))
+            T.reduce(T.region(qk[0, 0], 1, 64, 64), T.region(scores_sum[0], 2, 64), "sum", 1, T.bool(True))
+            for i in T.parallel(64):
+                logsum[i] = logsum[i] * alpha[i] + scores_sum[i]
+            T.copy(T.region(qk[0, 0], 1, 64, 64), T.region(p_shared[0, 0], 2, 64, 64))
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    acc[i, j] = acc[i, j] * alpha[i]
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    acc2[i, j] = acc2[i, j] * alpha[i]
+            T.copy(T.region(V[off_b, off_h_kv, start_n[0], 0], 1, 1, 1, 64, 64), T.region(v_shared[0, 0], 2, 64, 64))
+            T.gemm(T.region(p_shared[0, 0], 1, 64, 64), T.region(v_shared[0, 0], 1, 64, 64), T.region(pv_tmem[0, 0], 3, 64, 64), T.bool(False), T.bool(False), 64, 64, 64, 0, T.bool(True), 64, 64, 0, 0, 1, 0, pv_mbar_1[0], 0, 0)
+            T.tvm_storage_sync("shared")
+            T.copy(T.region(pv_tmem[0, 0], 1, 64, 64), T.region(pv[0, 0], 2, 64, 64))
+            T.tvm_storage_sync("shared")
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    acc[i, j] = acc[i, j] + pv[i, j]
+            T.copy(T.region(V[off_b, off_h_kv, start_n[0], 64], 1, 1, 1, 64, 64), T.region(v_shared2[0, 0], 2, 64, 64))
+            T.gemm(T.region(p_shared[0, 0], 1, 64, 64), T.region(v_shared2[0, 0], 1, 64, 64), T.region(pv2_tmem[0, 0], 3, 64, 64), T.bool(False), T.bool(False), 64, 64, 64, 0, T.bool(True), 64, 64, 0, 0, 1, 0, pv_mbar_1[0], 0, 0)
+            T.tvm_storage_sync("shared")
+            T.copy(T.region(pv2_tmem[0, 0], 1, 64, 64), T.region(pv2[0, 0], 2, 64, 64))
+            T.tvm_storage_sync("shared")
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    acc2[i, j] = acc2[i, j] + pv2[i, j]
+            l[0] = l[0] + 1
+        for i in T.parallel(64):
+            for j in T.parallel(64):
+                acc[i, j] = acc[i, j] / T.Select(logsum[i] > T.float32(0.0), logsum[i], T.float32(1.0))
+        T.copy(T.region(acc[0, 0], 1, 64, 64), T.region(o_shared[0, 0], 2, 64, 64))
+        T.copy(T.region(o_shared[0, 0], 1, 64, 64), T.region(O[off_b, off_h, bx * 64, 0], 2, 1, 1, 64, 64))
+        for i in T.parallel(64):
+            for j in T.parallel(64):
+                acc2[i, j] = acc2[i, j] / T.Select(logsum[i] > T.float32(0.0), logsum[i], T.float32(1.0))
+        T.copy(T.region(acc2[0, 0], 1, 64, 64), T.region(o_shared2[0, 0], 2, 64, 64))
+        T.copy(T.region(o_shared2[0, 0], 1, 64, 64), T.region(O[off_b, off_h, bx * 64, 64], 2, 1, 1, 64, 64))

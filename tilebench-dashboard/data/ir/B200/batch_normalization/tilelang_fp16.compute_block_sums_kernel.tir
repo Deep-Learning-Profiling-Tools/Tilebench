@@ -1,0 +1,37 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def compute_block_sums_kernel(input: T.handle, block_sum: T.handle, block_sq_sum: T.handle):
+    input_1 = T.match_buffer(input, (20000, 1024), "float16", strides=(1024, 1))
+    block_sum_1 = T.match_buffer(block_sum, (313, 1024), strides=(1024, 1))
+    block_sq_sum_1 = T.match_buffer(block_sq_sum, (313, 1024), strides=(1024, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 313)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        acc_sum = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        acc_sq = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        input_local = T.sblock_alloc_buffer((8, 1024), scope="local.fragment")
+        input_sq_local = T.sblock_alloc_buffer((8, 1024), scope="local.fragment")
+        tile_sum = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        tile_sq_sum = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        T.fill(T.region(acc_sum[0], 2, 1024), T.float32(0.0))
+        T.fill(T.region(acc_sq[0], 2, 1024), T.float32(0.0))
+        for _tmp in T.unroll(8, annotations={"pragma_unroll_explicit": False}):
+            r: T.int32 = _tmp * 8
+            for i in T.parallel(8):
+                for col in T.parallel(1024):
+                    row: T.int32 = bx * 64 + r + i
+                    input_local[i, col] = T.Cast("float32", input_1[row, col])
+                    input_sq_local[i, col] = input_local[i, col] * input_local[i, col]
+            T.reduce(T.region(input_local[0, 0], 1, 8, 1024), T.region(tile_sum[0], 2, 1024), "sum", 0, T.bool(True))
+            T.reduce(T.region(input_sq_local[0, 0], 1, 8, 1024), T.region(tile_sq_sum[0], 2, 1024), "sum", 0, T.bool(True))
+            for col in T.parallel(1024):
+                acc_sum[col] = acc_sum[col] + tile_sum[col]
+                acc_sq[col] = acc_sq[col] + tile_sq_sum[col]
+        T.copy(T.region(acc_sum[0], 1, 1024), T.region(block_sum_1[bx, 0], 2, 1, 1024))
+        T.copy(T.region(acc_sq[0], 1, 1024), T.region(block_sq_sum_1[bx, 0], 2, 1, 1024))

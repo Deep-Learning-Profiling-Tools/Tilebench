@@ -1,0 +1,28 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def jacobi_stencil_kernel(input: T.handle, output: T.handle):
+    input_1 = T.match_buffer(input, (10240, 10240), "bfloat16", strides=(10240, 1))
+    output_1 = T.match_buffer(output, (10240, 10240), "bfloat16", strides=(10240, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 5120)
+    by = T.launch_thread("blockIdx.y", 20)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        local_tile_out = T.sblock_alloc_buffer((2, 512), "bfloat16", scope="local.fragment")
+        start_r: T.int32 = bx * 2
+        start_c: T.int32 = by * 512
+        T.copy(T.region(input_1[start_r, start_c], 1, 2, 512), T.region(local_tile_out[0, 0], 2, 2, 512))
+        quarter: T.bfloat16 = T.bfloat16(0.25)
+        for i in T.parallel(2):
+            for j in T.parallel(512):
+                gb_r: T.int32 = i + start_r
+                gb_c: T.int32 = j + start_c
+                is_inner: T.bool = gb_r >= 1 and (gb_c >= 1 and (gb_r < 10239 and gb_c < 10239))
+                avg: T.bfloat16 = quarter * (input_1[gb_r - 1, gb_c] + input_1[gb_r + 1, gb_c] + input_1[gb_r, gb_c - 1] + input_1[gb_r, gb_c + 1])
+                local_tile_out[i, j] = T.Select(is_inner, avg, local_tile_out[i, j])
+        T.copy(T.region(local_tile_out[0, 0], 1, 2, 512), T.region(output_1[start_r, start_c], 2, 2, 512))

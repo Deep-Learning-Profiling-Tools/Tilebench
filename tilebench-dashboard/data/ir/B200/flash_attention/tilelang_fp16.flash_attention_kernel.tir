@@ -1,0 +1,78 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(Q_handle: T.handle, K_handle: T.handle, V_handle: T.handle, O_handle: T.handle):
+    Q = T.match_buffer(Q_handle, (4, 32, 20480, 128), "float16", strides=(83886080, 2621440, 128, 1))
+    K = T.match_buffer(K_handle, (4, 32, 20480, 128), "float16", strides=(83886080, 2621440, 128, 1))
+    V = T.match_buffer(V_handle, (4, 32, 20480, 128), "float16", strides=(83886080, 2621440, 128, 1))
+    O = T.match_buffer(O_handle, (4, 32, 20480, 128), "float16", strides=(83886080, 2621440, 128, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 160)
+    by = T.launch_thread("blockIdx.y", 32)
+    bz = T.launch_thread("blockIdx.z", 4)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        pv_mbar = T.handle("uint64", "shared.barrier")
+        qk_mbar = T.handle("uint64", "shared.barrier")
+        T.sblock_attr({"barrier_init": {pv_mbar: [1], qk_mbar: [1]}})
+        q_shared = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        k_shared = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        v_shared = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        qk = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        qk_tmem = T.sblock_alloc_buffer((128, 128), scope="shared.tmem")
+        p_shared = T.sblock_alloc_buffer((128, 128), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        pv = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        pv_tmem = T.sblock_alloc_buffer((128, 128), scope="shared.tmem")
+        qk_mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=qk_mbar, scope="shared.barrier")
+        pv_mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=pv_mbar, scope="shared.barrier")
+        m_i = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        m_ij = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        alpha = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        l_ij = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        l_i = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        T.copy(T.region(Q[bz, by, bx * 128, 0], 1, 1, 1, 128, 128), T.region(q_shared[0, 0], 2, 128, 128))
+        for i in T.parallel(128):
+            for j in T.parallel(128):
+                q_shared[i, j] = T.Cast("float16", T.Cast("float32", q_shared[i, j]) * T.float32(0.1275174307460247))
+        T.fill(T.region(acc[0, 0], 2, 128, 128), 0)
+        T.fill(T.region(l_i[0], 2, 128), 0)
+        T.fill(T.region(m_i[0], 2, 128), T.infinity("float32") * T.float32(-1.0))
+        loop_range: T.int32 = T.min(160, ((bx + 1) * 128 + 128 - 1) // 128)
+        for k_tile in range(loop_range):
+            T.copy(T.region(K[bz, by, k_tile * 128, 0], 1, 1, 1, 128, 128), T.region(k_shared[0, 0], 2, 128, 128))
+            T.gemm(T.region(q_shared[0, 0], 1, 128, 128), T.region(k_shared[0, 0], 1, 128, 128), T.region(qk_tmem[0, 0], 3, 128, 128), T.bool(False), T.bool(True), 128, 128, 128, 0, T.bool(True), 128, 128, 0, 0, 1, 0, qk_mbar_1[0], 0, 0)
+            T.copy(T.region(qk_tmem[0, 0], 1, 128, 128), T.region(qk[0, 0], 2, 128, 128))
+            for i in T.parallel(128):
+                for j in T.parallel(128):
+                    qk[i, j] = T.Select(bx * 128 + i >= k_tile * 128 + j, qk[i, j], T.infinity("float32") * T.float32(-1.0))
+            T.fill(T.region(m_ij[0], 2, 128), T.infinity("float32") * T.float32(-1.0))
+            T.reduce(T.region(qk[0, 0], 1, 128, 128), T.region(m_ij[0], 2, 128), "max", 1, T.bool(False))
+            for i in T.parallel(128):
+                m_ij[i] = T.max(m_i[i], m_ij[i])
+                alpha[i] = T.exp2(m_i[i] - m_ij[i])
+            for i in T.parallel(128):
+                for j in T.parallel(128):
+                    qk[i, j] = T.exp2(qk[i, j] - m_ij[i])
+            T.reduce(T.region(qk[0, 0], 1, 128, 128), T.region(l_ij[0], 2, 128), "sum", 1, T.bool(True))
+            for i in T.parallel(128):
+                l_i[i] = l_i[i] * alpha[i] + l_ij[i]
+            T.copy(T.region(qk[0, 0], 1, 128, 128), T.region(p_shared[0, 0], 2, 128, 128))
+            for i in T.parallel(128):
+                for j in T.parallel(128):
+                    acc[i, j] = acc[i, j] * alpha[i]
+            T.copy(T.region(V[bz, by, k_tile * 128, 0], 1, 1, 1, 128, 128), T.region(v_shared[0, 0], 2, 128, 128))
+            T.gemm(T.region(p_shared[0, 0], 1, 128, 128), T.region(v_shared[0, 0], 1, 128, 128), T.region(pv_tmem[0, 0], 3, 128, 128), T.bool(False), T.bool(False), 128, 128, 128, 0, T.bool(True), 128, 128, 0, 0, 1, 0, pv_mbar_1[0], 0, 0)
+            T.copy(T.region(pv_tmem[0, 0], 1, 128, 128), T.region(pv[0, 0], 2, 128, 128))
+            for i in T.parallel(128):
+                for j in T.parallel(128):
+                    acc[i, j] = acc[i, j] + pv[i, j]
+            T.copy(T.region(m_ij[0], 1, 128), T.region(m_i[0], 2, 128))
+        for i in T.parallel(128):
+            for j in T.parallel(128):
+                acc[i, j] = acc[i, j] / l_i[i]
+        T.copy(T.region(acc[0, 0], 1, 128, 128), T.region(O[bz, by, bx * 128, 0], 2, 1, 1, 128, 128))

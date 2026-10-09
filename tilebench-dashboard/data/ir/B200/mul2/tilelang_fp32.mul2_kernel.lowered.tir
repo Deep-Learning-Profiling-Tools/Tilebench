@@ -1,0 +1,22 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def mul2_kernel_kernel(output: T.handle("float32", "global"), x: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 10240, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        output_1 = T.decl_buffer((20971520,), data=output)
+        x_1 = T.decl_buffer((20971520,), data=x)
+        bx = T.launch_thread("blockIdx.x", 10240)
+        x_reg = T.alloc_buffer((8,), scope="local")
+        output_reg = T.alloc_buffer((8,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        output_reg_1 = T.decl_buffer((8,), data=output_reg.data, scope="local")
+        x_reg_1 = T.decl_buffer((8,), data=x_reg.data, scope="local")
+        x_reg_1[0:8] = x_1[bx * 2048 + tx * 8:bx * 2048 + tx * 8 + 8]
+        for i in T.unroll(8):
+            output_reg_1[i] = x_reg_1[i] * T.float32(2.0)
+        output_1[bx * 2048 + tx * 8:bx * 2048 + tx * 8 + 8] = output_reg_1[0:8]

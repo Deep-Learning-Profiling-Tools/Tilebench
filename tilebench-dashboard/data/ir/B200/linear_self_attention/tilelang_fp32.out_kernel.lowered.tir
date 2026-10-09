@@ -1,0 +1,292 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def out_kernel_kernel(O: T.handle("float32", "global"), PhiQ: T.handle("float32", "global"), S: T.handle("float32", "global"), Z: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 57344, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 157, "blockIdx.y": 2, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2, 3]})
+        O_1 = T.decl_buffer((2560000,), data=O)
+        Z_1 = T.decl_buffer((256,), data=Z)
+        PhiQ_1 = T.decl_buffer((2560000,), data=PhiQ)
+        S_1 = T.decl_buffer((65536,), data=S)
+        bx = T.launch_thread("blockIdx.x", 157)
+        buf_dyn_shmem = T.alloc_buffer((57344,), "uint8", scope="shared.dyn")
+        s_shared: T.handle("custom[tfloat32]", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        q_shared: T.handle("custom[tfloat32]", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 49152)
+        numer = T.alloc_buffer((64,), scope="local")
+        denom = T.alloc_buffer((4,), scope="local")
+        q_frag = T.alloc_buffer((64,), scope="local")
+        z_frag = T.alloc_buffer((1,), scope="local")
+        denom_prod = T.alloc_buffer((64,), scope="local")
+        denom_delta = T.alloc_buffer((4,), scope="local")
+        denom_delta_clear = T.alloc_buffer((64,), scope="local")
+        denom_delta_clear_1 = T.alloc_buffer((64,), scope="local")
+        denom_delta_clear_2 = T.alloc_buffer((64,), scope="local")
+        denom_delta_clear_3 = T.alloc_buffer((64,), scope="local")
+        out = T.alloc_buffer((64,), scope="local")
+        by = T.launch_thread("blockIdx.y", 2)
+        thread_binding = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        numer_1 = T.decl_buffer((64,), data=numer.data, scope="local")
+        denom_1 = T.decl_buffer((4,), data=denom.data, scope="local")
+        out_1 = T.decl_buffer((64,), data=out.data, scope="local")
+        numer_2 = T.decl_buffer((64,), data=numer.data, scope="local")
+        denom_2 = T.decl_buffer((4,), data=denom.data, scope="local")
+        denom_3 = T.decl_buffer((4,), data=denom.data, scope="local")
+        denom_4 = T.decl_buffer((4,), data=denom.data, scope="local")
+        denom_5 = T.decl_buffer((4,), data=denom.data, scope="local")
+        for i in T.unroll(16):
+            numer_2[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        denom_2[0:4] = T.Broadcast(T.float32(0.0), 4)
+        denom_delta_1 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        s_shared_1 = T.decl_buffer((12288,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        s_shared_2 = T.decl_buffer((12288,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        s_shared_3 = T.decl_buffer((12288,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        q_frag_1 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_1 = T.decl_buffer((2048,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_2 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        s_shared_4 = T.decl_buffer((12288,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        z_frag_1 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_1 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_3 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_2 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_2 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_2 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        denom_delta_3 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        q_frag_4 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_2 = T.decl_buffer((2048,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_5 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_3 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_3 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_6 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_4 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_4 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_4 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        denom_delta_5 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        q_frag_7 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_3 = T.decl_buffer((2048,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_8 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_5 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_5 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_9 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_6 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_6 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_6 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        denom_delta_7 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        q_frag_10 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_4 = T.decl_buffer((2048,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_11 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_7 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_7 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_12 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_8 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_8 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_8 = T.decl_buffer((4,), data=denom_delta.data, scope="local")
+        with T.attr(0, "tl.pipeline_mvb_num_stages", 3):
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 0)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(32):
+                    s_shared_1[i * 128 + thread_binding // 32 * 32 + (thread_binding % 32 // 16 + i % 2) % 2 * 16 + (thread_binding // 64 + thread_binding % 16 // 8) % 2 * 8 + (thread_binding % 64 // 32 + thread_binding % 8 // 4) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", S_1[thread_binding % 32 * 256 + by * 128 + i * 4 + thread_binding // 32])
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(32):
+                    s_shared_2[i * 128 + thread_binding // 32 * 32 + (thread_binding % 32 // 16 + i % 2) % 2 * 16 + (thread_binding // 64 + thread_binding % 16 // 8) % 2 * 8 + (thread_binding % 64 // 32 + thread_binding % 8 // 4) % 2 * 4 + thread_binding % 4 + 4096] = T.Cast("custom[tfloat32]", S_1[thread_binding % 32 * 256 + by * 128 + i * 4 + thread_binding // 32 + 8192])
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 2)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(32):
+                    s_shared_3[i * 128 + thread_binding // 32 * 32 + (thread_binding % 32 // 16 + i % 2) % 2 * 16 + (thread_binding // 64 + thread_binding % 16 // 8) % 2 * 8 + (thread_binding % 64 // 32 + thread_binding % 8 // 4) % 2 * 4 + thread_binding % 4 + 8192] = T.Cast("custom[tfloat32]", S_1[thread_binding % 32 * 256 + by * 128 + i * 4 + thread_binding // 32 + 16384])
+            T.ptx_commit_group()
+            for k_tile in T.serial(5, annotations={"tl_pipelined_num_stages": 3}):
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    for i in T.unroll(64):
+                        q_frag_1[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + k_tile * 32 + thread_binding % 32], T.float32(0.0))
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    if thread_binding // 32 == 0:
+                        for i in T.unroll(64):
+                            q_shared_1[i * 32 + (thread_binding % 32 // 16 + i % 8 // 4) % 2 * 16 + (thread_binding % 16 // 8 + i % 4 // 2) % 2 * 8 + (thread_binding % 8 // 4 + i % 2) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", q_frag_2[i])
+                T.ptx_wait_group(2)
+                T.tvm_storage_sync("shared")
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    T.attr(0, "lexical_alloc_scope", 1)
+                    A_local = T.alloc_buffer((8,), "custom[tfloat32]", scope="local")
+                    B_local = T.alloc_buffer((16,), "custom[tfloat32]", scope="local")
+                    for ki in range(4):
+                        for i in range(2):
+                            T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, thread_binding % 64 // 32 * 1024 + i * 512 + thread_binding % 16 // 8 * 256 + (thread_binding % 16 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 2) % 2 * 4) % 256, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), A_local.data, i * 4, 8, 2))
+                        for i in range(4):
+                            T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, k_tile % 3 * 4096 + thread_binding // 64 * 2048 + i * 512 + thread_binding % 32 // 16 * 256 + thread_binding % 8 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 4, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), B_local.data, i * 4, 8, 2))
+                        for i, j in T.grid(2, 4):
+                            T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4, numer.data, i * 32 + j * 8, T.bool(False))
+                            T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4 + 2, numer.data, i * 32 + j * 8 + 4, T.bool(False))
+                with T.attr(0, "async_scope", 1):
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (k_tile // 3 + 1) % 2)
+                    T.tvm_storage_sync("shared.dyn")
+                    for i in T.unroll(32):
+                        s_shared_4[k_tile % 3 * 4096 + i * 128 + thread_binding // 32 * 32 + (thread_binding % 32 // 16 + i % 2) % 2 * 16 + (thread_binding // 64 + thread_binding % 16 // 8) % 2 * 8 + (thread_binding % 64 // 32 + thread_binding % 8 // 4) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", S_1[k_tile * 8192 + thread_binding % 32 * 256 + by * 128 + i * 4 + thread_binding // 32 + 24576])
+                T.ptx_commit_group()
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    z_frag_1[0] = Z_1[k_tile * 32 + thread_binding % 32]
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    for i in T.unroll(64):
+                        denom_prod_1[i] = q_frag_3[i] * z_frag_2[0]
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                    for i in T.unroll(64):
+                        denom_delta_clear[i] = T.float32(0.0)
+                        denom_delta_clear[i] = denom_delta_clear[i] + denom_prod_2[i]
+                        denom_delta_clear[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 32, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear[i])
+                        if thread_binding % 64 // 32 * 32 + i % 32 // 8 * 8 + thread_binding % 32 // 4 == i:
+                            denom_delta_2[i % 32 // 8] = denom_delta_clear[i]
+                T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile % 3)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", k_tile // 3)
+                for i in T.unroll(4):
+                    denom_3[i] = denom_3[i] + denom_delta_3[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    q_frag_4[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + thread_binding % 32 + 160], T.float32(0.0))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                if thread_binding // 32 == 0:
+                    for i in T.unroll(64):
+                        q_shared_2[i * 32 + (thread_binding % 32 // 16 + i % 8 // 4) % 2 * 16 + (thread_binding % 16 // 8 + i % 4 // 2) % 2 * 8 + (thread_binding % 8 // 4 + i % 2) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", q_frag_5[i])
+            T.ptx_wait_group(2)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.attr(0, "lexical_alloc_scope", 1)
+                A_local = T.alloc_buffer((8,), "custom[tfloat32]", scope="local")
+                B_local = T.alloc_buffer((16,), "custom[tfloat32]", scope="local")
+                for ki in range(4):
+                    for i in range(2):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, thread_binding % 64 // 32 * 1024 + i * 512 + thread_binding % 16 // 8 * 256 + (thread_binding % 16 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 2) % 2 * 4) % 256, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), A_local.data, i * 4, 8, 2))
+                    for i in range(4):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, thread_binding // 64 * 2048 + i * 512 + thread_binding % 32 // 16 * 256 + thread_binding % 8 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 4 + 8192, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), B_local.data, i * 4, 8, 2))
+                    for i, j in T.grid(2, 4):
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4, numer.data, i * 32 + j * 8, T.bool(False))
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4 + 2, numer.data, i * 32 + j * 8 + 4, T.bool(False))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                z_frag_3[0] = Z_1[thread_binding % 32 + 160]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    denom_prod_3[i] = q_frag_6[i] * z_frag_4[0]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    denom_delta_clear_1[i] = T.float32(0.0)
+                    denom_delta_clear_1[i] = denom_delta_clear_1[i] + denom_prod_4[i]
+                    denom_delta_clear_1[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 32, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear_1[i])
+                    if thread_binding % 64 // 32 * 32 + i % 32 // 8 * 8 + thread_binding % 32 // 4 == i:
+                        denom_delta_4[i % 32 // 8] = denom_delta_clear_1[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(4):
+                    denom_4[i] = denom_4[i] + denom_delta_5[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    q_frag_7[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + thread_binding % 32 + 192], T.float32(0.0))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.tvm_storage_sync("shared.dyn")
+                if thread_binding // 32 == 0:
+                    for i in T.unroll(64):
+                        q_shared_3[i * 32 + (thread_binding % 32 // 16 + i % 8 // 4) % 2 * 16 + (thread_binding % 16 // 8 + i % 4 // 2) % 2 * 8 + (thread_binding % 8 // 4 + i % 2) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", q_frag_8[i])
+            T.ptx_wait_group(1)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.attr(0, "lexical_alloc_scope", 1)
+                A_local = T.alloc_buffer((8,), "custom[tfloat32]", scope="local")
+                B_local = T.alloc_buffer((16,), "custom[tfloat32]", scope="local")
+                for ki in range(4):
+                    for i in range(2):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, thread_binding % 64 // 32 * 1024 + i * 512 + thread_binding % 16 // 8 * 256 + (thread_binding % 16 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 2) % 2 * 4) % 256, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), A_local.data, i * 4, 8, 2))
+                    for i in range(4):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, thread_binding // 64 * 2048 + i * 512 + thread_binding % 32 // 16 * 256 + thread_binding % 8 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 4, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), B_local.data, i * 4, 8, 2))
+                    for i, j in T.grid(2, 4):
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4, numer.data, i * 32 + j * 8, T.bool(False))
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4 + 2, numer.data, i * 32 + j * 8 + 4, T.bool(False))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                z_frag_5[0] = Z_1[thread_binding % 32 + 192]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    denom_prod_5[i] = q_frag_9[i] * z_frag_6[0]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    denom_delta_clear_2[i] = T.float32(0.0)
+                    denom_delta_clear_2[i] = denom_delta_clear_2[i] + denom_prod_6[i]
+                    denom_delta_clear_2[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 32, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear_2[i])
+                    if thread_binding % 64 // 32 * 32 + i % 32 // 8 * 8 + thread_binding % 32 // 4 == i:
+                        denom_delta_6[i % 32 // 8] = denom_delta_clear_2[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(4):
+                    denom_5[i] = denom_5[i] + denom_delta_7[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    q_frag_10[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + thread_binding % 32 + 224], T.float32(0.0))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.tvm_storage_sync("shared.dyn")
+                if thread_binding // 32 == 0:
+                    for i in T.unroll(64):
+                        q_shared_4[i * 32 + (thread_binding % 32 // 16 + i % 8 // 4) % 2 * 16 + (thread_binding % 16 // 8 + i % 4 // 2) % 2 * 8 + (thread_binding % 8 // 4 + i % 2) % 2 * 4 + thread_binding % 4] = T.Cast("custom[tfloat32]", q_frag_11[i])
+            T.ptx_wait_group(0)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.attr(0, "lexical_alloc_scope", 1)
+                A_local = T.alloc_buffer((8,), "custom[tfloat32]", scope="local")
+                B_local = T.alloc_buffer((16,), "custom[tfloat32]", scope="local")
+                for ki in range(4):
+                    for i in range(2):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, thread_binding % 64 // 32 * 1024 + i * 512 + thread_binding % 16 // 8 * 256 + (thread_binding % 16 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 32 // 16 + thread_binding % 2) % 2 * 4) % 256, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), A_local.data, i * 4, 8, 2))
+                    for i in range(4):
+                        T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, thread_binding // 64 * 2048 + i * 512 + thread_binding % 32 // 16 * 256 + thread_binding % 8 * 32 + (thread_binding % 8 // 4 + ki // 2) % 2 * 16 + (thread_binding % 4 // 2 + ki % 2) % 2 * 8 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 4 + 4096, 8, 1), T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), B_local.data, i * 4, 8, 2))
+                    for i, j in T.grid(2, 4):
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4, numer.data, i * 32 + j * 8, T.bool(False))
+                        T.ptx_mma("float32", "m16n8k8", "row", "col", "tf32", "tf32", "fp32", A_local.data, i * 4, B_local.data, j * 4 + 2, numer.data, i * 32 + j * 8 + 4, T.bool(False))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                z_frag_7[0] = Z_1[thread_binding % 32 + 224]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    denom_prod_7[i] = q_frag_12[i] * z_frag_8[0]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    denom_delta_clear_3[i] = T.float32(0.0)
+                    denom_delta_clear_3[i] = denom_delta_clear_3[i] + denom_prod_8[i]
+                    denom_delta_clear_3[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 32, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear_3[i])
+                    if thread_binding % 64 // 32 * 32 + i % 32 // 8 * 8 + thread_binding % 32 // 4 == i:
+                        denom_delta_8[i % 32 // 8] = denom_delta_clear_3[i]
+            T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+            T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+            for i in T.unroll(4):
+                denom_1[i] = denom_1[i] + denom_delta_1[i]
+        for i in T.unroll(64):
+            out_1[i] = numer_1[i] / (denom_1[i // 32 * 2 + i % 4 // 2] + T.float32(9.9999999999999995e-07))
+        for i in T.unroll(32):
+            if bx * 4 + thread_binding % 64 // 32 * 2 + i // 16 < 625:
+                O_1[bx * 16384 + thread_binding % 64 // 32 * 8192 + i // 16 * 4096 + i % 2 * 2048 + thread_binding % 32 // 4 * 256 + by * 128 + thread_binding // 64 * 64 + i % 16 // 2 * 8 + thread_binding % 4 * 2:bx * 16384 + thread_binding % 64 // 32 * 8192 + i // 16 * 4096 + i % 2 * 2048 + thread_binding % 32 // 4 * 256 + by * 128 + thread_binding // 64 * 64 + i % 16 // 2 * 8 + thread_binding % 4 * 2 + 2] = out_1[i * 2:i * 2 + 2]

@@ -1,0 +1,27 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def max_pool2d_kernel_kernel(input: T.handle("float32", "global"), output: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 512, "blockIdx.y": 320, "blockIdx.z": 1, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "blockIdx.z", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        output_1 = T.decl_buffer((52428800,), data=output)
+        input_1 = T.decl_buffer((209715200,), data=input)
+        bx = T.launch_thread("blockIdx.x", 512)
+        acc = T.alloc_buffer((4,), scope="local")
+        row_start = T.launch_thread("blockIdx.y", 320)
+        bz = T.launch_thread("blockIdx.z", 1)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((4,), data=acc.data, scope="local")
+        neg_inf: T.float32 = T.infinity("float32") * T.float32(-1.0)
+        acc_1[0:4] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 4)
+        for kh in T.unroll(3):
+            for kw in T.unroll(3):
+                for i in T.unroll(4):
+                    acc_1[i] = T.max(acc_1[i], T.if_then_else(1 <= i * 256 + tx * 2 + kw, T.if_then_else(i * 256 + tx * 2 + kw < 641, T.if_then_else(1 <= row_start * 2 + kh, input_1[bx * 409600 + row_start * 1280 + kh * 640 + i * 256 + tx * 2 + kw - 641], T.infinity("float32") * T.float32(-1.0)), T.infinity("float32") * T.float32(-1.0)), T.infinity("float32") * T.float32(-1.0)))
+        for i in T.unroll(4):
+            if i * 2 + tx // 64 < 5:
+                output_1[bx * 102400 + row_start * 320 + i * 128 + tx] = acc_1[i]

@@ -1,0 +1,18 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def pad_kernel(data: T.handle, work: T.handle):
+    data_1 = T.match_buffer(data, (10000000,), strides=(1,))
+    work_1 = T.match_buffer(work, (16777216,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 32768)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {data_1.data: T.infinity("float32")}})
+        for local_idx in T.parallel(512):
+            offs: T.int32 = bx * 512 + local_idx
+            work_1[offs] = data_1[offs]

@@ -1,0 +1,25 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(input_handle: T.handle, hist_handle: T.handle, shift: T.int32):
+    input = T.match_buffer(input_handle, (20000000,), "int32", strides=(1,))
+    hist = T.match_buffer(hist_handle, (78128,), "int32", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 19532)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        packed = T.sblock_alloc_buffer((1024,), "int64", scope="local.fragment")
+        total = T.sblock_alloc_buffer((1,), "int64", scope="local.fragment")
+        for local_idx in T.parallel(1024):
+            idx: T.int32 = bx * 1024 + local_idx
+            valid: T.bool = idx < 20000000
+            block: T.int32 = input[idx]
+            digit: T.int32 = T.bitwise_and(T.shift_right(block, shift), 3)
+            packed[local_idx] = T.shift_left(T.Cast("int64", valid), T.Cast("int64", digit * 16))
+        T.reduce(T.region(packed[0], 1, 1024), T.region(total[0], 2, 1), "sum", 0, T.bool(True))
+        for digit in T.parallel(4):
+            hist[digit * 19532 + bx] = T.Cast("int32", T.bitwise_and(T.shift_right(total[0], T.Cast("int64", digit * 16)), T.int64(65535)))

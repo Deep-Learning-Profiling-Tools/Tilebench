@@ -1,0 +1,34 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def bmm_kernel(A: T.handle, B: T.handle, C: T.handle):
+    A_1 = T.match_buffer(A, (32, 640, 640), "float16", strides=(409600, 640, 1))
+    B_1 = T.match_buffer(B, (32, 640, 640), "float16", strides=(409600, 640, 1))
+    C_1 = T.match_buffer(C, (32, 640, 640), "float16", strides=(409600, 640, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 5)
+    by = T.launch_thread("blockIdx.y", 5)
+    bz = T.launch_thread("blockIdx.z", 32)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        mbar = T.handle("uint64", "shared.barrier")
+        T.sblock_attr({"barrier_init": {mbar: [1]}})
+        A_tile = T.sblock_alloc_buffer((128, 64), "float16", scope="shared.dyn")
+        B_tile = T.sblock_alloc_buffer((64, 128), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        acc_tmem = T.sblock_alloc_buffer((128, 128), scope="shared.tmem")
+        mbar_1 = T.sblock_alloc_buffer((1,), "uint64", data=mbar, scope="shared.barrier")
+        start_m: T.int32 = bx * 128
+        start_n: T.int32 = by * 128
+        for k in T.serial(10, annotations={"num_stages": 2}):
+            T.copy(T.region(A_1[bz, start_m, k * 64], 1, 1, 128, 64), T.region(A_tile[0, 0], 2, 128, 64))
+            T.copy(T.region(B_1[bz, k * 64, start_n], 1, 1, 64, 128), T.region(B_tile[0, 0], 2, 64, 128))
+            T.gemm(T.region(A_tile[0, 0], 1, 128, 64), T.region(B_tile[0, 0], 1, 64, 128), T.region(acc_tmem[0, 0], 3, 128, 128), T.bool(False), T.bool(False), 128, 128, 64, 0, k == 0, 64, 128, 0, 0, 1, 0, mbar_1[0], 0, 0)
+            T.tvm_storage_sync("shared")
+        T.tvm_storage_sync("shared")
+        T.copy(T.region(acc_tmem[0, 0], 1, 128, 128), T.region(acc[0, 0], 2, 128, 128))
+        T.copy(T.region(acc[0, 0], 1, 128, 128), T.region(C_1[bz, start_m, start_n], 2, 1, 128, 128))

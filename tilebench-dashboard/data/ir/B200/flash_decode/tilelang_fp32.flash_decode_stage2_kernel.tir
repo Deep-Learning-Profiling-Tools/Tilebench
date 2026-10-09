@@ -1,0 +1,43 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def flash_decode_stage2_kernel(mid_o: T.handle, mid_o_lse: T.handle, b_seqlen: T.handle, output: T.handle):
+    mid_o_1 = T.match_buffer(mid_o, (2, 8, 320, 128), strides=(327680, 40960, 128, 1))
+    mid_o_lse_1 = T.match_buffer(mid_o_lse, (2, 8, 320), strides=(2560, 320, 1))
+    b_seqlen_1 = T.match_buffer(b_seqlen, (2,), "int32", strides=(1,))
+    output_1 = T.match_buffer(output, (2, 8, 128), strides=(1024, 128, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 2)
+    by = T.launch_thread("blockIdx.y", 8)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        acc = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        tv = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        out = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        sum_exp = T.sblock_alloc_buffer((1,), scope="local.var")
+        max_logic = T.sblock_alloc_buffer((1,), scope="local.var")
+        exp_logic = T.sblock_alloc_buffer((1,), scope="local.var")
+        sum_exp[0] = T.float32(0.0)
+        max_logic[0] = T.infinity("float32") * T.float32(-1.0)
+        T.fill(T.region(acc[0], 2, 128), T.float32(0.0))
+        T.fill(T.region(out[0], 2, 128), T.Cast("float32", T.float32(0.0)))
+        cur_batch_seq_len: T.int32 = b_seqlen_1[bx]
+        block_n_size: T.int32 = T.Select(cur_batch_seq_len <= 0, 0, (cur_batch_seq_len + 128 - 1) // 128)
+        for block_seq_n in T.serial(block_n_size, annotations={"num_stages": 2}):
+            T.copy(T.region(mid_o_1[bx, by, block_seq_n, 0], 1, 1, 1, 1, 128), T.region(tv[0], 2, 128))
+            tlogic: T.float32 = mid_o_lse_1[bx, by, block_seq_n]
+            new_max_logic: T.float32 = T.max(tlogic, max_logic[0])
+            old_scale: T.float32 = T.exp(max_logic[0] - new_max_logic)
+            exp_logic[0] = T.exp(tlogic - new_max_logic)
+            for d in T.parallel(128):
+                acc[d] = acc[d] * old_scale + exp_logic[0] * tv[d]
+            sum_exp[0] = sum_exp[0] * old_scale + exp_logic[0]
+            max_logic[0] = new_max_logic
+        if cur_batch_seq_len > 0:
+            for d in T.parallel(128):
+                out[d] = acc[d] / sum_exp[0]
+        T.copy(T.region(out[0], 1, 128), T.region(output_1[bx, by, 0], 2, 1, 1, 128))

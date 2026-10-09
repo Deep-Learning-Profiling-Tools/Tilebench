@@ -1,0 +1,38 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(input_handle: T.handle, output_handle: T.handle, hist_handle: T.handle, shift: T.int32):
+    input = T.match_buffer(input_handle, (20000000,), "int32", strides=(1,))
+    output = T.match_buffer(output_handle, (20000000,), "int32", strides=(1,))
+    hist = T.match_buffer(hist_handle, (78128,), "int32", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 19532)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        block = T.sblock_alloc_buffer((1024,), "int32", scope="local.fragment")
+        digit_vals = T.sblock_alloc_buffer((1024,), "int32", scope="local.fragment")
+        src_buffer = T.sblock_alloc_buffer((1024,), "int64", scope="local.fragment")
+        scan_smem = T.sblock_alloc_buffer((1024,), "int64", scope="shared.dyn")
+        for local_idx in T.parallel(1024):
+            idx: T.int32 = bx * 1024 + local_idx
+            valid: T.bool = idx < 20000000
+            val: T.int32 = input[idx]
+            digit: T.int32 = T.bitwise_and(T.shift_right(val, shift), 3)
+            block[local_idx] = val
+            digit_vals[local_idx] = digit
+            src_buffer[local_idx] = T.shift_left(T.Cast("int64", valid), T.Cast("int64", digit * 16))
+        T.copy(T.region(src_buffer[0], 1, 1024), T.region(scan_smem[0], 2, 1024))
+        T.cumsum(T.region(scan_smem[0], 1, 1024), T.region(scan_smem[0], 2, 1024), 0, T.bool(False))
+        T.copy(T.region(scan_smem[0], 1, 1024), T.region(src_buffer[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            idx: T.int32 = bx * 1024 + local_idx
+            if idx < 20000000:
+                digit: T.int32 = digit_vals[local_idx]
+                field: T.int32 = digit * 16
+                rank: T.int32 = T.Cast("int32", T.bitwise_and(T.shift_right(src_buffer[local_idx] - T.shift_left(T.int64(1), T.Cast("int64", field)), T.Cast("int64", field)), T.int64(65535)))
+                base: T.int32 = hist[digit * 19532 + bx]
+                output[base + rank] = block[local_idx]

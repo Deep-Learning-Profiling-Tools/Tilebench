@@ -1,0 +1,51 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def cross_entropy_kernel_kernel(logits: T.handle("float16", "global"), output: T.handle("float16", "global"), targets: T.handle("int64", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 256, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 2]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `logits`, `targets`, `output`")
+        output_1 = T.decl_buffer((M,), "float16", data=output)
+        targets_1 = T.decl_buffer((M,), "int64", data=targets)
+        logits_1 = T.decl_buffer((M * 512,), "float16", data=logits)
+        bx = T.launch_thread("blockIdx.x", M)
+        buf_dyn_shmem = T.alloc_buffer((256,), "uint8", scope="shared.dyn")
+        workspace: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        local_logits = T.alloc_buffer((8,), scope="local")
+        logits_local_cast = T.alloc_buffer((8,), "float16", scope="local")
+        row_max = T.alloc_buffer((1,), scope="local")
+        exp_shifted = T.alloc_buffer((8,), scope="local")
+        row_sum = T.alloc_buffer((1,), scope="local")
+        loss = T.alloc_buffer((1,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        local_logits_1 = T.decl_buffer((8,), data=local_logits.data, scope="local")
+        exp_shifted_1 = T.decl_buffer((8,), data=exp_shifted.data, scope="local")
+        row_max_1 = T.decl_buffer((1,), data=row_max.data, scope="local")
+        row_sum_1 = T.decl_buffer((1,), data=row_sum.data, scope="local")
+        loss_1 = T.decl_buffer((1,), data=loss.data, scope="local")
+        for i in T.unroll(2):
+            local_logits_1[i * 4:i * 4 + 4] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 4)
+        logits_2 = T.Buffer((M * 512,), "float16", data=logits)
+        logits_local_cast[0:8] = logits_2[T.Cast("int64", bx) * T.int64(512) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(512) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+        for i in range(2):
+            local_logits_1[i * 4:i * 4 + 4] = T.Cast("float32x4", logits_local_cast[i * 4:i * 4 + 4])
+        row_max_1[0] = T.float32("-inf")
+        for rv in T.unroll(8):
+            row_max_1[0] = T.max(row_max_1[0], local_logits_1[rv])
+        row_max_1[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 64, 1, 0, tl::NamedBarrier<64>>::run", row_max_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 64, 2))
+        for i in T.unroll(8):
+            exp_shifted_1[i] = T.exp(local_logits_1[i] - row_max_1[0])
+        row_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(8):
+            row_sum_1[0] = row_sum_1[0] + exp_shifted_1[rv]
+        T.tvm_storage_sync("shared.dyn")
+        row_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 64, 1, 0, tl::NamedBarrier<64>>::run", row_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 64, 2))
+        target_lw: T.int32 = T.Cast("int32", targets_1[T.Cast("int64", bx)])
+        loss_1[0] = T.log(row_sum_1[0]) + row_max_1[0] - T.Cast("float32", T.if_then_else(0 <= target_lw and target_lw < 512, logits_2[T.Cast("int64", bx) * T.int64(512) + T.Cast("int64", target_lw)], T.float16(0.0)))
+        if tx == 0:
+            output_1[T.Cast("int64", bx)] = T.Cast("float16", loss_1[0])

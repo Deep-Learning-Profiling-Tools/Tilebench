@@ -154,11 +154,15 @@ function publicProfile(r: ProfileEntry): ToolResult {
 }
 
 function profileFilter(args: Record<string, unknown>) {
-  const platform = asStr(args.platform)?.toLowerCase();
+  const any = (v: unknown) => {
+    const text = asStr(v)?.toLowerCase();
+    return text === "all" || text === "any" || text === "*" ? undefined : text;
+  };
+  const platform = any(args.platform);
   const op = asStr(args.op);
-  const backend = asStr(args.backend)?.toLowerCase();
-  const dtype = asStr(args.dtype)?.toLowerCase();
-  return (r: ProfileEntry) =>
+  const backend = any(args.backend);
+  const dtype = any(args.dtype);
+  return (r: { platform: string; op: string; backend: string; dtype: string }) =>
     (!platform || r.platform.toLowerCase() === platform) &&
     (!op || r.op === op) &&
     (!backend || r.backend === backend) &&
@@ -400,10 +404,11 @@ async function compareProfileMetrics(input: unknown): Promise<ToolResult> {
   const op = asStr(args.op);
   const dtype = asStr(args.dtype);
   if (!op || !SAFE_OP.test(op)) return badInput("op is required");
-  const names = Array.isArray(args.names) ? args.names.filter((n): n is string => typeof n === "string") : [];
+  const given = Array.isArray(args.names) ? args.names.filter((n): n is string => typeof n === "string" && n.trim() !== "") : [];
   const pattern = asStr(args.pattern);
-  if (!names.length && !pattern) return badInput("pass names (exact) or pattern");
-  const limit = asInt(args.limit, 25, 1, 60);
+  const defaulted = !given.length && !pattern;
+  const names = defaulted ? [...NCU_KEY_METRICS] : given;
+  const limit = asInt(args.limit, defaulted ? 60 : 25, 1, 60);
   const entries = (await profileManifest()).filter(
     profileFilter({ op, dtype, platform: args.platform, backend: args.backend })
   );
@@ -428,7 +433,305 @@ async function compareProfileMetrics(input: unknown): Promise<ToolResult> {
     ok: true,
     op,
     rows,
+    ...(defaulted ? { metrics_shown: "the curated key metrics, because no names or pattern were given" } : {}),
     note: "Metric names differ between profilers and between GPU generations, so a name can be absent on one platform. Compare backends within a platform before comparing across platforms.",
+  };
+}
+
+// ---------- compiler intermediate code (data/ir, written by scripts/export_ir.py) ----------
+
+interface IrFile {
+  kind: string;
+  what: string;
+  file: string;
+  lines: number;
+  chars: number;
+}
+
+interface IrEntry {
+  platform: string;
+  op: string;
+  backend: string;
+  dtype: string;
+  kernel: string;
+  shape?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  files: IrFile[];
+  versions?: Record<string, unknown>;
+  source_revision?: string | null;
+  note?: string;
+  verified?: string;
+  profile_check?: string;
+  profile_check_ok?: boolean | null;
+  variant?: number;
+  launch_variants?: number;
+  config_note?: string;
+  args?: string[];
+  tensors?: string[];
+  kw?: string[];
+}
+
+let irCache: IrEntry[] | null = null;
+async function irManifest(): Promise<IrEntry[]> {
+  if (!irCache) {
+    try {
+      const raw = await fs.readFile(path.join(DATA, "ir", "manifest.json"), "utf8");
+      irCache = (JSON.parse(raw) as { entries: IrEntry[] }).entries;
+    } catch {
+      irCache = [];
+    }
+  }
+  return irCache;
+}
+
+function publicIr(e: IrEntry): ToolResult {
+  return {
+    platform: e.platform,
+    op: e.op,
+    backend: e.backend,
+    dtype: e.dtype,
+    kernel: e.kernel,
+    shape: e.shape,
+    config: e.config,
+    kinds: e.files.map((f) => ({ kind: f.kind, what: f.what, lines: f.lines })),
+    ...(e.launch_variants && e.launch_variants > 1
+      ? {
+          variant: e.variant ?? 1,
+          launch_variants: e.launch_variants,
+          launch_arguments: e.args ?? [...(e.tensors ?? []), ...(e.kw ?? [])],
+        }
+      : {}),
+    ...(e.config_note ? { config_note: e.config_note } : {}),
+    ...(e.note ? { note: e.note } : {}),
+    ...(e.verified ? { verified: e.verified } : {}),
+    ...(e.profile_check ? { check_against_profile: e.profile_check } : {}),
+    ...(e.profile_check_ok === false
+      ? { warning: "This code did not match the profiled kernel. Do not use it to explain the profile." }
+      : {}),
+  };
+}
+
+async function findIr(input: unknown): Promise<ToolResult> {
+  const args = asObj(input);
+  const op = asStr(args.op);
+  if (op && !SAFE_OP.test(op)) return badInput("bad op");
+  const all = await irManifest();
+  if (all.length === 0) return { ok: false, error: "no intermediate code is deployed" };
+  const rows = all.filter(profileFilter(args));
+  return {
+    ok: true,
+    total: rows.length,
+    operators_with_intermediate_code: [...new Set(all.map((e) => e.op))].sort(),
+    entries: rows.slice(0, 120).map(publicIr),
+    note:
+      "Each entry is the code one compiler produced for one kernel at the profiled shape and that backend's autotuned configuration. An operator, backend or dtype that is not listed has no intermediate code here.",
+  };
+}
+
+async function getIr(input: unknown): Promise<ToolResult> {
+  const args = asObj(input);
+  for (const key of ["platform", "op", "backend", "dtype"]) {
+    if (!asStr(args[key])) return badInput("platform, op, backend and dtype are all required; call find_ir to see what exists");
+  }
+  const all = await irManifest();
+  const matches = all.filter(profileFilter(args));
+  if (matches.length === 0) {
+    const near = all.filter(profileFilter({ op: args.op })).map((e) => `${e.platform}/${e.backend}_${e.dtype}`);
+    return { ok: false, error: "no intermediate code for this report", available_for_this_op: near };
+  }
+  const wantedKernel = asStr(args.kernel)?.toLowerCase();
+  const byKernel = wantedKernel ? matches.filter((e) => e.kernel.toLowerCase().includes(wantedKernel)) : matches;
+  const exact = wantedKernel ? byKernel.filter((e) => e.kernel.toLowerCase() === wantedKernel) : [];
+  const named = exact.length ? exact : byKernel;
+  const wantedVariant = args.variant === undefined ? undefined : asInt(args.variant, 1, 1, 64);
+  const narrowed = wantedVariant ? named.filter((e) => (e.variant ?? 1) === wantedVariant) : named;
+  if (narrowed.length !== 1) {
+    return {
+      ok: true,
+      kernels: (narrowed.length ? narrowed : matches).map(publicIr),
+      note: "This report has intermediate code for more than one kernel, or for one kernel launched with different arguments. Pass kernel, and variant where launch_variants is above 1, to pick one.",
+    };
+  }
+  const entry = narrowed[0];
+  const kind = asStr(args.kind);
+  const file = kind ? entry.files.find((f) => f.kind === kind) : entry.files.length === 1 ? entry.files[0] : undefined;
+  if (!file) {
+    return { ok: true, ...publicIr(entry), note: "Pass kind to read one of these." };
+  }
+  const full = normDataPath(`ir/${file.file}`);
+  if (!full) return badInput("bad path");
+  let text: string;
+  try {
+    text = await fs.readFile(full, "utf8");
+  } catch {
+    return { ok: false, error: "intermediate code file could not be read", file: file.file };
+  }
+  const lines = text.split("\n");
+  const pattern = asStr(args.pattern)?.toLowerCase();
+  if (pattern) {
+    const hits = lines
+      .map((line, i) => ({ line: i + 1, text: line.length > 400 ? `${line.slice(0, 400)}...` : line }))
+      .filter((row) => row.text.toLowerCase().includes(pattern));
+    return { ok: true, ...publicIr(entry), kind: file.kind, pattern, total_matches: hits.length, matches: hits.slice(0, 120) };
+  }
+  const start = asInt(args.start_line, 1, 1, Math.max(1, lines.length));
+  const count = asInt(args.max_lines, 400, 1, 1500);
+  const slice = lines.slice(start - 1, start - 1 + count);
+  const end = start - 1 + slice.length;
+  return {
+    ok: true,
+    ...publicIr(entry),
+    kind: file.kind,
+    what: file.what,
+    versions: entry.versions,
+    total_lines: lines.length,
+    start_line: start,
+    end_line: end,
+    ...(end < lines.length ? { next_start_line: end + 1 } : {}),
+    text: slice.join("\n"),
+  };
+}
+
+// ---------- per-instruction listings (data/profile_listings, written by scripts/export_listings.py) ----------
+
+interface ListingRow {
+  offset: string;
+  executed: number;
+  samples: number;
+  stalls: Record<string, number>;
+  source: string | null;
+  sass: string;
+}
+
+interface ListingKernel {
+  name: string;
+  samples: number;
+  static_instructions?: number;
+  stall_samples?: Record<string, number>;
+  samples_by_source_line?: Array<Record<string, unknown>>;
+  opcode_executions?: Record<string, number>;
+  load_order?: Record<string, unknown>;
+  instructions: ListingRow[];
+  note?: string;
+}
+
+interface ListingReport {
+  platform: string;
+  op: string;
+  backend: string;
+  dtype: string;
+  kernels: ListingKernel[];
+}
+
+interface ListingEntry {
+  platform: string;
+  op: string;
+  backend: string;
+  dtype: string;
+  file: string;
+}
+
+let listingManifestCache: ListingEntry[] | null = null;
+async function listingManifest(): Promise<ListingEntry[]> {
+  if (!listingManifestCache) {
+    try {
+      const raw = await fs.readFile(path.join(DATA, "profile_listings", "manifest.json"), "utf8");
+      listingManifestCache = (JSON.parse(raw) as { reports: ListingEntry[] }).reports;
+    } catch {
+      listingManifestCache = [];
+    }
+  }
+  return listingManifestCache;
+}
+
+const listingCache = new Map<string, ListingReport>();
+async function loadListing(entry: ListingEntry): Promise<ListingReport | null> {
+  const hit = listingCache.get(entry.file);
+  if (hit) return hit;
+  const full = normDataPath(`profile_listings/${entry.file}`);
+  if (!full) return null;
+  try {
+    const report = JSON.parse(gunzipSync(await fs.readFile(full)).toString("utf8")) as ListingReport;
+    if (listingCache.size >= 12) listingCache.delete(listingCache.keys().next().value as string);
+    listingCache.set(entry.file, report);
+    return report;
+  } catch {
+    return null;
+  }
+}
+
+function listingRow(r: ListingRow, total: number): ToolResult {
+  return {
+    offset: r.offset,
+    sass: r.sass,
+    executed: r.executed,
+    samples: r.samples,
+    ...(total ? { pct_of_samples: Math.round((1000 * r.samples) / total) / 10 } : {}),
+    ...(Object.keys(r.stalls).length ? { stalls: r.stalls } : {}),
+    ...(r.source ? { source: r.source } : {}),
+  };
+}
+
+async function getProfileListing(input: unknown): Promise<ToolResult> {
+  const args = asObj(input);
+  for (const key of ["platform", "op", "backend", "dtype"]) {
+    if (!asStr(args[key])) return badInput("platform, op, backend and dtype are all required");
+  }
+  const all = await listingManifest();
+  const matches = all.filter(profileFilter(args));
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      error: "no per-instruction listing for this report; use get_profile_hotspots for its hottest instructions",
+      listings_for_this_op: all.filter(profileFilter({ op: args.op })).map((e) => `${e.platform}/${e.backend}_${e.dtype}`),
+    };
+  }
+  const report = await loadListing(matches[0]);
+  if (!report) return { ok: false, error: "listing file could not be read", file: matches[0].file };
+  const wanted = asStr(args.kernel)?.toLowerCase();
+  const kernels = wanted ? report.kernels.filter((k) => k.name.toLowerCase().includes(wanted)) : report.kernels;
+  const head = { ok: true, platform: report.platform, op: report.op, backend: report.backend, dtype: report.dtype };
+  const pattern = asStr(args.pattern)?.toLowerCase();
+  const start = asStr(args.start_offset);
+  if (!pattern && !start) {
+    const shown = kernels.slice(0, 12);
+    return {
+      ...head,
+      kernels_in_report: report.kernels.length,
+      kernels: shown.map((k) => ({
+        name: k.name,
+        samples: k.samples,
+        static_instructions: k.static_instructions ?? k.instructions.length,
+        ...(k.note ? { note: k.note } : {}),
+        stall_samples: k.stall_samples,
+        samples_by_source_line: (k.samples_by_source_line ?? []).slice(0, 12),
+        opcode_executions: k.opcode_executions,
+        load_order: k.load_order,
+        hottest: [...k.instructions].sort((a, b) => b.samples - a.samples).slice(0, 12).map((r) => listingRow(r, k.samples)),
+      })),
+      note:
+        "Samples are taken at a fixed rate, so sample counts compare as time between kernels and backends. A stall is charged to the instruction that waits for a value, not the one that produced it: for long_scoreboard walk back to the LDG that loaded it. load_order lists global loads and load waits of the hot loop in address order; loads issued before the first wait overlap, a load issued after a wait is another memory round trip. Pass start_offset or pattern to read instructions in address order.",
+    };
+  }
+  const limit = asInt(args.max_instructions, 120, 1, 400);
+  return {
+    ...head,
+    kernels: kernels.slice(0, 4).map((k) => {
+      let rows = k.instructions;
+      if (pattern) rows = rows.filter((r) => r.sass.toLowerCase().includes(pattern) || (r.source ?? "").toLowerCase().includes(pattern));
+      if (start) {
+        const at = Number.parseInt(start, 16);
+        rows = rows.filter((r) => Number.parseInt(r.offset, 16) >= at);
+      }
+      const slice = rows.slice(0, limit);
+      return {
+        name: k.name,
+        samples: k.samples,
+        matching_instructions: rows.length,
+        ...(rows.length > slice.length ? { next_start_offset: rows[slice.length].offset } : {}),
+        instructions: slice.map((r) => listingRow(r, k.samples)),
+      };
+    }),
   };
 }
 
@@ -512,10 +815,12 @@ async function getPlatformResults(input: unknown): Promise<ToolResult> {
 async function getOperatorTool(input: unknown): Promise<ToolResult> {
   const op = asStr(asObj(input).op);
   if (!op || !SAFE_OP.test(op)) return badInput("op is required");
-  const [operator, src, manifest] = await Promise.all([
+  const [operator, src, manifest, ir, listings] = await Promise.all([
     getOperator(op),
     getSourceIndex(),
     profileManifest(),
+    irManifest(),
+    listingManifest(),
   ]);
   if (!operator) return { ok: false, error: "unknown operator", op };
   return {
@@ -527,6 +832,8 @@ async function getOperatorTool(input: unknown): Promise<ToolResult> {
       ? Object.keys(src[op]).filter((file) => AGENT_SOURCE_FILES.has(file)).sort()
       : [],
     profiles: manifest.filter((r) => r.op === op).map(publicProfile),
+    intermediate_code: [...new Set(ir.filter((e) => e.op === op).map((e) => `${e.platform}/${e.backend}_${e.dtype}`))],
+    instruction_listings: listings.filter((e) => e.op === op).map((e) => `${e.platform}/${e.backend}_${e.dtype}`),
   };
 }
 
@@ -809,6 +1116,57 @@ export const AGENT_TOOLS = [
       required: ["platform", "op", "backend", "dtype"],
     },
   },
+  {
+    name: "get_profile_listing",
+    description: "Per-instruction evidence for one Nsight Compute report (B200, GH200), when a listing was exported for it. Without start_offset or pattern: per kernel, the stall reasons behind its samples, samples by source line, dynamic opcode totals, the order of global loads and load waits in the hot loop, and the hottest instructions with their stall reasons and source lines. With start_offset (hex) or pattern (substring of the SASS or source line): the instructions in address order with execution count, samples, stall reasons and source line. Use this to locate a mechanism; get_profile_hotspots is the fallback when no listing exists.",
+    input_schema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["B200", "GH200"] },
+        op: { type: "string" },
+        backend: { type: "string" },
+        dtype: { type: "string" },
+        kernel: { type: "string", description: "substring of a kernel name; default all kernels in the report" },
+        start_offset: { type: "string", description: "hex offset to start reading from, e.g. 0x0300" },
+        pattern: { type: "string", description: "e.g. LDG, BAR, STS, or a source file:line" },
+        max_instructions: { type: "integer" },
+      },
+      required: ["platform", "op", "backend", "dtype"],
+    },
+  },
+  {
+    name: "find_ir",
+    description: "List the compiler intermediate code that can be read: for one kernel at the profiled shape and that backend's autotuned configuration, what each compiler produced. Triton: ttir (before the GPU passes), ttgir (after them: layouts, shared memory, tensor path, pipelining) and ptx. TileLang: the generated CUDA (cu), and TIR before (tir) and after (lowered.tir) its passes. cuTile: the front-end Tile IR (tileir); its back end is closed. Filter by platform, op, backend or dtype. Coverage is partial: an operator that is not listed has none.",
+    input_schema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["B200", "GH200", "MI300X"] },
+        op: { type: "string" },
+        backend: { type: "string", enum: ["triton", "cutile", "tilelang"] },
+        dtype: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "get_ir",
+    description: "Read compiler intermediate code for one (platform, op, backend, dtype). Without kind: what is available. With kind (ttir, ttgir, ptx, cu, tir, lowered.tir, tileir): the text, paged with start_line/max_lines, or only the lines containing pattern. This is what the compiler emitted for the profiled configuration; cite the lines you rely on.",
+    input_schema: {
+      type: "object",
+      properties: {
+        platform: { type: "string", enum: ["B200", "GH200", "MI300X"] },
+        op: { type: "string" },
+        backend: { type: "string", enum: ["triton", "cutile", "tilelang"] },
+        dtype: { type: "string" },
+        kernel: { type: "string", description: "substring of a kernel name, for operators that launch several kernels" },
+        variant: { type: "integer", description: "which launch of the kernel, when it is launched with different arguments (launch_variants above 1)" },
+        kind: { type: "string", enum: ["ttir", "ttgir", "ptx", "cu", "tir", "lowered.tir", "tileir"] },
+        pattern: { type: "string" },
+        start_line: { type: "integer" },
+        max_lines: { type: "integer" },
+      },
+      required: ["platform", "op", "backend", "dtype"],
+    },
+  },
 ] as const;
 
 const HANDLERS: Record<string, (input: unknown) => Promise<ToolResult>> = {
@@ -824,6 +1182,9 @@ const HANDLERS: Record<string, (input: unknown) => Promise<ToolResult>> = {
   query_profile_metrics: queryProfileMetrics,
   compare_profile_metrics: compareProfileMetrics,
   get_profile_hotspots: getProfileHotspots,
+  get_profile_listing: getProfileListing,
+  find_ir: findIr,
+  get_ir: getIr,
 };
 
 export async function runAgentTool(name: string, input: unknown): Promise<ToolResult> {

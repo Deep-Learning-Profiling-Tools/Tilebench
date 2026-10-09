@@ -1,0 +1,150 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def bmm_kernel_kernel(A: T.handle("float16", "global"), B: T.handle("float16", "global"), C: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 65536, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 5, "blockIdx.y": 5, "blockIdx.z": 32, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "blockIdx.z", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        C_1 = T.decl_buffer((13107200,), "float16", data=C)
+        bx = T.launch_thread("blockIdx.x", 5)
+        buf_dyn_shmem = T.alloc_buffer((65536,), "uint8", scope="shared.dyn")
+        A_tile: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        B_tile: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 32768)
+        mbar = T.alloc_buffer((1,), "uint64", scope="shared.barrier")
+        acc_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
+        acc = T.alloc_buffer((128,), scope="local")
+        C_local_cast = T.alloc_buffer((16,), "float16", scope="local")
+        by = T.launch_thread("blockIdx.y", 5)
+        bz = T.launch_thread("blockIdx.z", 32)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        mbar_1 = T.decl_buffer((1,), "uint64", data=mbar.data, scope="shared.barrier")
+        acc_1 = T.decl_buffer((128,), data=acc.data, scope="local")
+        acc_tmem_1 = T.decl_buffer((1,), "uint32", data=acc_tmem.data, scope="shared")
+        if T.tl_shuffle_elect(0):
+            T.ptx_init_barrier_thread_count(mbar_1[0], 1)
+        T.ptx_fence_barrier_init()
+        T.tcgen05_before_thread_sync()
+        T.tvm_storage_sync("shared")
+        T.tcgen05_after_thread_sync()
+        if tx // 32 == 0:
+            T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), acc_tmem.data, 0, 1, 1), 128)
+        T.tcgen05_before_thread_sync()
+        T.tvm_storage_sync("shared")
+        T.tcgen05_after_thread_sync()
+        with T.attr(0, "tl.pipeline_mvb_num_stages", 2):
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 0)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(8):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), A_tile, i * 1024 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, bz * 409600 + bx * 81920 + i * 10240 + tx // 8 * 640 + tx % 8 * 8, 1, 1), 8)
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 0)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(8):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), B_tile, tx % 16 // 8 * 4096 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, bz * 409600 + i * 5120 + tx // 16 * 640 + by * 128 + tx % 16 * 8, 1, 1), 8)
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(8):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), A_tile, i * 1024 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 8192, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, bz * 409600 + bx * 81920 + i * 10240 + tx // 8 * 640 + tx % 8 * 8 + 64, 1, 1), 8)
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(8):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), B_tile, tx % 16 // 8 * 4096 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8 + 8192, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, bz * 409600 + i * 5120 + tx // 16 * 640 + by * 128 + tx % 16 * 8 + 40960, 1, 1), 8)
+            T.ptx_commit_group()
+            for k in T.serial(8, annotations={"tl_pipelined_num_stages": 2}):
+                T.ptx_wait_group(1)
+                T.tcgen05_before_thread_sync()
+                T.tvm_storage_sync("shared")
+                T.tcgen05_after_thread_sync()
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k % 2):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", k % 4 // 2)
+                    T.attr(0, "lexical_alloc_scope", 1)
+                    desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                    desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                    desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.tcgen05_smem")
+                    desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.tcgen05_smem")
+                    if tx // 32 == 0:
+                        T.initialize_tcgen05_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), A_tile, k % 2 * 8192, 16384 - k % 2 * 8192, 1), 1, 64, 0, 0, 2)
+                        T.initialize_tcgen05_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), B_tile, k % 2 * 8192, 16384 - k % 2 * 8192, 1), 512, 64, 0, 0, 2)
+                        T.fence_proxy_async()
+                        for ki in T.unroll(4):
+                            T.ptx_tcgen05_mma_ss("fp16", desc_a.data, ki * 32, desc_b.data, ki * 2048, acc_tmem.data, 0, 136380432, T.Select(0 < ki, 1, T.Select(k == 0, 0, 1)), 0, 0, 0, 0, 0, 0)
+                        T.tcgen05_mma_arrive(T.tvm_access_ptr(T.type_annotation("uint64"), mbar.data, 0, 1, 3))
+                    T.mbarrier_wait_parity(mbar_1[0], k % 4 // 2)
+                with T.attr(0, "async_scope", 1):
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", k % 2)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (k // 2 + 1) % 2)
+                    T.tcgen05_before_thread_sync()
+                    T.tvm_storage_sync("shared.dyn")
+                    T.tcgen05_after_thread_sync()
+                    for i in T.unroll(8):
+                        T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), A_tile, k % 2 * 8192 + i * 1024 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, bz * 409600 + bx * 81920 + i * 10240 + tx // 8 * 640 + k * 64 + tx % 8 * 8 + 128, 1, 1), 8)
+                with T.attr(0, "async_scope", 1):
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", k % 2)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (k // 2 + 1) % 2)
+                    for i in T.unroll(8):
+                        T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), B_tile, k % 2 * 8192 + tx % 16 // 8 * 4096 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, bz * 409600 + k * 40960 + i * 5120 + tx // 16 * 640 + by * 128 + tx % 16 * 8 + 81920, 1, 1), 8)
+                T.ptx_commit_group()
+                T.attr(0, "tl.pipeline_mvb_stage_expr", k % 2)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", k % 4 // 2)
+                T.tvm_storage_sync("shared")
+            T.ptx_wait_group(1)
+            T.tcgen05_before_thread_sync()
+            T.tvm_storage_sync("shared")
+            T.tcgen05_after_thread_sync()
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.attr(0, "lexical_alloc_scope", 1)
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.tcgen05_smem")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.tcgen05_smem")
+                if tx // 32 == 0:
+                    T.initialize_tcgen05_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), A_tile, 0, 16384, 1), 1, 64, 0, 0, 2)
+                    T.initialize_tcgen05_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), B_tile, 0, 16384, 1), 512, 64, 0, 0, 2)
+                    T.fence_proxy_async()
+                    for ki in T.unroll(4):
+                        T.ptx_tcgen05_mma_ss("fp16", desc_a.data, ki * 32, desc_b.data, ki * 2048, acc_tmem.data, 0, 136380432, 1, 0, 0, 0, 0, 0, 0)
+                    T.tcgen05_mma_arrive(T.tvm_access_ptr(T.type_annotation("uint64"), mbar.data, 0, 1, 3))
+                T.mbarrier_wait_parity(mbar_1[0], 0)
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.tvm_storage_sync("shared")
+            T.ptx_wait_group(0)
+            T.tcgen05_before_thread_sync()
+            T.tvm_storage_sync("shared")
+            T.tcgen05_after_thread_sync()
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                T.attr(0, "lexical_alloc_scope", 1)
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.tcgen05_smem")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.tcgen05_smem")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.tcgen05_smem")
+                if tx // 32 == 0:
+                    T.initialize_tcgen05_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), A_tile, 8192, 8192, 1), 1, 64, 0, 0, 2)
+                    T.initialize_tcgen05_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), B_tile, 8192, 8192, 1), 512, 64, 0, 0, 2)
+                    T.fence_proxy_async()
+                    for ki in T.unroll(4):
+                        T.ptx_tcgen05_mma_ss("fp16", desc_a.data, ki * 32, desc_b.data, ki * 2048, acc_tmem.data, 0, 136380432, 1, 0, 0, 0, 0, 0, 0)
+                    T.tcgen05_mma_arrive(T.tvm_access_ptr(T.type_annotation("uint64"), mbar.data, 0, 1, 3))
+                T.mbarrier_wait_parity(mbar_1[0], 0)
+            T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+            T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+            T.tvm_storage_sync("shared")
+        T.tcgen05_before_thread_sync()
+        T.tvm_storage_sync("shared")
+        T.tcgen05_after_thread_sync()
+        T.tcgen05_ld(32, 128, T.bool(False), acc_tmem_1[0], 0, T.tvm_access_ptr(T.type_annotation("float32"), acc.data, 0, 128, 2))
+        for i in T.unroll(8):
+            for vec in range(4):
+                C_local_cast[vec * 4:vec * 4 + 4] = T.Cast("float16x4", acc_1[i * 16 + vec * 4:i * 16 + vec * 4 + 4])
+            C_1[bz * 409600 + bx * 81920 + tx * 640 + by * 128 + i * 16:bz * 409600 + bx * 81920 + tx * 640 + by * 128 + i * 16 + 16] = C_local_cast[0:16]
+        if tx // 32 == 0:
+            T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), acc_tmem.data, 0, 1, 1), 128)

@@ -1,0 +1,21 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(src_handle: T.handle, dst_handle: T.handle):
+    src = T.match_buffer(src_handle, (78128,), "int32", strides=(1,))
+    dst = T.match_buffer(dst_handle, (77,), "int32", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 77)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        vals = T.sblock_alloc_buffer((1024,), "int32", scope="local.fragment")
+        total = T.sblock_alloc_buffer((1,), "int32", scope="local.fragment")
+        for local_idx in T.parallel(1024):
+            idx: T.int32 = bx * 1024 + local_idx
+            vals[local_idx] = src[idx]
+        T.reduce(T.region(vals[0], 1, 1024), T.region(total[0], 2, 1), "sum", 0, T.bool(True))
+        dst[bx] = total[0]

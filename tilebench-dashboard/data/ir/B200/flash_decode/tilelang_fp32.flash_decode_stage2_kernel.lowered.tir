@@ -1,0 +1,46 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def flash_decode_stage2_kernel_kernel(b_seqlen: T.handle("int32", "global"), mid_o: T.handle("float32", "global"), mid_o_lse: T.handle("float32", "global"), output: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_100", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 2, "blockIdx.y": 8, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1, 2]})
+        output_1 = T.decl_buffer((2048,), data=output)
+        mid_o_lse_1 = T.decl_buffer((5120,), data=mid_o_lse)
+        mid_o_1 = T.decl_buffer((655360,), data=mid_o)
+        b_seqlen_1 = T.decl_buffer((2,), "int32", data=b_seqlen)
+        bx = T.launch_thread("blockIdx.x", 2)
+        sum_exp = T.alloc_buffer((1,), scope="local.var")
+        max_logic = T.alloc_buffer((1,), scope="local.var")
+        acc = T.alloc_buffer((1,), scope="local")
+        out = T.alloc_buffer((1,), scope="local")
+        tv = T.alloc_buffer((1,), scope="local")
+        exp_logic = T.alloc_buffer((1,), scope="local.var")
+        by = T.launch_thread("blockIdx.y", 8)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((1,), data=acc.data, scope="local")
+        out_1 = T.decl_buffer((1,), data=out.data, scope="local")
+        sum_exp_1 = T.decl_buffer((1,), data=sum_exp.data, scope="local.var")
+        max_logic_1 = T.decl_buffer((1,), data=max_logic.data, scope="local.var")
+        sum_exp_1[0] = T.float32(0.0)
+        max_logic_1[0] = T.infinity("float32") * T.float32(-1.0)
+        acc_1[0] = T.float32(0.0)
+        out_1[0] = T.float32(0.0)
+        cur_batch_seq_len: T.int32 = b_seqlen_1[bx]
+        for block_seq_n in range(T.Select(cur_batch_seq_len <= 0, 0, (cur_batch_seq_len + 127) // 128)):
+            tv_1 = T.decl_buffer((1,), data=tv.data, scope="local")
+            exp_logic_1 = T.decl_buffer((1,), data=exp_logic.data, scope="local.var")
+            tv_1[0] = T.if_then_else(block_seq_n < 320, mid_o_1[T.Cast("int64", bx) * T.int64(327680) + T.Cast("int64", by) * T.int64(40960) + T.Cast("int64", block_seq_n) * T.int64(128) + T.Cast("int64", tx)], T.float32(0.0))
+            tlogic: T.float32 = T.if_then_else(block_seq_n < 320, mid_o_lse_1[bx * 2560 + by * 320 + block_seq_n], T.float32(0.0))
+            new_max_logic: T.float32 = T.max(tlogic, max_logic_1[0])
+            old_scale: T.float32 = T.exp(max_logic_1[0] - new_max_logic)
+            exp_logic_1[0] = T.exp(tlogic - new_max_logic)
+            acc_1[0] = acc_1[0] * old_scale + exp_logic_1[0] * tv_1[0]
+            sum_exp_1[0] = sum_exp_1[0] * old_scale + exp_logic_1[0]
+            max_logic_1[0] = new_max_logic
+        if 0 < cur_batch_seq_len:
+            out_1[0] = acc_1[0] / sum_exp_1[0]
+        output_1[bx * 1024 + by * 128 + tx] = out_1[0]

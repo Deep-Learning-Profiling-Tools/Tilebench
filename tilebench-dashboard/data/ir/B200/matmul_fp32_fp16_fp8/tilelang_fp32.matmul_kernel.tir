@@ -1,0 +1,28 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def matmul_kernel(a: T.handle, b: T.handle, c: T.handle):
+    a_1 = T.match_buffer(a, (4096, 20480), "custom[tfloat32]", strides=(20480, 1))
+    b_1 = T.match_buffer(b, (20480, 4096), "custom[tfloat32]", strides=(4096, 1))
+    c_1 = T.match_buffer(c, (4096, 4096), "custom[tfloat32]", strides=(4096, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 32)
+    by = T.launch_thread("blockIdx.y", 32)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        a_tile = T.sblock_alloc_buffer((128, 64), "custom[tfloat32]", scope="shared.dyn")
+        b_tile = T.sblock_alloc_buffer((64, 128), "custom[tfloat32]", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        T.attr(None, "threadblock_swizzle_pattern", T.tvm_tuple("rasterization2DRow", 8))
+        start_m: T.int32 = bx * 128
+        start_n: T.int32 = by * 128
+        T.fill(T.region(acc[0, 0], 2, 128, 128), 0)
+        for k in T.serial(320, annotations={"num_stages": 2}):
+            T.copy(T.region(a_1[start_m, k * 64], 1, 128, 64), T.region(a_tile[0, 0], 2, 128, 64))
+            T.copy(T.region(b_1[k * 64, start_n], 1, 64, 128), T.region(b_tile[0, 0], 2, 64, 128))
+            T.gemm(T.region(a_tile[0, 0], 1, 128, 64), T.region(b_tile[0, 0], 1, 64, 128), T.region(acc[0, 0], 3, 128, 128), T.bool(False), T.bool(False), 128, 128, 64, 0, T.bool(False), 64, 128, 0, 0, 1, 0, 0, 0, 0)
+        T.copy(T.region(acc[0, 0], 1, 128, 128), T.region(c_1[start_m, start_n], 2, 128, 128))

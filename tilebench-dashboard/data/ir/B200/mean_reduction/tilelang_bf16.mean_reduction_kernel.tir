@@ -1,0 +1,24 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def mean_reduction_kernel(x: T.handle, output: T.handle):
+    M = T.int32()
+    x_1 = T.match_buffer(x, (M, 20480), "bfloat16", strides=(20480, 1))
+    output_1 = T.match_buffer(output, (M,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        acc = T.sblock_alloc_buffer((2048,), scope="local.fragment")
+        row_sum = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        T.fill(T.region(acc[0], 2, 2048), T.float32(0.0))
+        for tile_idx in T.serial(10, annotations={"num_stages": 3}):
+            for local_col in T.parallel(2048):
+                col: T.int32 = tile_idx * 2048 + local_col
+                acc[local_col] = acc[local_col] + T.Cast("float32", x_1[bx, col])
+        T.reduce(T.region(acc[0], 1, 2048), T.region(row_sum[0], 2, 1), "sum", 0, T.bool(True))
+        output_1[bx] = row_sum[0] / T.float32(20480.0)

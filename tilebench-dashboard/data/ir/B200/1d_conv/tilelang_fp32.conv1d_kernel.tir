@@ -1,0 +1,56 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def conv1d_kernel(input: T.handle, weight: T.handle, output: T.handle):
+    input_1 = T.match_buffer(input, (1, 128, 2621440), strides=(335544320, 2621440, 1))
+    weight_1 = T.match_buffer(weight, (128, 128, 3), strides=(384, 3, 1))
+    output_1 = T.match_buffer(output, (1, 128, 2621440), strides=(335544320, 2621440, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 40960)
+    by = T.launch_thread("blockIdx.y", 1)
+    bz = T.launch_thread("blockIdx.z", 1)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        input_tile = T.sblock_alloc_buffer((64, 16), scope="shared.dyn")
+        weight_tile = T.sblock_alloc_buffer((16, 128), scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((64, 128), scope="local.fragment")
+        bl_offsets = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        batch_ids = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        out_ls = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        feat_offsets = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        in_channel_locals = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        kernel_ls = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        T.fill(T.region(acc[0, 0], 2, 64, 128), 0)
+        for i in T.parallel(64):
+            bl_offsets[i] = bx * 64 + i
+            batch_ids[i] = bl_offsets[i] // 2621440
+            out_ls[i] = bl_offsets[i] % 2621440
+        for feat_block in T.serial(24, annotations={"num_stages": 3}):
+            for j in T.parallel(16):
+                feat_offsets[j] = feat_block * 16 + j
+                in_channel_locals[j] = feat_offsets[j] // 3
+                kernel_ls[j] = feat_offsets[j] % 3
+            for i in T.parallel(64):
+                for j in T.parallel(16):
+                    in_l: T.int32 = out_ls[i] + kernel_ls[j] - 1
+                    in_channel: T.int32 = bz * 128 + in_channel_locals[j]
+                    input_tile[i, j] = T.Select(bl_offsets[i] < 2621440 and (feat_offsets[j] < 384 and (in_l >= 0 and in_l < 2621440)), input_1[batch_ids[i], in_channel, in_l], T.float32(0.0))
+            for i in T.parallel(16):
+                for j in T.parallel(128):
+                    out_channel_local: T.int32 = by * 128 + j
+                    out_channel: T.int32 = bz * 128 + out_channel_local
+                    weight_tile[i, j] = T.Select(feat_offsets[i] < 384 and out_channel_local < 128, weight_1[out_channel, in_channel_locals[i], kernel_ls[i]], T.float32(0.0))
+            T.gemm(T.region(input_tile[0, 0], 1, 64, 16), T.region(weight_tile[0, 0], 1, 16, 128), T.region(acc[0, 0], 3, 64, 128), T.bool(False), T.bool(False), 64, 128, 16, 0, T.bool(False), 16, 128, 0, 0, 1, 0, 0, 0, 0)
+        for tile_idx in T.parallel(8192):
+            i: T.int32 = tile_idx // 128
+            j: T.int32 = tile_idx % 128
+            out_channel_local: T.int32 = by * 128 + j
+            out_channel: T.int32 = bz * 128 + out_channel_local
+            if out_channel_local < 128:
+                output_idx: T.int32 = (batch_ids[i] * 128 + out_channel) * 2621440 + out_ls[i]
+                output_flat = T.Buffer((335544320,), data=output_1.data, strides=(1,))
+                output_flat[output_idx] = T.Cast("float32", acc[i, j])

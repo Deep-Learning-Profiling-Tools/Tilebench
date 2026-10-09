@@ -1,0 +1,31 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(work_handle: T.handle, k: T.int32, j: T.int32):
+    work = T.match_buffer(work_handle, (16777216,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 32768)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        a = T.sblock_alloc_buffer((1,), scope="local.var")
+        b = T.sblock_alloc_buffer((1,), scope="local.var")
+        for local_idx in T.parallel(512):
+            offs: T.int32 = bx * 512 + local_idx
+            ixj: T.int32 = T.bitwise_xor(offs, j)
+            active: T.bool = ixj > offs and (ixj < 16777216 and offs < 16777216)
+            a[0] = T.float32(0.0)
+            b[0] = T.float32(0.0)
+            if active:
+                a[0] = work[offs]
+                b[0] = work[ixj]
+            ascending: T.bool = T.bitwise_and(offs, k) == 0
+            swap: T.bool = T.Select(ascending, a[0] > b[0], a[0] < b[0])
+            new_a: T.float32 = T.Select(swap, b[0], a[0])
+            new_b: T.float32 = T.Select(swap, a[0], b[0])
+            if active:
+                work[offs] = new_a
+                work[ixj] = new_b
