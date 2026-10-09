@@ -59,7 +59,8 @@ def main():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
     kernel = getattr(module, args.kernel)
-    kernel = getattr(kernel, "fn", kernel) if not hasattr(kernel, "arg_names") else kernel
+    while not hasattr(kernel, "params") and hasattr(kernel, "fn"):
+        kernel = kernel.fn
     given = dict(item.split("=", 1) for item in args.arg)
     missing = [name for name in kernel.arg_names if name not in given]
     if missing:
@@ -102,9 +103,9 @@ def main():
             (args.out / f"{args.kernel}.{extension}").write_text(compiled.asm[extension])
     fields = compiled.metadata._asdict() if hasattr(compiled.metadata, "_asdict") else vars(compiled.metadata)
     meta = {key: value for key, value in fields.items() if isinstance(value, (int, float, str, bool, type(None)))}
-    (args.out / f"{args.kernel}.json").write_text(json.dumps(meta, indent=1))
+    (args.out / f"{args.kernel}.json").write_text(json.dumps(meta, indent=1, default=str))
     print(json.dumps({"kernel": args.kernel, "out": str(args.out), "triton": triton.__version__,
-                      "signature": signature, "constexprs": constexprs, **describe(args.out, args.kernel, meta)}, indent=1))
+                      "signature": signature, "constexprs": constexprs, **describe(args.out, args.kernel, meta)}, indent=1, default=str))
 
 
 if __name__ == "__main__":
