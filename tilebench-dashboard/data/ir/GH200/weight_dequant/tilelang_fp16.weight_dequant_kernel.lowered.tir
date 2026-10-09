@@ -1,0 +1,18 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def weight_dequant_kernel_kernel(S: T.handle("float16", "global"), X: T.handle("float16", "global"), output: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 25600, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        output_1 = T.decl_buffer((104857600,), "float16", data=output)
+        S_1 = T.decl_buffer((6400,), "float16", data=S)
+        X_1 = T.decl_buffer((104857600,), "float16", data=X)
+        bx = T.launch_thread("blockIdx.x", 25600)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        for i in T.unroll(32):
+            value: T.float32 = T.Cast("float32", X_1[bx * 4096 + i // 4 * 512 + tx * 4 + i % 4]) * T.Cast("float32", S_1[bx // 320 * 80 + (bx * 8 + i // 4) % 20 * 4 + tx // 32])
+            output_1[bx * 4096 + i // 4 * 512 + tx * 4 + i % 4] = T.Cast("float16", value)

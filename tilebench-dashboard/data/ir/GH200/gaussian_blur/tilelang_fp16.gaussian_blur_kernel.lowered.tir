@@ -1,0 +1,26 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def gaussian_blur_kernel_kernel(input: T.handle("float16", "global"), kernel: T.handle("float16", "global"), output: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 10240, "blockIdx.y": 20, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        output_1 = T.decl_buffer((104857600,), "float16", data=output)
+        input_1 = T.decl_buffer((104857600,), "float16", data=input)
+        kernel_1 = T.decl_buffer((49,), "float16", data=kernel)
+        row_start = T.launch_thread("blockIdx.x", 10240)
+        acc = T.alloc_buffer((4,), scope="local")
+        by = T.launch_thread("blockIdx.y", 20)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((4,), data=acc.data, scope="local")
+        acc_1[0:4] = T.Broadcast(T.float32(0.0), 4)
+        for kr in T.unroll(7):
+            for kc in T.unroll(7):
+                w: T.float32 = T.Cast("float32", kernel_1[kr * 7 + kc])
+                for i in T.unroll(4):
+                    acc_1[i] = acc_1[i] + T.if_then_else(3 <= by * 512 + i * 128 + tx + kc and by * 512 + i * 128 + tx + kc < 10243 and 3 <= row_start + kr and row_start + kr < 10243, T.Cast("float32", input_1[row_start * 10240 + kr * 10240 + by * 512 + i * 128 + tx + kc - 30723]), T.float32(0.0)) * w
+        for i in T.unroll(4):
+            output_1[row_start * 10240 + by * 512 + i * 128 + tx] = T.Cast("float16", acc_1[i])

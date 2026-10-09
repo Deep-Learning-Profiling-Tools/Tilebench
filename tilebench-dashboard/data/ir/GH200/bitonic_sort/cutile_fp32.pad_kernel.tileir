@@ -1,0 +1,18 @@
+(data_ptr_0: Tile[PointerTy(pointee_type=<DType 'float32'>),()], data_ptr_1: Tile[int32,()], data_ptr_2: Tile[int32,()], work_ptr_0: Tile[PointerTy(pointee_type=<DType 'float32'>),()], work_ptr_1: Tile[int32,()], work_ptr_2: Tile[int32,()], N: Tile[int32,()], M: Tile[int32,()]):
+$token: Token = make_token()
+data_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'float32'>),()] = assume_div_by(x=data_ptr_0, divisor=16)
+data_ptr_1.0: Tile[int32,()] = assume_div_by(x=data_ptr_1, divisor=16)
+work_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'float32'>),()] = assume_div_by(x=work_ptr_0, divisor=16)
+work_ptr_1.0: Tile[int32,()] = assume_div_by(x=work_ptr_1, divisor=16)
+$0: Tile[int32,()] = assume_bounded(x=data_ptr_1.0, lower_bound=0, upper_bound=None)
+$0.0: Tile[int32,()] = assume_div_by(x=$0, divisor=16)
+data_ptr{data_ptr_0, $0, data_ptr_2}: Array[float32,(?):(1)] = make_tensor_view(base_ptr=data_ptr_0.0, shape=($0.0), dynamic_strides=())
+$1: Tile[int32,()] = assume_bounded(x=work_ptr_1.0, lower_bound=0, upper_bound=None)
+$1.0: Tile[int32,()] = assume_div_by(x=$1, divisor=16)
+work_ptr{work_ptr_0, $1, work_ptr_2}: Array[float32,(?):(1)] = make_tensor_view(base_ptr=work_ptr_0.0, shape=($1.0), dynamic_strides=())
+$11: Tile[int32,()] = tile_bid(axis=0)
+$45{data_ptr_0, $0, data_ptr_2}: PartitionView[Array[float32,(?):(1)],tile_shape=(512,),order=(0,),padding_mode=PaddingMode.POS_INF] = make_partition_view(array=data_ptr{data_ptr_0, $0, data_ptr_2})
+$46: Tile[float32,(512)], $47: Token = tile_load(view=$45{data_ptr_0, $0, data_ptr_2}, index=($11), token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+$70{work_ptr_0, $1, work_ptr_2}: PartitionView[Array[float32,(?):(1)],tile_shape=(512,),order=(0,),padding_mode=PaddingMode.UNDETERMINED] = make_partition_view(array=work_ptr{work_ptr_0, $1, work_ptr_2})
+$71: Token = tile_store(view=$70{work_ptr_0, $1, work_ptr_2}, index=($11), tile=$46, token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+return

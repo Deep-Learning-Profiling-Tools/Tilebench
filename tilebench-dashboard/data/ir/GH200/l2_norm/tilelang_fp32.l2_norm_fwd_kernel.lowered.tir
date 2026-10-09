@@ -1,0 +1,42 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def l2_norm_fwd_kernel_kernel(X: T.handle("float32", "global"), Y: T.handle("float32", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 512, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `X`, `Y`")
+        Y_1 = T.decl_buffer((M * 10240,), data=Y)
+        X_1 = T.decl_buffer((M * 10240,), data=X)
+        bx = T.launch_thread("blockIdx.x", M)
+        acc = T.alloc_buffer((8,), scope="local")
+        row_sum = T.alloc_buffer((1,), scope="local")
+        workspace = T.alloc_buffer((128,), scope="shared.dyn")
+        inv_norm = T.alloc_buffer((1,), scope="local")
+        Y_local = T.alloc_buffer((8,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((8,), data=acc.data, scope="local")
+        row_sum_1 = T.decl_buffer((1,), data=row_sum.data, scope="local")
+        inv_norm_1 = T.decl_buffer((1,), data=inv_norm.data, scope="local")
+        for i in T.unroll(2):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        X_2 = T.Buffer((M * 10240,), data=X)
+        for tile in range(10):
+            for i in T.unroll(2):
+                x_val: T.float32x4 = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4) + T.int64(4)]
+                acc_1[i * 4:i * 4 + 4] = acc_1[i * 4:i * 4 + 4] + x_val * x_val
+        row_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(8):
+            row_sum_1[0] = row_sum_1[0] + acc_1[rv % 2 * 4 + rv // 2]
+        row_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 128, 1, 0, tl::NamedBarrier<128>>::run", row_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace.data, 0, 128, 2))
+        inv_norm_1[0] = T.rsqrt(row_sum_1[0] + T.float32(9.9999999999999995e-07))
+        for tile in range(10):
+            Y_local_1 = T.decl_buffer((8,), data=Y_local.data, scope="local")
+            for i in T.unroll(2):
+                x_val: T.float32x4 = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4) + T.int64(4)]
+                Y_local_1[i * 4:i * 4 + 4] = x_val * T.Broadcast(inv_norm_1[0], 4)
+            for i in T.unroll(2):
+                Y_1[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(1024) + T.Cast("int64", i) * T.int64(512) + T.Cast("int64", tx) * T.int64(4) + T.int64(4)] = Y_local_1[i * 4:i * 4 + 4]

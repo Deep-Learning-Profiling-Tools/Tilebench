@@ -72,6 +72,23 @@ def merged(default, config):
     return SimpleNamespace(**{**vars(default), **config})
 
 
+def profile_winners(platform, op):
+    """Shape and winner recorded in the exported profiles, for platforms whose captures carry them."""
+    import gzip
+    manifest = ROOT / "data" / "profiles_json" / "manifest.json"
+    found = {}
+    for report in json.loads(manifest.read_text())["reports"]:
+        if (report["platform"], report["op"]) != (platform, op):
+            continue
+        capture = json.loads(gzip.decompress((manifest.parent / report["file"]).read_bytes())).get("capture") or {}
+        if capture.get("params") is None or capture.get("autotune_winner") is None:
+            continue
+        entry = found.setdefault(report["dtype"], {"dtype": report["dtype"], "configs": {},
+                                                  "params": {k: v for k, v in capture["params"].items() if k != "dtype"}})
+        entry["configs"][report["backend"]] = capture["autotune_winner"]
+    return found
+
+
 def install_config(module, config):
     saved = {}
     if getattr(module, "_DEFAULT_CONFIG", None) is not None:
@@ -88,6 +105,13 @@ def install_config(module, config):
             if own:
                 saved[name] = value
                 setattr(module, name, merged(value, own))
+    default = saved.get("_DEFAULT_CONFIG")
+    if isinstance(default, dict) and len(saved) == 1 and not any(key in default for key in config):
+        shared = {}
+        for key, item in config.items():
+            shared.setdefault(key.split("_", 1)[-1], set()).add(json.dumps(item))
+        if all(key in default and len(items) == 1 for key, items in shared.items()):
+            module._DEFAULT_CONFIG = merged(saved["_DEFAULT_CONFIG"], {key: json.loads(next(iter(items))) for key, items in shared.items()})
     return saved
 
 
@@ -272,7 +296,10 @@ CAPTURE = {"triton": capture_triton, "tilelang": capture_tilelang, "cutile": cap
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkout", type=Path, required=True)
-    parser.add_argument("--winners", type=Path, required=True)
+    parser.add_argument("--winners", type=Path,
+                        help="directory of autotune winner logs; omit to use the shape and winner stored in the exported profiles")
+    parser.add_argument("--sm-count", type=int,
+                        help="multiprocessor count of the target hardware, for kernels that take it as an argument")
     parser.add_argument("--platform", default="B200")
     parser.add_argument("--only", required=True, help="operator to capture")
     parser.add_argument("--cases", type=Path, default=ROOT / "scripts" / "ir_cases.json")
@@ -287,7 +314,20 @@ def main():
     document = json.loads(args.cases.read_text()) if args.cases.exists() else {"cases": []}
     existing = {(c["platform"], c["op"], c["backend"], c["dtype"], c["kernel"], c.get("variant", 1)): c for c in document["cases"]}
     captured = failed = 0
-    for dtype, entry in sorted(winners(args.winners, op).items()):
+    if args.sm_count:
+        properties = torch.cuda.get_device_properties
+
+        class Target:
+            def __init__(self, real):
+                self.real = real
+                self.multi_processor_count = args.sm_count
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+        torch.cuda.get_device_properties = lambda *a, **k: Target(properties(*a, **k))
+    chosen = winners(args.winners, op) if args.winners else profile_winners(args.platform, op)
+    for dtype, entry in sorted(chosen.items()):
         try:
             inputs = get_generator(op)(**entry["params"], dtype=resolve_dtype(dtype))
         except Exception as error:
@@ -311,6 +351,15 @@ def main():
                 failed += 1
                 print(f"FAILED {label}: {type(error).__name__}: {str(error)[:140]}")
                 continue
+            groups = {}
+            for key, item in config.items():
+                groups.setdefault(key.split("_", 1)[0], {})[key.split("_", 1)[-1]] = item
+            if backend == "tilelang" and len(groups) > 1 and set(saved) == {"_DEFAULT_CONFIG"} and \
+                    not any(key in saved["_DEFAULT_CONFIG"] for key in config) and len(found) == len(groups):
+                for case, (label, group) in zip(found, groups.items()):
+                    case["kw"] = [f"{item.split('=', 1)[0]}={group[item.split('=', 1)[0]]}"
+                                  if item.split("=", 1)[0] in group else item for item in case["kw"]]
+                    case["config_note"] = f"launch '{label}' uses the winner's {label}_ settings"
             unique, seen, fresh = [], {}, set()
             for case in found:
                 if any(case == {k: v for k, v in other.items() if k != "variant"} for other in unique):

@@ -1,0 +1,46 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def moe_topk_gating_kernel(logits: T.handle, topk_w: T.handle, topk_idx: T.handle):
+    logits_1 = T.match_buffer(logits, (20480, 128), "bfloat16", strides=(128, 1))
+    topk_w_1 = T.match_buffer(topk_w, (20480, 2), "bfloat16", strides=(2, 1))
+    topk_idx_1 = T.match_buffer(topk_idx, (20480, 2), "int32", strides=(2, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 20480)
+    tx = T.launch_thread("threadIdx.x", 32)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        logits_reg = T.sblock_alloc_buffer((128,), scope="local.fragment")
+        topk_vals = T.sblock_alloc_buffer((2,), scope="local.fragment")
+        topk_idxs = T.sblock_alloc_buffer((2,), "int32", scope="local.fragment")
+        src_idx = T.sblock_alloc_buffer((128,), "int32", scope="local.fragment")
+        curr_max_val = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        curr_max_idx = T.sblock_alloc_buffer((1,), "int32", scope="local.fragment")
+        mx = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        rs = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        T.fill(T.region(logits_reg[0], 2, 128), T.infinity("float32") * T.float32(-1.0))
+        T.fill(T.region(topk_vals[0], 2, 2), T.infinity("float32") * T.float32(-1.0))
+        T.fill(T.region(topk_idxs[0], 2, 2), 0)
+        T.copy(T.region(logits_1[bx, 0], 1, 1, 128), T.region(logits_reg[0], 2, 128))
+        for i in range(2):
+            T.reduce(T.region(logits_reg[0], 1, 128), T.region(curr_max_val[0], 2, 1), "max", 0, T.bool(True))
+            T.fill(T.region(src_idx[0], 2, 128), 128)
+            for j in T.parallel(128):
+                src_idx[j] = T.Select(logits_reg[j] == curr_max_val[0], j, 128)
+            T.reduce(T.region(src_idx[0], 1, 128), T.region(curr_max_idx[0], 2, 1), "min", 0, T.bool(True))
+            for j in T.parallel(2):
+                topk_vals[j] = T.Select(j == i, curr_max_val[0], topk_vals[j])
+                topk_idxs[j] = T.Select(j == i, curr_max_idx[0], topk_idxs[j])
+            for j in T.parallel(128):
+                logits_reg[j] = T.Select(j == curr_max_idx[0], T.infinity("float32") * T.float32(-1.0), logits_reg[j])
+        T.reduce(T.region(topk_vals[0], 1, 2), T.region(mx[0], 2, 1), "max", 0, T.bool(True))
+        for i in T.parallel(2):
+            topk_vals[i] = T.exp(topk_vals[i] - mx[0])
+        T.reduce(T.region(topk_vals[0], 1, 2), T.region(rs[0], 2, 1), "sum", 0, T.bool(True))
+        for i in T.parallel(2):
+            topk_vals[i] = topk_vals[i] / rs[0]
+            topk_w_1[bx, i] = T.Cast("bfloat16", topk_vals[i])
+        T.copy(T.region(topk_idxs[0], 1, 2), T.region(topk_idx_1[bx, 0], 2, 1, 2))

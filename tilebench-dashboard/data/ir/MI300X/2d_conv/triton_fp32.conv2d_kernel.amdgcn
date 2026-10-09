@@ -1,0 +1,2881 @@
+	.amdgcn_target "amdgcn-amd-amdhsa--gfx942"
+	.amdhsa_code_object_version 5
+	.text
+	.globl	conv2d_kernel                   ; -- Begin function conv2d_kernel
+	.p2align	8
+	.type	conv2d_kernel,@function
+conv2d_kernel:                          ; @conv2d_kernel
+.Lfunc_begin0:
+	.cfi_sections .debug_frame
+	.cfi_startproc
+; %bb.63:
+	.file	1 "/scratch/arustagi/tb_ir_src/mi300x/tilebench/benchmarks/operators/2d_conv" "impl_triton.py"
+	.loc	1 15 0 prologue_end             ; impl_triton.py:15:0
+	s_load_dwordx2 s[2:3], s[0:1], 0x0
+	s_load_dwordx8 s[4:11], s[0:1], 0x8
+	s_load_dwordx4 s[12:15], s[0:1], 0x28
+	s_waitcnt lgkmcnt(0)
+	s_branch .LBB0_0
+	.loc	1 0 0 is_stmt 0                 ; :0:0
+.Ltmp0:
+	.p2align	8
+; %bb.64:
+.LBB0_0:
+.Ltmp1:
+	.loc	1 44 37 is_stmt 1               ; impl_triton.py:44:37
+	s_mul_i32 s33, s13, s12
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	s_abs_i32 s24, s33
+	v_cvt_f32_u32_e32 v2, s24
+	.loc	1 40 73                         ; impl_triton.py:40:73
+	v_and_b32_e32 v21, 0x100, v0
+	.loc	1 40 28 is_stmt 0               ; impl_triton.py:40:28
+	s_lshl_b32 s8, s16, 7
+	.loc	1 40 73                         ; impl_triton.py:40:73
+	v_and_b32_e32 v20, 0x7f, v0
+	.loc	1 45 29 is_stmt 1               ; impl_triton.py:45:29
+	v_rcp_iflag_f32_e32 v2, v2
+	.loc	1 40 73                         ; impl_triton.py:40:73
+	v_and_b32_e32 v76, 31, v0
+	v_lshrrev_b32_e32 v1, 3, v21
+	.loc	1 40 60 is_stmt 0               ; impl_triton.py:40:60
+	v_or_b32_e32 v3, s8, v20
+	.loc	1 45 29 is_stmt 1               ; impl_triton.py:45:29
+	v_mul_f32_e32 v2, 0x4f7ffffe, v2
+	v_cvt_u32_f32_e32 v2, v2
+	.loc	1 40 60                         ; impl_triton.py:40:60
+	v_or3_b32 v1, v1, v76, s8
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	s_bfe_i32 s16, s16, 0x10018
+	s_ashr_i32 s8, s33, 31
+	s_xor_b32 s19, s16, s8
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	s_sub_i32 s8, 0, s24
+	v_mul_lo_u32 v5, s8, v2
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_add_u32_e32 v4, s16, v3
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_mul_hi_u32 v5, v2, v5
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_xor_b32_e32 v4, s16, v4
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_add_u32_e32 v2, v2, v5
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_mul_hi_u32 v5, v4, v2
+	v_mul_lo_u32 v6, v5, s24
+	v_sub_u32_e32 v4, v4, v6
+	v_add_u32_e32 v6, 1, v5
+	v_cmp_le_u32_e32 vcc, s24, v4
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	s_abs_i32 s8, s13
+	s_sub_i32 s20, 0, s8
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_cndmask_b32_e32 v5, v5, v6, vcc
+	v_subrev_u32_e32 v6, s24, v4
+	v_cndmask_b32_e32 v4, v4, v6, vcc
+	v_add_u32_e32 v6, 1, v5
+	v_cmp_le_u32_e32 vcc, s24, v4
+	s_load_dwordx4 s[36:39], s[0:1], 0x3c
+	.loc	1 58 44                         ; impl_triton.py:58:44
+	s_mul_i32 s43, s15, s14
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_cndmask_b32_e32 v4, v5, v6, vcc
+	v_add_u32_e32 v5, s16, v1
+	v_xor_b32_e32 v6, s16, v5
+	v_mul_hi_u32 v7, v6, v2
+	v_mul_lo_u32 v8, v7, s24
+	v_sub_u32_e32 v6, v6, v8
+	v_add_u32_e32 v8, 1, v7
+	v_cmp_le_u32_e32 vcc, s24, v6
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_add_u32_e32 v5, 64, v5
+	v_xor_b32_e32 v5, s16, v5
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_cndmask_b32_e32 v7, v7, v8, vcc
+	v_subrev_u32_e32 v8, s24, v6
+	v_cndmask_b32_e32 v6, v6, v8, vcc
+	v_add_u32_e32 v8, 1, v7
+	v_cmp_le_u32_e32 vcc, s24, v6
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_mul_hi_u32 v2, v5, v2
+	v_mul_lo_u32 v2, v2, s24
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_cndmask_b32_e32 v8, v7, v8, vcc
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_cvt_f32_u32_e32 v7, s8
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_sub_u32_e32 v2, v5, v2
+	v_subrev_u32_e32 v5, s24, v2
+	v_cmp_le_u32_e32 vcc, s24, v2
+	.loc	1 44 29                         ; impl_triton.py:44:29
+	v_xor_b32_e32 v4, s19, v4
+	v_subrev_u32_e32 v4, s19, v4
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_cndmask_b32_e32 v27, v2, v5, vcc
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_rcp_iflag_f32_e32 v2, v7
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_mul_lo_u32 v6, v4, s33
+	v_sub_u32_e32 v6, v3, v6
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_sub_u32_e32 v7, 0, v6
+	v_mul_f32_e32 v2, 0x4f7ffffe, v2
+	v_cvt_u32_f32_e32 v2, v2
+	v_max_i32_e32 v7, v6, v7
+	.loc	1 58 49                         ; impl_triton.py:58:49
+	s_waitcnt lgkmcnt(0)
+	s_mul_i32 s44, s43, s36
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_ashrrev_i32_e32 v5, 31, v6
+	v_mul_lo_u32 v9, s20, v2
+	v_mul_hi_u32 v9, v2, v9
+	v_add_u32_e32 v23, v2, v9
+	v_mul_hi_u32 v2, v7, v23
+	v_mul_lo_u32 v9, v2, s8
+	v_sub_u32_e32 v7, v7, v9
+	v_add_u32_e32 v9, 1, v2
+	v_cmp_le_u32_e32 vcc, s8, v7
+	s_ashr_i32 s12, s13, 31
+.Ltmp2:
+	.file	2 "/scratch/arustagi/tilebench_pdf_env/lib/python3.11/site-packages/triton/language" "standard.py"
+	.loc	2 43 17                         ; standard.py:43:17 @[ impl_triton.py:59:57 ]
+	s_add_i32 s52, s44, 15
+.Ltmp3:
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_cndmask_b32_e32 v2, v2, v9, vcc
+	v_subrev_u32_e32 v9, s8, v7
+	v_cndmask_b32_e32 v7, v7, v9, vcc
+	v_add_u32_e32 v9, 1, v2
+	v_cmp_le_u32_e32 vcc, s8, v7
+	v_xor_b32_e32 v5, s12, v5
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cmp_gt_i32 s52, 15
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_cndmask_b32_e32 v2, v2, v9, vcc
+	v_xor_b32_e32 v2, v2, v5
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cselect_b64 s[34:35], -1, 0
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	s_abs_i32 s45, s43
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_sub_u32_e32 v9, v2, v5
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cvt_f32_u32_e32 v2, s45
+	.loc	1 79 40                         ; impl_triton.py:79:40
+	v_cmp_gt_i32_e64 s[28:29], 1, v4
+	.loc	1 76 37                         ; impl_triton.py:76:37
+	v_cmp_gt_i32_e32 vcc, s33, v3
+	.loc	1 60 76                         ; impl_triton.py:60:76
+	v_and_b32_e32 v22, 0x180, v0
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_rcp_iflag_f32_e32 v5, v2
+	.loc	1 85 31                         ; impl_triton.py:85:31
+	v_mul_lo_u32 v2, v4, s37
+	.loc	1 85 14 is_stmt 0               ; impl_triton.py:85:14
+	v_ashrrev_i32_e32 v3, 31, v2
+	v_lshl_add_u64 v[52:53], v[2:3], 2, s[2:3]
+	.loc	1 63 39 is_stmt 1               ; impl_triton.py:63:39
+	v_mul_f32_e32 v4, 0x4f7ffffe, v5
+	v_cvt_u32_f32_e32 v4, v4
+	s_sub_i32 s2, 0, s45
+	.loc	1 60 76                         ; impl_triton.py:60:76
+	v_lshrrev_b32_e32 v81, 6, v22
+	v_or_b32_e32 v31, 1, v81
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_mul_lo_u32 v2, s2, v4
+	v_mul_hi_u32 v2, v4, v2
+	v_add_u32_e32 v83, v4, v2
+	v_mul_hi_u32 v2, v31, v83
+	v_mul_lo_u32 v4, v2, s45
+	v_sub_u32_e32 v4, v31, v4
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	s_ashr_i32 s47, s43, 31
+	.loc	1 60 76                         ; impl_triton.py:60:76
+	v_or_b32_e32 v28, 8, v81
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_subrev_u32_e32 v5, s45, v4
+	v_cndmask_b32_e64 v4, v4, v5, s[2:3]
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 60 76                         ; impl_triton.py:60:76
+	v_or_b32_e32 v25, 9, v81
+	v_and_b32_e32 v77, 15, v0
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v32, s47, v2
+	v_mul_hi_u32 v2, v28, v83
+	v_mul_lo_u32 v4, v2, s45
+	v_sub_u32_e32 v4, v28, v4
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_abs_i32 s49, s15
+	v_cvt_f32_u32_e32 v10, s49
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_subrev_u32_e32 v5, s45, v4
+	v_cndmask_b32_e64 v4, v4, v5, s[2:3]
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_ashr_i32 s50, s15, 31
+	.loc	1 47 23                         ; impl_triton.py:47:23
+	v_mul_lo_u32 v38, v9, s13
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v29, s47, v2
+	v_mul_hi_u32 v2, v25, v83
+	v_mul_lo_u32 v4, v2, s45
+	v_sub_u32_e32 v4, v25, v4
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 71 46                         ; impl_triton.py:71:46
+	v_add_u32_e32 v86, -1, v9
+	.loc	1 72 46                         ; impl_triton.py:72:46
+	v_xad_u32 v87, v38, -1, v6
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_subrev_u32_e32 v5, s45, v4
+	v_cndmask_b32_e64 v4, v4, v5, s[2:3]
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_i32_e64 s[20:21], s44, v81
+	.loc	1 45 29                         ; impl_triton.py:45:29
+	v_cmp_le_u32_e64 s[22:23], s24, v27
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v26, s47, v2
+	v_mul_hi_u32 v2, v77, v83
+	v_mul_lo_u32 v4, v2, s45
+	v_sub_u32_e32 v4, v77, v4
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 53 25                         ; impl_triton.py:53:25
+	s_mul_i32 s42, s36, s18
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_mov_b32_e32 v3, 0
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_subrev_u32_e32 v5, s45, v4
+	v_cndmask_b32_e64 v4, v4, v5, s[2:3]
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	s_nop 1
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v24, s47, v2
+	v_mul_hi_u32 v2, v81, v83
+	v_mul_lo_u32 v4, v2, s45
+	v_sub_u32_e32 v4, v81, v4
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	s_nop 1
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	v_subrev_u32_e32 v5, s45, v4
+	v_cndmask_b32_e64 v4, v4, v5, s[2:3]
+	v_add_u32_e32 v5, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v4
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v4, v32, s43
+	v_sub_u32_e32 v4, v31, v4
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v5, s[2:3]
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v5, v29, s43
+	v_sub_u32_e32 v35, v28, v5
+	v_mul_lo_u32 v5, v26, s43
+	v_sub_u32_e32 v33, v25, v5
+	v_mul_lo_u32 v5, v24, s43
+	v_sub_u32_e32 v30, v77, v5
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_rcp_iflag_f32_e32 v5, v10
+	.loc	1 63 39 is_stmt 1               ; impl_triton.py:63:39
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v7, s47, v2
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v2, v7, s43
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_mul_f32_e32 v5, 0x4f7ffffe, v5
+	v_cvt_u32_f32_e32 v5, v5
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_sub_u32_e32 v2, v81, v2
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_sub_u32_e32 v11, 0, v2
+	s_sub_i32 s2, 0, s49
+	v_ashrrev_i32_e32 v10, 31, v2
+	v_max_i32_e32 v2, v2, v11
+	v_mul_lo_u32 v11, s2, v5
+	v_mul_hi_u32 v11, v5, v11
+	v_add_u32_e32 v85, v5, v11
+	v_mul_hi_u32 v5, v2, v85
+	v_mul_lo_u32 v11, v5, s49
+	v_sub_u32_e32 v2, v2, v11
+	v_add_u32_e32 v11, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	v_ashrrev_i32_e32 v36, 31, v4
+	v_xor_b32_e32 v10, s50, v10
+	v_cndmask_b32_e64 v5, v5, v11, s[2:3]
+	v_subrev_u32_e32 v11, s49, v2
+	v_cndmask_b32_e64 v2, v2, v11, s[2:3]
+	v_add_u32_e32 v11, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	s_nop 1
+	v_cndmask_b32_e64 v2, v5, v11, s[2:3]
+	v_sub_u32_e32 v5, 0, v4
+	v_max_i32_e32 v37, v4, v5
+	v_sub_u32_e32 v4, 0, v35
+	v_max_i32_e32 v34, v35, v4
+	v_mad_u64_u32 v[4:5], s[2:3], v34, v85, 0
+	v_mad_u64_u32 v[16:17], s[2:3], v37, v85, 0
+	v_sub_u32_e32 v4, 0, v33
+	v_xor_b32_e32 v2, v2, v10
+	v_max_i32_e32 v16, v33, v4
+	v_sub_u32_e32 v2, v2, v10
+	v_mad_u64_u32 v[10:11], s[2:3], v16, v85, 0
+	v_sub_u32_e32 v4, 0, v30
+	v_max_i32_e32 v10, v30, v4
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v4, v81, v85
+	v_mul_lo_u32 v4, v4, s49
+	v_sub_u32_e32 v4, v81, v4
+	v_subrev_u32_e32 v12, s49, v4
+	v_cmp_le_u32_e64 s[2:3], s49, v4
+	s_nop 1
+	v_cndmask_b32_e64 v4, v4, v12, s[2:3]
+	v_subrev_u32_e32 v12, s49, v4
+	v_cmp_le_u32_e64 s[2:3], s49, v4
+	s_nop 1
+	v_cndmask_b32_e64 v39, v4, v12, s[2:3]
+	v_mad_u64_u32 v[18:19], s[2:3], v31, v85, 0
+	v_mad_u64_u32 v[14:15], s[2:3], v28, v85, 0
+	v_mad_u64_u32 v[12:13], s[2:3], v25, v85, 0
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v4, v86, v2
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v6, v87, v39
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v4
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[14:15], s10, v4
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[26:27], s[2:3], s[14:15]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v6
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[14:15], s11, v6
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[14:15]
+	.loc	1 80 53 is_stmt 1               ; impl_triton.py:80:53
+	s_and_b64 s[2:3], s[26:27], s[2:3]
+	s_and_b64 s[2:3], vcc, s[2:3]
+	.loc	1 80 63 is_stmt 0               ; impl_triton.py:80:63
+	s_and_b64 s[2:3], s[28:29], s[2:3]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[2:3], s[20:21], s[2:3]
+	.loc	1 59 34 is_stmt 1               ; impl_triton.py:59:34
+	s_and_b64 s[14:15], s[34:35], s[2:3]
+	v_mov_b32_e32 v2, 0
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[2:3], s[14:15]
+	s_cbranch_execz .LBB0_2
+; %bb.1:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v2, s42, v7
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v38, v2, s38
+	.loc	1 86 14 is_stmt 0               ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v39, 31, v38
+	.loc	1 87 45 is_stmt 1               ; impl_triton.py:87:45
+	v_mul_lo_u32 v40, v4, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v41, 31, v40
+	v_lshl_add_u64 v[38:39], v[40:41], 2, v[38:39]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_mov_b32_e32 v7, 0
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[6:7], v[6:7], 2, v[38:39]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v2, v[6:7], off
+.LBB0_2:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v14, v17, s49
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_xor_b32_e32 v4, s19, v8
+	v_mad_u64_u32 v[8:9], s[2:3], v10, v85, 0
+	v_mad_u64_u32 v[6:7], s[2:3], v77, v85, 0
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_sub_u32_e32 v14, v37, v14
+	v_add_u32_e32 v18, 1, v17
+	v_cmp_le_u32_e64 s[2:3], s49, v14
+	v_xor_b32_e32 v8, s50, v36
+	.loc	1 0 0                           ; impl_triton.py:0
+	v_subrev_u32_e32 v12, s24, v27
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v17, v17, v18, s[2:3]
+	v_subrev_u32_e32 v18, s49, v14
+	v_cndmask_b32_e64 v14, v14, v18, s[2:3]
+	v_add_u32_e32 v18, 1, v17
+	v_cmp_le_u32_e64 s[2:3], s49, v14
+	.loc	1 0 0                           ; impl_triton.py:0
+	v_ashrrev_i32_e32 v6, 31, v35
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_nop 0
+	v_cndmask_b32_e64 v14, v17, v18, s[2:3]
+	v_xor_b32_e32 v14, v14, v8
+	v_sub_u32_e32 v8, v14, v8
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_lo_u32 v14, v19, s49
+	v_sub_u32_e32 v14, v31, v14
+	v_subrev_u32_e32 v17, s49, v14
+	v_cmp_le_u32_e64 s[2:3], s49, v14
+	s_nop 1
+	v_cndmask_b32_e64 v14, v14, v17, s[2:3]
+	v_subrev_u32_e32 v17, s49, v14
+	v_cmp_le_u32_e64 s[2:3], s49, v14
+	s_nop 1
+	v_cndmask_b32_e64 v17, v14, v17, s[2:3]
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v14, v86, v8
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v8, v87, v17
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v14
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[14:15], s10, v14
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[14:15], s[2:3], s[14:15]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v8
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[24:25], s11, v8
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[24:25]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[24:25], vcc, s[14:15]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[24:25], s[24:25], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[24:25], s[28:29], s[24:25]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[24:25], s[20:21], s[24:25]
+	.loc	1 59 34 is_stmt 1               ; impl_triton.py:59:34
+	s_and_b64 s[26:27], s[34:35], s[24:25]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[24:25], s[26:27]
+	s_cbranch_execz .LBB0_4
+; %bb.3:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v3, s42, v32
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v18, v3, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v3, 0, v14, s[14:15]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v19, 31, v18
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v36, v3, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[18:19], v[18:19], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v37, 31, v36
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v3, 31, v8
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[18:19], v[36:37], 2, v[18:19]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v37, 0, v3, s[2:3]
+	v_cndmask_b32_e64 v36, 0, v8, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[18:19], v[36:37], 2, v[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v3, v[18:19], off
+.LBB0_4:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[24:25]
+	v_subrev_u32_e32 v79, s19, v4
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_xor_b32_e32 v4, s50, v6
+	v_mul_lo_u32 v6, v5, s49
+	v_sub_u32_e32 v6, v34, v6
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_cndmask_b32_e64 v14, v27, v12, s[22:23]
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_add_u32_e32 v12, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	.loc	1 0 0                           ; impl_triton.py:0
+	v_ashrrev_i32_e32 v8, 31, v33
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_nop 0
+	v_cndmask_b32_e64 v5, v5, v12, s[2:3]
+	v_subrev_u32_e32 v12, s49, v6
+	v_cndmask_b32_e64 v6, v6, v12, s[2:3]
+	v_add_u32_e32 v12, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	s_nop 1
+	v_cndmask_b32_e64 v5, v5, v12, s[2:3]
+	v_xor_b32_e32 v5, v5, v4
+	v_sub_u32_e32 v4, v5, v4
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_lo_u32 v5, v15, s49
+	v_sub_u32_e32 v5, v28, v5
+	v_subrev_u32_e32 v6, s49, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v5
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v12, v86, v4
+	.loc	1 77 49                         ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[14:15], s10, v12
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_cndmask_b32_e64 v5, v5, v6, s[2:3]
+	v_subrev_u32_e32 v6, s49, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v5
+	v_mov_b32_e32 v4, 0
+	s_nop 0
+	v_cndmask_b32_e64 v5, v5, v6, s[2:3]
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v6, v87, v5
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v12
+	.loc	1 77 40 is_stmt 0               ; impl_triton.py:77:40
+	s_and_b64 s[14:15], s[2:3], s[14:15]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v6
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[22:23], s11, v6
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[22:23]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[22:23], vcc, s[14:15]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[22:23], s[22:23], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[22:23], s[28:29], s[22:23]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[22:23], s[20:21], s[22:23]
+	.loc	1 59 34 is_stmt 1               ; impl_triton.py:59:34
+	s_and_b64 s[24:25], s[34:35], s[22:23]
+	v_mov_b32_e32 v5, 0
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[22:23], s[24:25]
+	s_cbranch_execz .LBB0_6
+; %bb.5:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v4, s42, v29
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v18, v4, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v4, 0, v12, s[14:15]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v19, 31, v18
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v28, v4, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[18:19], v[18:19], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v29, 31, v28
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v4, 31, v6
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[18:19], v[28:29], 2, v[18:19]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v29, 0, v4, s[2:3]
+	v_cndmask_b32_e64 v28, 0, v6, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[18:19], v[28:29], 2, v[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v4, v[18:19], off
+.LBB0_6:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[22:23]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v15, v11, s49
+	v_sub_u32_e32 v15, v16, v15
+	v_add_u32_e32 v16, 1, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v15
+	v_xor_b32_e32 v8, s50, v8
+	s_load_dword s46, s[0:1], 0x38
+	s_load_dwordx2 s[36:37], s[0:1], 0x4c
+	s_load_dword s51, s[0:1], 0x54
+	v_cndmask_b32_e64 v11, v11, v16, s[2:3]
+	v_subrev_u32_e32 v16, s49, v15
+	v_cndmask_b32_e64 v15, v15, v16, s[2:3]
+	v_add_u32_e32 v16, 1, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v15
+	v_mul_lo_u32 v12, v79, s33
+	v_xor_b32_e32 v14, s16, v14
+	v_cndmask_b32_e64 v11, v11, v16, s[2:3]
+	v_xor_b32_e32 v11, v11, v8
+	v_sub_u32_e32 v8, v11, v8
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_mul_lo_u32 v11, v13, s49
+	v_sub_u32_e32 v11, v25, v11
+	v_subrev_u32_e32 v13, s49, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v11
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_ashrrev_i32_e32 v6, 31, v30
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	s_nop 0
+	v_cndmask_b32_e64 v11, v11, v13, s[2:3]
+	v_subrev_u32_e32 v13, s49, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v11
+	s_nop 1
+	v_cndmask_b32_e64 v13, v11, v13, s[2:3]
+	.loc	1 71 64 is_stmt 1               ; impl_triton.py:71:64
+	v_add_u32_e32 v11, v86, v8
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v8, v87, v13
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v11
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[14:15], s10, v11
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[14:15], s[2:3], s[14:15]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v8
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[22:23], s11, v8
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[22:23]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[22:23], vcc, s[14:15]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[22:23], s[22:23], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[22:23], s[28:29], s[22:23]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[20:21], s[20:21], s[22:23]
+	.loc	1 59 34 is_stmt 1               ; impl_triton.py:59:34
+	s_and_b64 s[22:23], s[34:35], s[20:21]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[20:21], s[22:23]
+	s_cbranch_execz .LBB0_8
+; %bb.7:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v5, s42, v26
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v16, v5, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v5, 0, v11, s[14:15]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v17, 31, v16
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v18, v5, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[16:17], v[16:17], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v19, 31, v18
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v5, 31, v8
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[16:17], v[18:19], 2, v[16:17]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v19, 0, v5, s[2:3]
+	v_cndmask_b32_e64 v18, 0, v8, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[16:17], v[18:19], 2, v[16:17]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v5, v[16:17], off
+.LBB0_8:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[20:21]
+	.loc	1 40 73 is_stmt 1               ; impl_triton.py:40:73
+	v_lshrrev_b32_e32 v8, 4, v0
+	.loc	1 41 28                         ; impl_triton.py:41:28
+	s_lshl_b32 s48, s17, 7
+	v_sub_u32_e32 v82, v1, v12
+	.loc	1 41 61 is_stmt 0               ; impl_triton.py:41:61
+	v_or_b32_e32 v12, s48, v8
+	.loc	1 50 24 is_stmt 1               ; impl_triton.py:50:24
+	s_waitcnt lgkmcnt(0)
+	s_mul_i32 s46, s46, s18
+	.loc	1 50 49 is_stmt 0               ; impl_triton.py:50:49
+	v_add_u32_e32 v8, s46, v12
+	v_subrev_u32_e32 v78, s16, v14
+	.loc	1 93 30 is_stmt 1               ; impl_triton.py:93:30
+	v_cmp_gt_i32_e64 s[24:25], s9, v8
+	.loc	1 97 32                         ; impl_triton.py:97:32
+	v_mul_lo_u32 v14, s36, v8
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_mul_lo_u32 v8, v9, s49
+	v_sub_u32_e32 v8, v10, v8
+	v_add_u32_e32 v10, 1, v9
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	v_xor_b32_e32 v6, s50, v6
+	.loc	1 97 14                         ; impl_triton.py:97:14
+	v_ashrrev_i32_e32 v15, 31, v14
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v9, v9, v10, s[2:3]
+	v_subrev_u32_e32 v10, s49, v8
+	v_cndmask_b32_e64 v8, v8, v10, s[2:3]
+	v_add_u32_e32 v10, 1, v9
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	.loc	1 97 14                         ; impl_triton.py:97:14
+	v_lshl_add_u64 v[56:57], v[14:15], 2, s[4:5]
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_nop 0
+	v_cndmask_b32_e64 v8, v9, v10, s[2:3]
+	v_xor_b32_e32 v8, v8, v6
+	v_sub_u32_e32 v10, v8, v6
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_mul_lo_u32 v6, v7, s49
+	v_sub_u32_e32 v6, v77, v6
+	v_subrev_u32_e32 v7, s49, v6
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	.loc	1 98 34                         ; impl_triton.py:98:34
+	v_mul_lo_u32 v8, v24, s37
+	.loc	1 99 32                         ; impl_triton.py:99:32
+	v_mul_lo_u32 v10, v10, s51
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_cndmask_b32_e64 v6, v6, v7, s[2:3]
+	v_subrev_u32_e32 v7, s49, v6
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_ashrrev_i32_e32 v9, 31, v8
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_ashrrev_i32_e32 v11, 31, v10
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_cndmask_b32_e64 v6, v6, v7, s[2:3]
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_i32_e64 s[2:3], s44, v77
+	.loc	1 94 46                         ; impl_triton.py:94:46
+	s_and_b64 s[14:15], s[24:25], s[2:3]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_mov_b32_e32 v7, 0
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_and_b64 s[16:17], s[34:35], s[14:15]
+	v_mov_b32_e32 v13, v7
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[14:15], s[16:17]
+	s_cbranch_execz .LBB0_10
+; %bb.9:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	v_lshl_add_u64 v[14:15], v[8:9], 2, v[56:57]
+	v_lshl_add_u64 v[14:15], v[10:11], 2, v[14:15]
+	v_lshl_add_u64 v[14:15], v[6:7], 2, v[14:15]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v13, v[14:15], off
+.LBB0_10:
+	.loc	1 0 25                          ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[14:15]
+	.loc	1 41 61 is_stmt 1               ; impl_triton.py:41:61
+	v_or_b32_e32 v14, 32, v12
+	.loc	1 50 49                         ; impl_triton.py:50:49
+	v_add_u32_e32 v14, s46, v14
+	.loc	1 93 30                         ; impl_triton.py:93:30
+	v_cmp_gt_i32_e64 s[26:27], s9, v14
+	.loc	1 97 32                         ; impl_triton.py:97:32
+	v_mul_lo_u32 v18, s36, v14
+	.loc	1 97 14 is_stmt 0               ; impl_triton.py:97:14
+	v_ashrrev_i32_e32 v19, 31, v18
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[14:15], s[26:27], s[2:3]
+	v_sub_u32_e32 v15, 0, v82
+	v_sub_u32_e32 v16, 0, v78
+	.loc	1 97 14                         ; impl_triton.py:97:14
+	v_lshl_add_u64 v[58:59], v[18:19], 2, s[4:5]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_and_b64 s[16:17], s[34:35], s[14:15]
+	v_mov_b32_e32 v14, v7
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[14:15], s[16:17]
+	s_cbranch_execz .LBB0_12
+; %bb.11:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[18:19], v[8:9], 2, v[58:59]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[18:19], v[10:11], 2, v[18:19]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[18:19], v[6:7], 2, v[18:19]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v14, v[18:19], off
+.LBB0_12:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[14:15]
+	v_max_i32_e32 v84, v82, v15
+	.loc	1 50 49 is_stmt 1               ; impl_triton.py:50:49
+	v_add3_u32 v15, s46, v12, 64
+	v_max_i32_e32 v80, v78, v16
+	.loc	1 93 30                         ; impl_triton.py:93:30
+	v_cmp_gt_i32_e64 s[22:23], s9, v15
+	.loc	1 97 32                         ; impl_triton.py:97:32
+	v_mul_lo_u32 v16, s36, v15
+	.loc	1 97 14 is_stmt 0               ; impl_triton.py:97:14
+	v_ashrrev_i32_e32 v17, 31, v16
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[14:15], s[22:23], s[2:3]
+	.loc	1 97 14                         ; impl_triton.py:97:14
+	v_lshl_add_u64 v[60:61], v[16:17], 2, s[4:5]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_and_b64 s[16:17], s[34:35], s[14:15]
+	v_mov_b32_e32 v15, 0
+	v_mov_b32_e32 v16, 0
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[14:15], s[16:17]
+	s_cbranch_execz .LBB0_14
+; %bb.13:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[16:17], v[8:9], 2, v[60:61]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[16:17], v[10:11], 2, v[16:17]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[16:17], v[6:7], 2, v[16:17]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v16, v[16:17], off
+.LBB0_14:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[14:15]
+	.loc	1 41 61 is_stmt 1               ; impl_triton.py:41:61
+	v_or_b32_e32 v12, 0x60, v12
+	v_mad_u64_u32 v[54:55], s[14:15], v84, v23, 0
+	v_mad_u64_u32 v[50:51], s[14:15], v80, v23, 0
+	.loc	1 50 49                         ; impl_triton.py:50:49
+	v_add_u32_e32 v12, s46, v12
+	.loc	1 93 30                         ; impl_triton.py:93:30
+	v_cmp_gt_i32_e64 s[14:15], s9, v12
+	.loc	1 97 32                         ; impl_triton.py:97:32
+	v_mul_lo_u32 v18, s36, v12
+	.loc	1 97 14 is_stmt 0               ; impl_triton.py:97:14
+	v_ashrrev_i32_e32 v19, 31, v18
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[2:3], s[14:15], s[2:3]
+	.loc	1 97 14                         ; impl_triton.py:97:14
+	v_lshl_add_u64 v[62:63], v[18:19], 2, s[4:5]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_and_b64 s[4:5], s[34:35], s[2:3]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[2:3], s[4:5]
+	s_cbranch_execz .LBB0_16
+; %bb.15:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[8:9], v[8:9], 2, v[62:63]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[8:9], v[10:11], 2, v[8:9]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[6:7], v[6:7], 2, v[8:9]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v15, v[6:7], off
+.LBB0_16:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	v_lshlrev_b32_e32 v6, 2, v0
+	v_lshrrev_b32_e32 v7, 1, v0
+	v_xor_b32_e32 v7, v6, v7
+	v_lshrrev_b32_e32 v8, 4, v22
+	v_and_b32_e32 v7, 56, v7
+	v_xor_b32_e32 v7, v7, v8
+	v_lshl_or_b32 v7, v20, 6, v7
+	v_add_u32_e32 v89, 0, v7
+	s_waitcnt vmcnt(0)
+	ds_write_b64 v89, v[2:3]
+	v_xor_b32_e32 v2, 32, v7
+	v_add_u32_e32 v90, 0, v2
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	v_lshrrev_b32_e32 v2, 2, v0
+	v_and_b32_e32 v2, 56, v2
+	v_xor_b32_e32 v2, v6, v2
+	v_add_u32_e32 v91, 0, v2
+	.loc	1 40 73                         ; impl_triton.py:40:73
+	v_cmp_eq_u32_e64 s[4:5], 0, v21
+	v_and_b32_e32 v50, 0xc0, v0
+	v_and_b32_e32 v54, 32, v0
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_and_b32_e32 v88, 56, v6
+	ds_write_b64 v90, v[4:5]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_write2st64_b32 v91, v13, v14 offset0:32 offset1:40
+	ds_write2st64_b32 v91, v16, v15 offset0:48 offset1:56
+	v_mov_b32_e32 v17, 0
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cmp_lt_i32 s52, 32
+	v_mov_b32_e32 v16, 0
+	v_mov_b32_e32 v15, 0
+	v_mov_b32_e32 v14, 0
+	v_mov_b32_e32 v13, 0
+	v_mov_b32_e32 v12, 0
+	v_mov_b32_e32 v11, 0
+	v_mov_b32_e32 v10, 0
+	v_mov_b32_e32 v9, 0
+	v_mov_b32_e32 v8, 0
+	v_mov_b32_e32 v7, 0
+	v_mov_b32_e32 v6, 0
+	v_mov_b32_e32 v5, 0
+	v_mov_b32_e32 v4, 0
+	v_mov_b32_e32 v3, 0
+	v_mov_b32_e32 v2, 0
+	v_mov_b32_e32 v33, 0
+	v_mov_b32_e32 v32, 0
+	v_mov_b32_e32 v31, 0
+	v_mov_b32_e32 v30, 0
+	v_mov_b32_e32 v29, 0
+	v_mov_b32_e32 v28, 0
+	v_mov_b32_e32 v27, 0
+	v_mov_b32_e32 v26, 0
+	v_mov_b32_e32 v25, 0
+	v_mov_b32_e32 v24, 0
+	v_mov_b32_e32 v23, 0
+	v_mov_b32_e32 v22, 0
+	v_mov_b32_e32 v21, 0
+	v_mov_b32_e32 v20, 0
+	v_mov_b32_e32 v19, 0
+	v_mov_b32_e32 v18, 0
+	s_cbranch_scc1 .LBB0_52
+; %bb.17:                               ; %.lr.ph
+	.loc	1 60 63                         ; impl_triton.py:60:63
+	v_or_b32_e32 v26, 17, v81
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_mul_hi_u32 v2, v26, v83
+	v_mul_lo_u32 v3, v2, s45
+	v_sub_u32_e32 v3, v26, v3
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 60 63                         ; impl_triton.py:60:63
+	v_or_b32_e32 v22, 24, v81
+	v_or_b32_e32 v20, 25, v81
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_subrev_u32_e32 v4, s45, v3
+	v_cndmask_b32_e64 v3, v3, v4, s[2:3]
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 60 63                         ; impl_triton.py:60:63
+	v_or_b32_e32 v18, 16, v77
+	v_or_b32_e32 v5, 16, v81
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v25, s47, v2
+	v_mul_hi_u32 v2, v22, v83
+	v_mul_lo_u32 v3, v2, s45
+	v_sub_u32_e32 v3, v22, v3
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_and_b64 s[40:41], vcc, s[28:29]
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_u32_e64 s[16:17], s44, v5
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_subrev_u32_e32 v4, s45, v3
+	v_cndmask_b32_e64 v3, v3, v4, s[2:3]
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	v_mov_b32_e32 v47, 0
+	v_mov_b32_e32 v46, 0
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v23, s47, v2
+	v_mul_hi_u32 v2, v20, v83
+	v_mul_lo_u32 v3, v2, s45
+	v_sub_u32_e32 v3, v20, v3
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v6, v23, s43
+	v_sub_u32_e32 v28, v22, v6
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_subrev_u32_e32 v4, s45, v3
+	v_cndmask_b32_e64 v3, v3, v4, s[2:3]
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	s_nop 1
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v21, s47, v2
+	v_mul_hi_u32 v2, v18, v83
+	v_mul_lo_u32 v3, v2, s45
+	v_sub_u32_e32 v3, v18, v3
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v6, v21, s43
+	v_sub_u32_e32 v27, v20, v6
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_subrev_u32_e32 v4, s45, v3
+	v_cndmask_b32_e64 v3, v3, v4, s[2:3]
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	s_nop 1
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v19, s47, v2
+	v_mul_hi_u32 v2, v5, v83
+	v_mul_lo_u32 v3, v2, s45
+	v_sub_u32_e32 v3, v5, v3
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v6, v19, s43
+	v_sub_u32_e32 v24, v18, v6
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_subrev_u32_e32 v4, s45, v3
+	v_cndmask_b32_e64 v3, v3, v4, s[2:3]
+	v_add_u32_e32 v4, 1, v2
+	v_cmp_le_u32_e64 s[2:3], s45, v3
+	s_nop 1
+	v_cndmask_b32_e64 v2, v2, v4, s[2:3]
+	v_xor_b32_e32 v2, s47, v2
+	v_subrev_u32_e32 v3, s47, v2
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v2, v3, s43
+	v_sub_u32_e32 v2, v5, v2
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v7, 0, v2
+	v_ashrrev_i32_e32 v6, 31, v2
+	v_max_i32_e32 v2, v2, v7
+	v_mul_hi_u32 v7, v2, v85
+	v_mul_lo_u32 v8, v7, s49
+	v_sub_u32_e32 v2, v2, v8
+	v_add_u32_e32 v8, 1, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v4, v25, s43
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_xor_b32_e32 v6, s50, v6
+	v_cndmask_b32_e64 v7, v7, v8, s[2:3]
+	v_subrev_u32_e32 v8, s49, v2
+	v_cndmask_b32_e64 v2, v2, v8, s[2:3]
+	v_add_u32_e32 v8, 1, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_sub_u32_e32 v4, v26, v4
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_ashrrev_i32_e32 v29, 31, v4
+	v_cndmask_b32_e64 v2, v7, v8, s[2:3]
+	v_xor_b32_e32 v2, v2, v6
+	v_sub_u32_e32 v2, v2, v6
+	v_sub_u32_e32 v6, 0, v4
+	v_max_i32_e32 v30, v4, v6
+	v_mad_u64_u32 v[14:15], s[2:3], v30, v85, 0
+	v_sub_u32_e32 v4, 0, v28
+	v_max_i32_e32 v14, v28, v4
+	v_mad_u64_u32 v[10:11], s[2:3], v14, v85, 0
+	v_sub_u32_e32 v4, 0, v27
+	v_max_i32_e32 v10, v27, v4
+	v_mad_u64_u32 v[6:7], s[2:3], v10, v85, 0
+	v_sub_u32_e32 v4, 0, v24
+	v_max_i32_e32 v6, v24, v4
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v4, v5, v85
+	v_mul_lo_u32 v4, v4, s49
+	v_sub_u32_e32 v4, v5, v4
+	v_subrev_u32_e32 v8, s49, v4
+	v_cmp_le_u32_e64 s[2:3], s49, v4
+	s_nop 1
+	v_cndmask_b32_e64 v4, v4, v8, s[2:3]
+	v_subrev_u32_e32 v8, s49, v4
+	v_cmp_le_u32_e64 s[2:3], s49, v4
+	s_nop 1
+	v_cndmask_b32_e64 v31, v4, v8, s[2:3]
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v4, v86, v2
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v2, v87, v31
+	.loc	1 77 49                         ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v4
+	.loc	1 78 49                         ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[30:31], s11, v2
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_mad_u64_u32 v[16:17], s[2:3], v26, v85, 0
+	v_mad_u64_u32 v[12:13], s[2:3], v22, v85, 0
+	v_mad_u64_u32 v[8:9], s[2:3], v20, v85, 0
+	.loc	1 78 34                         ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[20:21], -1, v2
+	.loc	1 78 40 is_stmt 0               ; impl_triton.py:78:40
+	s_and_b64 s[18:19], s[30:31], s[18:19]
+	.loc	1 77 34 is_stmt 1               ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v4
+	.loc	1 80 53                         ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[20:21]
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	s_and_b64 s[2:3], s[2:3], s[40:41]
+	.loc	1 80 73 is_stmt 0               ; impl_triton.py:80:73
+	s_and_b64 s[18:19], s[16:17], s[2:3]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[2:3], s[18:19]
+	s_cbranch_execz .LBB0_19
+; %bb.18:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v3, s42, v3
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v32, v3, s38
+	.loc	1 86 14 is_stmt 0               ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v33, 31, v32
+	.loc	1 87 45 is_stmt 1               ; impl_triton.py:87:45
+	v_mul_lo_u32 v4, v4, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[32:33], v[32:33], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v5, 31, v4
+	v_lshl_add_u64 v[4:5], v[4:5], 2, v[32:33]
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_mov_b32_e32 v3, 0
+	v_lshl_add_u64 v[2:3], v[2:3], 2, v[4:5]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	global_load_dword v46, v[2:3], off
+.LBB0_19:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v8, v15, s49
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_mad_u64_u32 v[4:5], s[2:3], v6, v85, 0
+	v_mad_u64_u32 v[2:3], s[2:3], v18, v85, 0
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_sub_u32_e32 v8, v30, v8
+	v_add_u32_e32 v12, 1, v15
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	v_xor_b32_e32 v4, s50, v29
+	.loc	1 0 0                           ; impl_triton.py:0
+	v_ashrrev_i32_e32 v2, 31, v28
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v12, v15, v12, s[2:3]
+	v_subrev_u32_e32 v15, s49, v8
+	v_cndmask_b32_e64 v8, v8, v15, s[2:3]
+	v_add_u32_e32 v15, 1, v12
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v8, v12, v15, s[2:3]
+	v_xor_b32_e32 v8, v8, v4
+	v_sub_u32_e32 v4, v8, v4
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_lo_u32 v8, v17, s49
+	v_sub_u32_e32 v8, v26, v8
+	v_subrev_u32_e32 v12, s49, v8
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v8, v8, v12, s[2:3]
+	v_subrev_u32_e32 v12, s49, v8
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v12, v8, v12, s[2:3]
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v8, v86, v4
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v4, v87, v12
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v8
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v8
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v4
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v4
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[30:31], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[18:19], s[30:31]
+	s_cbranch_execz .LBB0_21
+; %bb.20:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v12, s42, v25
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v16, v12, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v8, 0, v8, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v17, 31, v16
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v28, v8, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[16:17], v[16:17], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v29, 31, v28
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v8, 31, v4
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[16:17], v[28:29], 2, v[16:17]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v29, 0, v8, s[2:3]
+	v_cndmask_b32_e64 v28, 0, v4, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[16:17], v[28:29], 2, v[16:17]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v47, v[16:17], off
+.LBB0_21:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[18:19]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v8, v11, s49
+	v_sub_u32_e32 v8, v14, v8
+	v_add_u32_e32 v12, 1, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	v_xor_b32_e32 v2, s50, v2
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_ashrrev_i32_e32 v4, 31, v27
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v11, v11, v12, s[2:3]
+	v_subrev_u32_e32 v12, s49, v8
+	v_cndmask_b32_e64 v8, v8, v12, s[2:3]
+	v_add_u32_e32 v12, 1, v11
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	v_mov_b32_e32 v49, 0
+	v_mov_b32_e32 v48, 0
+	v_cndmask_b32_e64 v8, v11, v12, s[2:3]
+	v_xor_b32_e32 v8, v8, v2
+	v_sub_u32_e32 v2, v8, v2
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_lo_u32 v8, v13, s49
+	v_sub_u32_e32 v8, v22, v8
+	v_subrev_u32_e32 v11, s49, v8
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v8, v8, v11, s[2:3]
+	v_subrev_u32_e32 v11, s49, v8
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v11, v8, v11, s[2:3]
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v8, v86, v2
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v2, v87, v11
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v8
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v8
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v2
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v2
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[30:31], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[18:19], s[30:31]
+	s_cbranch_execz .LBB0_23
+; %bb.22:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v11, s42, v23
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v12, v11, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v8, 0, v8, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v13, 31, v12
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v14, v8, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[12:13], v[12:13], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v15, 31, v14
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v8, 31, v2
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[12:13], v[14:15], 2, v[12:13]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v15, 0, v8, s[2:3]
+	v_cndmask_b32_e64 v14, 0, v2, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[12:13], v[14:15], 2, v[12:13]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v48, v[12:13], off
+.LBB0_23:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[18:19]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v8, v7, s49
+	v_sub_u32_e32 v8, v10, v8
+	v_add_u32_e32 v10, 1, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	v_xor_b32_e32 v4, s50, v4
+	.loc	1 0 0 is_stmt 0                 ; impl_triton.py:0
+	v_ashrrev_i32_e32 v2, 31, v24
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v7, v7, v10, s[2:3]
+	v_subrev_u32_e32 v10, s49, v8
+	v_cndmask_b32_e64 v8, v8, v10, s[2:3]
+	v_add_u32_e32 v10, 1, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v8
+	s_nop 1
+	v_cndmask_b32_e64 v7, v7, v10, s[2:3]
+	v_xor_b32_e32 v7, v7, v4
+	v_sub_u32_e32 v4, v7, v4
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_lo_u32 v7, v9, s49
+	v_sub_u32_e32 v7, v20, v7
+	v_subrev_u32_e32 v8, s49, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v7
+	s_nop 1
+	v_cndmask_b32_e64 v7, v7, v8, s[2:3]
+	v_subrev_u32_e32 v8, s49, v7
+	v_cmp_le_u32_e64 s[2:3], s49, v7
+	s_nop 1
+	v_cndmask_b32_e64 v8, v7, v8, s[2:3]
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v7, v86, v4
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v4, v87, v8
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v7
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v7
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v4
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v4
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[18:19], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_25
+; %bb.24:
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v8, s42, v21
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v8, v8, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v7, 0, v7, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v9, 31, v8
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v10, v7, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[8:9], v[8:9], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v11, 31, v10
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v7, 31, v4
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[8:9], v[10:11], 2, v[8:9]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v11, 0, v7, s[2:3]
+	v_cndmask_b32_e64 v10, 0, v4, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[8:9], v[10:11], 2, v[8:9]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v49, v[8:9], off
+.LBB0_25:
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 64 52 is_stmt 1               ; impl_triton.py:64:52
+	v_mul_lo_u32 v10, v5, s49
+	v_sub_u32_e32 v6, v6, v10
+	v_add_u32_e32 v10, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	v_bfe_i32 v4, v0, 4, 1
+	v_xor_b32_e32 v2, s50, v2
+	v_cndmask_b32_e64 v5, v5, v10, s[2:3]
+	v_subrev_u32_e32 v10, s49, v6
+	v_cndmask_b32_e64 v6, v6, v10, s[2:3]
+	v_add_u32_e32 v10, 1, v5
+	v_cmp_le_u32_e64 s[2:3], s49, v6
+	v_and_b32_e32 v4, 0x408, v4
+	v_mov_b32_e32 v7, 0x810
+	v_cndmask_b32_e64 v5, v5, v10, s[2:3]
+	v_lshl_or_b32 v8, v77, 6, v88
+	v_xor_b32_e32 v5, v5, v2
+	v_cndmask_b32_e64 v7, v7, 0, s[4:5]
+	v_xor_b32_e32 v4, v8, v4
+	v_sub_u32_e32 v10, v5, v2
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_mul_lo_u32 v2, v3, s49
+	v_lshrrev_b32_e32 v12, 2, v54
+	v_xor_b32_e32 v4, v4, v7
+	v_sub_u32_e32 v2, v18, v2
+	v_xor_b32_e32 v4, v4, v12
+	v_subrev_u32_e32 v3, s49, v2
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	v_xor_b32_e32 v7, 16, v4
+	v_xor_b32_e32 v8, 32, v4
+	v_xor_b32_e32 v9, 48, v4
+	v_cndmask_b32_e64 v2, v2, v3, s[2:3]
+	v_subrev_u32_e32 v3, s49, v2
+	v_cmp_le_u32_e64 s[2:3], s49, v2
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_add_u32_e32 v92, 0, v4
+	v_add_u32_e32 v93, 0, v7
+	v_add_u32_e32 v94, 0, v8
+	v_add_u32_e32 v95, 0, v9
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_cndmask_b32_e64 v6, v2, v3, s[2:3]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_waitcnt lgkmcnt(0)
+	s_barrier
+	ds_read2st64_b64 v[38:41], v92 offset1:8
+	ds_read2st64_b64 v[34:37], v93 offset1:8
+	ds_read2st64_b64 v[2:5], v94 offset1:8
+	ds_read2st64_b64 v[42:45], v95 offset1:8
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_u32_e64 s[2:3], s44, v18
+	.loc	1 98 34                         ; impl_triton.py:98:34
+	v_mul_lo_u32 v8, v19, s37
+	.loc	1 99 32                         ; impl_triton.py:99:32
+	v_mul_lo_u32 v10, v10, s51
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_mov_b32_e32 v7, 0
+	.loc	1 94 46                         ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[24:25], s[2:3]
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_ashrrev_i32_e32 v9, 31, v8
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_ashrrev_i32_e32 v11, 31, v10
+	v_mov_b32_e32 v64, v7
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_27
+; %bb.26:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	v_lshl_add_u64 v[14:15], v[8:9], 2, v[56:57]
+	v_lshl_add_u64 v[14:15], v[10:11], 2, v[14:15]
+	v_lshl_add_u64 v[14:15], v[6:7], 2, v[14:15]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v64, v[14:15], off
+.LBB0_27:
+	.loc	1 0 25                          ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[26:27], s[2:3]
+	v_mov_b32_e32 v65, v7
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_29
+; %bb.28:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[14:15], v[8:9], 2, v[58:59]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[14:15], v[10:11], 2, v[14:15]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[14:15], v[6:7], 2, v[14:15]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v65, v[14:15], off
+.LBB0_29:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[22:23], s[2:3]
+	v_mov_b32_e32 v66, 0
+	v_mov_b32_e32 v67, 0
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_31
+; %bb.30:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[14:15], v[8:9], 2, v[60:61]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[14:15], v[10:11], 2, v[14:15]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[14:15], v[6:7], 2, v[14:15]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v67, v[14:15], off
+.LBB0_31:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[16:17], s[14:15], s[2:3]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[2:3], s[16:17]
+	s_cbranch_execz .LBB0_33
+; %bb.32:
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[8:9], v[8:9], 2, v[62:63]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[8:9], v[10:11], 2, v[8:9]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[6:7], v[6:7], 2, v[8:9]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v66, v[6:7], off
+.LBB0_33:
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[2:3]
+	v_lshlrev_b32_e32 v6, 6, v76
+	v_lshlrev_b32_e32 v7, 5, v50
+	v_xor_b32_e32 v8, v88, v12
+	v_or3_b32 v8, v6, v7, v8
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	v_add_u32_e32 v96, 0, v8
+	ds_read_b64 v[6:7], v96 offset:8192
+	v_xor_b32_e32 v9, 16, v8
+	v_xor_b32_e32 v10, 32, v8
+	v_xor_b32_e32 v8, 48, v8
+	v_add_u32_e32 v97, 0, v9
+	v_add_u32_e32 v98, 0, v10
+	v_add_u32_e32 v99, 0, v8
+	.loc	1 105 31 is_stmt 1              ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(0)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[6:7], v[38:39], 0
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_read_b64 v[68:69], v97 offset:8192
+	ds_read_b64 v[70:71], v98 offset:8192
+	ds_read_b64 v[72:73], v99 offset:8192
+.Ltmp4:
+	.loc	2 43 30                         ; standard.py:43:30 @[ impl_triton.py:59:57 ]
+	s_ashr_i32 s2, s52, 31
+	s_lshr_b32 s2, s2, 28
+	s_add_i32 s52, s52, s2
+	s_ashr_i32 s2, s52, 4
+.Ltmp5:
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_max_i32 s2, s2, 2
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_mov_b32 s36, 0
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(2)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[68:69], v[34:35], v[18:33]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cmp_eq_u32 s2, 2
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_waitcnt lgkmcnt(0)
+	s_barrier
+	s_waitcnt vmcnt(0)
+	ds_write_b64 v89, v[46:47]
+	ds_write_b64 v90, v[48:49]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_write2st64_b32 v91, v64, v65 offset0:32 offset1:40
+	ds_write2st64_b32 v91, v67, v66 offset0:48 offset1:56
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[70:71], v[2:3], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[6:7], v[4:5], 0
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[68:69], v[44:45], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[70:71], v[40:41], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[72:73], v[42:43], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[72:73], v[36:37], v[2:17]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cbranch_scc1 .LBB0_52
+; %bb.34:                               ; %.peel.next
+	s_lshl_b32 s2, s2, 4
+	s_sub_i32 s52, s2, 32
+	v_or_b32_e32 v100, 32, v77
+	v_mov_b32_e32 v65, 0
+	s_branch .LBB0_36
+.LBB0_35:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 34 is_stmt 0                ; impl_triton.py:0:34
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 102 25 is_stmt 1              ; impl_triton.py:102:25
+	ds_read_b64 v[70:71], v96 offset:8192
+	ds_read_b64 v[72:73], v97 offset:8192
+	ds_read_b64 v[74:75], v98 offset:8192
+	ds_read_b64 v[104:105], v99 offset:8192
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_add_i32 s36, s36, 16
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(3)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[70:71], v[38:39], v[18:33]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cmp_lg_u32 s52, s36
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_waitcnt lgkmcnt(0)
+	s_barrier
+	s_waitcnt vmcnt(0)
+	ds_write_b64 v89, v[66:67]
+	ds_write_b64 v90, v[68:69]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_write2st64_b32 v91, v64, v102 offset0:32 offset1:40
+	ds_write2st64_b32 v91, v101, v103 offset0:48 offset1:56
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[70:71], v[48:49], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[72:73], v[34:35], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[72:73], v[44:45], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[74:75], v[46:47], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[74:75], v[40:41], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[104:105], v[42:43], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[104:105], v[36:37], v[2:17]
+	.loc	1 59 34                         ; impl_triton.py:59:34
+	s_cbranch_scc0 .LBB0_52
+.LBB0_36:                               ; =>This Inner Loop Header: Depth=1
+	.loc	1 60 63                         ; impl_triton.py:60:63
+	v_add_u32_e32 v34, s36, v81
+	v_add_u32_e32 v37, 32, v34
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_sub_u32_e32 v38, 0xffffffe0, v34
+	v_max_i32_e32 v38, v37, v38
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_mul_hi_u32 v39, v38, v83
+	v_mul_lo_u32 v40, v39, s45
+	v_sub_u32_e32 v40, v38, v40
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_ashrrev_i32_e32 v36, 31, v37
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_xor_b32_e32 v35, s47, v36
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_subrev_u32_e32 v41, s45, v40
+	v_cndmask_b32_e64 v40, v40, v41, s[2:3]
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_i32_e64 s[16:17], s44, v37
+	v_mov_b32_e32 v66, 0
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_xor_b32_e32 v39, v39, v35
+	v_sub_u32_e32 v35, v39, v35
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v39, v35, s43
+	v_sub_u32_e32 v39, v37, v39
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v41, 0, v39
+	v_ashrrev_i32_e32 v40, 31, v39
+	v_max_i32_e32 v39, v39, v41
+	v_mul_hi_u32 v41, v39, v85
+	v_mul_lo_u32 v42, v41, s49
+	v_sub_u32_e32 v39, v39, v42
+	v_add_u32_e32 v42, 1, v41
+	v_cmp_le_u32_e64 s[2:3], s49, v39
+	v_xor_b32_e32 v40, s50, v40
+	s_nop 0
+	v_cndmask_b32_e64 v41, v41, v42, s[2:3]
+	v_subrev_u32_e32 v42, s49, v39
+	v_cndmask_b32_e64 v39, v39, v42, s[2:3]
+	v_add_u32_e32 v42, 1, v41
+	v_cmp_le_u32_e64 s[2:3], s49, v39
+	s_nop 1
+	v_cndmask_b32_e64 v39, v41, v42, s[2:3]
+	v_xor_b32_e32 v39, v39, v40
+	v_sub_u32_e32 v39, v39, v40
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v40, v38, v85
+	v_mul_lo_u32 v40, v40, s49
+	v_sub_u32_e32 v38, v38, v40
+	v_subrev_u32_e32 v40, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v40, s[2:3]
+	v_subrev_u32_e32 v40, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v40, s[2:3]
+	v_xor_b32_e32 v38, v38, v36
+	v_sub_u32_e32 v38, v38, v36
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v36, v86, v39
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v64, v87, v38
+	.loc	1 77 49                         ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v36
+	.loc	1 78 49                         ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[30:31], s11, v64
+	.loc	1 78 34 is_stmt 0               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[20:21], -1, v64
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[18:19], s[30:31], s[18:19]
+	.loc	1 77 34 is_stmt 1               ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v36
+	.loc	1 80 53                         ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[20:21]
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	s_and_b64 s[2:3], s[2:3], s[40:41]
+	.loc	1 80 73 is_stmt 0               ; impl_triton.py:80:73
+	s_and_b64 s[18:19], s[16:17], s[2:3]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[2:3], s[18:19]
+	s_cbranch_execz .LBB0_38
+; %bb.37:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v35, s42, v35
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v38, v35, s38
+	.loc	1 86 14 is_stmt 0               ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v39, 31, v38
+	.loc	1 87 45 is_stmt 1               ; impl_triton.py:87:45
+	v_mul_lo_u32 v36, v36, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v37, 31, v36
+	v_lshl_add_u64 v[36:37], v[36:37], 2, v[38:39]
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_lshl_add_u64 v[36:37], v[64:65], 2, v[36:37]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	global_load_dword v66, v[36:37], off
+.LBB0_38:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 60 63 is_stmt 1               ; impl_triton.py:60:63
+	v_add_u32_e32 v36, 33, v34
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_sub_u32_e32 v38, 0xffffffdf, v34
+	v_max_i32_e32 v38, v36, v38
+	v_mul_hi_u32 v39, v38, v83
+	v_mul_lo_u32 v40, v39, s45
+	v_sub_u32_e32 v40, v38, v40
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	v_ashrrev_i32_e32 v37, 31, v36
+	v_xor_b32_e32 v35, s47, v37
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_subrev_u32_e32 v41, s45, v40
+	v_cndmask_b32_e64 v40, v40, v41, s[2:3]
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	v_mov_b32_e32 v68, 0
+	v_mov_b32_e32 v67, 0
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_xor_b32_e32 v39, v39, v35
+	v_sub_u32_e32 v35, v39, v35
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v39, v35, s43
+	v_sub_u32_e32 v36, v36, v39
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v40, 0, v36
+	v_ashrrev_i32_e32 v39, 31, v36
+	v_max_i32_e32 v36, v36, v40
+	v_mul_hi_u32 v40, v36, v85
+	v_mul_lo_u32 v41, v40, s49
+	v_sub_u32_e32 v36, v36, v41
+	v_add_u32_e32 v41, 1, v40
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	v_xor_b32_e32 v39, s50, v39
+	s_nop 0
+	v_cndmask_b32_e64 v40, v40, v41, s[2:3]
+	v_subrev_u32_e32 v41, s49, v36
+	v_cndmask_b32_e64 v36, v36, v41, s[2:3]
+	v_add_u32_e32 v41, 1, v40
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	s_nop 1
+	v_cndmask_b32_e64 v36, v40, v41, s[2:3]
+	v_xor_b32_e32 v36, v36, v39
+	v_sub_u32_e32 v36, v36, v39
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v39, v38, v85
+	v_mul_lo_u32 v39, v39, s49
+	v_sub_u32_e32 v38, v38, v39
+	v_subrev_u32_e32 v39, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v39, s[2:3]
+	v_subrev_u32_e32 v39, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v39, s[2:3]
+	v_xor_b32_e32 v38, v38, v37
+	v_sub_u32_e32 v38, v38, v37
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v37, v86, v36
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v36, v87, v38
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v37
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v37
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v36
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v36
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[30:31], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[18:19], s[30:31]
+	s_cbranch_execz .LBB0_40
+; %bb.39:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v35, s42, v35
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v38, v35, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v35, 0, v37, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v39, 31, v38
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v40, v35, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v41, 31, v40
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v35, 31, v36
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[38:39], v[40:41], 2, v[38:39]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v37, 0, v35, s[2:3]
+	v_cndmask_b32_e64 v36, 0, v36, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[36:37], v[36:37], 2, v[38:39]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v67, v[36:37], off
+.LBB0_40:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[18:19]
+	.loc	1 60 63 is_stmt 1               ; impl_triton.py:60:63
+	v_add_u32_e32 v36, 40, v34
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_sub_u32_e32 v38, 0xffffffd8, v34
+	v_max_i32_e32 v38, v36, v38
+	v_mul_hi_u32 v39, v38, v83
+	v_mul_lo_u32 v40, v39, s45
+	v_sub_u32_e32 v40, v38, v40
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	v_ashrrev_i32_e32 v37, 31, v36
+	v_xor_b32_e32 v35, s47, v37
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_subrev_u32_e32 v41, s45, v40
+	v_cndmask_b32_e64 v40, v40, v41, s[2:3]
+	v_add_u32_e32 v41, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s45, v40
+	s_nop 1
+	v_cndmask_b32_e64 v39, v39, v41, s[2:3]
+	v_xor_b32_e32 v39, v39, v35
+	v_sub_u32_e32 v35, v39, v35
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v39, v35, s43
+	v_sub_u32_e32 v36, v36, v39
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v40, 0, v36
+	v_ashrrev_i32_e32 v39, 31, v36
+	v_max_i32_e32 v36, v36, v40
+	v_mul_hi_u32 v40, v36, v85
+	v_mul_lo_u32 v41, v40, s49
+	v_sub_u32_e32 v36, v36, v41
+	v_add_u32_e32 v41, 1, v40
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	v_xor_b32_e32 v39, s50, v39
+	s_nop 0
+	v_cndmask_b32_e64 v40, v40, v41, s[2:3]
+	v_subrev_u32_e32 v41, s49, v36
+	v_cndmask_b32_e64 v36, v36, v41, s[2:3]
+	v_add_u32_e32 v41, 1, v40
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	s_nop 1
+	v_cndmask_b32_e64 v36, v40, v41, s[2:3]
+	v_xor_b32_e32 v36, v36, v39
+	v_sub_u32_e32 v36, v36, v39
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v39, v38, v85
+	v_mul_lo_u32 v39, v39, s49
+	v_sub_u32_e32 v38, v38, v39
+	v_subrev_u32_e32 v39, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v39, s[2:3]
+	v_subrev_u32_e32 v39, s49, v38
+	v_cmp_le_u32_e64 s[2:3], s49, v38
+	s_nop 1
+	v_cndmask_b32_e64 v38, v38, v39, s[2:3]
+	v_xor_b32_e32 v38, v38, v37
+	v_sub_u32_e32 v38, v38, v37
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v37, v86, v36
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v36, v87, v38
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v37
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v37
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v36
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v36
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[30:31], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[18:19], s[30:31]
+	s_cbranch_execz .LBB0_42
+; %bb.41:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v35, s42, v35
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v38, v35, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v35, 0, v37, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v39, 31, v38
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v40, v35, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v41, 31, v40
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v35, 31, v36
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[38:39], v[40:41], 2, v[38:39]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v37, 0, v35, s[2:3]
+	v_cndmask_b32_e64 v36, 0, v36, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[36:37], v[36:37], 2, v[38:39]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v68, v[36:37], off
+.LBB0_42:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[18:19]
+	.loc	1 60 63 is_stmt 1               ; impl_triton.py:60:63
+	v_add_u32_e32 v35, 41, v34
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_sub_u32_e32 v34, 0xffffffd7, v34
+	v_max_i32_e32 v38, v35, v34
+	v_mul_hi_u32 v34, v38, v83
+	v_mul_lo_u32 v39, v34, s45
+	v_sub_u32_e32 v39, v38, v39
+	v_add_u32_e32 v40, 1, v34
+	v_cmp_le_u32_e64 s[2:3], s45, v39
+	v_ashrrev_i32_e32 v36, 31, v35
+	v_xor_b32_e32 v37, s47, v36
+	v_cndmask_b32_e64 v34, v34, v40, s[2:3]
+	v_subrev_u32_e32 v40, s45, v39
+	v_cndmask_b32_e64 v39, v39, v40, s[2:3]
+	v_add_u32_e32 v40, 1, v34
+	v_cmp_le_u32_e64 s[2:3], s45, v39
+	v_mov_b32_e32 v64, 0
+	v_mov_b32_e32 v69, 0
+	v_cndmask_b32_e64 v34, v34, v40, s[2:3]
+	v_xor_b32_e32 v34, v34, v37
+	v_sub_u32_e32 v34, v34, v37
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v37, v34, s43
+	v_sub_u32_e32 v35, v35, v37
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v39, 0, v35
+	v_ashrrev_i32_e32 v37, 31, v35
+	v_max_i32_e32 v35, v35, v39
+	v_mul_hi_u32 v39, v35, v85
+	v_mul_lo_u32 v40, v39, s49
+	v_sub_u32_e32 v35, v35, v40
+	v_add_u32_e32 v40, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s49, v35
+	v_xor_b32_e32 v37, s50, v37
+	s_nop 0
+	v_cndmask_b32_e64 v39, v39, v40, s[2:3]
+	v_subrev_u32_e32 v40, s49, v35
+	v_cndmask_b32_e64 v35, v35, v40, s[2:3]
+	v_add_u32_e32 v40, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s49, v35
+	s_nop 1
+	v_cndmask_b32_e64 v35, v39, v40, s[2:3]
+	v_xor_b32_e32 v35, v35, v37
+	v_sub_u32_e32 v35, v35, v37
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_mul_hi_u32 v37, v38, v85
+	v_mul_lo_u32 v37, v37, s49
+	v_sub_u32_e32 v37, v38, v37
+	v_subrev_u32_e32 v38, s49, v37
+	v_cmp_le_u32_e64 s[2:3], s49, v37
+	s_nop 1
+	v_cndmask_b32_e64 v37, v37, v38, s[2:3]
+	v_subrev_u32_e32 v38, s49, v37
+	v_cmp_le_u32_e64 s[2:3], s49, v37
+	s_nop 1
+	v_cndmask_b32_e64 v37, v37, v38, s[2:3]
+	v_xor_b32_e32 v37, v37, v36
+	v_sub_u32_e32 v37, v37, v36
+	.loc	1 71 64                         ; impl_triton.py:71:64
+	v_add_u32_e32 v36, v86, v35
+	.loc	1 72 64                         ; impl_triton.py:72:64
+	v_add_u32_e32 v35, v87, v37
+	.loc	1 77 34                         ; impl_triton.py:77:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v36
+	.loc	1 77 49 is_stmt 0               ; impl_triton.py:77:49
+	v_cmp_gt_i32_e64 s[18:19], s10, v36
+	.loc	1 77 40                         ; impl_triton.py:77:40
+	s_and_b64 s[20:21], s[2:3], s[18:19]
+	.loc	1 78 34 is_stmt 1               ; impl_triton.py:78:34
+	v_cmp_lt_i32_e64 s[2:3], -1, v35
+	.loc	1 78 49 is_stmt 0               ; impl_triton.py:78:49
+	v_cmp_gt_i32_e64 s[18:19], s11, v35
+	.loc	1 78 40                         ; impl_triton.py:78:40
+	s_and_b64 s[2:3], s[2:3], s[18:19]
+	.loc	1 80 43 is_stmt 1               ; impl_triton.py:80:43
+	s_and_b64 s[18:19], vcc, s[20:21]
+	.loc	1 80 53 is_stmt 0               ; impl_triton.py:80:53
+	s_and_b64 s[18:19], s[18:19], s[2:3]
+	.loc	1 80 63                         ; impl_triton.py:80:63
+	s_and_b64 s[18:19], s[28:29], s[18:19]
+	.loc	1 80 73                         ; impl_triton.py:80:73
+	s_and_b64 s[18:19], s[16:17], s[18:19]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_44
+; %bb.43:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 68 27                         ; impl_triton.py:68:27
+	v_add_u32_e32 v34, s42, v34
+	.loc	1 86 32                         ; impl_triton.py:86:32
+	v_mul_lo_u32 v38, v34, s38
+	.loc	1 87 40                         ; impl_triton.py:87:40
+	v_cndmask_b32_e64 v34, 0, v36, s[20:21]
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_ashrrev_i32_e32 v39, 31, v38
+	.loc	1 87 45                         ; impl_triton.py:87:45
+	v_mul_lo_u32 v36, v34, s39
+	.loc	1 86 14                         ; impl_triton.py:86:14
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[52:53]
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_ashrrev_i32_e32 v37, 31, v36
+	.loc	1 88 14                         ; impl_triton.py:88:14
+	v_ashrrev_i32_e32 v34, 31, v35
+	.loc	1 87 14                         ; impl_triton.py:87:14
+	v_lshl_add_u64 v[36:37], v[36:37], 2, v[38:39]
+	.loc	1 88 40                         ; impl_triton.py:88:40
+	v_cndmask_b32_e64 v39, 0, v34, s[2:3]
+	v_cndmask_b32_e64 v38, 0, v35, s[2:3]
+	.loc	1 88 14 is_stmt 0               ; impl_triton.py:88:14
+	v_lshl_add_u64 v[34:35], v[38:39], 2, v[36:37]
+	.loc	1 90 26 is_stmt 1               ; impl_triton.py:90:26
+	global_load_dword v69, v[34:35], off
+.LBB0_44:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 26 is_stmt 0                ; impl_triton.py:0:26
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 63 39 is_stmt 1               ; impl_triton.py:63:39
+	v_add_u32_e32 v34, s36, v100
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_sub_u32_e32 v37, 0, v34
+	v_max_i32_e32 v37, v34, v37
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_mul_hi_u32 v38, v37, v83
+	v_mul_lo_u32 v39, v38, s45
+	v_sub_u32_e32 v39, v37, v39
+	v_add_u32_e32 v40, 1, v38
+	v_cmp_le_u32_e64 s[2:3], s45, v39
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_ashrrev_i32_e32 v35, 31, v34
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_xor_b32_e32 v36, s47, v35
+	v_cndmask_b32_e64 v38, v38, v40, s[2:3]
+	v_subrev_u32_e32 v40, s45, v39
+	v_cndmask_b32_e64 v39, v39, v40, s[2:3]
+	v_add_u32_e32 v40, 1, v38
+	v_cmp_le_u32_e64 s[2:3], s45, v39
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_waitcnt lgkmcnt(0)
+	s_barrier
+	.loc	1 63 39                         ; impl_triton.py:63:39
+	v_cndmask_b32_e64 v38, v38, v40, s[2:3]
+	v_xor_b32_e32 v38, v38, v36
+	v_sub_u32_e32 v71, v38, v36
+	.loc	1 64 39                         ; impl_triton.py:64:39
+	v_mul_lo_u32 v36, v71, s43
+	v_sub_u32_e32 v36, v34, v36
+	.loc	1 64 52 is_stmt 0               ; impl_triton.py:64:52
+	v_sub_u32_e32 v39, 0, v36
+	v_ashrrev_i32_e32 v38, 31, v36
+	v_max_i32_e32 v36, v36, v39
+	v_mul_hi_u32 v39, v36, v85
+	v_mul_lo_u32 v40, v39, s49
+	v_sub_u32_e32 v36, v36, v40
+	v_add_u32_e32 v40, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	v_xor_b32_e32 v38, s50, v38
+	.loc	1 98 34 is_stmt 1               ; impl_triton.py:98:34
+	v_mul_lo_u32 v72, v71, s37
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	v_cndmask_b32_e64 v39, v39, v40, s[2:3]
+	v_subrev_u32_e32 v40, s49, v36
+	v_cndmask_b32_e64 v36, v36, v40, s[2:3]
+	v_add_u32_e32 v40, 1, v39
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_ashrrev_i32_e32 v73, 31, v72
+	.loc	1 64 52                         ; impl_triton.py:64:52
+	s_nop 0
+	v_cndmask_b32_e64 v36, v39, v40, s[2:3]
+	v_xor_b32_e32 v36, v36, v38
+	v_sub_u32_e32 v74, v36, v38
+	.loc	1 65 37                         ; impl_triton.py:65:37
+	v_mul_hi_u32 v36, v37, v85
+	v_mul_lo_u32 v36, v36, s49
+	v_sub_u32_e32 v36, v37, v36
+	v_subrev_u32_e32 v37, s49, v36
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	.loc	1 99 32                         ; impl_triton.py:99:32
+	v_mul_lo_u32 v74, v74, s51
+	.loc	1 99 14 is_stmt 0               ; impl_triton.py:99:14
+	v_ashrrev_i32_e32 v75, 31, v74
+	.loc	1 65 37 is_stmt 1               ; impl_triton.py:65:37
+	v_cndmask_b32_e64 v36, v36, v37, s[2:3]
+	v_subrev_u32_e32 v37, s49, v36
+	v_cmp_le_u32_e64 s[2:3], s49, v36
+	s_nop 1
+	v_cndmask_b32_e64 v36, v36, v37, s[2:3]
+	v_xor_b32_e32 v36, v36, v35
+	v_sub_u32_e32 v70, v36, v35
+	.loc	1 75 41                         ; impl_triton.py:75:41
+	v_cmp_gt_i32_e64 s[2:3], s44, v34
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	ds_read2st64_b64 v[38:41], v92 offset1:8
+	ds_read2st64_b64 v[34:37], v93 offset1:8
+	ds_read2st64_b64 v[46:49], v94 offset1:8
+	ds_read2st64_b64 v[42:45], v95 offset1:8
+	.loc	1 94 46                         ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[24:25], s[2:3]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_ashrrev_i32_e32 v71, 31, v70
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_46
+; %bb.45:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	v_lshl_add_u64 v[102:103], v[72:73], 2, v[56:57]
+	v_lshl_add_u64 v[102:103], v[74:75], 2, v[102:103]
+	v_lshl_add_u64 v[102:103], v[70:71], 2, v[102:103]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v64, v[102:103], off
+.LBB0_46:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 25                          ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[26:27], s[2:3]
+	v_mov_b32_e32 v101, 0
+	v_mov_b32_e32 v102, 0
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_48
+; %bb.47:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[102:103], v[72:73], 2, v[58:59]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[102:103], v[74:75], 2, v[102:103]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[102:103], v[70:71], 2, v[102:103]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v102, v[102:103], off
+.LBB0_48:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[18:19], s[22:23], s[2:3]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[16:17], s[18:19]
+	s_cbranch_execz .LBB0_50
+; %bb.49:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[104:105], v[72:73], 2, v[60:61]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[104:105], v[74:75], 2, v[104:105]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[104:105], v[70:71], 2, v[104:105]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v101, v[104:105], off
+.LBB0_50:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_or_b64 exec, exec, s[16:17]
+	.loc	1 94 46 is_stmt 1               ; impl_triton.py:94:46
+	s_and_b64 s[16:17], s[14:15], s[2:3]
+	v_mov_b32_e32 v103, 0
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	s_and_saveexec_b64 s[2:3], s[16:17]
+	s_cbranch_execz .LBB0_35
+; %bb.51:                               ;   in Loop: Header=BB0_36 Depth=1
+	.loc	1 98 14                         ; impl_triton.py:98:14
+	v_lshl_add_u64 v[72:73], v[72:73], 2, v[62:63]
+	.loc	1 99 14                         ; impl_triton.py:99:14
+	v_lshl_add_u64 v[72:73], v[74:75], 2, v[72:73]
+	.loc	1 100 14                        ; impl_triton.py:100:14
+	v_lshl_add_u64 v[70:71], v[70:71], 2, v[72:73]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	global_load_dword v103, v[70:71], off
+	s_branch .LBB0_35
+.LBB0_52:                               ; %Flow84
+	.loc	1 0 25 is_stmt 0                ; impl_triton.py:0:25
+	s_load_dwordx2 s[2:3], s[0:1], 0x58
+	s_load_dword s10, s[0:1], 0x60
+	v_ashrrev_i32_e32 v34, 31, v82
+	v_ashrrev_i32_e32 v62, 31, v78
+	.loc	1 105 31 is_stmt 1              ; impl_triton.py:105:31
+	s_andn2_b64 vcc, exec, s[34:35]
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	s_waitcnt lgkmcnt(0)
+	s_barrier
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_cbranch_vccnz .LBB0_54
+; %bb.53:
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_lshrrev_b32_e32 v37, 2, v54
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	v_lshlrev_b32_e32 v35, 6, v76
+	v_lshlrev_b32_e32 v36, 5, v50
+	v_xor_b32_e32 v38, v88, v37
+	v_or3_b32 v35, v35, v36, v38
+	v_add_u32_e32 v36, 0, v35
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_bfe_i32 v0, v0, 4, 1
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_read_b64 v[48:49], v36 offset:8192
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_and_b32_e32 v0, 0x408, v0
+	v_lshl_or_b32 v36, v77, 6, v88
+	v_mov_b32_e32 v38, 0x810
+	v_cndmask_b32_e64 v38, v38, 0, s[4:5]
+	v_xor_b32_e32 v0, v36, v0
+	v_xor_b32_e32 v0, v0, v38
+	v_xor_b32_e32 v0, v0, v37
+	v_add_u32_e32 v36, 0, v0
+	ds_read2st64_b64 v[36:39], v36 offset1:8
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	v_xad_u32 v40, v35, 16, 0
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(0)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[48:49], v[36:37], v[18:33]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_read_b64 v[36:37], v40 offset:8192
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_xad_u32 v40, v0, 16, 0
+	ds_read2st64_b64 v[40:43], v40 offset1:8
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	v_xad_u32 v44, v35, 32, 0
+	v_xad_u32 v35, v35, 48, 0
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(0)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[36:37], v[40:41], v[18:33]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_read_b64 v[40:41], v44 offset:8192
+	.loc	1 90 26                         ; impl_triton.py:90:26
+	v_xad_u32 v44, v0, 32, 0
+	ds_read2st64_b64 v[44:47], v44 offset1:8
+	v_xad_u32 v0, v0, 48, 0
+	ds_read2st64_b64 v[56:59], v0 offset1:8
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	s_waitcnt lgkmcnt(1)
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[48:49], v[46:47], v[2:17]
+	s_waitcnt lgkmcnt(0)
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[36:37], v[58:59], v[2:17]
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[40:41], v[44:45], v[18:33]
+	.loc	1 102 25                        ; impl_triton.py:102:25
+	ds_read_b64 v[44:45], v35 offset:8192
+	.loc	1 105 31                        ; impl_triton.py:105:31
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[40:41], v[38:39], v[2:17]
+	s_waitcnt lgkmcnt(0)
+	v_mfma_f32_32x32x4_xf32 v[18:33], v[44:45], v[56:57], v[18:33]
+	v_mfma_f32_32x32x4_xf32 v[2:17], v[44:45], v[42:43], v[2:17]
+.LBB0_54:                               ; %._crit_edge._crit_edge
+	.loc	1 40 73                         ; impl_triton.py:40:73
+	v_lshrrev_b32_e32 v0, 1, v50
+	v_lshrrev_b32_e32 v35, 3, v54
+	.loc	1 41 61                         ; impl_triton.py:41:61
+	v_or3_b32 v0, v35, v0, s48
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_mul_lo_u32 v35, v55, s8
+	v_sub_u32_e32 v35, v84, v35
+	v_add_u32_e32 v36, 1, v55
+	v_cmp_le_u32_e32 vcc, s8, v35
+	v_subrev_u32_e32 v37, s8, v35
+	v_xor_b32_e32 v34, s12, v34
+	v_cndmask_b32_e32 v36, v55, v36, vcc
+	v_cndmask_b32_e32 v35, v35, v37, vcc
+	v_add_u32_e32 v37, 1, v36
+	v_cmp_le_u32_e32 vcc, s8, v35
+	.loc	1 50 49                         ; impl_triton.py:50:49
+	v_add_u32_e32 v50, s46, v0
+	.loc	1 111 27                        ; impl_triton.py:111:27
+	v_mul_lo_u32 v0, v79, s2
+	.loc	1 46 23                         ; impl_triton.py:46:23
+	v_cndmask_b32_e32 v35, v36, v37, vcc
+	v_xor_b32_e32 v35, v35, v34
+	v_sub_u32_e32 v53, v35, v34
+	.loc	1 108 30                        ; impl_triton.py:108:30
+	v_cmp_gt_i32_e32 vcc, s33, v1
+	.loc	1 111 10                        ; impl_triton.py:111:10
+	v_ashrrev_i32_e32 v1, 31, v0
+	.loc	1 47 23                         ; impl_triton.py:47:23
+	v_mul_lo_u32 v34, v53, s13
+	.loc	1 50 49                         ; impl_triton.py:50:49
+	v_add_u32_e32 v35, 2, v50
+	v_add_u32_e32 v37, 3, v50
+	v_add_u32_e32 v39, 8, v50
+	v_add_u32_e32 v41, 9, v50
+	v_add_u32_e32 v43, 10, v50
+	v_add_u32_e32 v45, 11, v50
+	.loc	1 111 10                        ; impl_triton.py:111:10
+	v_lshl_add_u64 v[48:49], v[0:1], 2, s[6:7]
+	.loc	1 112 28                        ; impl_triton.py:112:28
+	v_mul_lo_u32 v0, s3, v50
+	.loc	1 47 23                         ; impl_triton.py:47:23
+	v_sub_u32_e32 v52, v82, v34
+	.loc	1 112 28                        ; impl_triton.py:112:28
+	v_add_u32_e32 v34, s3, v0
+	v_mul_lo_u32 v36, s3, v35
+	v_mul_lo_u32 v38, s3, v37
+	v_mul_lo_u32 v40, s3, v39
+	v_mul_lo_u32 v42, s3, v41
+	v_mul_lo_u32 v44, s3, v43
+	v_mul_lo_u32 v46, s3, v45
+	.loc	1 113 28                        ; impl_triton.py:113:28
+	v_mul_lo_u32 v54, v53, s10
+	.loc	1 108 74                        ; impl_triton.py:108:74
+	v_cmp_gt_i32_e64 s[0:1], s9, v50
+	.loc	1 112 10                        ; impl_triton.py:112:10
+	v_ashrrev_i32_e32 v1, 31, v0
+	v_ashrrev_i32_e32 v35, 31, v34
+	v_ashrrev_i32_e32 v37, 31, v36
+	v_ashrrev_i32_e32 v39, 31, v38
+	v_ashrrev_i32_e32 v41, 31, v40
+	v_ashrrev_i32_e32 v43, 31, v42
+	v_ashrrev_i32_e32 v45, 31, v44
+	v_ashrrev_i32_e32 v47, 31, v46
+	.loc	1 113 10                        ; impl_triton.py:113:10
+	v_ashrrev_i32_e32 v55, 31, v54
+	.loc	1 114 10                        ; impl_triton.py:114:10
+	v_ashrrev_i32_e32 v53, 31, v52
+	.loc	1 108 64                        ; impl_triton.py:108:64
+	s_and_b64 s[4:5], vcc, s[0:1]
+	.loc	1 112 10                        ; impl_triton.py:112:10
+	v_lshl_add_u64 v[0:1], v[0:1], 2, v[48:49]
+	v_lshl_add_u64 v[34:35], v[34:35], 2, v[48:49]
+	v_lshl_add_u64 v[36:37], v[36:37], 2, v[48:49]
+	v_lshl_add_u64 v[38:39], v[38:39], 2, v[48:49]
+	v_lshl_add_u64 v[40:41], v[40:41], 2, v[48:49]
+	v_lshl_add_u64 v[42:43], v[42:43], 2, v[48:49]
+	v_lshl_add_u64 v[44:45], v[44:45], 2, v[48:49]
+	v_lshl_add_u64 v[46:47], v[46:47], 2, v[48:49]
+	v_lshlrev_b64 v[60:61], 2, v[54:55]
+	v_lshlrev_b64 v[58:59], 2, v[52:53]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	s_and_saveexec_b64 s[0:1], s[4:5]
+	s_cbranch_execz .LBB0_56
+; %bb.55:                               ; %.critedge
+	.loc	1 113 10                        ; impl_triton.py:113:10
+	v_lshl_add_u64 v[72:73], v[0:1], 0, v[60:61]
+	v_lshl_add_u64 v[52:53], v[46:47], 0, v[60:61]
+	v_lshl_add_u64 v[54:55], v[44:45], 0, v[60:61]
+	v_lshl_add_u64 v[56:57], v[42:43], 0, v[60:61]
+	v_lshl_add_u64 v[64:65], v[40:41], 0, v[60:61]
+	v_lshl_add_u64 v[66:67], v[38:39], 0, v[60:61]
+	v_lshl_add_u64 v[68:69], v[36:37], 0, v[60:61]
+	v_lshl_add_u64 v[70:71], v[34:35], 0, v[60:61]
+	.loc	1 114 10                        ; impl_triton.py:114:10
+	v_lshl_add_u64 v[72:73], v[72:73], 0, v[58:59]
+	v_lshl_add_u64 v[52:53], v[52:53], 0, v[58:59]
+	v_lshl_add_u64 v[54:55], v[54:55], 0, v[58:59]
+	v_lshl_add_u64 v[56:57], v[56:57], 0, v[58:59]
+	v_lshl_add_u64 v[64:65], v[64:65], 0, v[58:59]
+	v_lshl_add_u64 v[66:67], v[66:67], 0, v[58:59]
+	v_lshl_add_u64 v[68:69], v[68:69], 0, v[58:59]
+	v_lshl_add_u64 v[70:71], v[70:71], 0, v[58:59]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	global_store_dword v[72:73], v18, off
+	global_store_dword v[70:71], v19, off
+	global_store_dword v[68:69], v20, off
+	global_store_dword v[66:67], v21, off
+	global_store_dword v[64:65], v22, off
+	global_store_dword v[56:57], v23, off
+	global_store_dword v[54:55], v24, off
+	global_store_dword v[52:53], v25, off
+.LBB0_56:                               ; %.critedge12
+	.loc	1 0 23 is_stmt 0                ; impl_triton.py:0:23
+	s_or_b64 exec, exec, s[0:1]
+	.loc	1 50 49 is_stmt 1               ; impl_triton.py:50:49
+	v_add_u32_e32 v18, 16, v50
+	v_add_u32_e32 v19, 17, v50
+	v_add_u32_e32 v21, 18, v50
+	v_add_u32_e32 v23, 19, v50
+	v_add_u32_e32 v25, 24, v50
+	v_add_u32_e32 v53, 25, v50
+	v_add_u32_e32 v55, 26, v50
+	v_add_u32_e32 v50, 27, v50
+	.loc	1 108 74                        ; impl_triton.py:108:74
+	v_cmp_gt_i32_e64 s[0:1], s9, v18
+	.loc	1 112 28                        ; impl_triton.py:112:28
+	v_mul_lo_u32 v18, s3, v18
+	v_mul_lo_u32 v20, s3, v19
+	v_mul_lo_u32 v22, s3, v21
+	v_mul_lo_u32 v24, s3, v23
+	v_mul_lo_u32 v52, s3, v25
+	v_mul_lo_u32 v54, s3, v53
+	v_mul_lo_u32 v56, s3, v55
+	v_mul_lo_u32 v64, s3, v50
+	.loc	1 112 10 is_stmt 0              ; impl_triton.py:112:10
+	v_ashrrev_i32_e32 v19, 31, v18
+	v_ashrrev_i32_e32 v21, 31, v20
+	v_ashrrev_i32_e32 v23, 31, v22
+	v_ashrrev_i32_e32 v25, 31, v24
+	v_ashrrev_i32_e32 v53, 31, v52
+	v_ashrrev_i32_e32 v55, 31, v54
+	v_ashrrev_i32_e32 v57, 31, v56
+	v_ashrrev_i32_e32 v65, 31, v64
+	.loc	1 108 64 is_stmt 1              ; impl_triton.py:108:64
+	s_and_b64 s[0:1], vcc, s[0:1]
+	.loc	1 112 10                        ; impl_triton.py:112:10
+	v_lshl_add_u64 v[18:19], v[18:19], 2, v[48:49]
+	v_lshl_add_u64 v[20:21], v[20:21], 2, v[48:49]
+	v_lshl_add_u64 v[22:23], v[22:23], 2, v[48:49]
+	v_lshl_add_u64 v[24:25], v[24:25], 2, v[48:49]
+	v_lshl_add_u64 v[52:53], v[52:53], 2, v[48:49]
+	v_lshl_add_u64 v[54:55], v[54:55], 2, v[48:49]
+	v_lshl_add_u64 v[56:57], v[56:57], 2, v[48:49]
+	v_lshl_add_u64 v[48:49], v[64:65], 2, v[48:49]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	s_and_saveexec_b64 s[2:3], s[0:1]
+	s_cbranch_execz .LBB0_58
+; %bb.57:                               ; %.critedge14
+	.loc	1 113 10                        ; impl_triton.py:113:10
+	v_lshl_add_u64 v[64:65], v[18:19], 0, v[60:61]
+	v_lshl_add_u64 v[66:67], v[20:21], 0, v[60:61]
+	v_lshl_add_u64 v[68:69], v[22:23], 0, v[60:61]
+	v_lshl_add_u64 v[70:71], v[24:25], 0, v[60:61]
+	v_lshl_add_u64 v[72:73], v[52:53], 0, v[60:61]
+	v_lshl_add_u64 v[74:75], v[54:55], 0, v[60:61]
+	v_lshl_add_u64 v[76:77], v[56:57], 0, v[60:61]
+	v_lshl_add_u64 v[60:61], v[48:49], 0, v[60:61]
+	.loc	1 114 10                        ; impl_triton.py:114:10
+	v_lshl_add_u64 v[64:65], v[64:65], 0, v[58:59]
+	v_lshl_add_u64 v[66:67], v[66:67], 0, v[58:59]
+	v_lshl_add_u64 v[68:69], v[68:69], 0, v[58:59]
+	v_lshl_add_u64 v[70:71], v[70:71], 0, v[58:59]
+	v_lshl_add_u64 v[72:73], v[72:73], 0, v[58:59]
+	v_lshl_add_u64 v[74:75], v[74:75], 0, v[58:59]
+	v_lshl_add_u64 v[76:77], v[76:77], 0, v[58:59]
+	v_lshl_add_u64 v[58:59], v[60:61], 0, v[58:59]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	global_store_dword v[64:65], v26, off
+	global_store_dword v[66:67], v27, off
+	global_store_dword v[68:69], v28, off
+	global_store_dword v[70:71], v29, off
+	global_store_dword v[72:73], v30, off
+	global_store_dword v[74:75], v31, off
+	global_store_dword v[76:77], v32, off
+	global_store_dword v[58:59], v33, off
+.LBB0_58:                               ; %.critedge26
+	.loc	1 0 23 is_stmt 0                ; impl_triton.py:0:23
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 46 23 is_stmt 1               ; impl_triton.py:46:23
+	v_mul_lo_u32 v27, v51, s8
+	v_sub_u32_e32 v27, v80, v27
+	v_add_u32_e32 v28, 1, v51
+	v_cmp_le_u32_e32 vcc, s8, v27
+	v_subrev_u32_e32 v29, s8, v27
+	v_xor_b32_e32 v26, s12, v62
+	v_cndmask_b32_e32 v28, v51, v28, vcc
+	v_cndmask_b32_e32 v27, v27, v29, vcc
+	v_add_u32_e32 v29, 1, v28
+	v_cmp_le_u32_e32 vcc, s8, v27
+	s_nop 1
+	v_cndmask_b32_e32 v27, v28, v29, vcc
+	v_xor_b32_e32 v27, v27, v26
+	v_sub_u32_e32 v27, v27, v26
+	.loc	1 47 23                         ; impl_triton.py:47:23
+	v_mul_lo_u32 v26, v27, s13
+	v_sub_u32_e32 v26, v78, v26
+	.loc	1 113 28                        ; impl_triton.py:113:28
+	v_mul_lo_u32 v28, v27, s10
+	.loc	1 113 10 is_stmt 0              ; impl_triton.py:113:10
+	v_ashrrev_i32_e32 v29, 31, v28
+	.loc	1 114 10 is_stmt 1              ; impl_triton.py:114:10
+	v_ashrrev_i32_e32 v27, 31, v26
+	v_lshlrev_b64 v[28:29], 2, v[28:29]
+	v_lshlrev_b64 v[26:27], 2, v[26:27]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	s_and_saveexec_b64 s[2:3], s[4:5]
+	s_cbranch_execnz .LBB0_61
+; %bb.59:                               ; %.critedge40
+	.loc	1 0 23 is_stmt 0                ; impl_triton.py:0:23
+	s_or_b64 exec, exec, s[2:3]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	s_and_saveexec_b64 s[2:3], s[0:1]
+	s_cbranch_execnz .LBB0_62
+.LBB0_60:                               ; %.critedge54
+	.loc	1 116 4                         ; impl_triton.py:116:4
+	s_endpgm
+.LBB0_61:                               ; %.critedge28
+	.loc	1 113 10 is_stmt 1              ; impl_triton.py:113:10
+	v_lshl_add_u64 v[0:1], v[0:1], 0, v[28:29]
+	v_lshl_add_u64 v[30:31], v[34:35], 0, v[28:29]
+	v_lshl_add_u64 v[32:33], v[36:37], 0, v[28:29]
+	v_lshl_add_u64 v[34:35], v[38:39], 0, v[28:29]
+	v_lshl_add_u64 v[36:37], v[40:41], 0, v[28:29]
+	v_lshl_add_u64 v[38:39], v[42:43], 0, v[28:29]
+	v_lshl_add_u64 v[40:41], v[44:45], 0, v[28:29]
+	v_lshl_add_u64 v[42:43], v[46:47], 0, v[28:29]
+	.loc	1 114 10                        ; impl_triton.py:114:10
+	v_lshl_add_u64 v[0:1], v[0:1], 0, v[26:27]
+	v_lshl_add_u64 v[30:31], v[30:31], 0, v[26:27]
+	v_lshl_add_u64 v[32:33], v[32:33], 0, v[26:27]
+	v_lshl_add_u64 v[34:35], v[34:35], 0, v[26:27]
+	v_lshl_add_u64 v[36:37], v[36:37], 0, v[26:27]
+	v_lshl_add_u64 v[38:39], v[38:39], 0, v[26:27]
+	v_lshl_add_u64 v[40:41], v[40:41], 0, v[26:27]
+	v_lshl_add_u64 v[42:43], v[42:43], 0, v[26:27]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	global_store_dword v[0:1], v2, off
+	global_store_dword v[30:31], v3, off
+	global_store_dword v[32:33], v4, off
+	global_store_dword v[34:35], v5, off
+	global_store_dword v[36:37], v6, off
+	global_store_dword v[38:39], v7, off
+	global_store_dword v[40:41], v8, off
+	global_store_dword v[42:43], v9, off
+	s_or_b64 exec, exec, s[2:3]
+	s_and_saveexec_b64 s[2:3], s[0:1]
+	s_cbranch_execz .LBB0_60
+.LBB0_62:                               ; %.critedge42
+	.loc	1 113 10                        ; impl_triton.py:113:10
+	v_lshl_add_u64 v[0:1], v[18:19], 0, v[28:29]
+	v_lshl_add_u64 v[2:3], v[20:21], 0, v[28:29]
+	v_lshl_add_u64 v[4:5], v[22:23], 0, v[28:29]
+	v_lshl_add_u64 v[6:7], v[24:25], 0, v[28:29]
+	v_lshl_add_u64 v[8:9], v[52:53], 0, v[28:29]
+	v_lshl_add_u64 v[18:19], v[54:55], 0, v[28:29]
+	v_lshl_add_u64 v[20:21], v[56:57], 0, v[28:29]
+	v_lshl_add_u64 v[22:23], v[48:49], 0, v[28:29]
+	.loc	1 114 10                        ; impl_triton.py:114:10
+	v_lshl_add_u64 v[0:1], v[0:1], 0, v[26:27]
+	v_lshl_add_u64 v[2:3], v[2:3], 0, v[26:27]
+	v_lshl_add_u64 v[4:5], v[4:5], 0, v[26:27]
+	v_lshl_add_u64 v[6:7], v[6:7], 0, v[26:27]
+	v_lshl_add_u64 v[8:9], v[8:9], 0, v[26:27]
+	v_lshl_add_u64 v[18:19], v[18:19], 0, v[26:27]
+	v_lshl_add_u64 v[20:21], v[20:21], 0, v[26:27]
+	v_lshl_add_u64 v[22:23], v[22:23], 0, v[26:27]
+	.loc	1 116 23                        ; impl_triton.py:116:23
+	global_store_dword v[0:1], v10, off
+	global_store_dword v[2:3], v11, off
+	global_store_dword v[4:5], v12, off
+	global_store_dword v[6:7], v13, off
+	global_store_dword v[8:9], v14, off
+	global_store_dword v[18:19], v15, off
+	global_store_dword v[20:21], v16, off
+	global_store_dword v[22:23], v17, off
+	.loc	1 116 4 is_stmt 0               ; impl_triton.py:116:4
+	s_endpgm
+.Ltmp6:
+	.section	.rodata,"a",@progbits
+	.p2align	6, 0x0
+	.amdhsa_kernel conv2d_kernel
+		.amdhsa_group_segment_fixed_size 0
+		.amdhsa_private_segment_fixed_size 0
+		.amdhsa_kernarg_size 120
+		.amdhsa_user_sgpr_count 16
+		.amdhsa_user_sgpr_dispatch_ptr 0
+		.amdhsa_user_sgpr_queue_ptr 0
+		.amdhsa_user_sgpr_kernarg_segment_ptr 1
+		.amdhsa_user_sgpr_dispatch_id 0
+		.amdhsa_user_sgpr_kernarg_preload_length 14
+		.amdhsa_user_sgpr_kernarg_preload_offset 0
+		.amdhsa_user_sgpr_private_segment_size 0
+		.amdhsa_uses_dynamic_stack 0
+		.amdhsa_enable_private_segment 0
+		.amdhsa_system_sgpr_workgroup_id_x 1
+		.amdhsa_system_sgpr_workgroup_id_y 1
+		.amdhsa_system_sgpr_workgroup_id_z 1
+		.amdhsa_system_sgpr_workgroup_info 0
+		.amdhsa_system_vgpr_workitem_id 0
+		.amdhsa_next_free_vgpr 106
+		.amdhsa_next_free_sgpr 53
+		.amdhsa_accum_offset 108
+		.amdhsa_reserve_vcc 1
+		.amdhsa_reserve_xnack_mask 1
+		.amdhsa_float_round_mode_32 0
+		.amdhsa_float_round_mode_16_64 0
+		.amdhsa_float_denorm_mode_32 3
+		.amdhsa_float_denorm_mode_16_64 3
+		.amdhsa_dx10_clamp 1
+		.amdhsa_ieee_mode 1
+		.amdhsa_fp16_overflow 0
+		.amdhsa_tg_split 0
+		.amdhsa_exception_fp_ieee_invalid_op 0
+		.amdhsa_exception_fp_denorm_src 0
+		.amdhsa_exception_fp_ieee_div_zero 0
+		.amdhsa_exception_fp_ieee_overflow 0
+		.amdhsa_exception_fp_ieee_underflow 0
+		.amdhsa_exception_fp_ieee_inexact 0
+		.amdhsa_exception_int_div_zero 0
+	.end_amdhsa_kernel
+	.text
+.Lfunc_end0:
+	.size	conv2d_kernel, .Lfunc_end0-conv2d_kernel
+	.cfi_endproc
+                                        ; -- End function
+	.set conv2d_kernel.num_vgpr, 106
+	.set conv2d_kernel.num_agpr, 0
+	.set conv2d_kernel.numbered_sgpr, 53
+	.set conv2d_kernel.num_named_barrier, 0
+	.set conv2d_kernel.private_seg_size, 0
+	.set conv2d_kernel.uses_vcc, 1
+	.set conv2d_kernel.uses_flat_scratch, 0
+	.set conv2d_kernel.has_dyn_sized_stack, 0
+	.set conv2d_kernel.has_recursion, 0
+	.set conv2d_kernel.has_indirect_call, 0
+	.section	.AMDGPU.csdata,"",@progbits
+; Kernel info:
+; codeLenInByte = 10592
+; TotalNumSgprs: 59
+; NumVgprs: 106
+; NumAgprs: 0
+; TotalNumVgprs: 106
+; ScratchSize: 0
+; MemoryBound: 0
+; FloatMode: 240
+; IeeeMode: 1
+; LDSByteSize: 0 bytes/workgroup (compile time only)
+; SGPRBlocks: 7
+; VGPRBlocks: 13
+; NumSGPRsForWavesPerEU: 59
+; NumVGPRsForWavesPerEU: 106
+; AccumOffset: 108
+; Occupancy: 4
+; WaveLimiterHint : 0
+; COMPUTE_PGM_RSRC2:SCRATCH_EN: 0
+; COMPUTE_PGM_RSRC2:USER_SGPR: 16
+; COMPUTE_PGM_RSRC2:TRAP_HANDLER: 0
+; COMPUTE_PGM_RSRC2:TGID_X_EN: 1
+; COMPUTE_PGM_RSRC2:TGID_Y_EN: 1
+; COMPUTE_PGM_RSRC2:TGID_Z_EN: 1
+; COMPUTE_PGM_RSRC2:TIDIG_COMP_CNT: 0
+; COMPUTE_PGM_RSRC3_GFX90A:ACCUM_OFFSET: 26
+; COMPUTE_PGM_RSRC3_GFX90A:TG_SPLIT: 0
+	.text
+	.p2alignl 6, 3212836864
+	.fill 256, 4, 3212836864
+	.section	.AMDGPU.gpr_maximums,"",@progbits
+	.set amdgpu.max_num_vgpr, 0
+	.set amdgpu.max_num_agpr, 0
+	.set amdgpu.max_num_sgpr, 0
+	.text
+	.section	.debug_abbrev,"",@progbits
+	.byte	1                               ; Abbreviation Code
+	.byte	17                              ; DW_TAG_compile_unit
+	.byte	1                               ; DW_CHILDREN_yes
+	.byte	37                              ; DW_AT_producer
+	.byte	14                              ; DW_FORM_strp
+	.byte	19                              ; DW_AT_language
+	.byte	5                               ; DW_FORM_data2
+	.byte	3                               ; DW_AT_name
+	.byte	14                              ; DW_FORM_strp
+	.byte	16                              ; DW_AT_stmt_list
+	.byte	23                              ; DW_FORM_sec_offset
+	.byte	27                              ; DW_AT_comp_dir
+	.byte	14                              ; DW_FORM_strp
+	.byte	17                              ; DW_AT_low_pc
+	.byte	1                               ; DW_FORM_addr
+	.byte	18                              ; DW_AT_high_pc
+	.byte	6                               ; DW_FORM_data4
+	.byte	0                               ; EOM(1)
+	.byte	0                               ; EOM(2)
+	.byte	2                               ; Abbreviation Code
+	.byte	46                              ; DW_TAG_subprogram
+	.byte	0                               ; DW_CHILDREN_no
+	.byte	3                               ; DW_AT_name
+	.byte	14                              ; DW_FORM_strp
+	.byte	32                              ; DW_AT_inline
+	.byte	11                              ; DW_FORM_data1
+	.byte	0                               ; EOM(1)
+	.byte	0                               ; EOM(2)
+	.byte	3                               ; Abbreviation Code
+	.byte	46                              ; DW_TAG_subprogram
+	.byte	1                               ; DW_CHILDREN_yes
+	.byte	17                              ; DW_AT_low_pc
+	.byte	1                               ; DW_FORM_addr
+	.byte	18                              ; DW_AT_high_pc
+	.byte	6                               ; DW_FORM_data4
+	.byte	49                              ; DW_AT_abstract_origin
+	.byte	19                              ; DW_FORM_ref4
+	.byte	0                               ; EOM(1)
+	.byte	0                               ; EOM(2)
+	.byte	4                               ; Abbreviation Code
+	.byte	29                              ; DW_TAG_inlined_subroutine
+	.byte	0                               ; DW_CHILDREN_no
+	.byte	49                              ; DW_AT_abstract_origin
+	.byte	19                              ; DW_FORM_ref4
+	.byte	85                              ; DW_AT_ranges
+	.byte	23                              ; DW_FORM_sec_offset
+	.byte	88                              ; DW_AT_call_file
+	.byte	11                              ; DW_FORM_data1
+	.byte	89                              ; DW_AT_call_line
+	.byte	11                              ; DW_FORM_data1
+	.byte	87                              ; DW_AT_call_column
+	.byte	11                              ; DW_FORM_data1
+	.byte	0                               ; EOM(1)
+	.byte	0                               ; EOM(2)
+	.byte	0                               ; EOM(3)
+	.section	.debug_info,"",@progbits
+.Lcu_begin0:
+	.long	.Ldebug_info_end0-.Ldebug_info_start0 ; Length of Unit
+.Ldebug_info_start0:
+	.short	4                               ; DWARF version number
+	.long	.debug_abbrev                   ; Offset Into Abbrev. Section
+	.byte	8                               ; Address Size (in bytes)
+	.byte	1                               ; Abbrev [1] 0xb:0x44 DW_TAG_compile_unit
+	.long	.Linfo_string0                  ; DW_AT_producer
+	.short	2                               ; DW_AT_language
+	.long	.Linfo_string1                  ; DW_AT_name
+	.long	.Lline_table_start0             ; DW_AT_stmt_list
+	.long	.Linfo_string2                  ; DW_AT_comp_dir
+	.quad	.Lfunc_begin0                   ; DW_AT_low_pc
+	.long	.Lfunc_end0-.Lfunc_begin0       ; DW_AT_high_pc
+	.byte	2                               ; Abbrev [2] 0x2a:0x6 DW_TAG_subprogram
+	.long	.Linfo_string3                  ; DW_AT_name
+	.byte	1                               ; DW_AT_inline
+	.byte	3                               ; Abbrev [3] 0x30:0x1e DW_TAG_subprogram
+	.quad	.Lfunc_begin0                   ; DW_AT_low_pc
+	.long	.Lfunc_end0-.Lfunc_begin0       ; DW_AT_high_pc
+	.long	42                              ; DW_AT_abstract_origin
+	.byte	4                               ; Abbrev [4] 0x41:0xc DW_TAG_inlined_subroutine
+	.long	42                              ; DW_AT_abstract_origin
+	.long	.Ldebug_ranges0                 ; DW_AT_ranges
+	.byte	1                               ; DW_AT_call_file
+	.byte	59                              ; DW_AT_call_line
+	.byte	57                              ; DW_AT_call_column
+	.byte	0                               ; End Of Children Mark
+	.byte	0                               ; End Of Children Mark
+.Ldebug_info_end0:
+	.section	.debug_ranges,"",@progbits
+.Ldebug_ranges0:
+	.quad	.Ltmp2-.Lfunc_begin0
+	.quad	.Ltmp3-.Lfunc_begin0
+	.quad	.Ltmp4-.Lfunc_begin0
+	.quad	.Ltmp5-.Lfunc_begin0
+	.quad	0
+	.quad	0
+	.section	.debug_str,"MS",@progbits,1
+.Linfo_string0:
+	.asciz	"triton"                        ; string offset=0
+.Linfo_string1:
+	.asciz	"impl_triton.py"                ; string offset=7
+.Linfo_string2:
+	.asciz	"/scratch/arustagi/tb_ir_src/mi300x/tilebench/benchmarks/operators/2d_conv" ; string offset=22
+.Linfo_string3:
+	.asciz	"conv2d_kernel"                 ; string offset=96
+	.section	".note.GNU-stack","",@progbits
+	.amdgpu_metadata
+---
+amdhsa.kernels:
+  - .agpr_count:     0
+    .args:
+      - .address_space:  global
+        .offset:         0
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  global
+        .offset:         8
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  global
+        .offset:         16
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         24
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         28
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         32
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         36
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         40
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         44
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         48
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         52
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         56
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         60
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         64
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         68
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         72
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         76
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         80
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         84
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         88
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         92
+        .size:           4
+        .value_kind:     by_value
+      - .offset:         96
+        .size:           4
+        .value_kind:     by_value
+      - .address_space:  global
+        .offset:         104
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  global
+        .offset:         112
+        .size:           8
+        .value_kind:     global_buffer
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 120
+    .max_flat_workgroup_size: 512
+    .name:           conv2d_kernel
+    .private_segment_fixed_size: 0
+    .sgpr_count:     59
+    .sgpr_spill_count: 0
+    .symbol:         conv2d_kernel.kd
+    .uniform_work_group_size: 1
+    .uses_dynamic_stack: false
+    .vgpr_count:     106
+    .vgpr_spill_count: 0
+    .wavefront_size: 64
+amdhsa.target:   amdgcn-amd-amdhsa--gfx942
+amdhsa.version:
+  - 1
+  - 2
+...
+
+	.end_amdgpu_metadata
+	.section	.debug_line,"",@progbits
+.Lline_table_start0:

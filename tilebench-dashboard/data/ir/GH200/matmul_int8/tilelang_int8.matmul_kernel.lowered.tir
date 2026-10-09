@@ -1,0 +1,239 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def matmul_kernel_kernel(a: T.handle("int8", "global"), b: T.handle("uint8", "global"), c: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 36864, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 8, "blockIdx.y": 32, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        c_1 = T.decl_buffer((4194304,), "int32", data=c)
+        a_1 = T.decl_buffer((41943040,), "int8", data=a)
+        bx = T.launch_thread("blockIdx.x", 8)
+        buf_dyn_shmem = T.alloc_buffer((36864,), "uint8", scope="shared.dyn")
+        b_packed_shared: T.handle("uint8", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        a_shared: T.handle("int8", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 16384)
+        b_unpacked_shared: T.handle("int8", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 32768)
+        acc = T.alloc_buffer((128,), "int32", scope="local")
+        b_packed_local = T.alloc_buffer((32,), "uint8", scope="local")
+        b_unpacked_local = T.alloc_buffer((32,), "int8", scope="local")
+        by = T.launch_thread("blockIdx.y", 32)
+        thread_binding = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((128,), "int32", data=acc.data, scope="local")
+        acc_2 = T.decl_buffer((128,), "int32", data=acc.data, scope="local")
+        T.attr(None, "threadblock_swizzle_pattern", T.tvm_tuple("rasterization2DRow", 8))
+        for i in T.unroll(32):
+            acc_2[i * 4:i * 4 + 4] = T.Broadcast(0, 4)
+        a_shared_1 = T.decl_buffer((16384,), "int8", data=a_shared, scope="shared.dyn")
+        b_packed_shared_1 = T.decl_buffer((16384,), "uint8", data=b_packed_shared, scope="shared.dyn")
+        b_packed_local_1 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        b_unpacked_local_1 = T.decl_buffer((32,), "int8", data=b_unpacked_local.data, scope="local")
+        b_unpacked_shared_1 = T.decl_buffer((4096,), "int8", data=b_unpacked_shared, scope="shared.dyn")
+        b_packed_local_2 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        a_shared_2 = T.decl_buffer((16384,), "int8", data=a_shared, scope="shared.dyn")
+        b_packed_local_3 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        b_unpacked_local_2 = T.decl_buffer((32,), "int8", data=b_unpacked_local.data, scope="local")
+        b_unpacked_shared_2 = T.decl_buffer((4096,), "int8", data=b_unpacked_shared, scope="shared.dyn")
+        b_packed_local_4 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        a_shared_3 = T.decl_buffer((16384,), "int8", data=a_shared, scope="shared.dyn")
+        b_packed_local_5 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        b_unpacked_local_3 = T.decl_buffer((32,), "int8", data=b_unpacked_local.data, scope="local")
+        b_unpacked_shared_3 = T.decl_buffer((4096,), "int8", data=b_unpacked_shared, scope="shared.dyn")
+        b_packed_local_6 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        a_shared_4 = T.decl_buffer((16384,), "int8", data=a_shared, scope="shared.dyn")
+        b_packed_local_7 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        b_unpacked_local_4 = T.decl_buffer((32,), "int8", data=b_unpacked_local.data, scope="local")
+        b_unpacked_shared_4 = T.decl_buffer((4096,), "int8", data=b_unpacked_shared, scope="shared.dyn")
+        b_packed_local_8 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        a_shared_5 = T.decl_buffer((16384,), "int8", data=a_shared, scope="shared.dyn")
+        b_packed_local_9 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        b_unpacked_local_5 = T.decl_buffer((32,), "int8", data=b_unpacked_local.data, scope="local")
+        b_unpacked_shared_5 = T.decl_buffer((4096,), "int8", data=b_unpacked_shared, scope="shared.dyn")
+        b_packed_local_10 = T.decl_buffer((32,), "uint8", data=b_packed_local.data, scope="local")
+        with T.attr(0, "tl.pipeline_mvb_num_stages", 4):
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 0)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(2):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("uint8"), b_packed_shared, i * 2048 + thread_binding * 16, 1, 2), T.tvm_access_ptr(T.type_annotation("uint8"), b, i * 65536 + thread_binding // 4 * 2048 + by * 64 + thread_binding % 4 * 16, 1, 1), 16)
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(2):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("uint8"), b_packed_shared, i * 2048 + thread_binding * 16 + 4096, 1, 2), T.tvm_access_ptr(T.type_annotation("uint8"), b, i * 65536 + thread_binding // 4 * 2048 + by * 64 + thread_binding % 4 * 16 + 131072, 1, 1), 16)
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 2)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(2):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("uint8"), b_packed_shared, i * 2048 + thread_binding * 16 + 8192, 1, 2), T.tvm_access_ptr(T.type_annotation("uint8"), b, i * 65536 + thread_binding // 4 * 2048 + by * 64 + thread_binding % 4 * 16 + 262144, 1, 1), 16)
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 3)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(2):
+                    T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("uint8"), b_packed_shared, i * 2048 + thread_binding * 16 + 12288, 1, 2), T.tvm_access_ptr(T.type_annotation("uint8"), b, i * 65536 + thread_binding // 4 * 2048 + by * 64 + thread_binding % 4 * 16 + 393216, 1, 1), 16)
+            T.ptx_commit_group()
+            for kb_tile in T.serial(76, annotations={"tl_pipelined_num_stages": 4}):
+                T.ptx_wait_group(3)
+                T.tvm_storage_sync("shared")
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", kb_tile % 4):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", kb_tile % 8 // 4)
+                    for i in T.unroll(2):
+                        b_packed_local_2[i * 16:i * 16 + 16] = b_packed_shared_1[kb_tile % 4 * 4096 + i * 2048 + thread_binding * 16:kb_tile % 4 * 4096 + i * 2048 + thread_binding * 16 + 16]
+                with T.attr(0, "async_scope", 1):
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", kb_tile % 4)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (kb_tile // 4 + 1) % 2)
+                    T.tvm_storage_sync("shared.dyn")
+                    for i in T.unroll(2):
+                        T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("uint8"), b_packed_shared, kb_tile % 4 * 4096 + i * 2048 + thread_binding * 16, 1, 2), T.tvm_access_ptr(T.type_annotation("uint8"), b, kb_tile * 131072 + i * 65536 + thread_binding // 4 * 2048 + by * 64 + thread_binding % 4 * 16 + 524288, 1, 1), 16)
+                T.ptx_commit_group()
+                T.attr(0, "tl.pipeline_mvb_stage_expr", kb_tile % 4)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", kb_tile % 8 // 4)
+                T.tvm_storage_sync("shared.dyn")
+                for field_i in range(4):
+                    for i in T.unroll(8):
+                        a_shared_2[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = a_1[bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + kb_tile * 64 + thread_binding % 4 * 16:bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + kb_tile * 64 + thread_binding % 4 * 16 + 16]
+                    for i in T.unroll(32):
+                        field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local_3[i]), field_i * 2), 3)
+                        b_unpacked_local_2[i] = T.Cast("int8", field) - T.int8(1)
+                    for i in T.unroll(2):
+                        b_unpacked_shared_2[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = b_unpacked_local_2[i * 16:i * 16 + 16]
+                    T.tvm_storage_sync("shared")
+                    with T.attr(0, "lexical_alloc_scope", 1):
+                        A_local = T.alloc_buffer((128,), "int8", scope="local")
+                        B_local = T.alloc_buffer((32,), "int8", scope="local")
+                        for ki in range(2):
+                            B_local_1 = T.decl_buffer((32,), "int8", data=B_local.data, scope="local")
+                            for i in range(8):
+                                T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("int8"), a_shared, thread_binding % 64 // 32 * 8192 + i * 1024 + thread_binding % 16 * 64 + (thread_binding % 8 // 4 + ki) % 2 * 32 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 16, 8, 1), T.tvm_access_ptr(T.type_annotation("int8"), A_local.data, i * 16, 8, 2))
+                            for i, j in T.grid(2, 16):
+                                B_local_1[i * 16 + j] = b_unpacked_shared_2[ki * 2048 + j % 8 // 4 * 1024 + thread_binding % 4 * 256 + j % 4 * 64 + (thread_binding // 64 + thread_binding % 2) % 2 * 32 + (j % 4 // 2 + i) % 2 * 16 + j // 8 * 8 + thread_binding % 32 // 4]
+                            for i, j in T.grid(8, 2):
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16, acc.data, i * 16 + j * 8, T.bool(False))
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16 + 8, acc.data, i * 16 + j * 8 + 4, T.bool(False))
+                    T.tvm_storage_sync("shared")
+            T.ptx_wait_group(3)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(2):
+                    b_packed_local_4[i * 16:i * 16 + 16] = b_packed_shared_1[i * 2048 + thread_binding * 16:i * 2048 + thread_binding * 16 + 16]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for field_i in range(4):
+                    for i in T.unroll(8):
+                        a_shared_3[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = a_1[bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4864:bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4864 + 16]
+                    for i in T.unroll(32):
+                        field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local_5[i]), field_i * 2), 3)
+                        b_unpacked_local_3[i] = T.Cast("int8", field) - T.int8(1)
+                    for i in T.unroll(2):
+                        b_unpacked_shared_3[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = b_unpacked_local_3[i * 16:i * 16 + 16]
+                    T.tvm_storage_sync("shared")
+                    with T.attr(0, "lexical_alloc_scope", 1):
+                        A_local = T.alloc_buffer((128,), "int8", scope="local")
+                        B_local = T.alloc_buffer((32,), "int8", scope="local")
+                        for ki in range(2):
+                            B_local_1 = T.decl_buffer((32,), "int8", data=B_local.data, scope="local")
+                            for i in range(8):
+                                T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("int8"), a_shared, thread_binding % 64 // 32 * 8192 + i * 1024 + thread_binding % 16 * 64 + (thread_binding % 8 // 4 + ki) % 2 * 32 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 16, 8, 1), T.tvm_access_ptr(T.type_annotation("int8"), A_local.data, i * 16, 8, 2))
+                            for i, j in T.grid(2, 16):
+                                B_local_1[i * 16 + j] = b_unpacked_shared_3[ki * 2048 + j % 8 // 4 * 1024 + thread_binding % 4 * 256 + j % 4 * 64 + (thread_binding // 64 + thread_binding % 2) % 2 * 32 + (j % 4 // 2 + i) % 2 * 16 + j // 8 * 8 + thread_binding % 32 // 4]
+                            for i, j in T.grid(8, 2):
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16, acc.data, i * 16 + j * 8, T.bool(False))
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16 + 8, acc.data, i * 16 + j * 8 + 4, T.bool(False))
+                    T.tvm_storage_sync("shared")
+            T.ptx_wait_group(2)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(2):
+                    b_packed_local_6[i * 16:i * 16 + 16] = b_packed_shared_1[i * 2048 + thread_binding * 16 + 4096:i * 2048 + thread_binding * 16 + 4096 + 16]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for field_i in range(4):
+                    for i in T.unroll(8):
+                        a_shared_4[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = a_1[bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4928:bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4928 + 16]
+                    for i in T.unroll(32):
+                        field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local_7[i]), field_i * 2), 3)
+                        b_unpacked_local_4[i] = T.Cast("int8", field) - T.int8(1)
+                    for i in T.unroll(2):
+                        b_unpacked_shared_4[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = b_unpacked_local_4[i * 16:i * 16 + 16]
+                    T.tvm_storage_sync("shared")
+                    with T.attr(0, "lexical_alloc_scope", 1):
+                        A_local = T.alloc_buffer((128,), "int8", scope="local")
+                        B_local = T.alloc_buffer((32,), "int8", scope="local")
+                        for ki in range(2):
+                            B_local_1 = T.decl_buffer((32,), "int8", data=B_local.data, scope="local")
+                            for i in range(8):
+                                T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("int8"), a_shared, thread_binding % 64 // 32 * 8192 + i * 1024 + thread_binding % 16 * 64 + (thread_binding % 8 // 4 + ki) % 2 * 32 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 16, 8, 1), T.tvm_access_ptr(T.type_annotation("int8"), A_local.data, i * 16, 8, 2))
+                            for i, j in T.grid(2, 16):
+                                B_local_1[i * 16 + j] = b_unpacked_shared_4[ki * 2048 + j % 8 // 4 * 1024 + thread_binding % 4 * 256 + j % 4 * 64 + (thread_binding // 64 + thread_binding % 2) % 2 * 32 + (j % 4 // 2 + i) % 2 * 16 + j // 8 * 8 + thread_binding % 32 // 4]
+                            for i, j in T.grid(8, 2):
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16, acc.data, i * 16 + j * 8, T.bool(False))
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16 + 8, acc.data, i * 16 + j * 8 + 4, T.bool(False))
+                    T.tvm_storage_sync("shared")
+            T.ptx_wait_group(1)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(2):
+                    b_packed_local_8[i * 16:i * 16 + 16] = b_packed_shared_1[i * 2048 + thread_binding * 16 + 8192:i * 2048 + thread_binding * 16 + 8192 + 16]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 2):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for field_i in range(4):
+                    for i in T.unroll(8):
+                        a_shared_5[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = a_1[bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4992:bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 4992 + 16]
+                    for i in T.unroll(32):
+                        field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local_9[i]), field_i * 2), 3)
+                        b_unpacked_local_5[i] = T.Cast("int8", field) - T.int8(1)
+                    for i in T.unroll(2):
+                        b_unpacked_shared_5[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = b_unpacked_local_5[i * 16:i * 16 + 16]
+                    T.tvm_storage_sync("shared")
+                    with T.attr(0, "lexical_alloc_scope", 1):
+                        A_local = T.alloc_buffer((128,), "int8", scope="local")
+                        B_local = T.alloc_buffer((32,), "int8", scope="local")
+                        for ki in range(2):
+                            B_local_1 = T.decl_buffer((32,), "int8", data=B_local.data, scope="local")
+                            for i in range(8):
+                                T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("int8"), a_shared, thread_binding % 64 // 32 * 8192 + i * 1024 + thread_binding % 16 * 64 + (thread_binding % 8 // 4 + ki) % 2 * 32 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 16, 8, 1), T.tvm_access_ptr(T.type_annotation("int8"), A_local.data, i * 16, 8, 2))
+                            for i, j in T.grid(2, 16):
+                                B_local_1[i * 16 + j] = b_unpacked_shared_5[ki * 2048 + j % 8 // 4 * 1024 + thread_binding % 4 * 256 + j % 4 * 64 + (thread_binding // 64 + thread_binding % 2) % 2 * 32 + (j % 4 // 2 + i) % 2 * 16 + j // 8 * 8 + thread_binding % 32 // 4]
+                            for i, j in T.grid(8, 2):
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16, acc.data, i * 16 + j * 8, T.bool(False))
+                                T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16 + 8, acc.data, i * 16 + j * 8 + 4, T.bool(False))
+                    T.tvm_storage_sync("shared")
+            T.ptx_wait_group(0)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 3):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(2):
+                    b_packed_local_10[i * 16:i * 16 + 16] = b_packed_shared_1[i * 2048 + thread_binding * 16 + 12288:i * 2048 + thread_binding * 16 + 12288 + 16]
+            T.attr(0, "tl.pipeline_mvb_stage_expr", 3)
+            T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+            for field_i in range(4):
+                for i in T.unroll(8):
+                    a_shared_1[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = a_1[bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 5056:bx * 5242880 + i * 655360 + thread_binding // 4 * 20480 + field_i * 5120 + thread_binding % 4 * 16 + 5056 + 16]
+                for i in T.unroll(32):
+                    field: T.int32 = T.bitwise_and(T.shift_right(T.Cast("int32", b_packed_local_1[i]), field_i * 2), 3)
+                    b_unpacked_local_1[i] = T.Cast("int8", field) - T.int8(1)
+                for i in T.unroll(2):
+                    b_unpacked_shared_1[i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16:i * 2048 + thread_binding // 4 * 64 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 32 + (thread_binding % 16 // 8 + thread_binding % 2) % 2 * 16 + 16] = b_unpacked_local_1[i * 16:i * 16 + 16]
+                T.tvm_storage_sync("shared")
+                with T.attr(0, "lexical_alloc_scope", 1):
+                    A_local = T.alloc_buffer((128,), "int8", scope="local")
+                    B_local = T.alloc_buffer((32,), "int8", scope="local")
+                    for ki in range(2):
+                        B_local_1 = T.decl_buffer((32,), "int8", data=B_local.data, scope="local")
+                        for i in range(8):
+                            T.ptx_ldmatrix(T.bool(False), 4, T.tvm_access_ptr(T.type_annotation("int8"), a_shared, thread_binding % 64 // 32 * 8192 + i * 1024 + thread_binding % 16 * 64 + (thread_binding % 8 // 4 + ki) % 2 * 32 + (thread_binding % 32 // 16 + thread_binding % 4 // 2) % 2 * 16, 8, 1), T.tvm_access_ptr(T.type_annotation("int8"), A_local.data, i * 16, 8, 2))
+                        for i, j in T.grid(2, 16):
+                            B_local_1[i * 16 + j] = b_unpacked_shared_1[ki * 2048 + j % 8 // 4 * 1024 + thread_binding % 4 * 256 + j % 4 * 64 + (thread_binding // 64 + thread_binding % 2) % 2 * 32 + (j % 4 // 2 + i) % 2 * 16 + j // 8 * 8 + thread_binding % 32 // 4]
+                        for i, j in T.grid(8, 2):
+                            T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16, acc.data, i * 16 + j * 8, T.bool(False))
+                            T.ptx_mma("int32", "m16n8k32", "row", "col", "int8", "int8", "int32", A_local.data, i * 16, B_local.data, j * 16 + 8, acc.data, i * 16 + j * 8 + 4, T.bool(False))
+                T.tvm_storage_sync("shared")
+        for i in T.unroll(64):
+            c_1[bx * 524288 + thread_binding % 64 // 32 * 262144 + i // 8 * 32768 + i % 2 * 16384 + thread_binding % 32 // 4 * 2048 + by * 64 + thread_binding // 64 * 32 + i % 8 // 2 * 8 + thread_binding % 4 * 2:bx * 524288 + thread_binding % 64 // 32 * 262144 + i // 8 * 32768 + i % 2 * 16384 + thread_binding % 32 // 4 * 2048 + by * 64 + thread_binding // 64 * 32 + i % 8 // 2 * 8 + thread_binding % 4 * 2 + 2] = acc_1[i * 2:i * 2 + 2]

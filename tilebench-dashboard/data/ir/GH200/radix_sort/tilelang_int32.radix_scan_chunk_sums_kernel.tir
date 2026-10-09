@@ -1,0 +1,26 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(sums_handle: T.handle):
+    sums = T.match_buffer(sums_handle, (77,), "int32", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 1)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        src_buffer = T.sblock_alloc_buffer((1024,), "int32", scope="local.fragment")
+        original = T.sblock_alloc_buffer((1024,), "int32", scope="local.fragment")
+        scan_smem = T.sblock_alloc_buffer((1024,), "int32", scope="shared.dyn")
+        for local_idx in T.parallel(1024):
+            valid: T.bool = local_idx < 77
+            src_buffer[local_idx] = sums[local_idx]
+            original[local_idx] = src_buffer[local_idx]
+        T.copy(T.region(src_buffer[0], 1, 1024), T.region(scan_smem[0], 2, 1024))
+        T.cumsum(T.region(scan_smem[0], 1, 1024), T.region(scan_smem[0], 2, 1024), 0, T.bool(False))
+        T.copy(T.region(scan_smem[0], 1, 1024), T.region(src_buffer[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            if local_idx < 77:
+                sums[local_idx] = src_buffer[local_idx] - original[local_idx]

@@ -1,0 +1,47 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def first_wave_kernel(A: T.handle, B: T.handle, C: T.handle):
+    A_1 = T.match_buffer(A, (8192, 4096), "float16", strides=(4096, 1))
+    B_1 = T.match_buffer(B, (4096, 28672), "float16", strides=(28672, 1))
+    C_1 = T.match_buffer(C, (8192, 28672), strides=(28672, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 132)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        a_shared = T.sblock_alloc_buffer((128, 32), "float16", scope="shared.dyn")
+        b_shared = T.sblock_alloc_buffer((32, 128), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        start_iter = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        last_iter = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        end_iter = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        tile_id = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        pid_m = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        pid_n = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        group_id = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        first_pid_m = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        group_size_m = T.sblock_alloc_buffer((1,), "int32", scope="local.var")
+        start_iter[0] = bx * 205 + T.min(bx, 76)
+        last_iter[0] = (bx + 1) * 205 + T.min(bx + 1, 76)
+        while start_iter[0] < last_iter[0]:
+            end_iter[0] = T.min(start_iter[0] + (128 - start_iter[0] % 128), last_iter[0])
+            tile_id[0] = start_iter[0] // 128
+            group_id[0] = tile_id[0] // 1792
+            first_pid_m[0] = group_id[0] * 8
+            group_size_m[0] = T.min(64 - first_pid_m[0], 8)
+            pid_m[0] = first_pid_m[0] + tile_id[0] % group_size_m[0]
+            pid_n[0] = tile_id[0] % 1792 // group_size_m[0]
+            for current_iter in T.serial(start_iter[0], start_iter[0] + (end_iter[0] - start_iter[0]), annotations={"num_stages": 3}):
+                if current_iter == start_iter[0]:
+                    T.fill(T.region(acc[0, 0], 2, 128, 128), 0)
+                k_tile: T.int32 = current_iter % 128
+                T.copy(T.region(A_1[pid_m[0] * 128, k_tile * 32], 1, 128, 32), T.region(a_shared[0, 0], 2, 128, 32))
+                T.copy(T.region(B_1[k_tile * 32, pid_n[0] * 128], 1, 32, 128), T.region(b_shared[0, 0], 2, 32, 128))
+                T.gemm(T.region(a_shared[0, 0], 1, 128, 32), T.region(b_shared[0, 0], 1, 32, 128), T.region(acc[0, 0], 3, 128, 128), T.bool(False), T.bool(False), 128, 128, 32, 0, T.bool(False), 32, 128, 0, 0, 1, 0, 0, 0, 0)
+            T.atomicadd(T.region(acc[0, 0], 1, 128, 128), T.region(C_1[pid_m[0] * 128, pid_n[0] * 128], 2, 128, 128))
+            T.tvm_storage_sync("shared")
+            start_iter[0] = end_iter[0]

@@ -1,0 +1,23 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def swiglu_kernel_kernel(output: T.handle("bfloat16", "global"), x: T.handle("bfloat16", "global"), y: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 81920, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2]})
+        output_1 = T.decl_buffer((83886080,), "bfloat16", data=output)
+        y_1 = T.decl_buffer((83886080,), "bfloat16", data=y)
+        x_1 = T.decl_buffer((83886080,), "bfloat16", data=x)
+        bx = T.launch_thread("blockIdx.x", 81920)
+        x_local_cast_1 = T.alloc_buffer((4,), "bfloat16", scope="local")
+        y_local_cast_2 = T.alloc_buffer((4,), "bfloat16", scope="local")
+        output_local_cast = T.alloc_buffer((4,), "bfloat16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        for i in T.unroll(4):
+            x_local_cast_1[0:4] = x_1[bx * 1024 + i * 256 + tx * 4:bx * 1024 + i * 256 + tx * 4 + 4]
+            y_local_cast_2[0:4] = y_1[bx * 1024 + i * 256 + tx * 4:bx * 1024 + i * 256 + tx * 4 + 4]
+            output_local_cast[0:4] = T.Cast("bfloat16x4", T.Cast("float32x4", x_local_cast_1[0:4]) * T.sigmoid(T.Cast("float32x4", x_local_cast_1[0:4])) * T.Cast("float32x4", y_local_cast_2[0:4]))
+            output_1[bx * 1024 + i * 256 + tx * 4:bx * 1024 + i * 256 + tx * 4 + 4] = output_local_cast[0:4]

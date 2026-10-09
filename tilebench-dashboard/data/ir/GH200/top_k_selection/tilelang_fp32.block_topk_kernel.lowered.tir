@@ -1,0 +1,722 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(input: T.handle("float32", "global"), output: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 16384, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 256, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        output_1 = T.decl_buffer((262144,), data=output)
+        input_1 = T.decl_buffer((1048576,), data=input)
+        bx = T.launch_thread("blockIdx.x", 256)
+        workspace = T.alloc_buffer((4096,), scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        workspace_1 = T.decl_buffer((4096,), data=workspace.data, scope="shared.dyn")
+        for i in T.unroll(4):
+            workspace_1[i * 1024 + tx * 4:i * 1024 + tx * 4 + 4] = input_1[bx * 4096 + i * 1024 + tx * 4:bx * 4096 + i * 1024 + tx * 4 + 4]
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 2) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 2) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 2) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 4) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 4) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 4) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 8) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 8) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 8) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 8) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 8) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 8) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 8) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 8) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 8) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 16) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 16) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 16) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 16) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 16) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 16) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 16) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 16) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 16) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 16) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 16) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 16) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 32) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 32) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 32) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 32) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 32) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 32) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 32) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 32) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 32) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 32) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 32) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 32) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 32) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 32) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 32) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 64) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 64) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 64) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 64) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 64) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 64) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 64) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 64) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 128) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 128) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 128) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 128) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 128) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 128) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 128) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 128) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 128) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128]
+            b: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 256) == 0
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 256) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 256) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 256) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 256) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 256) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 256) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 256) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 256) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 256) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx]
+            b: T.float32 = workspace_1[i * 512 + tx + 256]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx, 512) == 0
+            workspace_1[i * 512 + tx] = T.Select(T.bitwise_and(i * 512 + tx, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx + 256] = T.Select(T.bitwise_and(i * 512 + tx, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128]
+            b: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 512) == 0
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 512) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 512) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 512) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 512) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 512) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 512) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 512) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 512) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 512) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx]
+            b: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 1024) == 0
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx]
+            b: T.float32 = workspace_1[i * 512 + tx + 256]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx, 1024) == 0
+            workspace_1[i * 512 + tx] = T.Select(T.bitwise_and(i * 512 + tx, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx + 256] = T.Select(T.bitwise_and(i * 512 + tx, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128]
+            b: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 1024) == 0
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 1024) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 1024) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 1024) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 1024) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 1024) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 1024) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 1024) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 1024) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 1024) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i // 4 * 2048 + i % 4 * 256 + tx]
+            b: T.float32 = workspace_1[i // 4 * 2048 + i % 4 * 256 + tx + 1024]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 2048) == 0
+            workspace_1[i // 4 * 2048 + i % 4 * 256 + tx] = T.Select(T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i // 4 * 2048 + i % 4 * 256 + tx + 1024] = T.Select(T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx]
+            b: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 2048) == 0
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx]
+            b: T.float32 = workspace_1[i * 512 + tx + 256]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx, 2048) == 0
+            workspace_1[i * 512 + tx] = T.Select(T.bitwise_and(i * 512 + tx, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx + 256] = T.Select(T.bitwise_and(i * 512 + tx, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128]
+            b: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 2048) == 0
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 2048) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 2048) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 2048) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 2048) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 2048) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 2048) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 2048) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 2048) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 2048) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 256 + tx]
+            b: T.float32 = workspace_1[i * 256 + tx + 2048]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 256 + tx, 4096) == 0
+            workspace_1[i * 256 + tx] = T.Select(T.bitwise_and(i * 256 + tx, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 256 + tx + 2048] = T.Select(T.bitwise_and(i * 256 + tx, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i // 4 * 2048 + i % 4 * 256 + tx]
+            b: T.float32 = workspace_1[i // 4 * 2048 + i % 4 * 256 + tx + 1024]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 4096) == 0
+            workspace_1[i // 4 * 2048 + i % 4 * 256 + tx] = T.Select(T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i // 4 * 2048 + i % 4 * 256 + tx + 1024] = T.Select(T.bitwise_and(i // 4 * 2048 + i % 4 * 256 + tx, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx]
+            b: T.float32 = workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 4096) == 0
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i // 2 * 1024 + i % 2 * 256 + tx + 512] = T.Select(T.bitwise_and(i // 2 * 1024 + i % 2 * 256 + tx, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx]
+            b: T.float32 = workspace_1[i * 512 + tx + 256]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx, 4096) == 0
+            workspace_1[i * 512 + tx] = T.Select(T.bitwise_and(i * 512 + tx, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx + 256] = T.Select(T.bitwise_and(i * 512 + tx, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128]
+            b: T.float32 = workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 4096) == 0
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 128 * 256 + tx % 128 + 128] = T.Select(T.bitwise_and(i * 512 + tx // 128 * 256 + tx % 128, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64]
+            b: T.float32 = workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 4096) == 0
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 64 * 128 + tx % 64 + 64] = T.Select(T.bitwise_and(i * 512 + tx // 64 * 128 + tx % 64, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32]
+            b: T.float32 = workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 4096) == 0
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 32 * 64 + tx % 32 + 32] = T.Select(T.bitwise_and(i * 512 + tx // 32 * 64 + tx % 32, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16]
+            b: T.float32 = workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 4096) == 0
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 16 * 32 + tx % 16 + 16] = T.Select(T.bitwise_and(i * 512 + tx // 16 * 32 + tx % 16, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8]
+            b: T.float32 = workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 4096) == 0
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 8 * 16 + tx % 8 + 8] = T.Select(T.bitwise_and(i * 512 + tx // 8 * 16 + tx % 8, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4]
+            b: T.float32 = workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 4096) == 0
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 4 * 8 + tx % 4 + 4] = T.Select(T.bitwise_and(i * 512 + tx // 4 * 8 + tx % 4, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2]
+            b: T.float32 = workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4096) == 0
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx // 2 * 4 + tx % 2 + 2] = T.Select(T.bitwise_and(i * 512 + tx // 2 * 4 + tx % 2, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        for i in T.unroll(8):
+            a: T.float32 = workspace_1[i * 512 + tx * 2]
+            b: T.float32 = workspace_1[i * 512 + tx * 2 + 1]
+            hi: T.float32 = T.Select(b < a, a, b)
+            lo: T.float32 = T.Select(b < a, b, a)
+            left_desc: T.bool = T.bitwise_and(i * 512 + tx * 2, 4096) == 0
+            workspace_1[i * 512 + tx * 2] = T.Select(T.bitwise_and(i * 512 + tx * 2, 4096) == 0, T.Select(b < a, a, b), T.Select(b < a, b, a))
+            workspace_1[i * 512 + tx * 2 + 1] = T.Select(T.bitwise_and(i * 512 + tx * 2, 4096) == 0, T.Select(b < a, b, a), T.Select(b < a, a, b))
+        T.tvm_storage_sync("shared")
+        output_1[bx * 1024 + tx * 4:bx * 1024 + tx * 4 + 4] = workspace_1[tx * 4:tx * 4 + 4]

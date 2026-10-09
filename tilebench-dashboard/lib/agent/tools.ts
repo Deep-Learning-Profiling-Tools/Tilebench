@@ -1149,7 +1149,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "get_ir",
-    description: "Read compiler intermediate code for one (platform, op, backend, dtype). Without kind: what is available. With kind (ttir, ttgir, ptx, cu, tir, lowered.tir, tileir): the text, paged with start_line/max_lines, or only the lines containing pattern. This is what the compiler emitted for the profiled configuration; cite the lines you rely on.",
+    description: "Read compiler intermediate code for one (platform, op, backend, dtype). Without kind: what is available. With kind (ttir, ttgir, ptx or amdgcn, cu, tir, lowered.tir, tileir): the text, paged with start_line/max_lines, or only the lines containing pattern. This is what the compiler emitted for the profiled configuration; cite the lines you rely on.",
     input_schema: {
       type: "object",
       properties: {
@@ -1159,7 +1159,7 @@ export const AGENT_TOOLS = [
         dtype: { type: "string" },
         kernel: { type: "string", description: "substring of a kernel name, for operators that launch several kernels" },
         variant: { type: "integer", description: "which launch of the kernel, when it is launched with different arguments (launch_variants above 1)" },
-        kind: { type: "string", enum: ["ttir", "ttgir", "ptx", "cu", "tir", "lowered.tir", "tileir"] },
+        kind: { type: "string", enum: ["ttir", "ttgir", "ptx", "amdgcn", "cu", "tir", "lowered.tir", "tileir"] },
         pattern: { type: "string" },
         start_line: { type: "integer" },
         max_lines: { type: "integer" },

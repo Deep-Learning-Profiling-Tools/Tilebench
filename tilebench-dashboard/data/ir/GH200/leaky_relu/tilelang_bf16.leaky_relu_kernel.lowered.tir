@@ -1,0 +1,26 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def leaky_relu_kernel_kernel(output: T.handle("bfloat16", "global"), x: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 6104, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        output_1 = T.decl_buffer((50000000,), "bfloat16", data=output)
+        x_1 = T.decl_buffer((50000000,), "bfloat16", data=x)
+        bx = T.launch_thread("blockIdx.x", 6104)
+        x_reg = T.alloc_buffer((64,), "bfloat16", scope="local")
+        output_reg = T.alloc_buffer((64,), "bfloat16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        x_reg_1 = T.decl_buffer((64,), "bfloat16", data=x_reg.data, scope="local")
+        output_reg_1 = T.decl_buffer((64,), "bfloat16", data=output_reg.data, scope="local")
+        for i in T.unroll(8):
+            x_reg_1[i * 8:i * 8 + 8] = T.if_then_else(bx * 64 + i * 8 + tx // 16 < 390625, x_1[bx * 8192 + i * 1024 + tx * 8:bx * 8192 + i * 1024 + tx * 8 + 8], T.Broadcast(T.bfloat16(0.0), 8))
+        for i in T.unroll(64):
+            value: T.bfloat16 = x_reg_1[i]
+            output_reg_1[i] = T.Select(T.bfloat16(0.0) < value, value, T.bfloat16(0.01) * value)
+        for i in T.unroll(8):
+            if bx * 64 + i * 8 + tx // 16 < 390625:
+                output_1[bx * 8192 + i * 1024 + tx * 8:bx * 8192 + i * 1024 + tx * 8 + 8] = output_reg_1[i * 8:i * 8 + 8]

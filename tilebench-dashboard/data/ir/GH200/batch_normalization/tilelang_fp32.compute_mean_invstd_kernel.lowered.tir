@@ -1,0 +1,51 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def compute_mean_invstd_kernel_kernel(block_sq_sum: T.handle("float32", "global"), block_sum: T.handle("float32", "global"), inv_std: T.handle("float32", "global"), mean: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 512, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 1024, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        inv_std_1 = T.decl_buffer((1024,), data=inv_std)
+        mean_1 = T.decl_buffer((1024,), data=mean)
+        block_sq_sum_1 = T.decl_buffer((320512,), data=block_sq_sum)
+        block_sum_1 = T.decl_buffer((320512,), data=block_sum)
+        bx = T.launch_thread("blockIdx.x", 1024)
+        buf_dyn_shmem = T.alloc_buffer((512,), "uint8", scope="shared.dyn")
+        workspace: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        sums = T.alloc_buffer((4,), scope="local")
+        sq_sums = T.alloc_buffer((4,), scope="local")
+        total_sum = T.alloc_buffer((1,), scope="local")
+        total_sq_sum = T.alloc_buffer((1,), scope="local")
+        mean_local = T.alloc_buffer((1,), scope="local")
+        inv_std_local = T.alloc_buffer((1,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        sums_1 = T.decl_buffer((4,), data=sums.data, scope="local")
+        sq_sums_1 = T.decl_buffer((4,), data=sq_sums.data, scope="local")
+        total_sum_1 = T.decl_buffer((1,), data=total_sum.data, scope="local")
+        total_sq_sum_1 = T.decl_buffer((1,), data=total_sq_sum.data, scope="local")
+        mean_local_1 = T.decl_buffer((1,), data=mean_local.data, scope="local")
+        inv_std_local_1 = T.decl_buffer((1,), data=inv_std_local.data, scope="local")
+        for i in T.unroll(4):
+            sums_1[i] = T.if_then_else(i * 128 + tx < 313, block_sum_1[i * 131072 + tx * 1024 + bx], T.float32(0.0))
+        for i in T.unroll(4):
+            sq_sums_1[i] = T.if_then_else(i * 128 + tx < 313, block_sq_sum_1[i * 131072 + tx * 1024 + bx], T.float32(0.0))
+        total_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(4):
+            total_sum_1[0] = total_sum_1[0] + sums_1[rv]
+        total_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 128, 1, 0, tl::NamedBarrier<128>>::run", total_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 128, 2))
+        total_sq_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(4):
+            total_sq_sum_1[0] = total_sq_sum_1[0] + sq_sums_1[rv]
+        T.tvm_storage_sync("shared.dyn")
+        total_sq_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 128, 1, 0, tl::NamedBarrier<128>>::run", total_sq_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 128, 2))
+        mean_local_1[0] = total_sum_1[0] / T.float32(20000.0)
+        var_raw: T.float32 = total_sq_sum_1[0] / T.float32(20000.0) - mean_local_1[0] * mean_local_1[0]
+        var_clamped: T.float32 = T.max(var_raw, T.float32(0.0))
+        inv_std_local_1[0] = T.rsqrt(T.max(var_raw, T.float32(0.0)) + T.float32(1.0000000000000001e-05))
+        if tx == 0:
+            mean_1[bx] = mean_local_1[0]
+            inv_std_1[bx] = inv_std_local_1[0]

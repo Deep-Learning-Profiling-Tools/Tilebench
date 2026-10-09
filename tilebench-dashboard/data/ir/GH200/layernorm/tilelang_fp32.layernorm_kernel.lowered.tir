@@ -1,0 +1,58 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def layernorm_kernel_kernel(X: T.handle("float32", "global"), Y: T.handle("float32", "global"), bias: T.handle("float32", "global"), weight: T.handle("float32", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 1024, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 2, 3]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `X`, `Y`")
+        Y_1 = T.decl_buffer((M * 10240,), data=Y)
+        bias_1 = T.decl_buffer((10240,), data=bias)
+        weight_1 = T.decl_buffer((10240,), data=weight)
+        X_1 = T.decl_buffer((M * 10240,), data=X)
+        bx = T.launch_thread("blockIdx.x", M)
+        buf_dyn_shmem = T.alloc_buffer((1024,), "uint8", scope="shared.dyn")
+        workspace: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        sum_local = T.alloc_buffer((2,), scope="local")
+        sumsq_local = T.alloc_buffer((2,), scope="local")
+        sum_row = T.alloc_buffer((1,), scope="local")
+        sumsq_row = T.alloc_buffer((1,), scope="local")
+        mean_row = T.alloc_buffer((1,), scope="local")
+        rstd_row = T.alloc_buffer((1,), scope="local")
+        Y_local = T.alloc_buffer((2,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        sum_local_1 = T.decl_buffer((2,), data=sum_local.data, scope="local")
+        sumsq_local_1 = T.decl_buffer((2,), data=sumsq_local.data, scope="local")
+        sum_row_1 = T.decl_buffer((1,), data=sum_row.data, scope="local")
+        sumsq_row_1 = T.decl_buffer((1,), data=sumsq_row.data, scope="local")
+        mean_row_1 = T.decl_buffer((1,), data=mean_row.data, scope="local")
+        rstd_row_1 = T.decl_buffer((1,), data=rstd_row.data, scope="local")
+        sum_local_1[0:2] = T.Broadcast(T.float32(0.0), 2)
+        sumsq_local_1[0:2] = T.Broadcast(T.float32(0.0), 2)
+        X_2 = T.Buffer((M * 10240,), data=X)
+        for tile in range(20):
+            x_val: T.float32x2 = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2) + T.int64(2)]
+            sum_local_1[0:2] = sum_local_1[0:2] + x_val
+            sumsq_local_1[0:2] = sumsq_local_1[0:2] + x_val * x_val
+        sum_row_1[0] = T.float32(0.0)
+        for rv in T.unroll(2):
+            sum_row_1[0] = sum_row_1[0] + sum_local_1[rv]
+        sum_row_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 1, 0, tl::NamedBarrier<256>>::run", sum_row_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
+        sumsq_row_1[0] = T.float32(0.0)
+        for rv in T.unroll(2):
+            sumsq_row_1[0] = sumsq_row_1[0] + sumsq_local_1[rv]
+        T.tvm_storage_sync("shared.dyn")
+        sumsq_row_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 1, 0, tl::NamedBarrier<256>>::run", sumsq_row_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 256, 2))
+        mean_row_1[0] = sum_row_1[0] / T.float32(10240.0)
+        variance: T.float32 = sumsq_row_1[0] / T.float32(10240.0) - mean_row_1[0] * mean_row_1[0]
+        rstd_row_1[0] = T.rsqrt(variance + T.float32(1.0000000000000001e-05))
+        for tile in range(20):
+            Y_local_1 = T.decl_buffer((2,), data=Y_local.data, scope="local")
+            x_val: T.float32x2 = X_2[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2) + T.int64(2)]
+            norm: T.float32x2 = (x_val - T.Broadcast(mean_row_1[0], 2)) * T.Broadcast(rstd_row_1[0], 2)
+            Y_local_1[0:2] = norm * weight_1[tile * 512 + tx * 2:tile * 512 + tx * 2 + 2] + bias_1[tile * 512 + tx * 2:tile * 512 + tx * 2 + 2]
+            Y_1[T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2):T.Cast("int64", bx) * T.int64(10240) + T.Cast("int64", tile) * T.int64(512) + T.Cast("int64", tx) * T.int64(2) + T.int64(2)] = Y_local_1[0:2]

@@ -1,0 +1,41 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def apply_batch_norm_kernel(input: T.handle, gamma: T.handle, beta: T.handle, output: T.handle, mean: T.handle, inv_std: T.handle):
+    input_1 = T.match_buffer(input, (20000, 1024), "float16", strides=(1024, 1))
+    gamma_1 = T.match_buffer(gamma, (1024,), "float16", strides=(1,))
+    beta_1 = T.match_buffer(beta, (1024,), "float16", strides=(1,))
+    output_1 = T.match_buffer(output, (20000, 1024), "float16", strides=(1024, 1))
+    mean_1 = T.match_buffer(mean, (1024,), strides=(1,))
+    inv_std_1 = T.match_buffer(inv_std, (1024,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 1250)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        mean_local = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        inv_std_local = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        gamma_local = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        beta_local = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        scale = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        shift = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        x = T.sblock_alloc_buffer((8, 1024), scope="local.fragment")
+        y = T.sblock_alloc_buffer((8, 1024), scope="local.fragment")
+        T.copy(T.region(mean_1[0], 1, 1024), T.region(mean_local[0], 2, 1024))
+        T.copy(T.region(inv_std_1[0], 1, 1024), T.region(inv_std_local[0], 2, 1024))
+        T.copy(T.region(gamma_1[0], 1, 1024), T.region(gamma_local[0], 2, 1024))
+        T.copy(T.region(beta_1[0], 1, 1024), T.region(beta_local[0], 2, 1024))
+        for col in T.parallel(1024):
+            scale[col] = inv_std_local[col] * gamma_local[col]
+            shift[col] = beta_local[col] - mean_local[col] * scale[col]
+        for _tmp in T.unroll(2, annotations={"pragma_unroll_explicit": False}):
+            r: T.int32 = _tmp * 8
+            row_start: T.int32 = bx * 16 + r
+            T.copy(T.region(input_1[row_start, 0], 1, 8, 1024), T.region(x[0, 0], 2, 8, 1024))
+            for i in T.parallel(8):
+                for col in T.parallel(1024):
+                    y[i, col] = x[i, col] * scale[col] + shift[col]
+            T.copy(T.region(y[0, 0], 1, 8, 1024), T.region(output_1[row_start, 0], 2, 8, 1024))

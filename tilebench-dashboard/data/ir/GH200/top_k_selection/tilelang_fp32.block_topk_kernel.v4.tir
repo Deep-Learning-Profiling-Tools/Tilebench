@@ -1,0 +1,40 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def main(input_handle: T.handle, output_handle: T.handle):
+    input = T.match_buffer(input_handle, (16384,), strides=(1,))
+    output = T.match_buffer(output_handle, (4, 1024), strides=(1024, 1))
+    # with T.sblock("root"):
+    workspace = T.sblock_alloc_buffer((4096,), scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 4)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {input.data: T.infinity("float32") * T.float32(-1.0)}})
+        for local_idx in T.parallel(4096):
+            workspace[local_idx] = input[bx * 4096 + local_idx]
+        T.tvm_storage_sync("shared")
+        for kb in T.unroll(1, 13, annotations={"pragma_unroll_explicit": True}):
+            for jj in T.unroll(12, annotations={"pragma_unroll_explicit": True}):
+                if jj < kb:
+                    stage: T.int32 = T.shift_left(1, kb)
+                    safe_shift: T.int32 = T.max(kb - 1 - jj, 0)
+                    stride: T.int32 = T.shift_left(1, safe_shift)
+                    for pair_idx in T.parallel(2048):
+                        group: T.int32 = pair_idx // stride
+                        offset: T.int32 = pair_idx % stride
+                        left: T.int32 = group * (2 * stride) + offset
+                        right: T.int32 = left + stride
+                        a: T.float32 = workspace[left]
+                        b: T.float32 = workspace[right]
+                        hi: T.float32 = T.Select(a > b, a, b)
+                        lo: T.float32 = T.Select(a > b, b, a)
+                        left_desc: T.bool = T.bitwise_and(left, stage) == 0
+                        workspace[left] = T.Select(left_desc, hi, lo)
+                        workspace[right] = T.Select(left_desc, lo, hi)
+                    T.tvm_storage_sync("shared")
+        for local_idx in T.parallel(1024):
+            output[bx, local_idx] = workspace[local_idx]

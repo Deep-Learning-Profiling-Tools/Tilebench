@@ -1,0 +1,24 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def weight_dequant_kernel(X: T.handle, S: T.handle, output: T.handle):
+    X_1 = T.match_buffer(X, (104857600,), strides=(1,))
+    S_1 = T.match_buffer(S, (80, 80), strides=(80, 1))
+    output_1 = T.match_buffer(output, (104857600,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 102400)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        for local_idx in T.parallel(1024):
+            idx: T.int32 = bx * 1024 + local_idx
+            if idx < 104857600:
+                row: T.int32 = idx // 10240
+                col: T.int32 = idx % 10240
+                s_row: T.int32 = row // 128
+                s_col: T.int32 = col // 128
+                value: T.float32 = X_1[idx] * S_1[s_row, s_col]
+                output_1[idx] = value

@@ -1,0 +1,33 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def rmsnorm_kernel(X: T.handle, rms_w: T.handle, Y: T.handle):
+    M = T.int32()
+    X_1 = T.match_buffer(X, (M, 10240), "float16", strides=(10240, 1))
+    rms_w_1 = T.match_buffer(rms_w, (10240,), "float16", strides=(1,))
+    Y_1 = T.match_buffer(Y, (M, 10240), "float16", strides=(10240, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        sumsq_local = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        row_sum = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        inv_rms = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        T.fill(T.region(sumsq_local[0], 2, 1024), T.float32(0.0))
+        for tile in T.serial(10, annotations={"num_stages": 3}):
+            for j in T.parallel(1024):
+                col: T.int32 = tile * 1024 + j
+                x_val: T.float32 = T.Cast("float32", X_1[bx, col])
+                sumsq_local[j] = sumsq_local[j] + x_val * x_val
+        T.reduce(T.region(sumsq_local[0], 1, 1024), T.region(row_sum[0], 2, 1), "sum", 0, T.bool(True))
+        inv_rms[0] = T.rsqrt(row_sum[0] / T.float32(10240.0) + T.Cast("float32", T.float32(9.9999999999999995e-07)))
+        for tile in T.serial(10, annotations={"num_stages": 3}):
+            for j in T.parallel(1024):
+                col: T.int32 = tile * 1024 + j
+                x_val: T.float32 = T.Cast("float32", X_1[bx, col])
+                weight: T.float32 = T.Cast("float32", rms_w_1[col])
+                Y_1[bx, col] = T.Cast("float16", x_val * inv_rms[0] * weight)

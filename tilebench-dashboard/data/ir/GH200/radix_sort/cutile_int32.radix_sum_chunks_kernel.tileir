@@ -1,0 +1,22 @@
+(src_ptr_0: Tile[PointerTy(pointee_type=<DType 'int32'>),()], src_ptr_1: Tile[int32,()], src_ptr_2: Tile[int32,()], dst_ptr_0: Tile[PointerTy(pointee_type=<DType 'int32'>),()], dst_ptr_1: Tile[int32,()], dst_ptr_2: Tile[int32,()]):
+$token: Token = make_token()
+src_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'int32'>),()] = assume_div_by(x=src_ptr_0, divisor=16)
+src_ptr_1.0: Tile[int32,()] = assume_div_by(x=src_ptr_1, divisor=16)
+dst_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'int32'>),()] = assume_div_by(x=dst_ptr_0, divisor=16)
+$0: Tile[int32,()] = assume_bounded(x=src_ptr_1.0, lower_bound=0, upper_bound=None)
+$0.0: Tile[int32,()] = assume_div_by(x=$0, divisor=16)
+src_ptr{src_ptr_0, $0, src_ptr_2}: Array[int32,(?):(1)] = make_tensor_view(base_ptr=src_ptr_0.0, shape=($0.0), dynamic_strides=())
+$1: Tile[int32,()] = assume_bounded(x=dst_ptr_1, lower_bound=0, upper_bound=None)
+dst_ptr{dst_ptr_0, $1, dst_ptr_2}: Array[int32,(?):(1)] = make_tensor_view(base_ptr=dst_ptr_0.0, shape=($1), dynamic_strides=())
+$11: Tile[int32,()] = tile_bid(axis=0)
+$45{src_ptr_0, $0, src_ptr_2}: PartitionView[Array[int32,(?):(1)],tile_shape=(1024,),order=(0,),padding_mode=PaddingMode.ZERO] = make_partition_view(array=src_ptr{src_ptr_0, $0, src_ptr_2})
+$46: Tile[int32,(1024)], $47: Token = tile_load(view=$45{src_ptr_0, $0, src_ptr_2}, index=($11), token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+$82: Tile[int32,()] = tile_reduce(xs=($46), identities=(0,), axis=0)
+do ($79: Tile[int32,()], $80: Tile[int32,()])
+    ($79: Tile[int32,()], $80: Tile[int32,()]):
+    $81: Tile[int32,()] = raw_binary_arith(lhs=$79, rhs=$80, fn="add", rounding_mode=None, flush_to_zero=False)
+    yield $81
+$83: Tile[int32,(1)] = tile_reshape(x=$82)
+$89{dst_ptr_0, $1, dst_ptr_2}: PartitionView[Array[int32,(?):(1)],tile_shape=(1,),order=(0,),padding_mode=PaddingMode.UNDETERMINED] = make_partition_view(array=dst_ptr{dst_ptr_0, $1, dst_ptr_2})
+$90: Token = tile_store(view=$89{dst_ptr_0, $1, dst_ptr_2}, index=($11), tile=$83, token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+return

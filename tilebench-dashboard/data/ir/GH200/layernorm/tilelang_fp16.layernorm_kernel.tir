@@ -1,0 +1,46 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def layernorm_kernel(X: T.handle, weight: T.handle, bias: T.handle, Y: T.handle):
+    M = T.int32()
+    X_1 = T.match_buffer(X, (M, 10240), "float16", strides=(10240, 1))
+    weight_1 = T.match_buffer(weight, (10240,), "float16", strides=(1,))
+    bias_1 = T.match_buffer(bias, (10240,), "float16", strides=(1,))
+    Y_1 = T.match_buffer(Y, (M, 10240), "float16", strides=(10240, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        sum_local = T.sblock_alloc_buffer((4096,), scope="local.fragment")
+        sumsq_local = T.sblock_alloc_buffer((4096,), scope="local.fragment")
+        Y_local = T.sblock_alloc_buffer((4096,), "float16", scope="local.fragment")
+        sum_row = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        sumsq_row = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        mean_row = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        rstd_row = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        T.fill(T.region(sum_local[0], 2, 4096), T.float32(0.0))
+        T.fill(T.region(sumsq_local[0], 2, 4096), T.float32(0.0))
+        for tile in T.serial(3, annotations={"num_stages": 2}):
+            off: T.int32 = tile * 4096
+            for j in T.parallel(4096):
+                col: T.int32 = off + j
+                x_val: T.float32 = T.Cast("float32", X_1[bx, col])
+                sum_local[j] = sum_local[j] + x_val
+                sumsq_local[j] = sumsq_local[j] + x_val * x_val
+        T.reduce(T.region(sum_local[0], 1, 4096), T.region(sum_row[0], 2, 1), "sum", 0, T.bool(True))
+        T.reduce(T.region(sumsq_local[0], 1, 4096), T.region(sumsq_row[0], 2, 1), "sum", 0, T.bool(True))
+        mean_row[0] = sum_row[0] / T.float32(10240.0)
+        variance: T.float32 = sumsq_row[0] / T.float32(10240.0) - mean_row[0] * mean_row[0]
+        rstd_row[0] = T.rsqrt(variance + T.float32(1.0000000000000001e-05))
+        for tile in T.serial(3, annotations={"num_stages": 2}):
+            off: T.int32 = tile * 4096
+            for j in T.parallel(4096):
+                col: T.int32 = off + j
+                x_val: T.float32 = T.Cast("float32", X_1[bx, col])
+                norm: T.float32 = (x_val - mean_row[0]) * rstd_row[0]
+                Y_local[j] = T.Cast("float16", norm * T.Cast("float32", weight_1[col]) + T.Cast("float32", bias_1[col]))
+            T.copy(T.region(Y_local[0], 1, 4096), T.region(Y_1[bx, off], 2, 1, 4096))

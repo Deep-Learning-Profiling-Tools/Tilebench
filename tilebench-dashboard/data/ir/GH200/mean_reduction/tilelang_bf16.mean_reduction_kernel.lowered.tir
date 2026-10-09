@@ -1,0 +1,33 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def mean_reduction_kernel_kernel(output: T.handle("float32", "global"), x: T.handle("bfloat16", "global"), M: T.int32):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 1024, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": M, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        T.attr(0 < M, "tl.assume", "Buffer shape should be greater than 0: shape `M` from buffer `x`, `output`")
+        output_1 = T.decl_buffer((M,), data=output)
+        x_1 = T.decl_buffer((M * 20480,), "bfloat16", data=x)
+        bx = T.launch_thread("blockIdx.x", M)
+        acc = T.alloc_buffer((8,), scope="local")
+        x_local_cast = T.alloc_buffer((8,), "bfloat16", scope="local")
+        row_sum = T.alloc_buffer((1,), scope="local")
+        workspace = T.alloc_buffer((256,), scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((8,), data=acc.data, scope="local")
+        row_sum_1 = T.decl_buffer((1,), data=row_sum.data, scope="local")
+        for i in T.unroll(2):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        for tile_idx in range(10):
+            x_2 = T.Buffer((M * 20480,), "bfloat16", data=x)
+            x_local_cast[0:8] = x_2[T.Cast("int64", bx) * T.int64(20480) + T.Cast("int64", tile_idx) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8):T.Cast("int64", bx) * T.int64(20480) + T.Cast("int64", tile_idx) * T.int64(2048) + T.Cast("int64", tx) * T.int64(8) + T.int64(8)]
+            for i in range(2):
+                acc_1[i * 4:i * 4 + 4] = acc_1[i * 4:i * 4 + 4] + T.Cast("float32x4", x_local_cast[i * 4:i * 4 + 4])
+        row_sum_1[0] = T.float32(0.0)
+        for rv in T.unroll(8):
+            row_sum_1[0] = row_sum_1[0] + acc_1[rv]
+        row_sum_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 1, 0, tl::NamedBarrier<256>>::run", row_sum_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace.data, 0, 256, 2))
+        output_1[T.Cast("int64", bx)] = row_sum_1[0] / T.float32(20480.0)

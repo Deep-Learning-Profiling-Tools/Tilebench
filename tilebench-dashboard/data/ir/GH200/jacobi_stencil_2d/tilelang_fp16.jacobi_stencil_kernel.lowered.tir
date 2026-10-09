@@ -1,0 +1,23 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def jacobi_stencil_kernel_kernel(input: T.handle("float16", "global"), output: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 10240, "blockIdx.y": 20, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        output_1 = T.decl_buffer((104857600,), "float16", data=output)
+        input_1 = T.decl_buffer((104857600,), "float16", data=input)
+        start_r = T.launch_thread("blockIdx.x", 10240)
+        local_tile_out = T.alloc_buffer((4,), "float16", scope="local")
+        by = T.launch_thread("blockIdx.y", 20)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        local_tile_out_1 = T.decl_buffer((4,), "float16", data=local_tile_out.data, scope="local")
+        local_tile_out_1[0:4] = input_1[start_r * 10240 + by * 512 + tx * 4:start_r * 10240 + by * 512 + tx * 4 + 4]
+        for i in T.unroll(4):
+            is_inner: T.bool = 1 <= start_r and 1 <= by * 512 + tx * 4 + i and start_r < 10239 and by * 512 + tx * 4 + i < 10239
+            avg: T.float16 = T.float16(0.25) * (T.if_then_else(1 <= start_r, input_1[start_r * 10240 + by * 512 + tx * 4 + i - 10240], T.float16(0.0)) + T.if_then_else(start_r < 10239, input_1[start_r * 10240 + by * 512 + tx * 4 + i + 10240], T.float16(0.0)) + T.if_then_else(1 <= by * 512 + tx * 4 + i, input_1[start_r * 10240 + by * 512 + tx * 4 + i - 1], T.float16(0.0)) + T.if_then_else(by * 512 + tx * 4 + i < 10239, input_1[start_r * 10240 + by * 512 + tx * 4 + i + 1], T.float16(0.0)))
+            local_tile_out_1[i] = T.Select(1 <= start_r and 1 <= by * 512 + tx * 4 + i and start_r < 10239 and by * 512 + tx * 4 + i < 10239, avg, local_tile_out_1[i])
+        output_1[start_r * 10240 + by * 512 + tx * 4:start_r * 10240 + by * 512 + tx * 4 + 4] = local_tile_out_1[0:4]

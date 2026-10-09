@@ -1,0 +1,37 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def rope_embedding_kernel(Q: T.handle("float16", "global"), cos: T.handle("float16", "global"), sin: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 20480, "blockIdx.y": 2, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2]})
+        Q_1 = T.decl_buffer((83886080,), "float16", data=Q)
+        sin_1 = T.decl_buffer((1310720,), "float16", data=sin)
+        cos_1 = T.decl_buffer((1310720,), "float16", data=cos)
+        bx = T.launch_thread("blockIdx.x", 20480)
+        cos_tile = T.alloc_buffer((4,), "float16", scope="local")
+        sin_tile = T.alloc_buffer((4,), "float16", scope="local")
+        q1_tile = T.alloc_buffer((4,), "float16", scope="local")
+        q2_tile = T.alloc_buffer((4,), "float16", scope="local")
+        by = T.launch_thread("blockIdx.y", 2)
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        q1_tile_1 = T.decl_buffer((4,), "float16", data=q1_tile.data, scope="local")
+        q2_tile_1 = T.decl_buffer((4,), "float16", data=q2_tile.data, scope="local")
+        cos_tile_1 = T.decl_buffer((4,), "float16", data=cos_tile.data, scope="local")
+        sin_tile_1 = T.decl_buffer((4,), "float16", data=sin_tile.data, scope="local")
+        cos_tile_1[0:4] = cos_1[bx * 64 + tx % 16 * 4:bx * 64 + tx % 16 * 4 + 4]
+        sin_tile_1[0:4] = sin_1[bx * 64 + tx % 16 * 4:bx * 64 + tx % 16 * 4 + 4]
+        q1_tile_1[0:4] = Q_1[bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4:bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 4]
+        q2_tile_1[0:4] = Q_1[bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 64:bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 64 + 4]
+        for i in T.unroll(4):
+            q1: T.float16 = q1_tile_1[i]
+            q2: T.float16 = q2_tile_1[i]
+            c: T.float16 = cos_tile_1[i]
+            s: T.float16 = sin_tile_1[i]
+            q1_tile_1[i] = q1 * c - q2 * s
+            q2_tile_1[i] = q2 * c + q1 * s
+        Q_1[bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4:bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 4] = q1_tile_1[0:4]
+        Q_1[bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 64:bx * 4096 + by * 2048 + tx // 16 * 128 + tx % 16 * 4 + 64 + 4] = q2_tile_1[0:4]

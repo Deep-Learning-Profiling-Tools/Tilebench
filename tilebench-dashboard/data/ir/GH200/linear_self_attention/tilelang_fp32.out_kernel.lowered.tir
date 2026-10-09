@@ -1,0 +1,249 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def out_kernel_kernel(O: T.handle("float32", "global"), PhiQ: T.handle("float32", "global"), S: T.handle("float32", "global"), Z: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 82432, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 157, "blockIdx.y": 2, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2, 3]})
+        O_1 = T.decl_buffer((2560000,), data=O)
+        Z_1 = T.decl_buffer((256,), data=Z)
+        PhiQ_1 = T.decl_buffer((2560000,), data=PhiQ)
+        S_1 = T.decl_buffer((65536,), data=S)
+        bx = T.launch_thread("blockIdx.x", 157)
+        buf_dyn_shmem = T.alloc_buffer((82432,), "uint8", scope="shared.dyn")
+        s_shared: T.handle("custom[tfloat32]", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        workspace: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        q_shared: T.handle("custom[tfloat32]", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 65536)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 81920)
+        workspace_2: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 81920)
+        numer = T.alloc_buffer((64,), scope="local")
+        denom = T.alloc_buffer((2,), scope="local")
+        q_frag = T.alloc_buffer((64,), scope="local")
+        z_frag = T.alloc_buffer((1,), scope="local")
+        denom_prod = T.alloc_buffer((64,), scope="local")
+        denom_delta = T.alloc_buffer((2,), scope="local")
+        denom_delta_clear = T.alloc_buffer((64,), scope="local")
+        denom_delta_clear_1 = T.alloc_buffer((64,), scope="local")
+        denom_delta_clear_2 = T.alloc_buffer((64,), scope="local")
+        out = T.alloc_buffer((64,), scope="local")
+        by = T.launch_thread("blockIdx.y", 2)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        numer_1 = T.decl_buffer((64,), data=numer.data, scope="local")
+        denom_1 = T.decl_buffer((2,), data=denom.data, scope="local")
+        out_1 = T.decl_buffer((64,), data=out.data, scope="local")
+        numer_2 = T.decl_buffer((64,), data=numer.data, scope="local")
+        denom_2 = T.decl_buffer((2,), data=denom.data, scope="local")
+        denom_3 = T.decl_buffer((2,), data=denom.data, scope="local")
+        denom_4 = T.decl_buffer((2,), data=denom.data, scope="local")
+        for i in T.unroll(16):
+            numer_2[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        denom_2[0:2] = T.Broadcast(T.float32(0.0), 2)
+        denom_delta_1 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        s_shared_1 = T.decl_buffer((16384,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        s_shared_2 = T.decl_buffer((16384,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        q_frag_1 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_1 = T.decl_buffer((4096,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_2 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        s_shared_3 = T.decl_buffer((16384,), "custom[tfloat32]", data=s_shared, scope="shared.dyn")
+        z_frag_1 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_1 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_3 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_2 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_2 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_2 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        denom_delta_3 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        q_frag_4 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_2 = T.decl_buffer((4096,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_5 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_3 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_3 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_6 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_4 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_4 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_4 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        denom_delta_5 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        q_frag_7 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        q_shared_3 = T.decl_buffer((4096,), "custom[tfloat32]", data=q_shared, scope="shared.dyn")
+        q_frag_8 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_5 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_5 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        q_frag_9 = T.decl_buffer((64,), data=q_frag.data, scope="local")
+        z_frag_6 = T.decl_buffer((1,), data=z_frag.data, scope="local")
+        denom_prod_6 = T.decl_buffer((64,), data=denom_prod.data, scope="local")
+        denom_delta_6 = T.decl_buffer((2,), data=denom_delta.data, scope="local")
+        with T.attr(0, "tl.pipeline_mvb_num_stages", 2):
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 0)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    s_shared_1[tx % 64 // 32 * 4096 + i * 64 + tx // 64 * 32 + (tx % 32 // 16 + i % 4 // 2) % 2 * 16 + (tx % 16 // 8 + i % 2) % 2 * 8 + (tx // 64 + tx % 8 // 4) % 2 * 4 + tx % 4] = T.Cast("custom[tfloat32]", S_1[tx % 64 * 256 + by * 128 + i * 2 + tx // 64])
+            T.ptx_commit_group()
+            with T.attr(0, "async_scope", 1):
+                T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(64):
+                    s_shared_2[tx % 64 // 32 * 4096 + i * 64 + tx // 64 * 32 + (tx % 32 // 16 + i % 4 // 2) % 2 * 16 + (tx % 16 // 8 + i % 2) % 2 * 8 + (tx // 64 + tx % 8 // 4) % 2 * 4 + tx % 4 + 8192] = T.Cast("custom[tfloat32]", S_1[tx % 64 * 256 + by * 128 + i * 2 + tx // 64 + 16384])
+            T.ptx_commit_group()
+            for k_tile in T.serial(2, annotations={"tl_pipelined_num_stages": 2}):
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    for i in T.unroll(64):
+                        q_frag_1[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + k_tile * 64 + tx % 64], T.float32(0.0))
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    T.tvm_storage_sync("shared.dyn")
+                    if tx // 64 == 0:
+                        for i in T.unroll(64):
+                            q_shared_1[tx % 64 // 32 * 2048 + i * 32 + (tx % 32 // 16 + i % 8 // 4) % 2 * 16 + (tx % 16 // 8 + i % 4 // 2) % 2 * 8 + (tx % 8 // 4 + i % 2) % 2 * 4 + tx % 4] = T.Cast("custom[tfloat32]", q_frag_2[i])
+                T.ptx_wait_group(1)
+                T.tvm_storage_sync("shared")
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    T.attr(0, "lexical_alloc_scope", 1)
+                    desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                    desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                    T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, 0, 4096, 1), 1, 1, 64)
+                    T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, k_tile * 8192, 16384 - k_tile * 8192, 1), 1, 1, 64)
+                    T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+                    T.warpgroup_arrive()
+                    T.fence_proxy_async()
+                    for ki in T.unroll(8):
+                        T.ptx_wgmma_ss("m64n128k8", T.bool(True), T.bool(True), "tf32", "tf32", "fp32", desc_a.data, T.shift_right(ki // 4 * 8192 + ki % 4 * 32, 4), desc_b.data, T.shift_right(ki // 4 * 16384 + ki % 4 * 32, 4), numer.data, 0, 1, 1, 1)
+                    T.warpgroup_commit_batch()
+                    T.warpgroup_wait(0)
+                    T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+                with T.attr(0, "async_scope", 1):
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                    T.tvm_storage_sync("shared.dyn")
+                    for i in T.unroll(64):
+                        s_shared_3[k_tile * 8192 + tx % 64 // 32 * 4096 + i * 64 + tx // 64 * 32 + (tx % 32 // 16 + i % 4 // 2) % 2 * 16 + (tx % 16 // 8 + i % 2) % 2 * 8 + (tx // 64 + tx % 8 // 4) % 2 * 4 + tx % 4] = T.Cast("custom[tfloat32]", S_1[k_tile * 16384 + tx % 64 * 256 + by * 128 + i * 2 + tx // 64 + 32768])
+                T.ptx_commit_group()
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    z_frag_1[0] = Z_1[k_tile * 64 + tx % 64]
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    for i in T.unroll(64):
+                        denom_prod_1[i] = q_frag_3[i] * z_frag_2[0]
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                    T.tvm_storage_sync("shared.dyn")
+                    for i in T.unroll(64):
+                        denom_delta_clear[i] = T.float32(0.0)
+                        denom_delta_clear[i] = denom_delta_clear[i] + denom_prod_2[i]
+                        denom_delta_clear[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 64, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear[i], T.tvm_access_ptr(T.type_annotation("float32"), workspace_2, 0, 128, 2))
+                        if tx // 32 * 16 + i % 16 // 8 * 8 + tx % 32 // 4 == i:
+                            denom_delta_2[i % 16 // 8] = denom_delta_clear[i]
+                T.attr(0, "tl.pipeline_mvb_stage_expr", k_tile)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 0)
+                for i in T.unroll(2):
+                    denom_3[i] = denom_3[i] + denom_delta_3[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    q_frag_4[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + tx % 64 + 128], T.float32(0.0))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.tvm_storage_sync("shared.dyn")
+                if tx // 64 == 0:
+                    for i in T.unroll(64):
+                        q_shared_2[tx % 64 // 32 * 2048 + i * 32 + (tx % 32 // 16 + i % 8 // 4) % 2 * 16 + (tx % 16 // 8 + i % 4 // 2) % 2 * 8 + (tx % 8 // 4 + i % 2) % 2 * 4 + tx % 4] = T.Cast("custom[tfloat32]", q_frag_5[i])
+            T.ptx_wait_group(1)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.attr(0, "lexical_alloc_scope", 1)
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, 0, 16384, 1), 1, 1, 64)
+                T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(8):
+                    T.ptx_wgmma_ss("m64n128k8", T.bool(True), T.bool(True), "tf32", "tf32", "fp32", desc_a.data, T.shift_right(ki // 4 * 8192 + ki % 4 * 32, 4), desc_b.data, T.shift_right(ki // 4 * 16384 + ki % 4 * 32, 4), numer.data, 0, 1, 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                z_frag_3[0] = Z_1[tx % 64 + 128]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    denom_prod_3[i] = q_frag_6[i] * z_frag_4[0]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.tvm_storage_sync("shared.dyn")
+                for i in T.unroll(64):
+                    denom_delta_clear_1[i] = T.float32(0.0)
+                    denom_delta_clear_1[i] = denom_delta_clear_1[i] + denom_prod_4[i]
+                    denom_delta_clear_1[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 64, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear_1[i], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 128, 2))
+                    if tx // 32 * 16 + i % 16 // 8 * 8 + tx % 32 // 4 == i:
+                        denom_delta_4[i % 16 // 8] = denom_delta_clear_1[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 0):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(2):
+                    denom_4[i] = denom_4[i] + denom_delta_5[i]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    q_frag_7[i] = T.if_then_else(bx * 4 + i // 16 < 625, PhiQ_1[bx * 16384 + i * 256 + tx % 64 + 192], T.float32(0.0))
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.tvm_storage_sync("shared.dyn")
+                if tx // 64 == 0:
+                    for i in T.unroll(64):
+                        q_shared_3[tx % 64 // 32 * 2048 + i * 32 + (tx % 32 // 16 + i % 8 // 4) % 2 * 16 + (tx % 16 // 8 + i % 4 // 2) % 2 * 8 + (tx % 8 // 4 + i % 2) % 2 * 4 + tx % 4] = T.Cast("custom[tfloat32]", q_frag_8[i])
+            T.ptx_wait_group(0)
+            T.tvm_storage_sync("shared")
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.attr(0, "lexical_alloc_scope", 1)
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), q_shared, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("custom[tfloat32]"), s_shared, 8192, 8192, 1), 1, 1, 64)
+                T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(8):
+                    T.ptx_wgmma_ss("m64n128k8", T.bool(True), T.bool(True), "tf32", "tf32", "fp32", desc_a.data, T.shift_right(ki // 4 * 8192 + ki % 4 * 32, 4), desc_b.data, T.shift_right(ki // 4 * 16384 + ki % 4 * 32, 4), numer.data, 0, 1, 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", numer.data, 0, 64)
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                z_frag_5[0] = Z_1[tx % 64 + 192]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                for i in T.unroll(64):
+                    denom_prod_5[i] = q_frag_9[i] * z_frag_6[0]
+            with T.attr(0, "tl.pipeline_mvb_stage_expr", 1):
+                T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+                T.tvm_storage_sync("shared.dyn")
+                for i in T.unroll(64):
+                    denom_delta_clear_2[i] = T.float32(0.0)
+                    denom_delta_clear_2[i] = denom_delta_clear_2[i] + denom_prod_6[i]
+                    denom_delta_clear_2[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 64, 1, 0, tl::NamedBarrier<128>>::run", denom_delta_clear_2[i], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 128, 2))
+                    if tx // 32 * 16 + i % 16 // 8 * 8 + tx % 32 // 4 == i:
+                        denom_delta_6[i % 16 // 8] = denom_delta_clear_2[i]
+            T.attr(0, "tl.pipeline_mvb_stage_expr", 1)
+            T.attr(0, "tl.pipeline_mvb_parity_expr", 1)
+            for i in T.unroll(2):
+                denom_1[i] = denom_1[i] + denom_delta_1[i]
+        for i in T.unroll(64):
+            out_1[i] = numer_1[i] / (denom_1[i % 4 // 2] + T.float32(9.9999999999999995e-07))
+        if bx * 4 + tx // 32 < 625:
+            for i in T.unroll(32):
+                O_1[bx * 16384 + tx // 32 * 4096 + i % 2 * 2048 + tx % 32 // 4 * 256 + by * 128 + i // 2 * 8 + tx % 4 * 2:bx * 16384 + tx // 32 * 4096 + i % 2 * 2048 + tx % 32 // 4 * 256 + by * 128 + i // 2 * 8 + tx % 4 * 2 + 2] = out_1[i * 2:i * 2 + 2]

@@ -1,0 +1,32 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def matrix_transpose_kernel_kernel(output_desc: T.handle("uint8x128", "grid_constant"), x: T.handle("bfloat16", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 16384, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 64, "blockIdx.y": 320, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        x_1 = T.decl_buffer((83886080,), "bfloat16", data=x)
+        bx = T.launch_thread("blockIdx.x", 64)
+        buf_dyn_shmem = T.alloc_buffer((16384,), "uint8", scope="shared.dyn")
+        tile: T.handle("bfloat16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        tile_T: T.handle("bfloat16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 8192)
+        by = T.launch_thread("blockIdx.y", 320)
+        tx = T.launch_thread("threadIdx.x", 256)
+        if T.tl_shuffle_elect(0):
+            T.call_extern("handle", "tl::prefetch_tma_descriptor", output_desc)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        tile_1 = T.decl_buffer((4096,), "bfloat16", data=tile, scope="shared.dyn")
+        tile_T_1 = T.decl_buffer((4096,), "bfloat16", data=tile_T, scope="shared.dyn")
+        for i in T.unroll(2):
+            tile_1[i * 2048 + tx * 8:i * 2048 + tx * 8 + 8] = x_1[bx * 1310720 + i * 655360 + tx // 8 * 20480 + by * 64 + tx % 8 * 8:bx * 1310720 + i * 655360 + tx // 8 * 20480 + by * 64 + tx % 8 * 8 + 8]
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(16):
+            tile_T_1[tx % 64 * 64 + (i // 8 + tx % 8 // 4) % 2 * 32 + (i % 8 // 4 + tx % 4 // 2) % 2 * 16 + (i % 4 // 2 + tx % 2) % 2 * 8 + i % 2 * 4 + tx // 64] = tile_1[i * 256 + tx]
+        T.tvm_storage_sync("shared.dyn")
+        if T.tl_shuffle_elect(256):
+            T.fence_proxy_async()
+            T.tma_store(output_desc, T.tvm_access_ptr(T.type_annotation("bfloat16"), tile_T, 0, 4096, 1), bx * 64, by * 64, 0, 0)
+            T.tma_store_arrive()
+            T.tma_store_wait(0, T.bool(True))

@@ -1,0 +1,37 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def rope_embedding(Q: T.handle, cos: T.handle, sin: T.handle):
+    Q_1 = T.match_buffer(Q, (20480, 32, 2, 64), strides=(4096, 128, 64, 1))
+    cos_1 = T.match_buffer(cos, (20480, 64), strides=(64, 1))
+    sin_1 = T.match_buffer(sin, (20480, 64), strides=(64, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 20480)
+    by = T.launch_thread("blockIdx.y", 2)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {Q_1.data: 0.0}})
+        q1_tile = T.sblock_alloc_buffer((16, 64), scope="local.fragment")
+        q2_tile = T.sblock_alloc_buffer((16, 64), scope="local.fragment")
+        cos_tile = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        sin_tile = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        seq_idx: T.int32 = bx % 20480
+        head_start: T.int32 = by * 16
+        T.copy(T.region(cos_1[seq_idx, 0], 1, 1, 64), T.region(cos_tile[0], 2, 64))
+        T.copy(T.region(sin_1[seq_idx, 0], 1, 1, 64), T.region(sin_tile[0], 2, 64))
+        T.copy(T.region(Q_1[bx, head_start, 0, 0], 1, 1, 16, 1, 64), T.region(q1_tile[0, 0], 2, 16, 64))
+        T.copy(T.region(Q_1[bx, head_start, 1, 0], 1, 1, 16, 1, 64), T.region(q2_tile[0, 0], 2, 16, 64))
+        for h in T.parallel(16):
+            for d in T.parallel(64):
+                q1: T.float32 = q1_tile[h, d]
+                q2: T.float32 = q2_tile[h, d]
+                c: T.float32 = cos_tile[d]
+                s: T.float32 = sin_tile[d]
+                q1_tile[h, d] = q1 * c - q2 * s
+                q2_tile[h, d] = q2 * c + q1 * s
+        T.copy(T.region(q1_tile[0, 0], 1, 16, 64), T.region(Q_1[bx, head_start, 0, 0], 2, 1, 16, 1, 64))
+        T.copy(T.region(q2_tile[0, 0], 1, 16, 64), T.region(Q_1[bx, head_start, 1, 0], 2, 1, 16, 1, 64))

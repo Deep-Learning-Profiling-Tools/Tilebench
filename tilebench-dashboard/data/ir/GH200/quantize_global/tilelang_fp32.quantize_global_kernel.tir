@@ -1,0 +1,17 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def quantize_global_kernel(x: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (20971520,), strides=(1,))
+    output_1 = T.match_buffer(output, (20971520,), "float16", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 2560)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        for local_idx in T.parallel(8192):
+            idx: T.int32 = local_idx + bx * 8192
+            output_1[idx] = T.Cast("float16", x_1[idx])

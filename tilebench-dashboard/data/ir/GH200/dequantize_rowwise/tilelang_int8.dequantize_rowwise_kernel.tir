@@ -1,0 +1,25 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def dequantize_rowwise_kernel(x: T.handle, state_x: T.handle, output: T.handle):
+    rows = T.int32()
+    x_1 = T.match_buffer(x, (rows, 8192), "int8", strides=(8192, 1))
+    state_x_1 = T.match_buffer(state_x, (rows,), strides=(1,))
+    output_1 = T.match_buffer(output, (rows, 8192), "float16", strides=(8192, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", rows)
+    by = T.launch_thread("blockIdx.y", 8)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        x_local = T.sblock_alloc_buffer((1024,), "int8", scope="local.fragment")
+        y_local = T.sblock_alloc_buffer((1024,), "float16", scope="local.fragment")
+        col_start: T.int32 = by * 1024
+        scale: T.float32 = state_x_1[bx] * T.float32(0.007874015748031496)
+        T.copy(T.region(x_1[bx, col_start], 1, 1, 1024), T.region(x_local[0], 2, 1024))
+        for i in T.parallel(1024):
+            y_local[i] = T.Cast("float16", T.Cast("float32", x_local[i]) * scale)
+        T.copy(T.region(y_local[0], 1, 1024), T.region(output_1[bx, col_start], 2, 1, 1024))

@@ -1,0 +1,180 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def first_wave_kernel_kernel(A: T.handle("float16", "global"), B: T.handle("float16", "global"), C: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 49152, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 132, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        bx = T.launch_thread("blockIdx.x", 132)
+        buf_dyn_shmem = T.alloc_buffer((49152,), "uint8", scope="shared.dyn")
+        a_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        b_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 24576)
+        start_iter = T.alloc_buffer((1,), "int32", scope="local.var")
+        last_iter = T.alloc_buffer((1,), "int32", scope="local.var")
+        end_iter = T.alloc_buffer((1,), "int32", scope="local.var")
+        tile_id = T.alloc_buffer((1,), "int32", scope="local.var")
+        group_id = T.alloc_buffer((1,), "int32", scope="local.var")
+        first_pid_m = T.alloc_buffer((1,), "int32", scope="local.var")
+        group_size_m = T.alloc_buffer((1,), "int32", scope="local.var")
+        pid_m = T.alloc_buffer((1,), "int32", scope="local.var")
+        pid_n = T.alloc_buffer((1,), "int32", scope="local.var")
+        acc = T.alloc_buffer((128,), scope="local")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        acc_1 = T.decl_buffer((128,), data=acc.data, scope="local")
+        start_iter_1 = T.decl_buffer((1,), "int32", data=start_iter.data, scope="local.var")
+        last_iter_1 = T.decl_buffer((1,), "int32", data=last_iter.data, scope="local.var")
+        end_iter_1 = T.decl_buffer((1,), "int32", data=end_iter.data, scope="local.var")
+        tile_id_1 = T.decl_buffer((1,), "int32", data=tile_id.data, scope="local.var")
+        pid_m_1 = T.decl_buffer((1,), "int32", data=pid_m.data, scope="local.var")
+        pid_n_1 = T.decl_buffer((1,), "int32", data=pid_n.data, scope="local.var")
+        group_id_1 = T.decl_buffer((1,), "int32", data=group_id.data, scope="local.var")
+        first_pid_m_1 = T.decl_buffer((1,), "int32", data=first_pid_m.data, scope="local.var")
+        group_size_m_1 = T.decl_buffer((1,), "int32", data=group_size_m.data, scope="local.var")
+        acc_2 = T.decl_buffer((128,), data=acc.data, scope="local")
+        acc_3 = T.decl_buffer((128,), data=acc.data, scope="local")
+        acc_4 = T.decl_buffer((128,), data=acc.data, scope="local")
+        start_iter_1[0] = bx * 205 + T.min(bx, 76)
+        last_iter_1[0] = bx * 205 + T.min(bx + 1, 76) + 205
+        while start_iter_1[0] < last_iter_1[0]:
+            end_iter_1[0] = T.min(start_iter_1[0] + 128 - start_iter_1[0] % 128, last_iter_1[0])
+            tile_id_1[0] = start_iter_1[0] // 128
+            group_id_1[0] = tile_id_1[0] // 1792
+            first_pid_m_1[0] = group_id_1[0] * 8
+            group_size_m_1[0] = 64 - T.max(first_pid_m_1[0], 56)
+            pid_m_1[0] = first_pid_m_1[0] + tile_id_1[0] % group_size_m_1[0]
+            pid_n_1[0] = tile_id_1[0] % 1792 // group_size_m_1[0]
+            with T.attr(0, "tl.pipeline_mvb_num_stages", 3):
+                if start_iter_1[0] < end_iter_1[0]:
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", start_iter_1[0] % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", start_iter_1[0] % 6 // 3)
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), a_shared, i * 1024 + tx // 4 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, T.Cast("int64", pid_m_1[T.int64(0)]) * T.int64(524288) + T.Cast("int64", i) * T.int64(131072) + T.Cast("int64", tx) // T.int64(4) * T.int64(4096) + T.Cast("int64", start_iter_1[0]) % T.int64(128) * T.int64(32) + T.Cast("int64", tx) % T.int64(4) * T.int64(8), 1, 1), 8, pid_m_1[0] < 64 and 0 <= pid_m_1[0] and pid_m_1[0] < 64 and 0 <= pid_m_1[0])
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", start_iter_1[0] % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", start_iter_1[0] % 6 // 3)
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), b_shared, tx % 16 // 8 * 2048 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, T.Cast("int64", start_iter_1[0]) % T.int64(128) * T.int64(917504) + T.Cast("int64", i) * T.int64(229376) + T.Cast("int64", tx) // T.int64(16) * T.int64(28672) + T.Cast("int64", pid_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(16) * T.int64(8), 1, 1), 8, pid_n_1[0] < 224 and 0 <= pid_n_1[0] and pid_n_1[0] < 224 and 0 <= pid_n_1[0])
+                    T.ptx_commit_group()
+                if T.bitwise_and(start_iter_1[0] < end_iter_1[0], start_iter_1[0] < end_iter_1[0]):
+                    T.ptx_wait_group(0)
+                T.tvm_storage_sync("shared")
+                if start_iter_1[0] + 1 < end_iter_1[0]:
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", (start_iter_1[0] + 1) % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", (start_iter_1[0] + 1) % 6 // 3)
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), a_shared, i * 1024 + tx // 4 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 4096, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, T.Cast("int64", pid_m_1[T.int64(0)]) * T.int64(524288) + T.Cast("int64", i) * T.int64(131072) + T.Cast("int64", tx) // T.int64(4) * T.int64(4096) + (T.Cast("int64", start_iter_1[0]) + T.int64(1)) % T.int64(128) * T.int64(32) + T.Cast("int64", tx) % T.int64(4) * T.int64(8), 1, 1), 8, pid_m_1[0] < 64 and 0 <= pid_m_1[0] and pid_m_1[0] < 64 and 0 <= pid_m_1[0])
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", (start_iter_1[0] + 1) % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", (start_iter_1[0] + 1) % 6 // 3)
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), b_shared, tx % 16 // 8 * 2048 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8 + 4096, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, (T.Cast("int64", start_iter_1[0]) + T.int64(1)) % T.int64(128) * T.int64(917504) + T.Cast("int64", i) * T.int64(229376) + T.Cast("int64", tx) // T.int64(16) * T.int64(28672) + T.Cast("int64", pid_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(16) * T.int64(8), 1, 1), 8, pid_n_1[0] < 224 and 0 <= pid_n_1[0] and pid_n_1[0] < 224 and 0 <= pid_n_1[0])
+                    T.ptx_commit_group()
+                if T.bitwise_and(start_iter_1[0] + 1 < end_iter_1[0], start_iter_1[0] + 1 < end_iter_1[0]):
+                    T.ptx_wait_group(0)
+                T.tvm_storage_sync("shared")
+                for current_iter in T.serial(start_iter_1[0], start_iter_1[0] + (end_iter_1[0] - start_iter_1[0] - 2), annotations={"tl_pipelined_num_stages": 3}):
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", (current_iter + 2) % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", (current_iter + 2) % 6 // 3)
+                        T.tvm_storage_sync("shared.dyn")
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), a_shared, (current_iter + 2 - start_iter_1[0]) % 3 * 4096 + i * 1024 + tx // 4 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), A, T.Cast("int64", pid_m_1[T.int64(0)]) * T.int64(524288) + T.Cast("int64", i) * T.int64(131072) + T.Cast("int64", tx) // T.int64(4) * T.int64(4096) + (T.Cast("int64", current_iter) + T.int64(2)) % T.int64(128) * T.int64(32) + T.Cast("int64", tx) % T.int64(4) * T.int64(8), 1, 1), 8, pid_m_1[0] < 64 and 0 <= pid_m_1[0] and pid_m_1[0] < 64 and 0 <= pid_m_1[0])
+                    with T.attr(0, "async_scope", 1):
+                        T.attr(0, "tl.pipeline_mvb_stage_expr", (current_iter + 2) % 3)
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", (current_iter + 2) % 6 // 3)
+                        for i in T.unroll(4):
+                            T.ptx_cp_async(T.tvm_access_ptr(T.type_annotation("float16"), b_shared, (current_iter + 2 - start_iter_1[0]) % 3 * 4096 + tx % 16 // 8 * 2048 + i * 512 + tx // 16 * 64 + (tx // 64 + tx % 8 // 4) % 2 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8, 1, 2), T.tvm_access_ptr(T.type_annotation("float16"), B, (T.Cast("int64", current_iter) + T.int64(2)) % T.int64(128) * T.int64(917504) + T.Cast("int64", i) * T.int64(229376) + T.Cast("int64", tx) // T.int64(16) * T.int64(28672) + T.Cast("int64", pid_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(16) * T.int64(8), 1, 1), 8, pid_n_1[0] < 224 and 0 <= pid_n_1[0] and pid_n_1[0] < 224 and 0 <= pid_n_1[0])
+                    T.ptx_commit_group()
+                    with T.attr(0, "tl.pipeline_mvb_stage_expr", current_iter % 3):
+                        T.attr(0, "tl.pipeline_mvb_parity_expr", current_iter % 6 // 3)
+                        if current_iter == start_iter_1[0]:
+                            for i in T.unroll(32):
+                                acc_3[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+                    T.ptx_wait_group(0)
+                    T.tvm_storage_sync("shared")
+                    T.attr(0, "tl.pipeline_mvb_stage_expr", current_iter % 3)
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", current_iter % 6 // 3)
+                    T.attr(0, "lexical_alloc_scope", 1)
+                    desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                    desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                    T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), a_shared, (current_iter - start_iter_1[0]) % 3 * 4096, 12288 - (current_iter - start_iter_1[0]) % 3 * 4096, 1), 2, 1, 32)
+                    T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), b_shared, (current_iter - start_iter_1[0]) % 3 * 4096, 12288 - (current_iter - start_iter_1[0]) % 3 * 4096, 1), 1, 256, 64)
+                    T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+                    T.warpgroup_arrive()
+                    T.fence_proxy_async()
+                    for i in T.unroll(2):
+                        for ki in T.unroll(2):
+                            T.ptx_wgmma_ss("m64n128k16", T.bool(True), T.bool(False), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(i * 4096 + ki * 32, 4), desc_b.data, T.shift_right(ki * 2048, 4), acc.data, i * 64, 1, 1, 1)
+                    T.warpgroup_commit_batch()
+                    T.warpgroup_wait(0)
+                    T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", (end_iter_1[0] + 1) % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (end_iter_1[0] + 4) % 6 // 3)
+                    if start_iter_1[0] + 2 <= end_iter_1[0]:
+                        if end_iter_1[0] - 2 == start_iter_1[0]:
+                            for i in T.unroll(32):
+                                acc_4[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+                if T.bitwise_and(T.bool(False), T.bool(False)):
+                    T.ptx_wait_group(0)
+                T.tvm_storage_sync("shared")
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", (end_iter_1[0] + 1) % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (end_iter_1[0] + 4) % 6 // 3)
+                    if start_iter_1[0] + 2 <= end_iter_1[0]:
+                        T.attr(0, "lexical_alloc_scope", 1)
+                        desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                        desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                        desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                        desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                        T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), a_shared, (end_iter_1[0] + 1 - start_iter_1[0]) % 3 * 4096, 12288 - (end_iter_1[0] + 1 - start_iter_1[0]) % 3 * 4096, 1), 2, 1, 32)
+                        T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), b_shared, (end_iter_1[0] + 1 - start_iter_1[0]) % 3 * 4096, 12288 - (end_iter_1[0] + 1 - start_iter_1[0]) % 3 * 4096, 1), 1, 256, 64)
+                        T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+                        T.warpgroup_arrive()
+                        T.fence_proxy_async()
+                        for i in T.unroll(2):
+                            for ki in T.unroll(2):
+                                T.ptx_wgmma_ss("m64n128k16", T.bool(True), T.bool(False), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(i * 4096 + ki * 32, 4), desc_b.data, T.shift_right(ki * 2048, 4), acc.data, i * 64, 1, 1, 1)
+                        T.warpgroup_commit_batch()
+                        T.warpgroup_wait(0)
+                        T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+                with T.attr(0, "tl.pipeline_mvb_stage_expr", (end_iter_1[0] + 2) % 3):
+                    T.attr(0, "tl.pipeline_mvb_parity_expr", (end_iter_1[0] + 5) % 6 // 3)
+                    if start_iter_1[0] < end_iter_1[0]:
+                        if end_iter_1[0] - 1 == start_iter_1[0]:
+                            for i in T.unroll(32):
+                                acc_4[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+                if T.bitwise_and(T.bool(False), T.bool(False)):
+                    T.ptx_wait_group(0)
+                T.tvm_storage_sync("shared")
+                T.attr(0, "tl.pipeline_mvb_stage_expr", (end_iter_1[0] + 2) % 3)
+                T.attr(0, "tl.pipeline_mvb_parity_expr", (end_iter_1[0] + 5) % 6 // 3)
+                if start_iter_1[0] < end_iter_1[0]:
+                    T.attr(0, "lexical_alloc_scope", 1)
+                    desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                    desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                    desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                    T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), a_shared, (end_iter_1[0] + 2 - start_iter_1[0]) % 3 * 4096, 12288 - (end_iter_1[0] + 2 - start_iter_1[0]) % 3 * 4096, 1), 2, 1, 32)
+                    T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), b_shared, (end_iter_1[0] + 2 - start_iter_1[0]) % 3 * 4096, 12288 - (end_iter_1[0] + 2 - start_iter_1[0]) % 3 * 4096, 1), 1, 256, 64)
+                    T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+                    T.warpgroup_arrive()
+                    T.fence_proxy_async()
+                    for i in T.unroll(2):
+                        for ki in T.unroll(2):
+                            T.ptx_wgmma_ss("m64n128k16", T.bool(True), T.bool(False), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(i * 4096 + ki * 32, 4), desc_b.data, T.shift_right(ki * 2048, 4), acc.data, i * 64, 1, 1, 1)
+                    T.warpgroup_commit_batch()
+                    T.warpgroup_wait(0)
+                    T.warpgroup_fence_operand("float32", acc.data, 0, 128)
+            if 0 <= pid_n_1[0]:
+                for i in T.unroll(64):
+                    if pid_n_1[0] < 224:
+                        if pid_m_1[0] < 64:
+                            T.atomic_addx2_elem_op(T.tvm_access_ptr(T.type_annotation("float32"), C, T.Cast("int64", pid_m_1[T.int64(0)]) * T.int64(3670016) + T.Cast("int64", i) // T.int64(32) * T.int64(1835008) + T.Cast("int64", tx) // T.int64(32) * T.int64(458752) + T.Cast("int64", i) % T.int64(2) * T.int64(229376) + T.Cast("int64", tx) % T.int64(32) // T.int64(4) * T.int64(28672) + T.Cast("int64", pid_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", i) % T.int64(32) // T.int64(2) * T.int64(8) + T.Cast("int64", tx) % T.int64(4) * T.int64(2), 1, 3), acc_1[i * 2:i * 2 + 2])
+            T.tvm_storage_sync("shared")
+            start_iter_1[0] = end_iter_1[0]

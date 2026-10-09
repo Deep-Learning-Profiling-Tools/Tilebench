@@ -1,0 +1,125 @@
+#if defined(_MSC_VER) && !defined(__clang__) && _MSC_VER < 1940
+#define _tl_orig_alignas alignas
+#define alignas(N) _tl_orig_alignas((N) <= 64 ? (N) : 64)
+#include <cuda.h>
+#undef alignas
+#define alignas _tl_orig_alignas
+#endif
+#include <math_constants.h>
+#include <tl_templates/cuda/gemm.h>
+#include <tl_templates/cuda/copy.h>
+#include <tl_templates/cuda/reduce.h>
+#include <tl_templates/cuda/scan.h>
+#include <tl_templates/cuda/ldsm.h>
+#include <tl_templates/cuda/threadblock_swizzle.h>
+#include <tl_templates/cuda/debug.h>
+#ifdef ENABLE_BF16
+#include <tl_templates/cuda/cuda_bf16_fallbacks.cuh>
+#endif
+
+extern "C" __global__ void softmax_online_kernel_kernel(const half_t* __restrict__ x, half_t* __restrict__ y, int M);
+extern "C" __global__ void __launch_bounds__(128, 1) softmax_online_kernel_kernel(const half_t* __restrict__ x, half_t* __restrict__ y, int M) {
+  extern __shared__ __align__(1024) uchar buf_dyn_shmem[];
+  void* workspace = ((void*)((char*)buf_dyn_shmem + 0));
+  void* workspace_1 = ((void*)((char*)buf_dyn_shmem + 512));
+  float l[1];
+  float running_max[1];
+  float past_max[1];
+  float X_local[16];
+  float x_exp_local[16];
+  half_t x_local_cast[8];
+  float tile_max[1];
+  float tile_sum_local[1];
+  half_t x_local_cast_1[8];
+  half_t Y_local[16];
+  l[0] = 0x0p+0f/*0.000000e+00*/;
+  running_max[0] = -CUDART_INF_F;
+  past_max[0] = -CUDART_INF_F;
+  __syncthreads();
+  for (int _tmp = 0; _tmp < 5; ++_tmp) {
+    #pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      float broadcast_var = -CUDART_INF_F;
+      *(float4*)(X_local + (i * 4)) = make_float4(broadcast_var, broadcast_var, broadcast_var, broadcast_var);
+    }
+    #pragma unroll
+    for (int i_1 = 0; i_1 < 4; ++i_1) {
+      float broadcast_var_1 = 0x0p+0f/*0.000000e+00*/;
+      *(float4*)(x_exp_local + (i_1 * 4)) = make_float4(broadcast_var_1, broadcast_var_1, broadcast_var_1, broadcast_var_1);
+    }
+    #pragma unroll
+    for (int i_2 = 0; i_2 < 2; ++i_2) {
+      *(uint4*)(x_local_cast + 0) = *(uint4*)(x + ((((((int64_t)((int)blockIdx.x)) * (int64_t)10240) + (((int64_t)_tmp) * (int64_t)2048)) + (((int64_t)i_2) * (int64_t)1024)) + (((int64_t)((int)threadIdx.x)) * (int64_t)8)));
+      for (int vec = 0; vec < 2; ++vec) {
+        float4 __1;
+        uint2 v_ = *(uint2*)(x_local_cast + (vec * 4));
+        ((float2*)(&__1))[0] = __half22float2(((half2*)(&v_))[0]);
+        ((float2*)(&__1))[1] = __half22float2(((half2*)(&v_))[1]);
+        *(float4*)(X_local + ((i_2 * 8) + (vec * 4))) = __1;
+      }
+    }
+    tile_max[0] = -CUDART_INF_F;
+    #pragma unroll
+    for (int rv = 0; rv < 16; ++rv) {
+      tile_max[0] = max(tile_max[0], X_local[(((rv & 1) * 8) + (rv >> 1))]);
+    }
+    tile_max[0] = tl::AllReduce<tl::MaxOp, 128, 1, 0, tl::NamedBarrier<128>>::run(tile_max[0], (&(((float*)workspace_1)[0])));
+    running_max[0] = max(running_max[0], tile_max[0]);
+    #pragma unroll
+    for (int i_3 = 0; i_3 < 16; ++i_3) {
+      x_exp_local[i_3] = expf((X_local[i_3] - running_max[0]));
+    }
+    tile_sum_local[0] = 0x0p+0f/*0.000000e+00*/;
+    #pragma unroll
+    for (int rv_1 = 0; rv_1 < 16; ++rv_1) {
+      tile_sum_local[0] = (tile_sum_local[0] + x_exp_local[(((rv_1 & 1) * 8) + (rv_1 >> 1))]);
+    }
+    tile_sum_local[0] = tl::AllReduce<tl::SumOp, 128, 1, 0, tl::NamedBarrier<128>>::run(tile_sum_local[0], (&(((float*)workspace)[0])));
+    l[0] = ((l[0] * expf((past_max[0] - running_max[0]))) + tile_sum_local[0]);
+    past_max[0] = running_max[0];
+  }
+  for (int _tmp_1 = 0; _tmp_1 < 5; ++_tmp_1) {
+    #pragma unroll
+    for (int i_4 = 0; i_4 < 2; ++i_4) {
+      *(uint4*)(x_local_cast_1 + 0) = *(uint4*)(x + ((((((int64_t)((int)blockIdx.x)) * (int64_t)10240) + (((int64_t)_tmp_1) * (int64_t)2048)) + (((int64_t)i_4) * (int64_t)1024)) + (((int64_t)((int)threadIdx.x)) * (int64_t)8)));
+      for (int vec_1 = 0; vec_1 < 2; ++vec_1) {
+        float4 __2;
+        uint2 v__1 = *(uint2*)(x_local_cast_1 + (vec_1 * 4));
+        ((float2*)(&__2))[0] = __half22float2(((half2*)(&v__1))[0]);
+        ((float2*)(&__2))[1] = __half22float2(((half2*)(&v__1))[1]);
+        *(float4*)(X_local + ((i_4 * 8) + (vec_1 * 4))) = __2;
+      }
+    }
+    float coef = (0x1p+0f/*1.000000e+00*/ / l[0]);
+    #pragma unroll
+    for (int i_5 = 0; i_5 < 4; ++i_5) {
+      uint2 __3;
+      float4 __4;
+        float4 __5;
+        float4 __6;
+          float4 v__2 = *(float4*)(X_local + (i_5 * 4));
+          float4 v__3 = make_float4(running_max[0], running_max[0], running_max[0], running_max[0]);
+          __6.x = (v__2.x-v__3.x);
+          __6.y = (v__2.y-v__3.y);
+          __6.z = (v__2.z-v__3.z);
+          __6.w = (v__2.w-v__3.w);
+        __5.x = expf(__6.x);
+        __5.y = expf(__6.y);
+        __5.z = expf(__6.z);
+        __5.w = expf(__6.w);
+        float4 v__4 = make_float4(coef, coef, coef, coef);
+        __4.x = (__5.x*v__4.x);
+        __4.y = (__5.y*v__4.y);
+        __4.z = (__5.z*v__4.z);
+        __4.w = (__5.w*v__4.w);
+      ((half2*)(&__3))[0] = __float22half2_rn(((float2*)(&__4))[0]);
+      ((half2*)(&__3))[1] = __float22half2_rn(((float2*)(&__4))[1]);
+      *(uint2*)(Y_local + (i_5 * 4)) = __3;
+    }
+    #pragma unroll
+    for (int i_6 = 0; i_6 < 2; ++i_6) {
+      *(uint4*)(y + ((((((int64_t)((int)blockIdx.x)) * (int64_t)10240) + (((int64_t)_tmp_1) * (int64_t)2048)) + (((int64_t)i_6) * (int64_t)1024)) + (((int64_t)((int)threadIdx.x)) * (int64_t)8))) = *(uint4*)(Y_local + (i_6 * 8));
+    }
+  }
+}
+

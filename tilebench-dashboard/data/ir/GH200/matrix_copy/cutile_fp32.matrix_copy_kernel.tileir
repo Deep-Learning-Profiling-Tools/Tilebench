@@ -1,0 +1,18 @@
+(a_ptr_0: Tile[PointerTy(pointee_type=<DType 'float32'>),()], a_ptr_1: Tile[int32,()], a_ptr_2: Tile[int32,()], b_ptr_0: Tile[PointerTy(pointee_type=<DType 'float32'>),()], b_ptr_1: Tile[int32,()], b_ptr_2: Tile[int32,()]):
+$token: Token = make_token()
+a_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'float32'>),()] = assume_div_by(x=a_ptr_0, divisor=16)
+a_ptr_1.0: Tile[int32,()] = assume_div_by(x=a_ptr_1, divisor=16)
+b_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'float32'>),()] = assume_div_by(x=b_ptr_0, divisor=16)
+b_ptr_1.0: Tile[int32,()] = assume_div_by(x=b_ptr_1, divisor=16)
+$0: Tile[int32,()] = assume_bounded(x=a_ptr_1.0, lower_bound=0, upper_bound=None)
+$0.0: Tile[int32,()] = assume_div_by(x=$0, divisor=16)
+a_ptr{a_ptr_0, $0, a_ptr_2}: Array[float32,(?):(1)] = make_tensor_view(base_ptr=a_ptr_0.0, shape=($0.0), dynamic_strides=())
+$1: Tile[int32,()] = assume_bounded(x=b_ptr_1.0, lower_bound=0, upper_bound=None)
+$1.0: Tile[int32,()] = assume_div_by(x=$1, divisor=16)
+b_ptr{b_ptr_0, $1, b_ptr_2}: Array[float32,(?):(1)] = make_tensor_view(base_ptr=b_ptr_0.0, shape=($1.0), dynamic_strides=())
+$11: Tile[int32,()] = tile_bid(axis=0)
+$37{a_ptr_0, $0, a_ptr_2}: PartitionView[Array[float32,(?):(1)],tile_shape=(1024,),order=(0,),padding_mode=PaddingMode.UNDETERMINED] = make_partition_view(array=a_ptr{a_ptr_0, $0, a_ptr_2})
+$38: Tile[float32,(1024)], $39: Token = tile_load(view=$37{a_ptr_0, $0, a_ptr_2}, index=($11), token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+$62{b_ptr_0, $1, b_ptr_2}: PartitionView[Array[float32,(?):(1)],tile_shape=(1024,),order=(0,),padding_mode=PaddingMode.UNDETERMINED] = make_partition_view(array=b_ptr{b_ptr_0, $1, b_ptr_2})
+$63: Token = tile_store(view=$62{b_ptr_0, $1, b_ptr_2}, index=($11), tile=$38, token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+return

@@ -1,0 +1,24 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def histogram_partial_kernel(x: T.handle, partial: T.handle):
+    x_1 = T.match_buffer(x, (67108864,), "int32", strides=(1,))
+    partial_1 = T.match_buffer(partial, (256, 4096), "int32", strides=(4096, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 256)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        smem = T.sblock_alloc_buffer((4096,), "int32", scope="shared.dyn")
+        T.fill(T.region(smem[0], 2, 4096), 0)
+        for _tmp in range((33023 - bx) // 256):
+            chunk_idx: T.int32 = bx + _tmp * 256
+            for local_idx in T.parallel(2048):
+                idx: T.int32 = chunk_idx * 2048 + local_idx
+                val: T.int32 = x_1[idx]
+                if idx < 67108864 and (val >= 0 and val < 4096):
+                    T.atomic_add_elem_op(T.access_ptr(smem[val], 1, 3), 1)
+        T.copy(T.region(smem[0], 1, 4096), T.region(partial_1[bx, 0], 2, 1, 4096))

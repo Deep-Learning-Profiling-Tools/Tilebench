@@ -1,0 +1,19 @@
+(sums_ptr_0: Tile[PointerTy(pointee_type=<DType 'int32'>),()], sums_ptr_1: Tile[int32,()], sums_ptr_2: Tile[int32,()]):
+$token: Token = make_token()
+sums_ptr_0.0: Tile[PointerTy(pointee_type=<DType 'int32'>),()] = assume_div_by(x=sums_ptr_0, divisor=16)
+$0: Tile[int32,()] = assume_bounded(x=sums_ptr_1, lower_bound=0, upper_bound=None)
+sums_ptr{sums_ptr_0, $0, sums_ptr_2}: Array[int32,(?):(1)] = make_tensor_view(base_ptr=sums_ptr_0.0, shape=($0), dynamic_strides=())
+$11: const Tile[int32,()] = typed_const(value=0)
+$32{sums_ptr_0, $0, sums_ptr_2}: PartitionView[Array[int32,(?):(1)],tile_shape=(1024,),order=(0,),padding_mode=PaddingMode.ZERO] = make_partition_view(array=sums_ptr{sums_ptr_0, $0, sums_ptr_2})
+$33: Tile[int32,(1024)], $34: Token = tile_load(view=$32{sums_ptr_0, $0, sums_ptr_2}, index=($11), token=$token, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+$token.0: Token = join_tokens(tokens=($token, $34))
+$55: Tile[int32,(1024)] = tile_scan(xs=($33), axis=0, reverse=False, identities=(0,))
+do ($52: Tile[int32,()], $53: Tile[int32,()])
+    ($52: Tile[int32,()], $53: Tile[int32,()]):
+    $54: Tile[int32,()] = raw_binary_arith(lhs=$52, rhs=$53, fn="add", rounding_mode=None, flush_to_zero=False)
+    yield $54
+$59: Tile[int32,(1024)] = raw_binary_arith(lhs=$55, rhs=$33, fn="sub", rounding_mode=None, flush_to_zero=False)
+$73: const Tile[int32,()] = typed_const(value=0)
+$83{sums_ptr_0, $0, sums_ptr_2}: PartitionView[Array[int32,(?):(1)],tile_shape=(1024,),order=(0,),padding_mode=PaddingMode.UNDETERMINED] = make_partition_view(array=sums_ptr{sums_ptr_0, $0, sums_ptr_2})
+$84: Token = tile_store(view=$83{sums_ptr_0, $0, sums_ptr_2}, index=($73), tile=$59, token=$token.0, latency=None, allow_tma=None, memory_order=MemoryOrder.WEAK, memory_scope=MemoryScope.NONE)
+return

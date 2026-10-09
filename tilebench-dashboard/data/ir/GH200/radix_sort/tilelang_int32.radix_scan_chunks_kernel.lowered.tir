@@ -1,0 +1,34 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(chunk_offsets: T.handle("int32", "global"), src: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 4096, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 77, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        src_1 = T.decl_buffer((78128,), "int32", data=src)
+        chunk_offsets_1 = T.decl_buffer((77,), "int32", data=chunk_offsets)
+        bx = T.launch_thread("blockIdx.x", 77)
+        src_buffer = T.alloc_buffer((8,), "int32", scope="local")
+        original = T.alloc_buffer((8,), "int32", scope="local")
+        scan_smem = T.alloc_buffer((1024,), "int32", scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        src_buffer_1 = T.decl_buffer((8,), "int32", data=src_buffer.data, scope="local")
+        original_1 = T.decl_buffer((8,), "int32", data=original.data, scope="local")
+        scan_smem_1 = T.decl_buffer((1024,), "int32", data=scan_smem.data, scope="shared.dyn")
+        base: T.int32 = chunk_offsets_1[bx]
+        for i in T.unroll(2):
+            src_buffer_1[i * 4:i * 4 + 4] = T.if_then_else(bx * 64 + i * 32 + tx // 4 < 4883, src_1[bx * 1024 + i * 512 + tx * 4:bx * 1024 + i * 512 + tx * 4 + 4], T.Broadcast(0, 4))
+            original_1[i * 4:i * 4 + 4] = src_buffer_1[i * 4:i * 4 + 4]
+        for i in T.unroll(2):
+            scan_smem_1[i * 512 + tx * 4:i * 512 + tx * 4 + 4] = src_buffer_1[i * 4:i * 4 + 4]
+        T.tvm_storage_sync("shared.dyn")
+        T.call_extern("int32", "tl::CumSum1D<128, false>::run", T.tvm_access_ptr(T.type_annotation("int32"), scan_smem.data, 0, 1024, 1), T.tvm_access_ptr(T.type_annotation("int32"), scan_smem.data, 0, 1024, 2), 1024)
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(2):
+            src_buffer_1[i * 4:i * 4 + 4] = scan_smem_1[i * 512 + tx * 4:i * 512 + tx * 4 + 4]
+        for i in T.unroll(2):
+            if bx * 64 + i * 32 + tx // 4 < 4883:
+                src_1[bx * 1024 + i * 512 + tx * 4:bx * 1024 + i * 512 + tx * 4 + 4] = src_buffer_1[i * 4:i * 4 + 4] + T.Broadcast(base, 4) - original_1[i * 4:i * 4 + 4]

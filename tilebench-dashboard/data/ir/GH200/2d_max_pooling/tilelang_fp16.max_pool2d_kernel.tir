@@ -1,0 +1,33 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def max_pool2d_kernel(input: T.handle, output: T.handle):
+    input_1 = T.match_buffer(input, (512, 640, 640), "float16", strides=(409600, 640, 1))
+    output_1 = T.match_buffer(output, (512, 320, 320), "float16", strides=(102400, 320, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 512)
+    by = T.launch_thread("blockIdx.y", 40)
+    bz = T.launch_thread("blockIdx.z", 5)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        neg_inf = T.float16()
+        T.sblock_attr({"safe_value_map": {input_1.data: neg_inf}})
+        acc = T.sblock_alloc_buffer((8, 64), "float16", scope="local.fragment")
+        neg_inf = T.infinity("float16") * T.float16(-1.0)
+        T.fill(T.region(acc[0, 0], 2, 8, 64), neg_inf)
+        row_start: T.int32 = by * 8
+        col_start: T.int32 = bz * 64
+        for kh in T.unroll(3, annotations={"pragma_unroll_explicit": False}):
+            for kw in T.unroll(3, annotations={"pragma_unroll_explicit": False}):
+                for i in T.parallel(8):
+                    for j in T.parallel(64):
+                        oh: T.int32 = row_start + i
+                        ow: T.int32 = col_start + j
+                        ih: T.int32 = oh * 2 + kh - 1
+                        iw: T.int32 = ow * 2 + kw - 1
+                        acc[i, j] = T.max(acc[i, j], input_1[bx, ih, iw])
+        T.copy(T.region(acc[0, 0], 1, 8, 64), T.region(output_1[bx, row_start, col_start], 2, 1, 8, 64))

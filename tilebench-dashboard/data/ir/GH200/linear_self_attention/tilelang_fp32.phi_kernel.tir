@@ -1,0 +1,25 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def phi_kernel(Y: T.handle, X: T.handle):
+    Y_1 = T.match_buffer(Y, (10000, 256), strides=(256, 1))
+    X_1 = T.match_buffer(X, (10000, 256), strides=(256, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 313)
+    by = T.launch_thread("blockIdx.y", 8)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {X_1.data: 0.0}})
+        x_frag = T.sblock_alloc_buffer((32, 32), scope="local.fragment")
+        y_frag = T.sblock_alloc_buffer((32, 32), scope="local.fragment")
+        m_start: T.int32 = bx * 32
+        d_start: T.int32 = by * 32
+        T.copy(T.region(X_1[m_start, d_start], 1, 32, 32), T.region(x_frag[0, 0], 2, 32, 32))
+        for i in T.parallel(32):
+            for j in T.parallel(32):
+                y_frag[i, j] = T.Select(x_frag[i, j] > T.float32(0.0), x_frag[i, j] + T.float32(1.0), T.exp(x_frag[i, j]))
+        T.copy(T.region(y_frag[0, 0], 1, 32, 32), T.region(Y_1[m_start, d_start], 2, 32, 32))

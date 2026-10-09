@@ -1,0 +1,229 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def main_kernel(K: T.handle("float16", "global"), O_desc: T.handle("uint8x128", "grid_constant"), Q: T.handle("float16", "global"), V: T.handle("float16", "global"), col_indices: T.handle("int32", "global"), row_indices: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 59392, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 160, "blockIdx.y": 16, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "blockIdx.y", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1, 2, 3, 4, 5]})
+        V_1 = T.decl_buffer((5242880,), "float16", data=V)
+        K_1 = T.decl_buffer((5242880,), "float16", data=K)
+        col_indices_1 = T.decl_buffer((25600,), "int32", data=col_indices)
+        row_indices_1 = T.decl_buffer((161,), "int32", data=row_indices)
+        Q_1 = T.decl_buffer((20971520,), "float16", data=Q)
+        bx = T.launch_thread("blockIdx.x", 160)
+        buf_dyn_shmem = T.alloc_buffer((59392,), "uint8", scope="shared.dyn")
+        o_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        o_shared2: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        q_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 0)
+        q_shared2: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 8192)
+        k_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 16384)
+        k_shared2: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 24576)
+        p_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 32768)
+        v_shared: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 40960)
+        v_shared2: T.handle("float16", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 49152)
+        workspace: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 57344)
+        workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 58368)
+        acc = T.alloc_buffer((16,), scope="local")
+        acc2 = T.alloc_buffer((16,), scope="local")
+        logsum = T.alloc_buffer((2,), scope="local")
+        scores_max = T.alloc_buffer((2,), scope="local")
+        start_l = T.alloc_buffer((1,), "int32", scope="local.var")
+        end_l = T.alloc_buffer((1,), "int32", scope="local.var")
+        l = T.alloc_buffer((1,), "int32", scope="local.var")
+        col_idx = T.alloc_buffer((1,), "int32", scope="local.var")
+        start_n = T.alloc_buffer((1,), "int32", scope="local.var")
+        qk = T.alloc_buffer((16,), scope="local")
+        scores_max_prev = T.alloc_buffer((2,), scope="local")
+        alpha = T.alloc_buffer((2,), scope="local")
+        scores_sum = T.alloc_buffer((2,), scope="local")
+        pv = T.alloc_buffer((16,), scope="local")
+        pv2 = T.alloc_buffer((16,), scope="local")
+        scores_max_clear = T.alloc_buffer((2,), scope="local")
+        by = T.launch_thread("blockIdx.y", 16)
+        tx = T.launch_thread("threadIdx.x", 256)
+        if T.tl_shuffle_elect(0):
+            T.call_extern("handle", "tl::prefetch_tma_descriptor", O_desc)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        q_shared_1 = T.decl_buffer((4096,), "float16", data=q_shared, scope="shared.dyn")
+        k_shared_1 = T.decl_buffer((4096,), "float16", data=k_shared, scope="shared.dyn")
+        v_shared_1 = T.decl_buffer((4096,), "float16", data=v_shared, scope="shared.dyn")
+        q_shared2_1 = T.decl_buffer((4096,), "float16", data=q_shared2, scope="shared.dyn")
+        k_shared2_1 = T.decl_buffer((4096,), "float16", data=k_shared2, scope="shared.dyn")
+        v_shared2_1 = T.decl_buffer((4096,), "float16", data=v_shared2, scope="shared.dyn")
+        qk_1 = T.decl_buffer((16,), data=qk.data, scope="local")
+        acc_1 = T.decl_buffer((16,), data=acc.data, scope="local")
+        pv_1 = T.decl_buffer((16,), data=pv.data, scope="local")
+        acc2_1 = T.decl_buffer((16,), data=acc2.data, scope="local")
+        pv2_1 = T.decl_buffer((16,), data=pv2.data, scope="local")
+        scores_max_1 = T.decl_buffer((2,), data=scores_max.data, scope="local")
+        scores_max_prev_1 = T.decl_buffer((2,), data=scores_max_prev.data, scope="local")
+        scores_sum_1 = T.decl_buffer((2,), data=scores_sum.data, scope="local")
+        logsum_1 = T.decl_buffer((2,), data=logsum.data, scope="local")
+        alpha_1 = T.decl_buffer((2,), data=alpha.data, scope="local")
+        start_l_1 = T.decl_buffer((1,), "int32", data=start_l.data, scope="local.var")
+        end_l_1 = T.decl_buffer((1,), "int32", data=end_l.data, scope="local.var")
+        l_1 = T.decl_buffer((1,), "int32", data=l.data, scope="local.var")
+        col_idx_1 = T.decl_buffer((1,), "int32", data=col_idx.data, scope="local.var")
+        start_n_1 = T.decl_buffer((1,), "int32", data=start_n.data, scope="local.var")
+        for i in T.unroll(2):
+            q_shared_1[i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8:i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 8] = Q_1[by * 1310720 + bx * 8192 + i * 4096 + tx // 8 * 128 + tx % 8 * 8:by * 1310720 + bx * 8192 + i * 4096 + tx // 8 * 128 + tx % 8 * 8 + 8]
+        for i in T.unroll(2):
+            q_shared2_1[i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8:i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 8] = Q_1[by * 1310720 + bx * 8192 + i * 4096 + tx // 8 * 128 + tx % 8 * 8 + 64:by * 1310720 + bx * 8192 + i * 4096 + tx // 8 * 128 + tx % 8 * 8 + 64 + 8]
+        for i in T.unroll(4):
+            acc_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        for i in T.unroll(4):
+            acc2_1[i * 4:i * 4 + 4] = T.Broadcast(T.float32(0.0), 4)
+        logsum_1[0:2] = T.Broadcast(T.float32(0.0), 2)
+        scores_max_1[0:2] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 2)
+        start_l_1[0] = row_indices_1[bx]
+        end_l_1[0] = row_indices_1[bx + 1]
+        l_1[0] = start_l_1[0]
+        while l_1[0] < end_l_1[0]:
+            col_idx_1[0] = T.if_then_else(0 <= l_1[0] and l_1[0] < 25600, col_indices_1[l_1[T.int64(0)]], 0)
+            start_n_1[0] = col_idx_1[0] * 64
+            for i in T.unroll(2):
+                k_shared_1[i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8:i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 8] = T.if_then_else((tx // 8 + start_n_1[0]) // 32 + i < 320 and 0 <= i * 32 + tx // 8 + start_n_1[0] and 0 <= i * 32 + tx // 8 + start_n_1[0] and (tx // 8 + start_n_1[0]) // 32 + i < 320, K_1[T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8):T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(8)], T.Broadcast(T.float16(0.0), 8))
+            with T.attr(0, "lexical_alloc_scope", 1):
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.tvm_storage_sync("shared.dyn")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), q_shared, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), k_shared, 0, 4096, 1), 1, 1, 64)
+                T.warpgroup_fence_operand("float32", qk.data, 0, 16)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(4):
+                    T.ptx_wgmma_ss("m64n32k16", T.bool(True), T.bool(True), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(ki * 32, 4), desc_b.data, T.shift_right(tx // 128 * 4096 + ki * 32, 4), qk.data, 0, T.Select(0 < ki, 1, 0), 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", qk.data, 0, 16)
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(2):
+                k_shared2_1[i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8:i * 2048 + tx // 8 * 64 + (tx % 64 // 32 + tx % 8 // 4) % 2 * 32 + (tx % 32 // 16 + tx % 4 // 2) % 2 * 16 + (tx % 16 // 8 + tx % 2) % 2 * 8 + 8] = T.if_then_else((tx // 8 + start_n_1[0]) // 32 + i < 320 and 0 <= i * 32 + tx // 8 + start_n_1[0] and 0 <= i * 32 + tx // 8 + start_n_1[0] and (tx // 8 + start_n_1[0]) // 32 + i < 320, K_1[T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(64):T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(64) + T.int64(8)], T.Broadcast(T.float16(0.0), 8))
+            with T.attr(0, "lexical_alloc_scope", 1):
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.tvm_storage_sync("shared.dyn")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), q_shared2, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), k_shared2, 0, 4096, 1), 1, 1, 64)
+                T.warpgroup_fence_operand("float32", qk.data, 0, 16)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(4):
+                    T.ptx_wgmma_ss("m64n32k16", T.bool(True), T.bool(True), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(ki * 32, 4), desc_b.data, T.shift_right(tx // 128 * 4096 + ki * 32, 4), qk.data, 0, 1, 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", qk.data, 0, 16)
+            T.tvm_storage_sync("shared")
+            for i in T.unroll(16):
+                qk_1[i] = T.Select(tx // 128 * 32 + i // 4 * 8 + tx % 4 * 2 + start_n_1[0] + i % 2 < 10240 and tx // 128 * 32 + i // 4 * 8 + tx % 4 * 2 + start_n_1[0] + i % 2 <= bx * 64 + tx % 128 // 32 * 16 + i % 4 // 2 * 8 + tx % 32 // 4, qk_1[i], T.infinity("float32") * T.float32(-1.0))
+            for i in T.unroll(16):
+                qk_1[i] = qk_1[i] * T.float32(0.088388347648318433)
+            scores_max_prev_1[0:2] = scores_max_1[0:2]
+            scores_max_1[0:2] = T.Broadcast(T.infinity("float32") * T.float32(-1.0), 2)
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(2):
+                scores_max_clear[i] = T.float32("-inf")
+                for rv in T.unroll(8):
+                    scores_max_clear[i] = T.max(scores_max_clear[i], qk_1[rv % 4 * 4 + i * 2 + rv // 4])
+                scores_max_clear[i] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run", scores_max_clear[i], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
+                scores_max_clear[i] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 4, 1, 0, tl::NamedBarrier<256>>::run", scores_max_clear[i])
+                scores_max_1[i] = T.max(scores_max_1[i], scores_max_clear[i])
+            for i in T.unroll(2):
+                has_prev: T.bool = T.float32(0.0) < logsum_1[i]
+                has_valid: T.bool = start_n_1[0] < 10240 and start_n_1[0] <= bx * 64 + tx % 128 // 32 * 16 + i * 8 + tx % 32 // 4
+                scores_max_1[i] = T.max(scores_max_1[i], scores_max_prev_1[i])
+                m_safe: T.float32 = T.Select(has_prev or has_valid, scores_max_1[i], T.float32(0.0))
+                alpha_1[i] = T.Select(has_prev, T.exp(scores_max_prev_1[i] - m_safe), T.float32(0.0))
+                scores_max_1[i] = T.Select(has_prev or has_valid, scores_max_1[i], scores_max_prev_1[i])
+            for i in T.unroll(16):
+                m_safe: T.float32 = T.Select(T.float32(0.0) < logsum_1[i % 4 // 2] or start_n_1[0] < 10240 and start_n_1[0] <= bx * 64 + tx % 128 // 32 * 16 + i % 4 // 2 * 8 + tx % 32 // 4, scores_max_1[i % 4 // 2], T.float32(0.0))
+                qk_1[i] = T.Select(tx // 128 * 32 + i // 4 * 8 + tx % 4 * 2 + start_n_1[0] + i % 2 < 10240 and tx // 128 * 32 + i // 4 * 8 + tx % 4 * 2 + start_n_1[0] + i % 2 <= bx * 64 + tx % 128 // 32 * 16 + i % 4 // 2 * 8 + tx % 32 // 4, T.exp(qk_1[i] - m_safe), T.float32(0.0))
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(2):
+                scores_sum_1[i] = T.float32(0.0)
+                for rv in T.unroll(8):
+                    scores_sum_1[i] = scores_sum_1[i] + qk_1[rv % 4 * 4 + i * 2 + rv // 4]
+                scores_sum_1[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 128, 0, tl::NamedBarrier<256>>::run", scores_sum_1[i], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 256, 2))
+                scores_sum_1[i] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 4, 1, 0, tl::NamedBarrier<256>>::run", scores_sum_1[i])
+            for i in T.unroll(2):
+                logsum_1[i] = logsum_1[i] * alpha_1[i] + scores_sum_1[i]
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(2):
+                T.ptx_stmatrix(0, 4, T.tvm_access_ptr(T.type_annotation("float16"), p_shared, tx % 128 // 32 * 1024 + tx % 16 // 8 * 512 + (tx % 16 * 64 + (tx // 128 + tx % 8 // 4) % 2 * 32 + (tx % 4 // 2 + i) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8) % 512, 8, 2), T.pack_b16(T.Cast("float16", qk_1[i * 8]), T.Cast("float16", qk_1[i * 8 + 1])), T.pack_b16(T.Cast("float16", qk_1[i * 8 + 2]), T.Cast("float16", qk_1[i * 8 + 3])), T.pack_b16(T.Cast("float16", qk_1[i * 8 + 4]), T.Cast("float16", qk_1[i * 8 + 5])), T.pack_b16(T.Cast("float16", qk_1[i * 8 + 6]), T.Cast("float16", qk_1[i * 8 + 7])))
+            for i in T.unroll(16):
+                acc_1[i] = acc_1[i] * alpha_1[i % 4 // 2]
+            for i in T.unroll(16):
+                acc2_1[i] = acc2_1[i] * alpha_1[i % 4 // 2]
+            T.tvm_storage_sync("shared.dyn")
+            for i in T.unroll(2):
+                v_shared_1[tx % 8 // 4 * 2048 + i * 1024 + tx // 8 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8:tx % 8 // 4 * 2048 + i * 1024 + tx // 8 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8 + 8] = T.if_then_else((tx // 8 + start_n_1[0]) // 32 + i < 320 and 0 <= i * 32 + tx // 8 + start_n_1[0] and 0 <= i * 32 + tx // 8 + start_n_1[0] and (tx // 8 + start_n_1[0]) // 32 + i < 320, V_1[T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8):T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(8)], T.Broadcast(T.float16(0.0), 8))
+            with T.attr(0, "lexical_alloc_scope", 1):
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.tvm_storage_sync("shared.dyn")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), p_shared, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), v_shared, 0, 4096, 1), 2, 512, 32)
+                T.warpgroup_fence_operand("float32", pv.data, 0, 16)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(4):
+                    T.ptx_wgmma_ss("m64n32k16", T.bool(True), T.bool(False), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(ki * 32, 4), desc_b.data, T.shift_right(tx // 128 * 4096 + ki * 1024, 4), pv.data, 0, T.Select(0 < ki, 1, 0), 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", pv.data, 0, 16)
+            T.tvm_storage_sync("shared")
+            for i in T.unroll(16):
+                acc_1[i] = acc_1[i] + pv_1[i]
+            for i in T.unroll(2):
+                v_shared2_1[tx % 8 // 4 * 2048 + i * 1024 + tx // 8 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8:tx % 8 // 4 * 2048 + i * 1024 + tx // 8 * 32 + (tx % 64 // 32 + tx % 4 // 2) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8 + 8] = T.if_then_else((tx // 8 + start_n_1[0]) // 32 + i < 320 and 0 <= i * 32 + tx // 8 + start_n_1[0] and 0 <= i * 32 + tx // 8 + start_n_1[0] and (tx // 8 + start_n_1[0]) // 32 + i < 320, V_1[T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(64):T.Cast("int64", by) // T.int64(4) * T.int64(1310720) + T.Cast("int64", i) * T.int64(4096) + T.Cast("int64", tx) // T.int64(8) * T.int64(128) + T.Cast("int64", start_n_1[T.int64(0)]) * T.int64(128) + T.Cast("int64", tx) % T.int64(8) * T.int64(8) + T.int64(64) + T.int64(8)], T.Broadcast(T.float16(0.0), 8))
+            with T.attr(0, "lexical_alloc_scope", 1):
+                desc_a = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_b = T.alloc_buffer((1,), "uint64", scope="local.descriptor.wgmma")
+                desc_a_1 = T.decl_buffer((1,), "uint64", data=desc_a.data, scope="local.descriptor.wgmma")
+                desc_b_1 = T.decl_buffer((1,), "uint64", data=desc_b.data, scope="local.descriptor.wgmma")
+                T.tvm_storage_sync("shared.dyn")
+                T.initialize_wgmma_descriptor(desc_a_1[0], T.tvm_access_ptr(T.type_annotation("float16"), p_shared, 0, 4096, 1), 1, 1, 64)
+                T.initialize_wgmma_descriptor(desc_b_1[0], T.tvm_access_ptr(T.type_annotation("float16"), v_shared2, 0, 4096, 1), 2, 512, 32)
+                T.warpgroup_fence_operand("float32", pv2.data, 0, 16)
+                T.warpgroup_arrive()
+                T.fence_proxy_async()
+                for ki in T.unroll(4):
+                    T.ptx_wgmma_ss("m64n32k16", T.bool(True), T.bool(False), "fp16", "fp16", "fp32", desc_a.data, T.shift_right(ki * 32, 4), desc_b.data, T.shift_right(tx // 128 * 4096 + ki * 1024, 4), pv2.data, 0, T.Select(0 < ki, 1, 0), 1, 1)
+                T.warpgroup_commit_batch()
+                T.warpgroup_wait(0)
+                T.warpgroup_fence_operand("float32", pv2.data, 0, 16)
+            T.tvm_storage_sync("shared")
+            for i in T.unroll(16):
+                acc2_1[i] = acc2_1[i] + pv2_1[i]
+            l_1[0] = l_1[0] + 1
+        for i in T.unroll(16):
+            acc_1[i] = acc_1[i] / T.Select(T.float32(0.0) < logsum_1[i % 4 // 2], logsum_1[i % 4 // 2], T.float32(1.0))
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(2):
+            T.ptx_stmatrix(0, 4, T.tvm_access_ptr(T.type_annotation("float16"), o_shared, tx % 128 // 32 * 1024 + tx % 16 // 8 * 512 + (tx % 16 * 64 + (tx // 128 + tx % 8 // 4) % 2 * 32 + (tx % 4 // 2 + i) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8) % 512, 8, 2), T.pack_b16(T.Cast("float16", acc_1[i * 8]), T.Cast("float16", acc_1[i * 8 + 1])), T.pack_b16(T.Cast("float16", acc_1[i * 8 + 2]), T.Cast("float16", acc_1[i * 8 + 3])), T.pack_b16(T.Cast("float16", acc_1[i * 8 + 4]), T.Cast("float16", acc_1[i * 8 + 5])), T.pack_b16(T.Cast("float16", acc_1[i * 8 + 6]), T.Cast("float16", acc_1[i * 8 + 7])))
+        T.tvm_storage_sync("shared.dyn")
+        if T.tl_shuffle_elect(256):
+            T.fence_proxy_async()
+            T.tma_store(O_desc, T.tvm_access_ptr(T.type_annotation("float16"), o_shared, 0, 4096, 1), 0, bx * 64, by % 8, by // 8, 0, 0)
+            T.tma_store_arrive()
+            T.tma_store_wait(0, T.bool(True))
+        for i in T.unroll(16):
+            acc2_1[i] = acc2_1[i] / T.Select(T.float32(0.0) < logsum_1[i % 4 // 2], logsum_1[i % 4 // 2], T.float32(1.0))
+        T.tvm_storage_sync("shared.dyn")
+        for i in T.unroll(2):
+            T.ptx_stmatrix(0, 4, T.tvm_access_ptr(T.type_annotation("float16"), o_shared2, tx % 128 // 32 * 1024 + tx % 16 // 8 * 512 + (tx % 16 * 64 + (tx // 128 + tx % 8 // 4) % 2 * 32 + (tx % 4 // 2 + i) % 2 * 16 + (tx % 32 // 16 + tx % 2) % 2 * 8) % 512, 8, 2), T.pack_b16(T.Cast("float16", acc2_1[i * 8]), T.Cast("float16", acc2_1[i * 8 + 1])), T.pack_b16(T.Cast("float16", acc2_1[i * 8 + 2]), T.Cast("float16", acc2_1[i * 8 + 3])), T.pack_b16(T.Cast("float16", acc2_1[i * 8 + 4]), T.Cast("float16", acc2_1[i * 8 + 5])), T.pack_b16(T.Cast("float16", acc2_1[i * 8 + 6]), T.Cast("float16", acc2_1[i * 8 + 7])))
+        T.tvm_storage_sync("shared.dyn")
+        if T.tl_shuffle_elect(256):
+            T.fence_proxy_async()
+            T.tma_store(O_desc, T.tvm_access_ptr(T.type_annotation("float16"), o_shared2, 0, 4096, 1), 64, bx * 64, by % 8, by // 8, 0, 0)
+            T.tma_store_arrive()
+            T.tma_store_wait(0, T.bool(True))

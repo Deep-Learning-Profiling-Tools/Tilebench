@@ -1,0 +1,25 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def interleave_kernel(A: T.handle, B: T.handle, output: T.handle):
+    A_1 = T.match_buffer(A, (20000000,), "bfloat16", strides=(1,))
+    B_1 = T.match_buffer(B, (20000000,), "bfloat16", strides=(1,))
+    output_1 = T.match_buffer(output, (40000000,), "bfloat16", strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 19532)
+    tx = T.launch_thread("threadIdx.x", 256)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        A_reg = T.sblock_alloc_buffer((1024,), "bfloat16", scope="local.fragment")
+        B_reg = T.sblock_alloc_buffer((1024,), "bfloat16", scope="local.fragment")
+        output_reg = T.sblock_alloc_buffer((2048,), "bfloat16", scope="local.fragment")
+        start: T.int32 = bx * 1024
+        T.copy(T.region(A_1[start], 1, 1024), T.region(A_reg[0], 2, 1024))
+        T.copy(T.region(B_1[start], 1, 1024), T.region(B_reg[0], 2, 1024))
+        for out_local_idx in T.parallel(2048):
+            in_local_idx: T.int32 = out_local_idx // 2
+            output_reg[out_local_idx] = T.Select(out_local_idx % 2 == 0, A_reg[in_local_idx], B_reg[in_local_idx])
+        T.copy(T.region(output_reg[0], 1, 2048), T.region(output_1[2 * start], 2, 2048))

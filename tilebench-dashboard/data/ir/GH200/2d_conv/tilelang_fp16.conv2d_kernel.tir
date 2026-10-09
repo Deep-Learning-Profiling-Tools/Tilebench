@@ -1,0 +1,64 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def conv2d_kernel(input: T.handle, weight: T.handle, output: T.handle):
+    input_1 = T.match_buffer(input, (1, 128, 320, 320), "float16", strides=(13107200, 102400, 320, 1))
+    weight_1 = T.match_buffer(weight, (128, 128, 3, 3), "float16", strides=(1152, 9, 3, 1))
+    output_1 = T.match_buffer(output, (1, 128, 320, 320), "float16", strides=(13107200, 102400, 320, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 1600)
+    by = T.launch_thread("blockIdx.y", 1)
+    bz = T.launch_thread("blockIdx.z", 1)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        input_tile = T.sblock_alloc_buffer((64, 16), "float16", scope="shared.dyn")
+        weight_tile = T.sblock_alloc_buffer((16, 128), "float16", scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((64, 128), scope="local.fragment")
+        bhw_offsets = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        batch_ids = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        out_rows = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        out_cols = T.sblock_alloc_buffer((64,), "int32", scope="local.fragment")
+        feat_offsets = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        in_channel_locals = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        kernel_rows = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        kernel_cols = T.sblock_alloc_buffer((16,), "int32", scope="local.fragment")
+        T.fill(T.region(acc[0, 0], 2, 64, 128), 0)
+        for i in T.parallel(64):
+            bhw_offsets[i] = bx * 64 + i
+            batch_ids[i] = bhw_offsets[i] // 102400
+            hw_id: T.int32 = bhw_offsets[i] % 102400
+            out_rows[i] = hw_id // 320
+            out_cols[i] = hw_id % 320
+        for feat_block in T.serial(72, annotations={"num_stages": 2}):
+            for j in T.parallel(16):
+                feat_offsets[j] = feat_block * 16 + j
+                in_channel_locals[j] = feat_offsets[j] // 9
+                kernel_rem: T.int32 = feat_offsets[j] % 9
+                kernel_rows[j] = kernel_rem // 3
+                kernel_cols[j] = kernel_rem % 3
+            for i in T.parallel(64):
+                for j in T.parallel(16):
+                    in_row: T.int32 = out_rows[i] + kernel_rows[j] - 1
+                    in_col: T.int32 = out_cols[i] + kernel_cols[j] - 1
+                    in_channel: T.int32 = bz * 128 + in_channel_locals[j]
+                    input_tile[i, j] = T.Select(bhw_offsets[i] < 102400 and (feat_offsets[j] < 1152 and (in_row >= 0 and (in_row < 320 and (in_col >= 0 and in_col < 320)))), input_1[batch_ids[i], in_channel, in_row, in_col], T.float16(0.0))
+            for i in T.parallel(16):
+                for j in T.parallel(128):
+                    out_channel_local: T.int32 = by * 128 + j
+                    out_channel: T.int32 = bz * 128 + out_channel_local
+                    weight_tile[i, j] = T.Select(feat_offsets[i] < 1152 and out_channel_local < 128, weight_1[out_channel, in_channel_locals[i], kernel_rows[i], kernel_cols[i]], T.float16(0.0))
+            T.tvm_storage_sync("shared")
+            T.gemm(T.region(input_tile[0, 0], 1, 64, 16), T.region(weight_tile[0, 0], 1, 16, 128), T.region(acc[0, 0], 3, 64, 128), T.bool(False), T.bool(False), 64, 128, 16, 0, T.bool(False), 16, 128, 0, 0, 1, 0, 0, 0, 0)
+        for tile_idx in T.parallel(8192):
+            i: T.int32 = tile_idx // 128
+            j: T.int32 = tile_idx % 128
+            out_channel_local: T.int32 = by * 128 + j
+            out_channel: T.int32 = bz * 128 + out_channel_local
+            if out_channel_local < 128:
+                output_idx: T.int32 = ((batch_ids[i] * 128 + out_channel) * 320 + out_rows[i]) * 320 + out_cols[i]
+                output_flat = T.Buffer((13107200,), "float16", data=output_1.data, strides=(1,))
+                output_flat[output_idx] = T.Cast("float16", acc[i, j])

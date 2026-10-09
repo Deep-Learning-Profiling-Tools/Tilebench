@@ -1,0 +1,29 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def histogram_partial_kernel_kernel(partial: T.handle("int32", "global"), x: T.handle("int32", "global")):
+        T.func_attr({"calling_conv": 2, "dyn_shared_memory_buf": 16384, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 256, "threadIdx.x": 256, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z", "tirx.use_dyn_shared_memory"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1]})
+        x_1 = T.decl_buffer((67108864,), "int32", data=x)
+        bx = T.launch_thread("blockIdx.x", 256)
+        smem = T.alloc_buffer((4096,), "int32", scope="shared.dyn")
+        tx = T.launch_thread("threadIdx.x", 256)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        smem_1 = T.decl_buffer((4096,), "int32", data=smem.data, scope="shared.dyn")
+        for i in T.unroll(4):
+            smem_1[i * 1024 + tx * 4:i * 1024 + tx * 4 + 4] = T.Broadcast(0, 4)
+        T.tvm_storage_sync("shared.dyn")
+        for _tmp in range(128):
+            for i in T.unroll(8):
+                val: T.int32 = x_1[_tmp * 524288 + bx * 2048 + i * 256 + tx]
+                if 0 <= val and val < 4096:
+                    T.atomic_add_elem_op(T.tvm_access_ptr(T.type_annotation("int32"), smem.data, val, 1, 3), 1)
+        T.tvm_storage_sync("shared.dyn")
+        if T.tl_shuffle_elect(256):
+            T.fence_proxy_async()
+            T.tma_store(T.tvm_access_ptr(T.type_annotation("int32"), partial, bx * 4096, 4096, 2), T.tvm_access_ptr(T.type_annotation("int32"), smem.data, 0, 4096, 1), 16384, 0, 0)
+            T.tma_store_arrive()
+            T.tma_store_wait(0, T.bool(True))

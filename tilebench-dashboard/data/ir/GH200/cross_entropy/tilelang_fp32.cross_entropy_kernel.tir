@@ -1,0 +1,30 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def cross_entropy_kernel(logits: T.handle, targets: T.handle, output: T.handle):
+    M = T.int32()
+    logits_1 = T.match_buffer(logits, (M, 512), strides=(512, 1))
+    targets_1 = T.match_buffer(targets, (M,), "int64", strides=(1,))
+    output_1 = T.match_buffer(output, (M,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        local_logits = T.sblock_alloc_buffer((512,), scope="local.fragment")
+        exp_shifted = T.sblock_alloc_buffer((512,), scope="local.fragment")
+        row_max = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        row_sum = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        loss = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        T.fill(T.region(local_logits[0], 2, 512), T.infinity("float32") * T.float32(-1.0))
+        T.copy(T.region(logits_1[bx, 0], 1, 1, 512), T.region(local_logits[0], 2, 512))
+        T.reduce(T.region(local_logits[0], 1, 512), T.region(row_max[0], 2, 1), "max", 0, T.bool(True))
+        for i in T.parallel(512):
+            exp_shifted[i] = T.exp(local_logits[i] - row_max[0])
+        T.reduce(T.region(exp_shifted[0], 1, 512), T.region(row_sum[0], 2, 1), "sum", 0, T.bool(True))
+        target_lw: T.int32 = T.Cast("int32", targets_1[bx])
+        loss[0] = T.log(row_sum[0]) + row_max[0] - logits_1[bx, target_lw]
+        T.copy(T.region(loss[0], 1, 1), T.region(output_1[bx], 2, 1))

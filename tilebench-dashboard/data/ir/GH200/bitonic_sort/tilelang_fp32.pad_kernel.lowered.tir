@@ -1,0 +1,15 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def pad_kernel_kernel(data: T.handle("float32", "global"), work: T.handle("float32", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 32768, "threadIdx.x": 128, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0]})
+        data_1 = T.decl_buffer((10000000,), data=data)
+        work_1 = T.decl_buffer((16777216,), data=work)
+        bx = T.launch_thread("blockIdx.x", 32768)
+        tx = T.launch_thread("threadIdx.x", 128)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        work_1[bx * 512 + tx * 4:bx * 512 + tx * 4 + 4] = T.if_then_else(bx * 4 + tx // 32 < 78125, data_1[bx * 512 + tx * 4:bx * 512 + tx * 4 + 4], T.Broadcast(T.infinity("float32"), 4))

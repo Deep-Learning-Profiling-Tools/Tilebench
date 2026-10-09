@@ -1,0 +1,28 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def fused_activation_kernel(x: T.handle, gate: T.handle, bias: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (20971520,), strides=(1,))
+    gate_1 = T.match_buffer(gate, (20971520,), strides=(1,))
+    bias_1 = T.match_buffer(bias, (20971520,), strides=(1,))
+    output_1 = T.match_buffer(output, (20971520,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 20480)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        x_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        gate_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        bias_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        output_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        start: T.int32 = bx * 1024
+        T.copy(T.region(x_1[start], 1, 1024), T.region(x_reg[0], 2, 1024))
+        T.copy(T.region(gate_1[start], 1, 1024), T.region(gate_reg[0], 2, 1024))
+        T.copy(T.region(bias_1[start], 1, 1024), T.region(bias_reg[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            z: T.float32 = x_reg[local_idx] * gate_reg[local_idx] + bias_reg[local_idx]
+            output_reg[local_idx] = z * T.sigmoid(z)
+        T.copy(T.region(output_reg[0], 1, 1024), T.region(output_1[start], 2, 1024))

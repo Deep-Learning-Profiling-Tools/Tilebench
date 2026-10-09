@@ -1,0 +1,24 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def add_kernel(x: T.handle, y: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (20971520,), strides=(1,))
+    y_1 = T.match_buffer(y, (20971520,), strides=(1,))
+    output_1 = T.match_buffer(output, (20971520,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 20480)
+    tx = T.launch_thread("threadIdx.x", 64)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        x_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        y_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        out_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        start: T.int32 = bx * 1024
+        T.copy(T.region(x_1[start], 1, 1024), T.region(x_reg[0], 2, 1024))
+        T.copy(T.region(y_1[start], 1, 1024), T.region(y_reg[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            out_reg[local_idx] = x_reg[local_idx] + y_reg[local_idx]
+        T.copy(T.region(out_reg[0], 1, 1024), T.region(output_1[start], 2, 1024))

@@ -1,0 +1,20 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def copy_by_dest_kernel_kernel(dest: T.handle("int64", "global"), kv: T.handle("float16", "global"), out: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 61440, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [0, 1]})
+        kv_1 = T.decl_buffer((62914560,), "float16", data=kv)
+        out_1 = T.decl_buffer((62914560,), "float16", data=out)
+        dest_1 = T.decl_buffer((40960,), "int64", data=dest)
+        bx = T.launch_thread("blockIdx.x", 61440)
+        tx = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        for i in T.unroll(8):
+            dest_index: T.int32 = T.Cast("int32", dest_1[(bx * 2 + i // 4) // 3])
+            if 0 <= dest_index:
+                if dest_index < 40960:
+                    out_1[dest_index * 1536 + (bx * 8 + i) % 12 * 128 + tx * 2:dest_index * 1536 + (bx * 8 + i) % 12 * 128 + tx * 2 + 2] = kv_1[bx * 1024 + i * 128 + tx * 2:bx * 1024 + i * 128 + tx * 2 + 2]

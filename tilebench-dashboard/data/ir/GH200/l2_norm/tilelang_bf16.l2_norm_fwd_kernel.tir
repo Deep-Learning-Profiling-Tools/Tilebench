@@ -1,0 +1,33 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def l2_norm_fwd_kernel(X: T.handle, Y: T.handle):
+    M = T.int32()
+    X_1 = T.match_buffer(X, (M, 10240), "bfloat16", strides=(10240, 1))
+    Y_1 = T.match_buffer(Y, (M, 10240), "bfloat16", strides=(10240, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", M)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        acc = T.sblock_alloc_buffer((512,), scope="local.fragment")
+        row_sum = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        inv_norm = T.sblock_alloc_buffer((1,), scope="local.fragment")
+        Y_local = T.sblock_alloc_buffer((512,), "bfloat16", scope="local.fragment")
+        T.fill(T.region(acc[0], 2, 512), T.float32(0.0))
+        for tile in T.serial(20, annotations={"num_stages": 2}):
+            off: T.int32 = tile * 512
+            for j in T.parallel(512):
+                x_val: T.float32 = T.Cast("float32", X_1[bx, off + j])
+                acc[j] = acc[j] + x_val * x_val
+        T.reduce(T.region(acc[0], 1, 512), T.region(row_sum[0], 2, 1), "sum", 0, T.bool(True))
+        inv_norm[0] = T.rsqrt(row_sum[0] + T.float32(9.9999999999999995e-07))
+        for tile in T.serial(20, annotations={"num_stages": 2}):
+            off: T.int32 = tile * 512
+            for j in T.parallel(512):
+                x_val: T.float32 = T.Cast("float32", X_1[bx, off + j])
+                Y_local[j] = T.Cast("bfloat16", x_val * inv_norm[0])
+            T.copy(T.region(Y_local[0], 1, 512), T.region(Y_1[bx, off], 2, 1, 512))

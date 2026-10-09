@@ -1,0 +1,22 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def leaky_relu_kernel(x: T.handle, output: T.handle):
+    x_1 = T.match_buffer(x, (50000000,), strides=(1,))
+    output_1 = T.match_buffer(output, (50000000,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 48829)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        x_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        output_reg = T.sblock_alloc_buffer((1024,), scope="local.fragment")
+        start: T.int32 = bx * 1024
+        T.copy(T.region(x_1[start], 1, 1024), T.region(x_reg[0], 2, 1024))
+        for local_idx in T.parallel(1024):
+            value: T.float32 = x_reg[local_idx]
+            output_reg[local_idx] = T.Select(value > T.float32(0.0), value, T.float32(0.01) * value)
+        T.copy(T.region(output_reg[0], 1, 1024), T.region(output_1[start], 2, 1024))

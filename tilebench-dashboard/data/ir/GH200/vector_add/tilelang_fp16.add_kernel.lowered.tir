@@ -1,0 +1,29 @@
+# from tvm.script import ir as I
+# from tvm.script import tirx as T
+
+@I.ir_module
+class Module:
+    @T.prim_func
+    def add_kernel_kernel(output: T.handle("float16", "global"), x: T.handle("float16", "global"), y: T.handle("float16", "global")):
+        T.func_attr({"calling_conv": 2, "target": T.target({"arch": "sm_90", "keys": ["cuda", "gpu"], "kind": "cuda", "max_num_threads": 1024, "tag": "", "thread_warp_size": 32}), "thread_extent": {"blockIdx.x": 10240, "threadIdx.x": 64, "threadIdx.y": 1, "threadIdx.z": 1}, "tirx.is_global_func": T.bool(True), "tirx.kernel_launch_params": ["blockIdx.x", "threadIdx.x", "threadIdx.y", "threadIdx.z"], "tirx.noalias": True, "tl.non_restrict_params": [], "tl.readonly_param_indices": [1, 2]})
+        output_1 = T.decl_buffer((20971520,), "float16", data=output)
+        y_1 = T.decl_buffer((20971520,), "float16", data=y)
+        x_1 = T.decl_buffer((20971520,), "float16", data=x)
+        bx = T.launch_thread("blockIdx.x", 10240)
+        x_reg = T.alloc_buffer((32,), "float16", scope="local")
+        y_reg = T.alloc_buffer((32,), "float16", scope="local")
+        out_reg = T.alloc_buffer((32,), "float16", scope="local")
+        tx = T.launch_thread("threadIdx.x", 64)
+        ty = T.launch_thread("threadIdx.y", 1)
+        tz = T.launch_thread("threadIdx.z", 1)
+        x_reg_1 = T.decl_buffer((32,), "float16", data=x_reg.data, scope="local")
+        y_reg_1 = T.decl_buffer((32,), "float16", data=y_reg.data, scope="local")
+        out_reg_1 = T.decl_buffer((32,), "float16", data=out_reg.data, scope="local")
+        for i in T.unroll(4):
+            x_reg_1[i * 8:i * 8 + 8] = x_1[bx * 2048 + i * 512 + tx * 8:bx * 2048 + i * 512 + tx * 8 + 8]
+        for i in T.unroll(4):
+            y_reg_1[i * 8:i * 8 + 8] = y_1[bx * 2048 + i * 512 + tx * 8:bx * 2048 + i * 512 + tx * 8 + 8]
+        for i in T.unroll(32):
+            out_reg_1[i] = x_reg_1[i] + y_reg_1[i]
+        for i in T.unroll(4):
+            output_1[bx * 2048 + i * 512 + tx * 8:bx * 2048 + i * 512 + tx * 8 + 8] = out_reg_1[i * 8:i * 8 + 8]

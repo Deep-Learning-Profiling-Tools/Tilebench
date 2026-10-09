@@ -1,0 +1,28 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def bmm_kernel(A: T.handle, B: T.handle, C: T.handle):
+    A_1 = T.match_buffer(A, (32, 640, 640), strides=(409600, 640, 1))
+    B_1 = T.match_buffer(B, (32, 640, 640), strides=(409600, 640, 1))
+    C_1 = T.match_buffer(C, (32, 640, 640), strides=(409600, 640, 1))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 5)
+    by = T.launch_thread("blockIdx.y", 5)
+    bz = T.launch_thread("blockIdx.z", 32)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        A_tile = T.sblock_alloc_buffer((128, 32), scope="shared.dyn")
+        B_tile = T.sblock_alloc_buffer((32, 128), scope="shared.dyn")
+        acc = T.sblock_alloc_buffer((128, 128), scope="local.fragment")
+        start_m: T.int32 = bx * 128
+        start_n: T.int32 = by * 128
+        T.fill(T.region(acc[0, 0], 2, 128, 128), 0)
+        for k in T.serial(20, annotations={"num_stages": 3}):
+            T.copy(T.region(A_1[bz, start_m, k * 32], 1, 1, 128, 32), T.region(A_tile[0, 0], 2, 128, 32))
+            T.copy(T.region(B_1[bz, k * 32, start_n], 1, 1, 32, 128), T.region(B_tile[0, 0], 2, 32, 128))
+            T.gemm(T.region(A_tile[0, 0], 1, 128, 32), T.region(B_tile[0, 0], 1, 32, 128), T.region(acc[0, 0], 3, 128, 128), T.bool(False), T.bool(False), 128, 128, 32, 0, T.bool(False), 32, 128, 0, 0, 1, 0, 0, 0, 0)
+        T.copy(T.region(acc[0, 0], 1, 128, 128), T.region(C_1[bz, start_m, start_n], 2, 1, 128, 128))

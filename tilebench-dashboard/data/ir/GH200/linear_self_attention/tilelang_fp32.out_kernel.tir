@@ -1,0 +1,52 @@
+# from tvm.script import tirx as T
+
+@T.prim_func
+def out_kernel(O: T.handle, PhiQ: T.handle, S: T.handle, Z: T.handle):
+    O_1 = T.match_buffer(O, (10000, 256), strides=(256, 1))
+    PhiQ_1 = T.match_buffer(PhiQ, (10000, 256), strides=(256, 1))
+    S_1 = T.match_buffer(S, (256, 256), strides=(256, 1))
+    Z_1 = T.match_buffer(Z, (256,), strides=(1,))
+    # with T.sblock("root"):
+    bx = T.launch_thread("blockIdx.x", 157)
+    by = T.launch_thread("blockIdx.y", 2)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.sblock("tilelang_root"):
+        T.reads()
+        T.writes()
+        T.sblock_attr({"safe_value_map": {PhiQ_1.data: 0.0, S_1.data: 0.0, Z_1.data: 0.0}})
+        q_frag = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        z_frag = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        q_shared = T.sblock_alloc_buffer((64, 64), "custom[tfloat32]", scope="shared.dyn")
+        s_shared = T.sblock_alloc_buffer((128, 64), "custom[tfloat32]", scope="shared.dyn")
+        numer = T.sblock_alloc_buffer((64, 128), scope="local.fragment")
+        denom = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        denom_prod = T.sblock_alloc_buffer((64, 64), scope="local.fragment")
+        denom_delta = T.sblock_alloc_buffer((64,), scope="local.fragment")
+        out = T.sblock_alloc_buffer((64, 128), scope="local.fragment")
+        m_start: T.int32 = bx * 64
+        d_start: T.int32 = by * 128
+        T.fill(T.region(numer[0, 0], 2, 64, 128), 0)
+        T.fill(T.region(denom[0], 2, 64), 0)
+        for k_tile in T.serial(4, annotations={"num_stages": 2}):
+            k_start: T.int32 = k_tile * 64
+            T.copy(T.region(PhiQ_1[m_start, k_start], 1, 64, 64), T.region(q_frag[0, 0], 2, 64, 64))
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    q_shared[i, j] = T.Cast("custom[tfloat32]", q_frag[i, j])
+            for i in T.parallel(128):
+                for j in T.parallel(64):
+                    s_shared[i, j] = T.Cast("custom[tfloat32]", S_1[k_start + j, d_start + i])
+            T.gemm(T.region(q_shared[0, 0], 1, 64, 64), T.region(s_shared[0, 0], 1, 128, 64), T.region(numer[0, 0], 3, 64, 128), T.bool(False), T.bool(True), 64, 128, 64, 0, T.bool(False), 64, 64, 0, 0, 1, 0, 0, 0, 0)
+            T.copy(T.region(Z_1[k_start], 1, 64), T.region(z_frag[0], 2, 64))
+            for i in T.parallel(64):
+                for j in T.parallel(64):
+                    denom_prod[i, j] = q_frag[i, j] * z_frag[j]
+            T.reduce(T.region(denom_prod[0, 0], 1, 64, 64), T.region(denom_delta[0], 2, 64), "sum", 1, T.bool(True))
+            for i in T.parallel(64):
+                denom[i] = denom[i] + denom_delta[i]
+        for i in T.parallel(64):
+            for j in T.parallel(128):
+                out[i, j] = numer[i, j] / (denom[i] + T.float32(9.9999999999999995e-07))
+        T.copy(T.region(out[0, 0], 1, 64, 128), T.region(O_1[m_start, d_start], 2, 64, 128))
