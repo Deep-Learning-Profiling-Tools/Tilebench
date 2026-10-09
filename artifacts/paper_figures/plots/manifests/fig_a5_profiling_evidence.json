@@ -2,7 +2,7 @@
  "figure": "fig_a5_profiling_evidence",
  "rq": "Evaluation Appendix",
  "script": "scripts/paper_figures/plot_appendix.py",
- "source_git_commit": "ae5fd54094261ba387f12730ca5fd42c9b053ca4",
+ "source_git_commit": "5fb4c08f2aef14fa8c9d7f5fa0b8b158ed9b5e1f",
  "source_data_files": {
   "figure_evidence.csv": "8d438bf5b552b4b53fc4ba0769a22a975c19b87cf0fe1e3badd15bf9a074fef7"
  },
@@ -35,7 +35,7 @@
   "B B200": "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum (sum over launches)",
   "B MI300X": "diagnostic latency (warmup 2 / repeat 10, 512 MiB write flush), not formal",
   "C NVIDIA traffic": "ratio to Triton on the same device of global-load requests, L1 global-load sectors and DRAM read bytes",
-  "C occupancy": "sm__warps_active.avg.pct_of_peak_sustained_active (bar), sm__maximum_warps_per_active_cycle_pct (line), smsp__issue_active.avg.pct_of_peak_sustained_active (text)",
+  "C occupancy": "foreground coloured bar = achieved occupancy (sm__warps_active.avg.pct_of_peak_sustained_active); grey background bar = theoretical occupancy limit permitted by the resource and launch configuration (sm__maximum_warps_per_active_cycle_pct); labels = achieved over /theoretical; issue activity (smsp__issue_active.avg.pct_of_peak_sustained_active) is a separate metric listed as text below the axis",
   "C MI300X": "diagnostic latency of torch.add and a standalone Triton add kernel (BLOCK 2048, 4 warps) with default or .cg loads under three flush protocols; mean of 10 repeats, block repeated twice, second kept"
  },
  "aggregation_order": [
@@ -183,6 +183,44 @@
    "a5:vector_add/fp32:MI300X:triton:diagnostic:flush_protocol_variants_fp32:triton_load_cg | write_flush_512MiB(formal)"
   ]
  },
+ "occupancy_bars": [
+  {
+   "device": "B200",
+   "dsl": "triton",
+   "achieved_pct": 24.60520168032664,
+   "theoretical_pct": 25.0
+  },
+  {
+   "device": "B200",
+   "dsl": "cutile",
+   "achieved_pct": 49.56769841592697,
+   "theoretical_pct": 50.0
+  },
+  {
+   "device": "B200",
+   "dsl": "tilelang",
+   "achieved_pct": 6.242116416762539,
+   "theoretical_pct": 18.75
+  },
+  {
+   "device": "GH200",
+   "dsl": "triton",
+   "achieved_pct": 24.7878313032475,
+   "theoretical_pct": 25.0
+  },
+  {
+   "device": "GH200",
+   "dsl": "cutile",
+   "achieved_pct": 24.843909376527705,
+   "theoretical_pct": 25.0
+  },
+  {
+   "device": "GH200",
+   "dsl": "tilelang",
+   "achieved_pct": 18.71177962616911,
+   "theoretical_pct": 18.75
+  }
+ ],
  "missing_shown_as": "n/c (not collected): B200 TileLang FP16/FP8 matmul reports are reduced collections",
  "confounders": {
   "weight_dequant/bf16|GH200": "GH200 Triton uses a different autotuned configuration (confounder)",
@@ -1944,15 +1982,15 @@
  "outputs": {
   "pdf": {
    "path": "appendix/fig_a5_profiling_evidence.pdf",
-   "sha256": "f038dca683657fba30a05ca4757bbab5dc29de3d16983bab19735c0afee8410e"
+   "sha256": "83761e7b1fc26fea8060ed0eacc2e3fe5878234b437fbe8ffb1553ad6466e6d7"
   },
   "svg": {
    "path": "appendix/fig_a5_profiling_evidence.svg",
-   "sha256": "c1e982cd193ed152febbdb1dc02cda805e688ffac8881b8212c866ac029616bb"
+   "sha256": "b44a69926cbb13305a3d0988761a6b42cdd42eda70ea782a2b8f1b9a74f28ee3"
   },
   "png": {
    "path": "previews/fig_a5_profiling_evidence.png",
-   "sha256": "8a90d01b836b2f8a9a2dfbf14df5ac74c5ff77b02bdd690c46e11c068079e80a"
+   "sha256": "cdc4fc0a33d59ae0ff7a14b9634da6a49d0c60d529b8a6882621f34130f3062a"
   }
  },
  "layout": {
@@ -1960,7 +1998,7 @@
   "height_in": 6.1,
   "min_font_pt": 6.0,
   "max_font_pt": 7.0,
-  "n_text_objects": 144,
+  "n_text_objects": 156,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
@@ -1972,6 +2010,6 @@
  "code_sha256": {
   "scripts/paper_figures/plot_style.py": "19c6d4a084f347e58a111d1ee05e4755c1f86b7ac09eb6ffbda4ad6f11f13fcc",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_appendix.py": "a7181190478bca795a3b592a9d28644fd768e7ccbafc0e35252221349020b54e"
+  "scripts/paper_figures/plot_appendix.py": "06ad9b5ecaf1290a11d7bfcb6d6b0077f9181f957e0d98f7c758133e7b7b37a7"
  }
 }

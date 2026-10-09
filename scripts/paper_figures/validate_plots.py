@@ -48,7 +48,9 @@ RQ2_COUNTERS = {  # Figure 3 axis label -> (evidence metric, divisor)
     "Executed instructions (M)": ("smsp__inst_executed.sum", 1e6),
     "Global store instructions (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STG*]", 1e6),
     "L1 global-load sectors (M)": ("l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", 1e6),
-    "Achieved occupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0)}
+    "Achieved / Theoretical\nOccupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0),
+    "Theoretical occupancy (%)": ("sm__maximum_warps_per_active_cycle_pct", 1.0)}      # launch-configuration limit
+OCC_A, OCC_T = "sm__warps_active.avg.pct_of_peak_sustained_active", "sm__maximum_warps_per_active_cycle_pct"
 SCRIPTS = ["plot_style.py", "figure_data.py", "plot_rq1.py", "plot_rq2.py", "plot_rq3.py", "plot_appendix.py"]
 TOL = 1e-9
 
@@ -352,7 +354,8 @@ def main():
             for k, v in vals.items():
                 dev, dsl = k.split(":")
                 r = ev[f"rq2:{case}:{dev}:{dsl}:{metric}"]
-                if VENDOR[dev] != "NVIDIA" or r["measurement_kind"] not in DYNAMIC_NV_KINDS or not close(float(r["value"]) / div, v):
+                kinds = DYNAMIC_NV_KINDS + (("launch_config",) if metric == OCC_T else ())
+                if VENDOR[dev] != "NVIDIA" or r["measurement_kind"] not in kinds or not close(float(r["value"]) / div, v):
                     bad.append(f"{case} {lab} {k}")
     ax_a = [ev[i] for i in a5_axes["A_nvidia_dynamic_instruction_ratio"]]
     if {(r["metric_name"], r["measurement_kind"]) for r in ax_a} != {("smsp__inst_executed.sum", "ncu_counter")}:
@@ -482,10 +485,39 @@ def main():
     check("21.no_nki_no_rq4_numbers_no_extra_figures_top_manifest", not bad and not extra and ok,
           f"NKI in {bad}; unexpected files {extra}; top manifest {'ok' if ok else 'inconsistent'}")
 
-    # 22. reproducibility: two independent rebuilds into temp dirs, byte-identical to each other and to the committed outputs
+    # 22. occupancy shown as achieved vs. theoretical limit without reference lines: Figure 3C labels, A5 overlaid bars
+    bad, occ = [], []
+    t2 = svg_texts(PLOTS / "main" / "fig_rq2_cross_device_diagnosis.svg")
+    for dev in ("B200", "GH200"):
+        for s_ in ("triton", "tilelang"):
+            av = float(ev[f"rq2:1d_conv/fp16:{dev}:{s_}:{OCC_A}"]["value"])
+            tv = float(ev[f"rq2:1d_conv/fp16:{dev}:{s_}:{OCC_T}"]["value"])
+            if f"{av:.1f} / {tv:.1f}" not in t2:
+                bad.append(f"Fig 3 label {dev} {s_}")
+            occ.append(f"{dev} {s_}: {av:.1f}/{tv:.2f}")
+    if any("= theoretical" in t for t in t2) or not any("Achieved / Theoretical" in t for t in t2):
+        bad.append("Fig 3 occupancy title/legend")
+    rows = {(r["device"], r["dsl"]): r for r in a5.get("occupancy_bars", [])}
+    for dev in ("B200", "GH200"):
+        for s_ in ("triton", "cutile", "tilelang"):
+            av = float(ev[f"a5:1d_conv/fp16:{dev}:{s_}:{OCC_A}"]["value"])
+            tv = float(ev[f"a5:1d_conv/fp16:{dev}:{s_}:{OCC_T}"]["value"])
+            iv = float(ev[f"a5:1d_conv/fp16:{dev}:{s_}:smsp__issue_active.avg.pct_of_peak_sustained_active"]["value"])
+            r = rows.get((dev, s_))
+            if r is None or not (close(r["achieved_pct"], av) and close(r["theoretical_pct"], tv)):
+                bad.append(f"A5 manifest {dev} {s_}")
+            if f"{av:.1f}" not in t5 or f"/{tv:.1f}" not in t5 or f"{iv:.0f}" not in t5:
+                bad.append(f"A5 labels {dev} {s_}")
+            if av > tv + 0.5:
+                bad.append(f"{dev} {s_}: achieved {av} > theoretical {tv}")
+    if not ({"achieved", "theoretical limit", "issue %"} <= set(t5)) or any("(line)" in t for t in t5):
+        bad.append("A5 legend / title")
+    check("22.occupancy_achieved_vs_theoretical_without_reference_lines", not bad, "; ".join(bad) or "; ".join(occ))
+
+    # 23. reproducibility: two independent rebuilds into temp dirs, byte-identical to each other and to the committed outputs
     if a.skip_reproducibility:
-        results.append({"check": "22.two_rebuilds_byte_identical", "status": "skipped", "detail": "--skip-reproducibility"})
-        print("[SKIP] 22.two_rebuilds_byte_identical")
+        results.append({"check": "23.two_rebuilds_byte_identical", "status": "skipped", "detail": "--skip-reproducibility"})
+        print("[SKIP] 23.two_rebuilds_byte_identical")
     else:
         diff = []
         with tempfile.TemporaryDirectory() as t1, tempfile.TemporaryDirectory() as t2:
@@ -503,7 +535,7 @@ def main():
                 x1, x2 = json.load(open(f"{t1}/plots/manifests/{n}.json")), json.load(open(f"{t2}/plots/manifests/{n}.json"))
                 if not (x1["plotted_values"] == x2["plotted_values"] == M[n]["plotted_values"] and x1["layout"] == x2["layout"] == M[n]["layout"]):
                     diff.append(f"{n}.json")
-        check("22.two_rebuilds_byte_identical", not diff, f"differs: {diff}" if diff else
+        check("23.two_rebuilds_byte_identical", not diff, f"differs: {diff}" if diff else
               f"2 rebuilds: 3 evidence files + {len(rels)} figure/table files + plotted values and layout identical")
     return finish()
 

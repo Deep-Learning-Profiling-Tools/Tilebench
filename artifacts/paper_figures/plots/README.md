@@ -122,9 +122,14 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 20. The captions and LaTeX snippets reference every figure, and the caption numbers match the data.
 21. There is no NKI and no RQ4 number, and the top manifest is consistent.
 
+**Occupancy representation**
+
+22. Occupancy is shown as achieved vs. theoretical limit without reference lines: Figure 3C labels "achieved /
+    theoretical" and A5 achieved bars over grey theoretical bars match the evidence; issue activity is unchanged.
+
 **Reproducibility**
 
-22. Two independent rebuilds are byte-identical to each other and to the committed outputs.
+23. Two independent rebuilds are byte-identical to each other and to the committed outputs.
 
 ## Style
 

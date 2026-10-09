@@ -92,7 +92,7 @@ def case_rows(E):
         "title": "C  Memory access and latency hiding (1d_conv, FP16)", "dsls": ("triton", "tilelang"),
         "metrics": [("L1 global-load sectors (M)", {(d, s): g(c, d, s, "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum") / 1e6
                                                     for d in NV for s in ("triton", "tilelang")}, "{:.0f}", None),
-                    ("Achieved occupancy (%)", {(d, s): g(c, d, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
+                    ("Achieved / Theoretical\nOccupancy (%)", {(d, s): g(c, d, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
                                                 for d in NV for s in ("triton", "tilelang")}, "{:.1f}", None)],
         "theoretical": theo,
         "mi300x": f"MI300X: PyTorch runs MIOpen implicit GEMM plus {n_tr} transpose kernels (trace); Triton loads with {ld} (static ISA)",
@@ -172,10 +172,9 @@ def bar_panel(ax, label, vals, fmt, notes, dsls, show_y, theoretical=None):
         v = vals[k]
         ax.barh(y, v, height=0.78, color=PS.DSL_COLORS[k[1]], edgecolor="white", lw=0.3)
         lab = fmt.format(v) + (f" ({notes[k]})" if notes else "")
-        t = theoretical[k] if theoretical else v
-        if theoretical:
-            ax.plot([t, t], [y - 0.42, y + 0.42], color=PS.INK, lw=0.9)
-        ax.text(max(v, t) + vmax * 0.04, y, lab, va="center", ha="left", fontsize=7)
+        if theoretical:                                  # occupancy: label "achieved / theoretical", no reference line
+            lab = f"{v:.1f} / {theoretical[k]:.1f}"
+        ax.text(v + vmax * 0.04, y, lab, va="center", ha="left", fontsize=7)
     ax.set_xlim(0, vmax * (1.75 if notes else 1.45))
     ax.set_ylim(-0.6, 3.75)
     ax.set_yticks(ys)
@@ -208,7 +207,7 @@ def plot(out_root):
             bar_panel(bx, lab, vals, fmt, notes, R["dsls"], show_y=(j == 0), theoretical=R.get("theoretical") if j == 1 else None)
             plotted[case][lab] = {f"{d}:{s_}": v for (d, s_), v in vals.items()}
         if R.get("theoretical"):
-            fig.text(5.97 / W, (ay - 0.035) / H, "| = theoretical", ha="right", va="top", fontsize=7, color=PS.MUTED)
+            plotted[case]["Theoretical occupancy (%)"] = {f"{d}:{s_}": v for (d, s_), v in R["theoretical"].items()}
         fig.text(0.1 / W, (ay - 0.2) / H, R["mi300x"], ha="left", va="top", fontsize=7, color=PS.INK)
         fig.text(0.1 / W, (ay - 0.34) / H, R["caveat"], ha="left", va="top", fontsize=7, color=PS.MUTED)
         if i:
@@ -237,7 +236,10 @@ def main(out_root=FD.PLOTS):
         "case_coverage": {x["case"]: {"case_id_v2": next(v["case_id_v2"] for v in values if v["case"] == x["case"])} for x in sel},
         "excluded_cases": {"cuTile/TileLang on MI300X": "not available"},
         "measurement_kinds_per_axis": {"left": ["formal benchmark latency"],
-                                       "right": ["dynamic NCU counters (one counter per axis, NVIDIA only)", "occupancy: achieved counter + theoretical launch value"],
+                                       "right": ["dynamic NCU counters (one counter per axis, NVIDIA only)",
+                                                 "occupancy: bar = achieved (sm__warps_active.avg.pct_of_peak_sustained_active); label = "
+                                                 "achieved / theoretical limit (sm__maximum_warps_per_active_cycle_pct, from the resource and launch "
+                                                 "configuration); no reference line"],
                                        "text": ["MI300X static ISA (execution_paths.csv)", "MI300X PyTorch kernel trace", "rocprof-compute MFMA utilization"]},
         "evidence_text": {c: {"mi300x": C[c]["mi300x"], "caveat": C[c]["caveat"]} for c in C},
         "profiling_evidence_ids": used,

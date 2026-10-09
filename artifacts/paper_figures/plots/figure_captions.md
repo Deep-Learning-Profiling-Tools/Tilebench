@@ -50,8 +50,13 @@ by every profile of that operator, with the same `case_id_v2` on all devices.
 
 **(C) Memory access and latency hiding** (1d_conv, FP16).
 - Load width (16 bit) and DRAM read traffic are the same for both DSLs.
-- TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton, and reaches lower achieved
-  occupancy. Its Hopper kernel body differs from the Blackwell one.
+- TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton. Its Hopper kernel body differs
+  from the Blackwell one.
+- The occupancy labels report achieved and theoretical occupancy directly (achieved / theoretical, %). On B200,
+  TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%. The other implementations operate close to
+  their theoretical limits. The theoretical limit is the maximum resident warp occupancy permitted by the kernel's
+  resource and launch configuration, not a predicted value, and the counters do not identify the cause of the
+  shortfall.
 - Triton's speedup of 1.48× on MI300X comes with a different PyTorch path (MIOpen implicit GEMM plus layout
   transposes). It is not a comparison of the Triton kernels alone.
 
@@ -151,7 +156,10 @@ not an architecture effect.
 - 1d_conv load traffic: global load requests, L1 load sectors and DRAM read bytes, each relative to Triton. All DSLs
   issue 16-bit loads. TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 sectors with the same DRAM traffic, so
   the extra sectors are served by L1 and do not increase DRAM reads.
-- 1d_conv occupancy: achieved (bars) and theoretical (lines) occupancy, with issue activity below the axis.
+- 1d_conv occupancy: coloured foreground bars show achieved occupancy, and grey background bars show the theoretical
+  occupancy limit permitted by the resource and launch configuration. Labels give achieved over theoretical. On
+  B200, TileLang achieves 6.2% against a limit of 18.75%; the other five implementations reach nearly their limits.
+  Issue activity, a separate metric, is listed below the axis.
 - MI300X vector_add: diagnostic latency of a standalone Triton kernel. With Triton's `.cg` load modifier, gfx942 emits
   `sc0 nt` loads, matching PyTorch under the formal 512 MiB write flush. Without a write flush, the gap from default
   loads shrinks to 1.1×. Store modifiers did not change latency: `.cs` emits `sc0 nt`, `.wt` emits `sc0 sc1`, and `.cg`
