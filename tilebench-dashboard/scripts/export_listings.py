@@ -11,9 +11,14 @@ totals, and how many global loads a thread issues before it first waits).
 
 <dir> holds NVIDIA_<platform>/<op>/<backend>_<dtype>.ncu-rep. Needs Nsight
 Compute's Python module (<nsight-compute>/extras/python on PYTHONPATH); no GPU.
+
+It also reads AMD_<platform>/<op>/<backend>_<dtype>/analysis/pc_sampling_instructions.csv
+(rocprof-compute). Those captures list only the instructions that received a
+sample and carry no execution counts.
 """
 
 import argparse
+import csv
 import gzip
 import json
 from pathlib import Path
@@ -92,6 +97,42 @@ def kernel_listing(action):
     }
 
 
+def amd_listing(path):
+    csv.field_size_limit(10 ** 9)
+    kernels = {}
+    with open(path, newline="") as handle:
+        for row in csv.DictReader(handle):
+            if row["operator_kernel"] == "True":
+                kernels.setdefault(row["kernel_name"], []).append(row)
+    out = []
+    for name, found in kernels.items():
+        rows, totals, by_line = [], {}, {}
+        for row in sorted(found, key=lambda r: int(r["offset"], 16)):
+            reasons = {k: int(v) for k, v in json.loads(row["stall_reasons"] or "{}").items()}
+            source = ":".join((Path(row["source_line"].rsplit(":", 1)[0]).name, row["source_line"].rsplit(":", 1)[1])) \
+                if ":" in row["source_line"] else None
+            hits = int(row["samples"])
+            for reason, value in reasons.items():
+                totals[reason] = totals.get(reason, 0) + value
+            if source:
+                line = by_line.setdefault(source, {"samples": 0, "stalls": {}})
+                line["samples"] += hits
+                for reason, value in reasons.items():
+                    line["stalls"][reason] = line["stalls"].get(reason, 0) + value
+            rows.append({"offset": row["offset"], "executed": None, "samples": hits, "issued": int(row["issued"]),
+                         "stalls": reasons, "source": source, "sass": row["instruction"]})
+        lines = sorted(by_line.items(), key=lambda kv: -kv[1]["samples"])[:20]
+        out.append({
+            "name": name, "samples": sum(r["samples"] for r in rows), "static_instructions": len(rows),
+            "stall_samples": dict(sorted(totals.items(), key=lambda kv: -kv[1])),
+            "samples_by_source_line": [{"source": k, **v} for k, v in lines],
+            "instructions": rows,
+            "note": "rocprof-compute PC sampling: only instructions that received a sample are listed, in address order, "
+                    "with no execution counts. The complete assembly is in the intermediate code (kind amdgcn).",
+        })
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--reports", type=Path, action="append", required=True)
@@ -99,16 +140,22 @@ def main():
     parser.add_argument("--only", action="append", default=[], help="operator to export; repeat")
     parser.add_argument("--force", action="store_true", help="re-export reports whose listing already exists")
     args = parser.parse_args()
-    try:
-        import ncu_report
-    except ImportError as error:
-        parser.error(f"Nsight Compute's Python module is not importable: {error}")
     found = {}
     for base in args.reports:
         for path in sorted(base.glob("NVIDIA_*/*/*.ncu-rep")):
             platform, op = path.parent.parent.name.replace("NVIDIA_", ""), path.parent.name
             if not args.only or op in args.only:
                 found.setdefault((platform, op, path.stem), path)
+        for path in sorted(base.glob("AMD_*/*/*/analysis/pc_sampling_instructions.csv")):
+            report = path.parent.parent
+            platform, op = report.parent.parent.name.replace("AMD_", ""), report.parent.name
+            if not args.only or op in args.only:
+                found.setdefault((platform, op, report.name), path)
+    if any(path.suffix == ".ncu-rep" for path in found.values()):
+        try:
+            import ncu_report
+        except ImportError as error:
+            parser.error(f"Nsight Compute's Python module is not importable: {error}")
     manifest_path = args.out / "manifest.json"
     previous = json.loads(manifest_path.read_text())["reports"] if manifest_path.exists() else []
     entries = {(e["platform"], e["op"], e["backend"], e["dtype"]): e for e in previous}
@@ -129,9 +176,12 @@ def main():
                 entries[(platform, op, backend, dtype)] = summary(platform, op, backend, dtype, stem, kernels)
             continue
         try:
-            report = ncu_report.load_report(str(path.resolve()))
-            kernels = [kernel_listing(report.range_by_idx(r).action_by_idx(a))
-                       for r in range(report.num_ranges()) for a in range(report.range_by_idx(r).num_actions())]
+            if path.suffix == ".csv":
+                kernels = amd_listing(path)
+            else:
+                report = ncu_report.load_report(str(path.resolve()))
+                kernels = [kernel_listing(report.range_by_idx(r).action_by_idx(a))
+                           for r in range(report.num_ranges()) for a in range(report.range_by_idx(r).num_actions())]
         except Exception as error:
             print(f"FAILED {platform}/{op}/{stem}: {error}")
             continue

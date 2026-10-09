@@ -596,7 +596,7 @@ async function getIr(input: unknown): Promise<ToolResult> {
 
 interface ListingRow {
   offset: string;
-  executed: number;
+  executed: number | null;
   samples: number;
   stalls: Record<string, number>;
   source: string | null;
@@ -664,7 +664,7 @@ function listingRow(r: ListingRow, total: number): ToolResult {
   return {
     offset: r.offset,
     sass: r.sass,
-    executed: r.executed,
+    ...(r.executed === null ? {} : { executed: r.executed }),
     samples: r.samples,
     ...(total ? { pct_of_samples: Math.round((1000 * r.samples) / total) / 10 } : {}),
     ...(Object.keys(r.stalls).length ? { stalls: r.stalls } : {}),
@@ -1118,7 +1118,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "get_profile_listing",
-    description: "Per-instruction evidence for one Nsight Compute report (B200, GH200), when a listing was exported for it. Without start_offset or pattern: per kernel, the stall reasons behind its samples, samples by source line, dynamic opcode totals, the order of global loads and load waits in the hot loop, and the hottest instructions with their stall reasons and source lines. With start_offset (hex) or pattern (substring of the SASS or source line): the instructions in address order with execution count, samples, stall reasons and source line. Use this to locate a mechanism; get_profile_hotspots is the fallback when no listing exists.",
+    description: "Per-instruction evidence for one profiling report. B200 and GH200 (Nsight Compute): every instruction with execution count, samples and stall reasons. MI300X (rocprof-compute): only the instructions that received a sample, with stall reasons and the Python source line, and no execution counts; read the full assembly with get_ir kind amdgcn. Without start_offset or pattern: per kernel, the stall reasons behind its samples, samples by source line, dynamic opcode totals, the order of global loads and load waits in the hot loop, and the hottest instructions with their stall reasons and source lines. With start_offset (hex) or pattern (substring of the SASS or source line): the instructions in address order with execution count, samples, stall reasons and source line. Use this to locate a mechanism; get_profile_hotspots is the fallback when no listing exists.",
     input_schema: {
       type: "object",
       properties: {
