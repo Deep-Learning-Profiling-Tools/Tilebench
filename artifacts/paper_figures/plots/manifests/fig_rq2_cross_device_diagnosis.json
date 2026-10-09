@@ -2,7 +2,7 @@
  "figure": "fig_rq2_cross_device_diagnosis",
  "rq": "RQ2",
  "script": "scripts/paper_figures/plot_rq2.py",
- "source_git_commit": "7b8002c3468e6a095a9777ec97076ba0a98f1b28",
+ "source_git_commit": "cb70a684689b93e07b3157ce1a7fe41ffadb70b9",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
   "profile_index_normalized.csv": "1deeb5c7ffd7267f10a424261615088443be948878691d1a2d4d58099a7c132c",
@@ -89,16 +89,16 @@
  },
  "evidence_text": {
   "matmul_fp32_fp16_fp8/fp32": {
-   "mi300x": "MI300X (static ISA): TensorDescriptor loads lowered to 96 scalar 32-bit global_load_dword; MFMA util. 4.5%",
+   "mi300x": "MI300X (ROCm / ISA evidence): TensorDescriptor loads lowered to 96 scalar 32-bit global_load_dword; MFMA util. 4.5%",
    "caveat": "Confounders: Triton reads a B operand transposed before timing; cuTile tiles differ (256\u00d7256 on B200, 128\u00d7128 on GH200)"
   },
   "destindex/int8": {
-   "mi300x": "MI300X (static ISA): Triton stores each row with 4 per-lane buffer_store_byte, no vector store",
+   "mi300x": "MI300X (ISA evidence): Triton stores each row with 4 per-lane buffer_store_byte, no vector store",
    "caveat": "Triton and cuTile write the same 2.05 M store sectors on both devices; the PyTorch baseline (index_copy) differs by vendor"
   },
   "1d_conv/fp16": {
-   "mi300x": "MI300X: PyTorch runs MIOpen implicit GEMM plus 3 transpose kernels (trace); Triton loads with buffer_load_ushort (static ISA)",
-   "caveat": "All loads are 16-bit and DRAM reads are equal (0.67 GB); TileLang uses a different kernel body on Hopper"
+   "mi300x": "MI300X (ISA / PyTorch trace): PyTorch runs MIOpen implicit GEMM plus 3 transpose kernels; Triton loads with buffer_load_ushort",
+   "caveat": "NVIDIA Triton and TileLang (B200, GH200): 16-bit loads and equal DRAM reads (0.67 GB); TileLang uses a different kernel body on Hopper"
   }
  },
  "occupancy_style": {
@@ -459,15 +459,15 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq2_cross_device_diagnosis.pdf",
-   "sha256": "0287bbfa2bebfa32cfc7d3850a252b1f4b4c905dc923d758ee5b1f9495978b08"
+   "sha256": "d9f68130e99179cf6d6eec40a8be2393fa2829a34eaa34e7f0e03cec451aca65"
   },
   "svg": {
    "path": "main/fig_rq2_cross_device_diagnosis.svg",
-   "sha256": "7c287229409b37d521a41123dc2b3410f9f2e7e665d611ce7494776d6ea76fe5"
+   "sha256": "4b93f2709cc28b213920e8e1efc42f7946c4a4252ed4a9061bbc9ebdfe649468"
   },
   "png": {
    "path": "previews/fig_rq2_cross_device_diagnosis.png",
-   "sha256": "59bad87ddafac1a9978bfa1a068e536076aa4c2fdb9995f0384015f5abf56c05"
+   "sha256": "70b8af477621a06b333f5a3f2ba0ef80ddf29fd24121507470d8a2c13f09a1eb"
   }
  },
  "layout": {
@@ -475,7 +475,7 @@
   "height_in": 4.95,
   "min_font_pt": 7.0,
   "max_font_pt": 8.0,
-  "n_text_objects": 98,
+  "n_text_objects": 99,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
@@ -487,6 +487,6 @@
  "code_sha256": {
   "scripts/paper_figures/plot_style.py": "d710869fdc68797ae42ba1e235be2331336c15fc5286a353188d4d0fa0f8bada",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq2.py": "89ccb1f5857e652182e3ae85f1413ad0b77f97631091b047c6527808a8efcd91"
+  "scripts/paper_figures/plot_rq2.py": "3776674ac7fb4808d1bd961dab6a5a516dfe206bfcdc1b15e800027d6c751b78"
  }
 }

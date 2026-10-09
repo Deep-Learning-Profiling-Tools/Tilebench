@@ -52,7 +52,7 @@ def case_rows(E):
                                              for d in NV for s in ("triton", "cutile")}, "{:.1f}", None),
                     ("Shared-memory stores (M)", {(d, s): g(c, d, s, sts) / 1e6 for d in NV for s in ("triton", "cutile")},
                      "{:.2f}", None)],
-        "mi300x": f"MI300X (static ISA): TensorDescriptor loads lowered to {nld} scalar 32-bit global_load_dword; "
+        "mi300x": f"MI300X (ROCm / ISA evidence): TensorDescriptor loads lowered to {nld} scalar 32-bit global_load_dword; "
                   f"MFMA util. {g(c, 'MI300X', 'triton', '2.1.10 | MFMA Utilization | Avg*'):.1f}%",
         "caveat": "Confounders: Triton reads a B operand transposed before timing; cuTile tiles differ (256×256 on B200, 128×128 on GH200)",
     }
@@ -74,7 +74,7 @@ def case_rows(E):
                      "{:.1f}", None),
                     ("Global store instructions (M)", {(d, s): g(c, d, s, "sass__inst_executed_per_opcode_with_modifier_all[STG*]") / 1e6
                                                        for d in NV for s in ("triton", "cutile")}, "{:.2f}", width)],
-        "mi300x": f"MI300X (static ISA): Triton stores each row with {nb} per-lane buffer_store_byte, no vector store",
+        "mi300x": f"MI300X (ISA evidence): Triton stores each row with {nb} per-lane buffer_store_byte, no vector store",
         "caveat": f"Triton and cuTile write the same {min(sec.values()) / 1e6:.2f} M store sectors on both devices; "
                   "the PyTorch baseline (index_copy) differs by vendor",
     }
@@ -95,8 +95,8 @@ def case_rows(E):
                     ("Achieved vs. Theoretical\nOccupancy (%)", {(d, s): g(c, d, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
                                                 for d in NV for s in ("triton", "tilelang")}, "{:.1f}", None)],
         "theoretical": theo,
-        "mi300x": f"MI300X: PyTorch runs MIOpen implicit GEMM plus {n_tr} transpose kernels (trace); Triton loads with {ld} (static ISA)",
-        "caveat": f"All loads are 16-bit and DRAM reads are equal ({min(dram) / 1e9:.2f} GB); "
+        "mi300x": f"MI300X (ISA / PyTorch trace): PyTorch runs MIOpen implicit GEMM plus {n_tr} transpose kernels; Triton loads with {ld}",
+        "caveat": f"NVIDIA Triton and TileLang (B200, GH200): 16-bit loads and equal DRAM reads ({min(dram) / 1e9:.2f} GB); "
                   "TileLang uses a different kernel body on Hopper",
     }
     return out
@@ -200,6 +200,10 @@ def plot(out_root):
     E = Ev()
     C = case_rows(E)
     fig = plt.figure(figsize=(W, H))
+    # one shared heading over the counter columns: the bars are NVIDIA NCU data (B200/GH200 only); MI300X is text below
+    hx0, hx1 = 2.45, 6.2
+    fig.text((hx0 + hx1) / 2 / W, (H - 0.07) / H, "NVIDIA Profiling (NCU)", ha="center", va="top", fontsize=7.5, fontweight="bold")
+    fig.add_artist(Line2D([hx0 / W, hx1 / W], [(H - 0.215) / H] * 2, color="#9A9FA4", lw=0.6))
     plotted = {}
     for i, s in enumerate(sel):
         case = s["case"]

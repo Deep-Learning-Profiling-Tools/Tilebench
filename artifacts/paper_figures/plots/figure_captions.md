@@ -31,8 +31,10 @@ by every profile of that operator, with the same `case_id_v2` on all devices.
 
 - **Left panels:** speedup over the local PyTorch baseline from the formal autotuned latency. No profiler duration is
   used.
-- **Right panels:** two dynamic Nsight Compute counters for B200 and GH200, summed over the profiled launches.
-- **MI300X line:** static ISA or kernel-trace observations. These are not comparable with the NVIDIA counters.
+- **Right panels** (heading "NVIDIA Profiling (NCU)"): two dynamic Nsight Compute counters for B200 and GH200 only,
+  summed over the profiled launches.
+- **MI300X line** (labelled ROCm / ISA evidence, ISA evidence, or ISA / PyTorch trace): static ISA, rocprof-compute or
+  PyTorch kernel-trace observations. These are not comparable with the NVIDIA counters, so MI300X has no bars.
 
 **(A) Matrix operand delivery** (matmul, FP32, M = N = 4096, K = 20480).
 - cuTile reaches 1.04× on B200 but 0.61× on GH200.
@@ -49,7 +51,7 @@ by every profile of that operator, with the same `case_id_v2` on all devices.
   2.17×. The PyTorch baseline also differs between vendors.
 
 **(C) Memory access and latency hiding** (1d_conv, FP16).
-- Load width (16 bit) and DRAM read traffic are the same for both DSLs.
+- On both NVIDIA devices, load width (16 bit) and DRAM read traffic are the same for Triton and TileLang.
 - TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton. Its Hopper kernel body differs
   from the Blackwell one.
 - The occupancy chart uses the same encoding as Figure A5: coloured foreground bars show achieved occupancy, grey
