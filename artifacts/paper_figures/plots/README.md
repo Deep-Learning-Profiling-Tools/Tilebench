@@ -124,8 +124,9 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 
 **Occupancy representation**
 
-22. Occupancy is shown as achieved vs. theoretical limit without reference lines: Figure 3C labels "achieved /
-    theoretical" and A5 achieved bars over grey theoretical bars match the evidence; issue activity is unchanged.
+22. Occupancy is shown as achieved vs. theoretical limit without reference lines: in Figure 3C and A5 the achieved
+    bars over grey theoretical bars and their labels match the evidence, both figures share one occupancy style, and
+    issue activity is unchanged.
 
 **Reproducibility**
 

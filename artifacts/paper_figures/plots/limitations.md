@@ -71,9 +71,9 @@ Neither figure puts both vendors' counters on one numeric axis.
   128×64 on B200). Its occupancy reaches the theoretical value on GH200 (18.7%) but not on B200 (6.2% of 18.75%), for
   reasons the counters do not identify.
 - **Theoretical occupancy.** This is the maximum resident warp occupancy permitted by the kernel's resource and launch
-  configuration (`sm__maximum_warps_per_active_cycle_pct`); it is not a predicted achieved occupancy. Figure 3C prints
-  it next to the achieved value (achieved / theoretical), and A5 draws it as a grey background bar behind the achieved
-  bar. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
+  configuration (`sm__maximum_warps_per_active_cycle_pct`); it is not a predicted achieved occupancy. Figures 3C and
+  A5 draw it as a grey background bar behind a narrower achieved bar, and Figure 3C also labels each bar
+  achieved / theoretical. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
   register pressure, memory stalls or CTA scheduling. Issue activity is a separate metric and is not expressed
   relative to either value.
 - **MI300X Triton.** Its higher speedup (1.48×) comes with a different PyTorch path: MIOpen implicit GEMM plus three

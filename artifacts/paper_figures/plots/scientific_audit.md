@@ -132,8 +132,8 @@ unchanged DRAM reads.
 **6. Controlled experiment?** No.
 
 **7. Qualified?** Yes. "On B200, TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%" is a
-measurement, shown directly as achieved / theoretical labels (Figure 3C) and as achieved bars over grey theoretical
-bars (A5). The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and the MI300X
+measurement, shown as achieved bars over grey theoretical bars in both Figure 3C (with achieved / theoretical labels)
+and A5. The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and the MI300X
 case is labelled a baseline effect.
 
 **8. Observation vs. hypothesis.** Yes.

@@ -92,7 +92,7 @@ def case_rows(E):
         "title": "C  Memory access and latency hiding (1d_conv, FP16)", "dsls": ("triton", "tilelang"),
         "metrics": [("L1 global-load sectors (M)", {(d, s): g(c, d, s, "l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum") / 1e6
                                                     for d in NV for s in ("triton", "tilelang")}, "{:.0f}", None),
-                    ("Achieved / Theoretical\nOccupancy (%)", {(d, s): g(c, d, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
+                    ("Achieved vs. Theoretical\nOccupancy (%)", {(d, s): g(c, d, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
                                                 for d in NV for s in ("triton", "tilelang")}, "{:.1f}", None)],
         "theoretical": theo,
         "mi300x": f"MI300X: PyTorch runs MIOpen implicit GEMM plus {n_tr} transpose kernels (trace); Triton loads with {ld} (static ISA)",
@@ -170,10 +170,14 @@ def bar_panel(ax, label, vals, fmt, notes, dsls, show_y, theoretical=None):
     vmax = max(vals.values())
     for y, k in zip(ys, keys):
         v = vals[k]
-        ax.barh(y, v, height=0.78, color=PS.DSL_COLORS[k[1]], edgecolor="white", lw=0.3)
         lab = fmt.format(v) + (f" ({notes[k]})" if notes else "")
-        if theoretical:                                  # occupancy: label "achieved / theoretical", no reference line
-            lab = f"{v:.1f} / {theoretical[k]:.1f}"
+        if theoretical:                # occupancy (as Figure A5): grey theoretical limit behind a narrower achieved bar
+            t = theoretical[k]
+            ax.barh(y, t, height=0.78, color=PS.OCC_THEORETICAL_COLOR, edgecolor="none", zorder=1)
+            ax.barh(y, v, height=0.78 * PS.OCC_ACHIEVED_RATIO, color=PS.DSL_COLORS[k[1]], edgecolor="none", zorder=2)
+            ax.text(max(v, t) + vmax * 0.04, y, f"{v:.1f} / {t:.1f}", va="center", ha="left", fontsize=7)
+            continue
+        ax.barh(y, v, height=0.78, color=PS.DSL_COLORS[k[1]], edgecolor="white", lw=0.3)
         ax.text(v + vmax * 0.04, y, lab, va="center", ha="left", fontsize=7)
     ax.set_xlim(0, vmax * (1.75 if notes else 1.45))
     ax.set_ylim(-0.6, 3.75)
@@ -184,6 +188,9 @@ def bar_panel(ax, label, vals, fmt, notes, dsls, show_y, theoretical=None):
     ax.spines["bottom"].set_visible(False)
     ax.spines["left"].set_color("#BFC3C7")
     ax.set_title(label, fontsize=7.5, loc="left", pad=2)
+    if theoretical:
+        PS.occupancy_legend(ax, dsls, fontsize=7, loc="upper right", bbox_to_anchor=(1.02, -0.01), ncol=2, handlelength=1.4,
+                            handletextpad=0.35, columnspacing=0.8, borderaxespad=0.0)
 
 
 def plot(out_root):
@@ -237,11 +244,13 @@ def main(out_root=FD.PLOTS):
         "excluded_cases": {"cuTile/TileLang on MI300X": "not available"},
         "measurement_kinds_per_axis": {"left": ["formal benchmark latency"],
                                        "right": ["dynamic NCU counters (one counter per axis, NVIDIA only)",
-                                                 "occupancy: bar = achieved (sm__warps_active.avg.pct_of_peak_sustained_active); label = "
-                                                 "achieved / theoretical limit (sm__maximum_warps_per_active_cycle_pct, from the resource and launch "
-                                                 "configuration); no reference line"],
+                                                 "occupancy (as Figure A5): grey background bar = theoretical limit "
+                                                 "(sm__maximum_warps_per_active_cycle_pct, from the resource and launch configuration); narrower "
+                                                 "DSL-coloured foreground bar = achieved (sm__warps_active.avg.pct_of_peak_sustained_active); label = "
+                                                 "achieved / theoretical; no reference line"],
                                        "text": ["MI300X static ISA (execution_paths.csv)", "MI300X PyTorch kernel trace", "rocprof-compute MFMA utilization"]},
         "evidence_text": {c: {"mi300x": C[c]["mi300x"], "caveat": C[c]["caveat"]} for c in C},
+        "occupancy_style": PS.occupancy_style(),
         "profiling_evidence_ids": used,
         "known_limitations": D.manifest["device_limitations"] | {
             "figure": ["the right-hand counters describe the profiled launches; they support, but do not prove, the attribution of the latency change",

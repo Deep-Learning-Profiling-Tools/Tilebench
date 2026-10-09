@@ -52,7 +52,8 @@ by every profile of that operator, with the same `case_id_v2` on all devices.
 - Load width (16 bit) and DRAM read traffic are the same for both DSLs.
 - TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton. Its Hopper kernel body differs
   from the Blackwell one.
-- The occupancy labels report achieved and theoretical occupancy directly (achieved / theoretical, %). On B200,
+- The occupancy chart uses the same encoding as Figure A5: coloured foreground bars show achieved occupancy, grey
+  background bars show the theoretical limit, and the labels give achieved / theoretical (%). On B200,
   TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%. The other implementations operate close to
   their theoretical limits. The theoretical limit is the maximum resident warp occupancy permitted by the kernel's
   resource and launch configuration, not a predicted value, and the counters do not identify the cause of the

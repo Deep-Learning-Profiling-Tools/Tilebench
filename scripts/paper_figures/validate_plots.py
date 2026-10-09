@@ -48,7 +48,7 @@ RQ2_COUNTERS = {  # Figure 3 axis label -> (evidence metric, divisor)
     "Executed instructions (M)": ("smsp__inst_executed.sum", 1e6),
     "Global store instructions (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STG*]", 1e6),
     "L1 global-load sectors (M)": ("l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", 1e6),
-    "Achieved / Theoretical\nOccupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0),
+    "Achieved vs. Theoretical\nOccupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0),
     "Theoretical occupancy (%)": ("sm__maximum_warps_per_active_cycle_pct", 1.0)}      # launch-configuration limit
 OCC_A, OCC_T = "sm__warps_active.avg.pct_of_peak_sustained_active", "sm__maximum_warps_per_active_cycle_pct"
 SCRIPTS = ["plot_style.py", "figure_data.py", "plot_rq1.py", "plot_rq2.py", "plot_rq3.py", "plot_appendix.py"]
@@ -495,8 +495,12 @@ def main():
             if f"{av:.1f} / {tv:.1f}" not in t2:
                 bad.append(f"Fig 3 label {dev} {s_}")
             occ.append(f"{dev} {s_}: {av:.1f}/{tv:.2f}")
-    if any("= theoretical" in t for t in t2) or not any("Achieved / Theoretical" in t for t in t2):
-        bad.append("Fig 3 occupancy title/legend")
+    if any("= theoretical" in t for t in t2) or not any("Achieved vs. Theoretical" in t for t in t2):
+        bad.append("Fig 3 occupancy title")
+    if not {"achieved", "theoretical limit"} <= set(t2):
+        bad.append("Fig 3 occupancy legend")
+    if rq2.get("occupancy_style") != a5.get("occupancy_style") or not rq2.get("occupancy_style"):
+        bad.append("Fig 3 and A5 occupancy styles differ")
     rows = {(r["device"], r["dsl"]): r for r in a5.get("occupancy_bars", [])}
     for dev in ("B200", "GH200"):
         for s_ in ("triton", "cutile", "tilelang"):
@@ -512,7 +516,9 @@ def main():
                 bad.append(f"{dev} {s_}: achieved {av} > theoretical {tv}")
     if not ({"achieved", "theoretical limit", "issue %"} <= set(t5)) or any("(line)" in t for t in t5):
         bad.append("A5 legend / title")
-    check("22.occupancy_achieved_vs_theoretical_without_reference_lines", not bad, "; ".join(bad) or "; ".join(occ))
+    check("22.occupancy_achieved_vs_theoretical_without_reference_lines", not bad, "; ".join(bad) or
+          "; ".join(occ) + f"; shared style {rq2['occupancy_style']['theoretical_color']}, width ratio "
+          f"{rq2['occupancy_style']['achieved_to_theoretical_bar_width']:.3f}")
 
     # 23. reproducibility: two independent rebuilds into temp dirs, byte-identical to each other and to the committed outputs
     if a.skip_reproducibility:

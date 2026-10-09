@@ -14,12 +14,10 @@ import figure_data as FD  # noqa: E402
 import plot_style as PS  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.colors import LogNorm  # noqa: E402
-from matplotlib.legend_handler import HandlerTuple  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch, Rectangle  # noqa: E402
 
 W = PS.DOUBLE_COL_IN
-THEORETICAL_GRAY = "#D9DDDF"      # background bar: theoretical occupancy limit (A5 C)
 S_COLS = [("B200", "triton"), ("B200", "cutile"), ("B200", "tilelang"), ("GH200", "triton"), ("GH200", "cutile"),
           ("GH200", "tilelang"), ("MI300X", "triton")]
 D_COLS = [("triton", "B200", "GH200"), ("triton", "B200", "MI300X"), ("cutile", "B200", "GH200"), ("tilelang", "B200", "GH200")]
@@ -415,6 +413,8 @@ A5_INSTR_CASES = [("weight_dequant/bf16", "weight_dequant\nBF16"), ("destindex/i
                   ("cross_entropy/fp16", "cross_entropy\nFP16"), ("moe_topk_gating/fp16", "moe_topk_gating\nFP16"),
                   ("flash_decode/fp32", "flash_decode\nFP32")]
 A5_CONFOUNDED = {("weight_dequant/bf16", "GH200"): "GH200 Triton uses a different autotuned configuration (confounder)"}
+A5_OCC_W, A5_OCC_W_ACH = 0.28, 0.18          # theoretical / achieved bar widths (ratio = plot_style.OCC_ACHIEVED_RATIO)
+assert abs(A5_OCC_W_ACH / A5_OCC_W - PS.OCC_ACHIEVED_RATIO) < 1e-12
 FLUSH = [("write_flush_512MiB(formal)", "write flush\n(formal)"), ("read_flush_512MiB", "read flush"), ("no_flush", "no flush")]
 
 
@@ -578,8 +578,8 @@ def fig_a5(D, out_root):
             a = E.num("1d_conv/fp16", dev, s, "sm__warps_active.avg.pct_of_peak_sustained_active")
             th = E.num("1d_conv/fp16", dev, s, "sm__maximum_warps_per_active_cycle_pct")
             x = di * 1.15 + (si - 1) * 0.3
-            c2.bar(x, th, width=0.28, color=THEORETICAL_GRAY, edgecolor="none", zorder=1)      # theoretical limit (behind)
-            c2.bar(x, a, width=0.18, color=col[s], edgecolor="none", zorder=2)                  # achieved (front)
+            c2.bar(x, th, width=A5_OCC_W, color=PS.OCC_THEORETICAL_COLOR, edgecolor="none", zorder=1)   # theoretical limit (behind)
+            c2.bar(x, a, width=A5_OCC_W_ACH, color=col[s], edgecolor="none", zorder=2)                  # achieved (front)
             top = max(a, th)                                   # two-line label: achieved (ink) above "/theoretical" (gray)
             c2.annotate(f"{a:.1f}", (x, top), xytext=(0, 8.5), textcoords="offset points", ha="center", va="bottom",
                         fontsize=6, color=PS.INK)
@@ -595,10 +595,8 @@ def fig_a5(D, out_root):
     c2.tick_params(labelsize=FS)
     c2.set_ylabel("occupancy (%)", fontsize=FS)
     title(c2, "1d_conv FP16: achieved and\ntheoretical occupancy")
-    c2.legend(handles=[(Patch(color=col["triton"]), Patch(color=col["cutile"]), Patch(color=col["tilelang"])),
-                       Patch(color=THEORETICAL_GRAY)], labels=["achieved", "theoretical limit"],
-              handler_map={tuple: HandlerTuple(ndivide=None, pad=0.0)}, fontsize=6, loc="upper right", handlelength=1.6,
-              handletextpad=0.4, borderaxespad=0.1, labelspacing=0.25)
+    PS.occupancy_legend(c2, ("triton", "cutile", "tilelang"), fontsize=6, loc="upper right", handlelength=1.6, handletextpad=0.4,
+                        borderaxespad=0.1, labelspacing=0.25)
     for x, iv in issue:
         c2.text(x, -0.27, f"{iv:.0f}", transform=c2.get_xaxis_transform(), ha="center", va="top", fontsize=6, color=PS.MUTED)
     c2.text(-0.02, -0.27, "issue %", transform=c2.transAxes, ha="right", va="top", fontsize=6, color=PS.MUTED)
@@ -638,7 +636,7 @@ def fig_a5(D, out_root):
                                              "B MI300X": ["diagnostic_experiment latency"], "C traffic": ["dynamic counters"],
                                              "C occupancy": ["dynamic counter", "launch_config"], "C MI300X": ["diagnostic_experiment latency"]},
               "axes_evidence": {k: sorted(set(v)) for k, v in E.axes.items()},
-              "occupancy_bars": occ,
+              "occupancy_bars": occ, "occupancy_style": PS.occupancy_style(),
               "missing_shown_as": "n/c (not collected): B200 TileLang FP16/FP8 matmul reports are reduced collections",
               "confounders": {f"{c}|{d}": t for (c, d), t in A5_CONFOUNDED.items()} | {
                   "GH200 STS per WGMMA": "Triton reads a B operand transposed outside the timed region; cuTile loads B as [K, N] and re-lays it out for TF32 and FP8, not FP16",

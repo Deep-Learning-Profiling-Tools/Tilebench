@@ -14,6 +14,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm  # noqa: E402
+from matplotlib.legend_handler import HandlerTuple  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 
 SINGLE_COL_IN = 3.03
 DOUBLE_COL_IN = 6.30
@@ -42,6 +44,23 @@ CATEGORY_MARKERS = {"Point-wise": "o", "Reduction/Normalization": "s", "Matrix M
 
 DIVERGING = LinearSegmentedColormap.from_list("tilearena_div", [NEGATIVE, NEUTRAL, POSITIVE], N=256)
 SEQUENTIAL = LinearSegmentedColormap.from_list("tilearena_seq", ["#F7F5F0", "#E7C9B5", "#C98E70", "#9C5B47"], N=256)
+
+# Occupancy panels (Figure 3C, Figure A5 C): a grey theoretical-limit bar drawn first, a narrower DSL-coloured achieved
+# bar on top; labels read "achieved / theoretical"
+OCC_THEORETICAL_COLOR = "#D9DDDF"
+OCC_ACHIEVED_RATIO = 0.18 / 0.28          # achieved bar width / theoretical bar width
+OCC_LEGEND_LABELS = ("achieved", "theoretical limit")
+
+
+def occupancy_legend(ax, dsls, **kw):
+    """Legend for the occupancy panels: one multi-colour 'achieved' handle (one patch per DSL) and the grey limit."""
+    handles = [tuple(Patch(color=DSL_COLORS[s]) for s in dsls), Patch(color=OCC_THEORETICAL_COLOR)]
+    return ax.legend(handles=handles, labels=list(OCC_LEGEND_LABELS), handler_map={tuple: HandlerTuple(ndivide=None, pad=0.0)}, **kw)
+
+
+def occupancy_style():
+    return {"theoretical_color": OCC_THEORETICAL_COLOR, "achieved_to_theoretical_bar_width": OCC_ACHIEVED_RATIO,
+            "legend_labels": list(OCC_LEGEND_LABELS), "label_format": "achieved and theoretical with one decimal"}
 
 BASE_FONT_PT = 7.5
 MIN_FONT_MAIN_PT = 7.0       # main-paper figures (validate_plots fails below this)
