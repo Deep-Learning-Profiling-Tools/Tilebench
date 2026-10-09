@@ -40,8 +40,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
   __shared__ __align__(16) uint64_t pv_mbar_mem[1];
   auto pv_mbar = reinterpret_cast<Barrier*>(pv_mbar_mem);
   __shared__ __align__(16) uint qk_tmem[1];
-  __shared__ __align__(16) uint pv2_tmem[1];
   __shared__ __align__(16) uint pv_tmem[1];
+  __shared__ __align__(16) uint pv2_tmem[1];
   float acc[16];
   float acc2[16];
   float logsum[1];
@@ -74,8 +74,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
   tl::tcgen05_after_thread_sync();
   if ((((int)threadIdx.x) >> 5) == 0) {
     tl::tmem_allocate((&(qk_tmem[0])), 32);
-    tl::tmem_allocate((&(pv2_tmem[0])), 32);
     tl::tmem_allocate((&(pv_tmem[0])), 32);
+    tl::tmem_allocate((&(pv2_tmem[0])), 32);
   }
   tl::tcgen05_before_thread_sync();
   __syncthreads();
@@ -196,8 +196,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
     for (int rv = 0; rv < 16; ++rv) {
       scores_max_clear[0] = max(scores_max_clear[0], qk[rv]);
     }
-    scores_max_clear[0] = tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run(scores_max_clear[0], (&(((float*)workspace_1)[0])));
-    scores_max_clear[0] = tl::AllReduce<tl::MaxOp, 128, 64, 0, tl::NamedBarrier<256>>::run(scores_max_clear[0], (&(((float*)workspace_2)[0])));
+    scores_max_clear[0] = tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run(scores_max_clear[0], (&(((float*)workspace_2)[0])));
+    scores_max_clear[0] = tl::AllReduce<tl::MaxOp, 128, 64, 0, tl::NamedBarrier<256>>::run(scores_max_clear[0], (&(((float*)workspace_1)[0])));
     scores_max[0] = max(scores_max[0], scores_max_clear[0]);
     bool has_prev = (0x0p+0f/*0.000000e+00*/ < logsum[0]);
     bool has_valid = ((start_n < 10240) && (start_n <= ((((int)blockIdx.x) * 64) + (((int)threadIdx.x) & 63))));
@@ -375,8 +375,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
   }
   if ((((int)threadIdx.x) >> 5) == 0) {
     tl::tmem_deallocate((&(qk_tmem[0])), 32);
-    tl::tmem_deallocate((&(pv2_tmem[0])), 32);
     tl::tmem_deallocate((&(pv_tmem[0])), 32);
+    tl::tmem_deallocate((&(pv2_tmem[0])), 32);
   }
 }
 

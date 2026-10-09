@@ -29,8 +29,8 @@ class Module:
         qk_mbar = T.alloc_buffer((1,), "uint64", scope="shared.barrier")
         pv_mbar = T.alloc_buffer((1,), "uint64", scope="shared.barrier")
         qk_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
-        pv2_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
         pv_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
+        pv2_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
         acc = T.alloc_buffer((16,), scope="local")
         acc2 = T.alloc_buffer((16,), scope="local")
         logsum = T.alloc_buffer((1,), scope="local")
@@ -94,8 +94,8 @@ class Module:
         T.tcgen05_after_thread_sync()
         if tx // 32 == 0:
             T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), qk_tmem.data, 0, 1, 1), 32)
-            T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv2_tmem.data, 0, 1, 1), 32)
             T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 32)
+            T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv2_tmem.data, 0, 1, 1), 32)
         T.tcgen05_before_thread_sync()
         T.tvm_storage_sync("shared")
         T.tcgen05_after_thread_sync()
@@ -170,8 +170,8 @@ class Module:
             scores_max_clear[0] = T.float32("-inf")
             for rv in T.unroll(16):
                 scores_max_clear[0] = T.max(scores_max_clear[0], qk_1[rv])
-            scores_max_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run", scores_max_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
-            scores_max_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 128, 64, 0, tl::NamedBarrier<256>>::run", scores_max_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_2, 0, 256, 2))
+            scores_max_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run", scores_max_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_2, 0, 256, 2))
+            scores_max_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 128, 64, 0, tl::NamedBarrier<256>>::run", scores_max_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
             scores_max_1[0] = T.max(scores_max_1[0], scores_max_clear[0])
             has_prev: T.bool = T.float32(0.0) < logsum_1[0]
             has_valid: T.bool = start_n_1[0] < 10240 and start_n_1[0] <= bx * 64 + tx % 64
@@ -287,5 +287,5 @@ class Module:
             T.tma_store_wait(0, T.bool(True))
         if tx // 32 == 0:
             T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), qk_tmem.data, 0, 1, 1), 32)
-            T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv2_tmem.data, 0, 1, 1), 32)
             T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 32)
+            T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv2_tmem.data, 0, 1, 1), 32)

@@ -20,8 +20,8 @@ class Module:
         workspace_1: T.handle("float32", "shared.dyn") = T.handle_add_byte_offset(buf_dyn_shmem.data, 132096)
         qk_mbar = T.alloc_buffer((1,), "uint64", scope="shared.barrier")
         pv_mbar = T.alloc_buffer((1,), "uint64", scope="shared.barrier")
-        pv_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
         qk_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
+        pv_tmem = T.alloc_buffer((1,), "uint32", scope="shared")
         q_shared_local_cast = T.alloc_buffer((8,), "float16", scope="local")
         acc = T.alloc_buffer((64,), scope="local")
         l_i = T.alloc_buffer((1,), scope="local")
@@ -55,8 +55,8 @@ class Module:
         T.tvm_storage_sync("shared")
         T.tcgen05_after_thread_sync()
         if tx // 32 == 0:
-            T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 128)
             T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), qk_tmem.data, 0, 1, 1), 128)
+            T.ptx_init_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 128)
         T.tcgen05_before_thread_sync()
         T.tvm_storage_sync("shared")
         T.tcgen05_after_thread_sync()
@@ -111,7 +111,7 @@ class Module:
             m_ij_clear[0] = T.float32("-inf")
             for rv in T.unroll(64):
                 m_ij_clear[0] = T.max(m_ij_clear[0], qk_1[rv])
-            m_ij_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run", m_ij_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
+            m_ij_clear[0] = T.call_extern("float32", "tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run", m_ij_clear[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 256, 2))
             m_ij_1[0] = T.max(m_ij_1[0], m_ij_clear[0])
             m_ij_1[0] = T.max(m_i_1[0], m_ij_1[0])
             alpha_1[0] = T.exp2(m_i_1[0] - m_ij_1[0])
@@ -120,7 +120,7 @@ class Module:
             l_ij_1[0] = T.float32(0.0)
             for rv in T.unroll(64):
                 l_ij_1[0] = l_ij_1[0] + qk_1[rv]
-            l_ij_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 128, 0, tl::NamedBarrier<256>>::run", l_ij_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace, 0, 256, 2))
+            l_ij_1[0] = T.call_extern("float32", "tl::AllReduce<tl::SumOp, 256, 128, 0, tl::NamedBarrier<256>>::run", l_ij_1[0], T.tvm_access_ptr(T.type_annotation("float32"), workspace_1, 0, 256, 2))
             l_i_1[0] = l_i_1[0] * alpha_1[0] + l_ij_1[0]
             T.tcgen05_before_thread_sync()
             T.tvm_storage_sync("shared.dyn")
@@ -160,5 +160,5 @@ class Module:
                 O_local_cast_2[vec * 4:vec * 4 + 4] = T.Cast("float16x4", acc_1[i * 16 + vec * 4:i * 16 + vec * 4 + 4])
             O_1[bz * 83886080 + by * 2621440 + bx * 16384 + tx % 128 * 128 + tx // 128 * 64 + i * 16:bz * 83886080 + by * 2621440 + bx * 16384 + tx % 128 * 128 + tx // 128 * 64 + i * 16 + 16] = O_local_cast_2[0:16]
         if tx // 32 == 0:
-            T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 128)
             T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), qk_tmem.data, 0, 1, 1), 128)
+            T.ptx_deallocate_tensor_memory(T.tvm_access_ptr(T.type_annotation("uint32"), pv_tmem.data, 0, 1, 1), 128)

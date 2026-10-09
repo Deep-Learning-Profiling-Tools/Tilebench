@@ -1136,7 +1136,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "find_ir",
-    description: "List the compiler intermediate code that can be read: for one kernel at the profiled shape and that backend's autotuned configuration, what each compiler produced. Triton: ttir (before the GPU passes), ttgir (after them: layouts, shared memory, tensor path, pipelining) and ptx. TileLang: the generated CUDA (cu), and TIR before (tir) and after (lowered.tir) its passes. cuTile: the front-end Tile IR (tileir); its back end is closed. Filter by platform, op, backend or dtype. Coverage is partial: an operator that is not listed has none.",
+    description: "List the compiler intermediate code that can be read: for one kernel at the profiled shape and that backend's autotuned configuration, what each compiler produced. Triton: ttir (before the GPU passes), ttgir (after them: layouts, shared memory, tensor path, pipelining) and ptx (amdgcn on MI300X). TileLang: the generated CUDA (cu), TIR before (tir) and after (lowered.tir) its passes, and the ptx that nvcc produces from that CUDA. cuTile: the front-end Tile IR (tileir); its back end is closed. Filter by platform, op, backend or dtype. Every profiled report on B200, GH200 and MI300X has an entry.",
     input_schema: {
       type: "object",
       properties: {

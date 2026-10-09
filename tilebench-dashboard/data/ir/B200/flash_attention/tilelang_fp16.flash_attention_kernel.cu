@@ -32,8 +32,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
   auto qk_mbar = reinterpret_cast<Barrier*>(qk_mbar_mem);
   __shared__ __align__(16) uint64_t pv_mbar_mem[1];
   auto pv_mbar = reinterpret_cast<Barrier*>(pv_mbar_mem);
-  __shared__ __align__(16) uint pv_tmem[1];
   __shared__ __align__(16) uint qk_tmem[1];
+  __shared__ __align__(16) uint pv_tmem[1];
   half_t q_shared_local_cast[8];
   float acc[64];
   float l_i[1];
@@ -55,8 +55,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
   __syncthreads();
   tl::tcgen05_after_thread_sync();
   if ((((int)threadIdx.x) >> 5) == 0) {
-    tl::tmem_allocate((&(pv_tmem[0])), 128);
     tl::tmem_allocate((&(qk_tmem[0])), 128);
+    tl::tmem_allocate((&(pv_tmem[0])), 128);
   }
   tl::tcgen05_before_thread_sync();
   __syncthreads();
@@ -132,7 +132,7 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
     for (int rv = 0; rv < 64; ++rv) {
       m_ij_clear[0] = max(m_ij_clear[0], qk[rv]);
     }
-    m_ij_clear[0] = tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run(m_ij_clear[0], (&(((float*)workspace_1)[0])));
+    m_ij_clear[0] = tl::AllReduce<tl::MaxOp, 256, 128, 0, tl::NamedBarrier<256>>::run(m_ij_clear[0], (&(((float*)workspace)[0])));
     m_ij[0] = max(m_ij[0], m_ij_clear[0]);
     m_ij[0] = max(m_i[0], m_ij[0]);
     alpha[0] = exp2f((m_i[0] - m_ij[0]));
@@ -145,7 +145,7 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
     for (int rv_1 = 0; rv_1 < 64; ++rv_1) {
       l_ij[0] = (l_ij[0] + qk[rv_1]);
     }
-    l_ij[0] = tl::AllReduce<tl::SumOp, 256, 128, 0, tl::NamedBarrier<256>>::run(l_ij[0], (&(((float*)workspace)[0])));
+    l_ij[0] = tl::AllReduce<tl::SumOp, 256, 128, 0, tl::NamedBarrier<256>>::run(l_ij[0], (&(((float*)workspace_1)[0])));
     l_i[0] = ((l_i[0] * alpha[0]) + l_ij[0]);
     tl::tcgen05_before_thread_sync();
     __syncthreads();
@@ -210,8 +210,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) main_kernel(const half_t* _
     tl::store_global_256(&(*(ulonglong4*)(O + ((((((((int)blockIdx.z) * 83886080) + (((int)blockIdx.y) * 2621440)) + (((int)blockIdx.x) * 16384)) + ((((int)threadIdx.x) & 127) * 128)) + ((((int)threadIdx.x) >> 7) * 64)) + (i_11 * 16)))), *(ulonglong4*)(O_local_cast_2 + 0));
   }
   if ((((int)threadIdx.x) >> 5) == 0) {
-    tl::tmem_deallocate((&(pv_tmem[0])), 128);
     tl::tmem_deallocate((&(qk_tmem[0])), 128);
+    tl::tmem_deallocate((&(pv_tmem[0])), 128);
   }
 }
 
