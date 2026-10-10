@@ -92,8 +92,9 @@ GitHub), finds or downloads the saved reports, and writes:
 - `<backend>/detail_*.json`, `<backend>/ncu.json`, `<backend>/embedded_source/`,
   `case.json`: exact records for citation.
 
-Then read the three `impl_<backend>.py` files for the operator
-([layout](references/tilebench-layout.md) if paths differ) and verify the join:
+Then read the three `impl_<backend>.py` files for the operator, in
+`benchmarks/operators/<op>/` or `tilebench/benchmarks/operators/<op>/`
+depending on the branch ([layout](references/tilebench-layout.md)) and verify the join:
 captured grid x winner tile should equal the problem shape. Do not rebuild this
 extraction by hand; write extra code only for a question the bundle cannot answer.
 If a backend's capture is reduced (the brief says no SASS or PC samples) and
@@ -162,7 +163,7 @@ differences you cannot yet explain.
    3. Take values from three places: the case parameters in `brief.md` (the
       winner log's `params`), defaults the benchmark fills in
       (`config.yaml` `case_defaults`, and the operator's input generator in
-      `tilebench/data/tensors.py` for anything still missing), and that
+      `data/tensors.py`, under `tilebench/` in the package layout, for anything still missing), and that
       backend's own winner config. Each backend has its own winner; do not
       reuse another backend's block sizes.
    4. Write one argument per kernel parameter:

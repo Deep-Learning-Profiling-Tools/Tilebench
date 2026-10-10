@@ -29,7 +29,7 @@ collection is explicitly authorized, not a prerequisite for reading saved report
 
 | Evidence | Package-layout path or output convention | How to use it |
 |---|---|---|
-| Operator semantics, case grid, formulas | `tilebench/benchmarks/operators/<op>/config.yaml` | Resolve dtype/shape and useful work. |
+| Operator semantics, case grid, formulas | `tilebench/benchmarks/operators/<op>/config.yaml`; `benchmarks/operators/<op>/config.yaml` on branches without the `tilebench/` package directory | Resolve dtype/shape and useful work. |
 | Implementation | Same directory, `impl_<backend>.py` | Inspect only the requested backend; `impl_torch.py` is the semantic reference when needed. |
 | Benchmark summary | `results/<hardware>/csv/<op>_<mode>.csv` | Match the exact params/dtype row; inspect actual columns and valid numeric entries. |
 | Winning-config logs | `results/<hardware>/logs/autotune_logs/` | Match the selected winner to the case/backend; use CSVs, not timing logs, for benchmark latency. |

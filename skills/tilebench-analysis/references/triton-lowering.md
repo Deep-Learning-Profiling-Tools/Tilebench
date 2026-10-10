@@ -13,10 +13,13 @@ Compile the kernel for the profiled target from its source. This needs no GPU
 and launches nothing:
 
 ```bash
-<python> <skill-dir>/scripts/triton_ir.py <checkout>/tilebench/benchmarks/operators/relu/impl_triton.py relu_kernel \
+<python> <skill-dir>/scripts/triton_ir.py <operators>/relu/impl_triton.py relu_kernel \
     --arg x_ptr=ptr:i8 --arg output_ptr=ptr:i8 --arg n_elements=int:20971520 --arg BLOCK_SIZE=const:2048 \
     --num-warps 2 --hardware B200 --out <output>/triton_ir
 ```
+
+`<operators>` is the checkout's operator directory: `benchmarks/operators` or
+`tilebench/benchmarks/operators`, depending on the branch.
 
 Give one `--arg` per kernel parameter, in any order:
 

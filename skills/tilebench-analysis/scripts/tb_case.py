@@ -295,10 +295,22 @@ def extract_backend(report_path, out):
             for r in rows:
                 for k, v in r["stalls"].items():
                     stall_totals[k] = stall_totals.get(k, 0) + v
+            sleeps = [r["pc"] for r in rows if "NANOSLEEP" in r["sass"]]
+            signal_wait = {"sites": 0, "samples": 0, "stalls": {}}
+            for r in rows:
+                tokens = [t for t in r["sass"].split() if not t.startswith("@")]
+                target = int(tokens[1], 16) if len(tokens) > 1 and tokens[0] == "BRA" and tokens[1].startswith("0x") else None
+                r["signal_wait"] = bool(tokens) and (tokens[0].startswith(("NANOSLEEP", "SYNCS")) or (
+                    target is not None and any(target <= pc <= target + 0x40 for pc in sleeps)))
+                if r["signal_wait"] and r["samples"]:
+                    signal_wait["sites"] += 1
+                    signal_wait["samples"] += r["samples"]
+                    for k, v in r["stalls"].items():
+                        signal_wait["stalls"][k] = signal_wait["stalls"].get(k, 0) + v
             chain = []
             for r in rows:
                 tokens = [t for t in r["sass"].split() if not t.startswith("@")]
-                waited = r["stalls"].get("long_scoreboard", 0)
+                waited = 0 if r["signal_wait"] else r["stalls"].get("long_scoreboard", 0)
                 if tokens and tokens[0].startswith("LDG"):
                     chain.append({"kind": "load", "offset": f"{r['pc'] - base:#07x}", "op": tokens[0], "executed": r["executed"]})
                 elif total_samples and waited >= max(20, 0.002 * total_samples):
@@ -321,7 +333,7 @@ def extract_backend(report_path, out):
                       "static_instructions": len(rows), "pc_samples": total_samples,
                       "per_pc_executed_sum": sum(r["executed"] for r in rows),
                       "stall_sample_totals": dict(sorted(stall_totals.items(), key=lambda kv: -kv[1])),
-                      "load_chain": chain,
+                      "load_chain": chain, "signal_wait": signal_wait,
                       "samples_by_opcode": dict(sorted(by_opcode.items(), key=lambda kv: -kv[1]["samples"])[:12]),
                       "samples_by_source_line": dict(sorted(by_line.items(), key=lambda kv: -kv[1]["samples"])[:12]),
                       "hot_pcs": [{**r, "offset": f"{r['pc'] - base:#07x}", "pc": hex(r["pc"])} for r in hot],
@@ -521,18 +533,22 @@ def write_brief(out, case, extracted):
                 lines += ["### Where the extra time sits (PC samples)", "",
                           "Samples are taken at a fixed rate, so a sample count is time. The second row of each backend is its excess over "
                           f"{ref}: the stall reasons that hold the excess are where the gap is spent, whatever the instruction counts say.", "",
-                          "| Backend | Samples | Samples/us | " + " | ".join(reasons) + " | no stall recorded |", "|---|---:|---:|" + "---:|" * (len(reasons) + 1)]
+                          "| Backend | Samples | Samples/us | " + " | ".join(reasons) + " | no stall recorded | at signal waits |", "|---|---:|---:|" + "---:|" * (len(reasons) + 2)]
                 base_a = sampled[ref]
                 for b, a in sampled.items():
                     us = (firsts[b].get("gpu__time_duration.sum") or 0) / 1000
                     row = [a["stall_sample_totals"].get(k, 0) for k in reasons]
                     rest = a["pc_samples"] - sum(a["stall_sample_totals"].values())
-                    lines.append(f"| {b} | {a['pc_samples']:,} | {fmt(a['pc_samples'] / us) if us else 'n/a'} | " + " | ".join(f"{v:,}" for v in row) + f" | {rest:,} |")
+                    lines.append(f"| {b} | {a['pc_samples']:,} | {fmt(a['pc_samples'] / us) if us else 'n/a'} | " + " | ".join(f"{v:,}" for v in row) + f" | {rest:,} | {a.get('signal_wait', {}).get('samples', 0):,} |")
                     if b != ref:
                         base_rest = base_a["pc_samples"] - sum(base_a["stall_sample_totals"].values())
                         lines.append(f"| {b} minus {ref} | {a['pc_samples'] - base_a['pc_samples']:+,} | | "
-                                     + " | ".join(f"{v - base_a['stall_sample_totals'].get(k, 0):+,}" for k, v in zip(reasons, row)) + f" | {rest - base_rest:+,} |")
-                lines.append("")
+                                     + " | ".join(f"{v - base_a['stall_sample_totals'].get(k, 0):+,}" for k, v in zip(reasons, row)) + f" | {rest - base_rest:+,} | "
+                                     f"{a.get('signal_wait', {}).get('samples', 0) - base_a.get('signal_wait', {}).get('samples', 0):+,} |")
+                lines += ["", "The last column is not an extra reason: it counts the samples, already included under the reasons to its left, that sit on "
+                          "`NANOSLEEP`/`SYNCS` sites or on a branch into a sleep loop. Those are a warp waiting for a signal from another warp or from "
+                          "a bulk (TMA) copy, usually recorded as long_scoreboard. Subtract them before reading long_scoreboard as waiting on a load; "
+                          "each backend's section gives the split by reason.", ""]
         for backend, summary in extracted.items():
             backend_total = sum(t.get("gpu__time_duration.sum") or 0 for t in summary["table"].values())
             for a in summary["actions"]:
@@ -556,7 +572,13 @@ def write_brief(out, case, extracted):
                 lines += ["", "Dynamic warp-level opcode executions: " + (", ".join(f"{k} {v:,}" for k, v in top) or "not collected in this capture"), ""]
                 if a["stall_sample_totals"]:
                     lines += ["Stalled-warp samples by reason: " + ", ".join(f"{k} {v:,}" for k, v in a["stall_sample_totals"].items()), ""]
-                busiest = max((c.get("executed") or 0 for c in a.get("load_chain", [])), default=0)
+                waiting = a.get("signal_wait") or {}
+                if waiting.get("samples"):
+                    lines += [f"Of these, {waiting['samples']:,} samples sit on {waiting['sites']} signal-wait sites (`NANOSLEEP`/`SYNCS`, or a branch into a sleep loop): "
+                              + ", ".join(f"{k} {v:,}" for k, v in sorted(waiting["stalls"].items(), key=lambda kv: -kv[1]))
+                              + ". They are a warp waiting for a signal, not for a load.", ""]
+                loads = [c.get("executed") or 0 for c in a.get("load_chain", []) if c["kind"] == "load"]
+                busiest = max(loads or [c.get("executed") or 0 for c in a.get("load_chain", [])], default=0)
                 a["load_chain"] = [c for c in a.get("load_chain", []) if (c.get("executed") or 0) * 4 >= busiest]
                 if any(c["kind"] == "wait" for c in a.get("load_chain", [])):
                     steps = [f"{c['op']}@{c['offset']}" if c["kind"] == "load" else f"wait@{c['offset']} ({c['op']}, {c['samples']:,} long_scoreboard)"
@@ -642,6 +664,9 @@ def main():
     if not rows:
         parser.error(f"No {args.mode} CSV for {args.operator} on {args.hardware} under {repo}/results")
     same_dtype = [r for r in rows if r.get("dtype") == args.dtype]
+    if csv_path.parent == repo / "results" / "csv":
+        notes.append(f"The benchmark CSV is `results/csv`, which does not name its hardware. Confirm it is a {args.hardware} run; "
+                     "no other hardware's results are in this checkout, so there is no hardware trend table.")
     if not same_dtype:
         parser.error(f"dtype {args.dtype} not in {csv_path}; available: {sorted({r.get('dtype') for r in rows})}")
     records, sources = load_logs(repo, args.hardware, args.operator, not args.no_network)
@@ -677,7 +702,9 @@ def main():
             "hardware_trend": [], "notes": notes}
     for other in ("B200", "GH200", "MI300X"):
         if other != args.hardware:
-            _, other_rows = read_csv(repo, other, args.operator, args.mode)
+            other_path, other_rows = read_csv(repo, other, args.operator, args.mode)
+            if other_path == csv_path:
+                continue
             for r in other_rows:
                 if r["params"] == row["params"] and r.get("dtype") == args.dtype:
                     case["hardware_trend"].append({"label": other, "latency_ms": latencies(r)})

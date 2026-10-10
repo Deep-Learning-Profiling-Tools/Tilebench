@@ -10,10 +10,13 @@ are visible only in SASS. Checked against cuda-tile 1.3.0 for `sm_100`.
 ## Get the IR
 
 ```bash
-<python> <skill-dir>/scripts/cutile_ir.py <checkout>/tilebench/benchmarks/operators/<op>/impl_cutile.py <kernel_fn> \
+<python> <skill-dir>/scripts/cutile_ir.py <operators>/<op>/impl_cutile.py <kernel_fn> \
     --arg 10240x10240:float16 --arg 49:float16 --arg 10240x10240:float16 --arg 7 --arg 7 --arg 2 --arg 128 \
     --out <output>/cutile_<op>.tileir
 ```
+
+`<operators>` is the checkout's operator directory: `benchmarks/operators` or
+`tilebench/benchmarks/operators`, depending on the branch.
 
 Arguments are the kernel's parameters in call order: arrays as `SHAPE:dtype`,
 scalars and `ct.Constant` tile sizes as values (the winner config). The script

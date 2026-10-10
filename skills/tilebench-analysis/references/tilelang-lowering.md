@@ -13,10 +13,13 @@ Saved TileLang reports embed `tvm_kernels.cu` with empty content, so the report
 alone never shows the generated kernel. Regenerate it; nothing runs on a GPU:
 
 ```bash
-<python> <skill-dir>/scripts/tl_codegen.py <checkout>/tilebench/benchmarks/operators/<op>/impl_tilelang.py <kernel_fn> \
+<python> <skill-dir>/scripts/tl_codegen.py <operators>/<op>/impl_tilelang.py <kernel_fn> \
     --tensor 20000000:float16 --tensor 20000000:float16 \
     --kw dtype=float16 --kw BLOCK_SIZE=1024 --kw threads=128 --out <output>/tilelang_<op>.cu
 ```
+
+`<operators>` is the checkout's operator directory: `benchmarks/operators` or
+`tilebench/benchmarks/operators`, depending on the branch.
 
 The script targets the hardware given with `--hardware` (default B200) and
 needs neither a GPU nor `nvcc`. Operators that pick a kernel variant by GPU
