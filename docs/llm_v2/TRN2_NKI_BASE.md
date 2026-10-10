@@ -186,22 +186,14 @@ Trajectory directories are deterministic per (campaign, task, model, condition):
 
 ## Launch (run from `tb_wt/_llm_trn2`)
 
+Launched 2026-10-10 16:36Z on the owner's go. The owner skipped the separate vector_add acceptance run, so the full set
+was launched directly. The command is also the restart / recovery command:
+
 ```bash
 cd /home/ubuntu/tb_wt/_llm_trn2
 PY=/home/ubuntu/workspace/native_venv/bin/python
-# 0. re-check right before launch (no API generation, no device run)
-$PY scripts/llm_v2/build_trn2_freeze.py --check && $PY scripts/llm_v2/build_trn2_eligibility.py --check
-$PY -m tilebench.llm.v2 preflight --devices Trn2 --live --run-type formal --conditions base --provider openai
-$PY -m tilebench.llm.v2 preflight --devices Trn2 --live --run-type formal --conditions base --provider anthropic
-# 1. launch acceptance: both models, vector_add only, formal identity
-systemd-run --user --unit=tb-trn2-nki-base -p MemoryMax=16G -p OOMPolicy=continue \
-  --working-directory=/home/ubuntu/tb_wt/_llm_trn2 --setenv=OPENAI_API_KEY --setenv=CLAUDE_API_KEY \
-  $PY -m tilebench.llm.v2 schedule --device Trn2 --dsls nki --models gpt claude --condition base \
-    --campaign formal_trn2_nki_base_rev4_2026-10-10 --run-type formal --isolation docker \
-    --operators vector_add --dtypes fp16 --executor "claude-code (Trn2 NKI Base)"
-# 2. after the acceptance unit has finished and its 2 trajectories are checked: full task set, same identity
 systemd-run --user --unit=tb-trn2-nki-base-full -p MemoryMax=16G -p OOMPolicy=continue \
-  --working-directory=/home/ubuntu/tb_wt/_llm_trn2 --setenv=OPENAI_API_KEY --setenv=CLAUDE_API_KEY \
+  --working-directory=/home/ubuntu/tb_wt/_llm_trn2 --setenv=PATH --setenv=OPENAI_API_KEY --setenv=CLAUDE_API_KEY \
   $PY -m tilebench.llm.v2 schedule --device Trn2 --dsls nki --models gpt claude --condition base \
     --campaign formal_trn2_nki_base_rev4_2026-10-10 --run-type formal --isolation docker --resume \
     --executor "claude-code (Trn2 NKI Base)"
@@ -209,12 +201,21 @@ systemd-run --user --unit=tb-trn2-nki-base-full -p MemoryMax=16G -p OOMPolicy=co
 journalctl --user -u tb-trn2-nki-base-full -f
 $PY -m tilebench.llm.v2 coverage outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10
 $PY -m tilebench.llm.v2 review-queue outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10
-touch outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/STOP      # graceful pause
+touch outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/STOP      # graceful pause (in-flight requests finish)
 ```
 
-- `MemoryMax=16G` caps the scheduler process only.
-- The evaluation container runs under dockerd with its own 100 GB limit (`evaluation/neuron.py`), so 16 + 100 GB stays
-  under the host's 124 GiB.
+Two flags are required. Both were learned on launch day:
+
+- **`--setenv=PATH`.** The systemd user manager's PATH lacks `/opt/aws/neuron/bin`. Without `neuron-ls`, host-arch
+  detection gives None and preflight refuses both tracks. The first launch failed this way, before any trajectory or
+  request.
+- **`--resume`, always, even on a fresh campaign.** After a `review-resolve`, the scheduler continues the trajectory in
+  process by resuming it. Without `--resume` that continuation raises "already holds a trajectory". This happened once
+  (gpt batched_matmul, round 1). The fix was a graceful STOP drain (no request lost) and a `--resume` relaunch at
+  17:41Z: all 72 trajectories resumed, 0 new, 0 re-requested.
+
+The unit cap covers the scheduler only. The evaluation container runs under dockerd with its own 100 GB limit
+(`evaluation/neuron.py`), so 16 + 100 GB stays under the host's 124 GiB.
 
 API generation runs concurrently (adaptive per provider, global evaluation backlog 16). Device evaluation is serial
 under the Trn2 lock (one candidate on one logical NeuronCore at a time). Tokens and USD are recorded per attempt under
