@@ -1,0 +1,99 @@
+\begin{promptbox}[Agent report (excerpt): matmul\_fp32\_fp16\_fp8, fp32, B200]
+# matmul_fp32_fp16_fp8, fp32, B200, K=20480: why TileLang is 3.8x slower than cuTile and 2.5x slower than Triton
+
+## 1. Verdict
+
+Case: C = A x B with M = N = 4096, K = 20480, fp32 inputs multiplied as TF32 (`bundle/brief.md`, "Benchmark row"; source `results/B200/csv/matmul_fp32_fp16_fp8_autotune.csv`).
+
+| Backend | CSV latency (ms) | TileLang / backend |
+|---|---:|---:|
+| cuTile | 0.9145 | 3.83 |
+| torch | 0.9466 | 3.70 |
+| Triton | 1.4130 | 2.48 |
+| TileLang | 3.4981 | 1 |
+
+This is a divergence, far outside the 10% band.
+
+Cause: TileLang 0.1.11 cannot lower a TF32 `T.gemm` to the Blackwell tcgen05 tensor-core instruction, so its kernel uses the legacy register MMA (`mma.sync m16n8k8`, SASS `HMMA.1688.F32.TF32`). It has to issue 335,544,320 of them, the tensor pipe is the binding resource, and it spends about 3.5x as much tensor-pipe time as Triton and cuTile need to do the same arithmetic with `UTCHMMA`.
+
+[...]
+
+## 3. NCU diagnosis per backend
+
+| Dimension | TileLang | Triton | cuTile |
+|---|---|---|---|
+| CTAs per SM and what limits it | 1 (shared memory) | 2 (shared memory) | 1 (shared memory and registers) |
+| Occupancy, theoretical / achieved % | 6.25 / 6.25 | 12.5 / 11.48 | 12.5 / 10.89 |
+| Warp instructions `smsp__inst_executed.sum` | 7.704e8 | 1.782e8 | 2.088e7 |
+| Tensor pipe `sm__pipe_tensor_cycles_active...elapsed` % | 69.19 | 52.36 | 81.17 |
+| tcgen05 pipe `sm__pipe_tc_cycles_active...elapsed` % | 0 | 59.93 | 81.61 |
+| DRAM throughput % | 7.73 | 18.48 | 18.49 |
+| PC samples (total; largest reason) | 229,602; `wait` 138,828 | 74,121; `long_scoreboard` 45,852 | 42,592; `long_scoreboard` 38,019 |
+| Samples at mbarrier/sleep sites | 0 | 42,931 | 38,222 |
+
+**TileLang: bound by the legacy tensor (HMMA) pipe.**
+- The hot loop is SASS 0x01660 to 0x03ae0: 585 instructions, each executed 1,306,624 times (4096 warps x 319 iterations). Per warp per iteration it holds 256 `HMMA.1688.F32.TF32`, 131 `LDS`, 32 `LDSM.16.M88.4`, 32 `LDGSTS.E.BYPASS.128`, 2 `BAR.SYNC` (counted from SASS by opcode).
+- 61.0% of PC samples are on `HMMA`, with `wait` as the stall; `LDS` holds another 13.7% (`bundle/brief.md`, "PC samples by opcode"). `wait` is 138,828 of 229,602 samples. Typical run: 0x02160 to 0x02180, three consecutive `HMMA` with 519 to 559 `wait` samples each.
+- The HMMA rate counter reads 69.19% of its sustained peak, and the tensor pipe is active 69.19% of elapsed cycles: when the pipe is active it issues HMMA at its maximum rate.
+- Memory is not the limit: DRAM throughput 7.73%, `long_scoreboard` 20,649 samples (9%), `lg_throttle` 4,172.
+
+[...]
+
+**Measured differences that could explain the gap**
+
+1. MMA form: `HMMA.1688.F32.TF32` (TileLang) versus `UTCHMMA` (Triton, cuTile); tcgen05 pipe 0 versus 59.93 and 81.61.
+2. Instruction count: 36.9x cuTile and 4.3x Triton (`smsp__inst_executed.sum`).
+3. Where warps wait: fixed-latency `wait` on HMMA (TileLang) versus mbarrier waits (peers).
+4. Operand staging: 1.717e8 `LDS` + 4.19e7 `LDSM` + 4.19e7 `LDGSTS` (TileLang) versus 1.31e6 and 9.83e5 `UTMALDG` (Triton, cuTile).
+5. Shared-load bank conflicts: 1.678e8 versus 6,422 and 5,167.
+6. Residency: 1 CTA per SM for TileLang, 2 for Triton.
+7. Accumulator location: 208 registers per thread (TileLang) versus 135 (Triton).
+
+[...]
+
+## 5. Lowering decision matrix (differing rows)
+
+| # | Decision | TileLang | Triton | cuTile |
+|---|---|---|---|---|
+| 7 | Tensor-core path, accumulator | `tl::mma_sync<kTensorFloat32, kTensorFloat32, kFloat32, 16, 8, 8, ...>` (`.cu`:69-70); accumulator `float acc[128]` per thread (`.cu`:25) | `ttng.tmem_alloc` 128x128 f32 (`.ttgir`:47) and `ttng.tc_gen5_mma` (`.ttgir`:99); PTX `tcgen05.mma.cta_group::1.kind::tf32` (`.ptx`:408-423) | one `tile_mma` on `Tile[tfloat32,(256,64)]` x `(64,256)` (`.tileir`:89); `UTCHMMA` and `LDTM` in SASS (back-end choice) |
+| 6 | Operand staging | swizzled shared tiles read back into registers: 4 `ptx_ldmatrix_x4` per k-step for A (`.cu`:60), 16 scalar reads per k-step for B (`.cu`:64) | `nvmma_shared` buffers handed to the MMA by descriptor (`.ttgir`:54-55); no register read-back | not visible in Tile IR; SASS has 2,048 shared loads in total |
+| 8 | Async and sync per iteration | 32 `tl::cp_async_gs<16>` per thread (`.cu`:45-51), `cp_async_wait<1>`, 2 `__syncthreads()` (`.cu`:43, 54); every thread copies and computes | 2 `ttng.async_tma_copy_global_to_local` (`.ttgir`:114, 116), mbarrier waits (`.ttgir`:94, 100) | `tile_load` with `allow_tma=None` (`.tileir`:84, 87); `UTMALDG` and `SYNCS`/`NANOSLEEP` in SASS |
+
+[...]
+
+## 6. Mechanisms
+
+**M1. TF32 GEMM is lowered to legacy `mma.sync`, not tcgen05 (primary).**
+
+- Source: `tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_tilelang.py:94` sets `use_tmem = dtype != T.tfloat32`, so for fp32 line 106 calls `T.gemm(a_tile, b_tile, acc)` with a register fragment (`T.alloc_fragment`, line 93).
+- Why the author wrote that: TileLang's instruction selection refuses the alternative. `tilelang/src/cuda/op/gemm.cc:77-85` (`AllowTcgen5Mma`) defers to `GetTCGEN5MMAMeta`, and `tilelang/src/op/tcgen5_meta.h` has branches only for fp16/bf16 (line 42), fp8/fp6/fp4 (line 79) and int8 (line 126); the file contains no `tfloat32` case, so the query fails and `SelectInst` falls through to `return kCudaMMA` (`gemm.cc:280-286`). Checked by compiling an edited copy with `use_tmem = True` (`variant_tmem_tf32/impl_tilelang.py`) at 128x128x64 and 256x256x64: both stop with `AssertionError: local_buf acc_tmem must be a fragment, but got shared.tmem` from `mma_macro_generator.py:822`, that is, the MMA emitter was chosen even with a tensor-memory accumulator. The instruction template itself exists (`tilelang/src/tl_templates/cuda/instruction/tcgen05mma.h:98-108`, `tcgen05.mma.cta_group::1.kind::tf32`); only the selection table lacks the dtype.
+[...]
+- SASS: 256 `HMMA.1688.F32.TF32` from 0x01fd0 up to the loop branch at 0x03ae0, 1,306,624 executions each; total 335,544,320.
+- Counters and samples: `sm__pipe_tc_cycles_active` 0 against 59.93 (Triton) and 81.61 (cuTile); HMMA rate 69.19% of sustained peak; 61.0% of samples on `HMMA` with `wait`; the excess over cuTile is +187,010 samples, of which +138,274 are `wait` and +46,504 have no stall recorded (`bundle/brief.md`, "Where the extra time sits").
+
+[...]
+
+## 7. Why the net gap is this size
+
+[...]
+
+**Trying to break it.** The strongest alternative is that TileLang is latency- or occupancy-bound: one CTA per SM, lane-issued `cp_async` copies and a barrier per iteration. Three measurements separate the two:
+
+1. Stall reasons: `wait` 138,828 samples against `long_scoreboard` 20,649, `lg_throttle` 4,172 and `barrier` 3,534. A load-latency bound would put the samples on `long_scoreboard`.
+2. The fp16 sibling keeps the same lane-issued `cp_async_gs<16>` copies, `__syncthreads()` and 6.25% occupancy (`contrast_fp16/tilelang_fp16.cu`:63-79) but calls `tl::tcgen05mma_ss<tl::DataType::kFloat16, false>` (line 91). Its gap is 1.40x to cuTile and 1.25x to Triton. Same staging, different MMA form, and most of the gap is gone.
+3. GH200 (`contrast_gh200/bundle/brief.md`): TileLang executes the identical 335,544,320 `HMMA` there and takes 3.7091 ms, with `wait` again the largest reason (220,041 of 411,898 samples) and 50.7% of samples on `HMMA`. A different memory system and SM count, the same HMMA count, the same latency to within 6%.
+
+The explanation survives all three.
+
+## 8. Classification
+
+- TileLang versus both peers: **capability gap in the compiler** (no tcgen05 lowering for TF32 in TileLang 0.1.11), with a secondary **codegen/lowering** cost (register staging of operands with a two-way bank conflict on B).
+- Not an autotune choice: the HMMA count is independent of every tuned parameter, and the winner is the same at all 20 shapes.
+- Not an author error: the source guard at `impl_tilelang.py:94` is the only form that compiles.
+- Not a capture artifact: NCU and CSV ratios agree (4.18 and 3.83 against cuTile; 2.65 and 2.48 against Triton).
+
+## 10. Limits
+
+- No TileLang TF32 tcgen05 kernel exists to measure. The size of the recoverable gap is inferred from the fp16 sibling, whose B200 capture is reduced (no SASS or PC samples); its tcgen05 path is taken from the generated CUDA, not from captured SASS.
+[...]
+\end{promptbox}
