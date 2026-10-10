@@ -2,7 +2,7 @@
  "figure": "fig_rq2_cross_device_diagnosis",
  "rq": "RQ2",
  "script": "scripts/paper_figures/plot_rq2.py",
- "source_git_commit": "c79a9bb0ebe574c2f12dabca28e35eb73aa64efb",
+ "source_git_commit": "89066ac6a6cbd9aca21db1c0f53d098072a57a30",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "b876056c05ce9b4472354777589da987b4642e94eff17f2aa34fbbc90bc3c423",
   "profile_index_normalized.csv": "1deeb5c7ffd7267f10a424261615088443be948878691d1a2d4d58099a7c132c",
@@ -25,7 +25,7 @@
  "metric": "Proximity to modeled SOL (T_SOL / T_k)",
  "metric_formula": {
   "left": "T_SOL / T_k at the case_id_v2 captured by every profile of the case (one input case, identical on all devices; not an operator aggregate); T_SOL from the frozen algorithm-level compute mode and the device's hybrid peaks (published dense rates for matmul_fp32_fp16_fp8, PR #323 empirical peaks otherwise); T_k = formal autotuned latency",
-  "right": "NVIDIA dynamic counters summed over the profiled run() launches (B200 and GH200 only), as a table; MI300X static ISA, rocprof counters and kernel traces as separate text"
+  "right": "NVIDIA dynamic counters summed over the profiled run() launches (B200 and GH200 only); MI300X evidence is static ISA or rocprof counters, shown as text"
  },
  "aggregation_order": [
   "none: one input case per row"
@@ -94,38 +94,41 @@
    "modeled SOL target (no measurement)"
   ],
   "right": [
-   "dynamic NCU counters and dynamic SASS counts (NVIDIA only, one table per case)",
-   "occupancy as 'achieved / theoretical limit' (sm__warps_active.avg.pct_of_peak_sustained_active / sm__maximum_warps_per_active_cycle_pct)"
+   "dynamic NCU counters (one counter per axis, NVIDIA only)",
+   "occupancy (as Figure A5): grey background bar = theoretical limit (sm__maximum_warps_per_active_cycle_pct, from the resource and launch configuration); narrower DSL-coloured foreground bar = achieved (sm__warps_active.avg.pct_of_peak_sustained_active); label = achieved / theoretical; no reference line"
   ],
   "text": [
    "MI300X static ISA (execution_paths.csv)",
    "MI300X rocprof counters",
-   "MI300X PyTorch kernel trace"
+   "rocprof-compute MFMA utilization"
   ]
  },
  "evidence_text": {
   "matmul_fp32_fp16_fp8/fp32": {
-   "mi300x": "MI300X Triton (static ISA): TensorDescriptor loads lowered to 96 scalar\n32-bit global_load_dword; MFMA utilization 4.5% (rocprof-compute)",
-   "interpretation": "Interpretation: on GH200, cuTile adds one STS and one LDSM per WGMMA,\nconsistent with an on-chip operand re-layout; B200 feeds tcgen05 via TMA.",
-   "caveat": "Confounders: Triton reads B pre-transposed (outside timing); cuTile tiles\n256\u00d7256 (B200) vs. 128\u00d7128 (GH200); cuda-tile 1.3.0 vs. 1.5.0.",
-   "basis": "T_SOL: TF32-class MMA term\n(MI300X: XF32); compute-bound"
+   "mi300x": "MI300X (ROCm / ISA evidence): TensorDescriptor loads lowered to 96 scalar 32-bit global_load_dword; MFMA util. 4.5%",
+   "caveat": "Confounders: Triton reads a B operand transposed before timing; cuTile tiles differ (256\u00d7256 on B200, 128\u00d7128 on GH200)"
   },
   "destindex/int8": {
-   "mi300x": "MI300X Triton (static ISA): each row is stored with 4 per-lane buffer_store_byte,\nno vector store",
-   "interpretation": "Interpretation: for the same 2.05 M store sectors, cuTile issues 16\u00d7 more (byte-wide)\nstores and about 17\u00d7 more instructions than Triton on both NVIDIA GPUs.",
-   "caveat": "Confounders: NVIDIA counts are dynamic, MI300X counts static; the memory-only\ntarget does not model index arithmetic.",
-   "basis": "T_SOL: memory-only (Q / BW)"
+   "mi300x": "MI300X (ISA evidence): Triton stores each row with 4 per-lane buffer_store_byte, no vector store",
+   "caveat": "Triton and cuTile write the same 2.05 M store sectors on both devices; the memory-only T_SOL does not model index arithmetic"
   },
   "1d_conv/fp16": {
-   "mi300x": "MI300X Triton (static ISA, rocprof): buffer_load_ushort loads; 66% of VALU instr. are\nINT32. PyTorch (MIOpen implicit GEMM + 3 transposes) is not part of T_SOL / T_k.",
-   "interpretation": "Interpretation: with the same 16-bit loads and 0.67 GB of DRAM reads, TileLang\ntouches 7\u201310\u00d7 more L1 sectors; on B200 it reaches 6.2% of an 18.8% occupancy limit.",
-   "caveat": "Confounders: TileLang uses a different kernel body on Hopper; no controlled\nexperiment isolates the MI300X difference.",
-   "basis": "T_SOL: max(FP16-MMA, HBM) terms;\ncompute-bound on B200 and MI300X,\nmemory-bound on GH200"
+   "mi300x": "MI300X (ISA / rocprof): Triton loads with buffer_load_ushort; 66% of its VALU instructions are INT32",
+   "caveat": "NVIDIA Triton and TileLang (B200, GH200): 16-bit loads and equal DRAM reads (0.67 GB); TileLang uses a different kernel body on Hopper"
   }
+ },
+ "occupancy_style": {
+  "theoretical_color": "#D9DDDF",
+  "achieved_to_theoretical_bar_width": 0.6428571428571428,
+  "legend_labels": [
+   "achieved",
+   "theoretical limit"
+  ],
+  "label_format": "achieved and theoretical with one decimal"
  },
  "above_one": {
   "values": [],
-  "audit": "sol/sol_above_one_cases.csv; the calibrated MMA ceiling is a sustained library-GEMM rate (power-capped telemetry), not a hardware bound"
+  "audit": "sol/sol_above_one_cases.csv, sol/sol_above_one_audit.json"
  },
  "peaks": {
   "B200": {
@@ -156,26 +159,21 @@
   "rq2:1d_conv/fp16:B200:tilelang:opcode_mix[LDG]",
   "rq2:1d_conv/fp16:B200:tilelang:sm__maximum_warps_per_active_cycle_pct",
   "rq2:1d_conv/fp16:B200:tilelang:sm__warps_active.avg.pct_of_peak_sustained_active",
-  "rq2:1d_conv/fp16:B200:tilelang:smsp__issue_active.avg.pct_of_peak_sustained_active",
   "rq2:1d_conv/fp16:B200:triton:dram__bytes_read.sum",
   "rq2:1d_conv/fp16:B200:triton:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
   "rq2:1d_conv/fp16:B200:triton:opcode_mix[LDG]",
   "rq2:1d_conv/fp16:B200:triton:sm__maximum_warps_per_active_cycle_pct",
   "rq2:1d_conv/fp16:B200:triton:sm__warps_active.avg.pct_of_peak_sustained_active",
-  "rq2:1d_conv/fp16:B200:triton:smsp__issue_active.avg.pct_of_peak_sustained_active",
   "rq2:1d_conv/fp16:GH200:tilelang:dram__bytes_read.sum",
   "rq2:1d_conv/fp16:GH200:tilelang:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
   "rq2:1d_conv/fp16:GH200:tilelang:opcode_mix[LDG]",
   "rq2:1d_conv/fp16:GH200:tilelang:sm__maximum_warps_per_active_cycle_pct",
   "rq2:1d_conv/fp16:GH200:tilelang:sm__warps_active.avg.pct_of_peak_sustained_active",
-  "rq2:1d_conv/fp16:GH200:tilelang:smsp__issue_active.avg.pct_of_peak_sustained_active",
   "rq2:1d_conv/fp16:GH200:triton:dram__bytes_read.sum",
   "rq2:1d_conv/fp16:GH200:triton:l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum",
   "rq2:1d_conv/fp16:GH200:triton:opcode_mix[LDG]",
   "rq2:1d_conv/fp16:GH200:triton:sm__maximum_warps_per_active_cycle_pct",
   "rq2:1d_conv/fp16:GH200:triton:sm__warps_active.avg.pct_of_peak_sustained_active",
-  "rq2:1d_conv/fp16:GH200:triton:smsp__issue_active.avg.pct_of_peak_sustained_active",
-  "rq2:1d_conv/fp16:MI300X:pytorch:kernel_trace.kernels",
   "rq2:1d_conv/fp16:MI300X:triton:SQ_INSTS_VALU",
   "rq2:1d_conv/fp16:MI300X:triton:SQ_INSTS_VALU_INT32",
   "rq2:1d_conv/fp16:MI300X:triton:execution_paths.access_path[conv1d_kernel]",
@@ -197,24 +195,12 @@
   "rq2:destindex/int8:GH200:triton:smsp__inst_executed.sum",
   "rq2:destindex/int8:MI300X:triton:execution_paths.access_path[copy_by_dest_kernel#0]",
   "rq2:matmul_fp32_fp16_fp8/fp32:B200:cutile:l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:cutile:sass__inst_executed_per_opcode[family=tcgen05]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:cutile:sass__inst_executed_per_opcode[family=wgmma]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:cutile:sass__inst_executed_per_opcode_with_modifier_all[LDSM*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:B200:cutile:sass__inst_executed_per_opcode_with_modifier_all[STS*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:B200:triton:l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:triton:sass__inst_executed_per_opcode[family=tcgen05]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:triton:sass__inst_executed_per_opcode[family=wgmma]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:B200:triton:sass__inst_executed_per_opcode_with_modifier_all[LDSM*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:B200:triton:sass__inst_executed_per_opcode_with_modifier_all[STS*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:GH200:cutile:l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:cutile:sass__inst_executed_per_opcode[family=tcgen05]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:cutile:sass__inst_executed_per_opcode[family=wgmma]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:cutile:sass__inst_executed_per_opcode_with_modifier_all[LDSM*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:GH200:cutile:sass__inst_executed_per_opcode_with_modifier_all[STS*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:GH200:triton:l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:triton:sass__inst_executed_per_opcode[family=tcgen05]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:triton:sass__inst_executed_per_opcode[family=wgmma]",
-  "rq2:matmul_fp32_fp16_fp8/fp32:GH200:triton:sass__inst_executed_per_opcode_with_modifier_all[LDSM*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:GH200:triton:sass__inst_executed_per_opcode_with_modifier_all[STS*]",
   "rq2:matmul_fp32_fp16_fp8/fp32:MI300X:triton:2.1.10 | MFMA Utilization | Avg",
   "rq2:matmul_fp32_fp16_fp8/fp32:MI300X:triton:execution_paths.access_path[matmul_kernel]"
@@ -260,7 +246,8 @@
     "sol_proximity": 0.4322999244224267,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
-    "peak_key": "peak_tflops.tf32_mma"
+    "peak_key": "peak_tflops.tf32_mma",
+    "peak_source": "datasheet"
    },
    {
     "case": "matmul_fp32_fp16_fp8/fp32",
@@ -272,7 +259,8 @@
     "sol_proximity": 0.7810243810118707,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
-    "peak_key": "peak_tflops.tf32_mma"
+    "peak_key": "peak_tflops.tf32_mma",
+    "peak_source": "datasheet"
    },
    {
     "case": "matmul_fp32_fp16_fp8/fp32",
@@ -284,7 +272,8 @@
     "sol_proximity": 0.041316918191544164,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
-    "peak_key": "peak_tflops.xf32_mma"
+    "peak_key": "peak_tflops.xf32_mma",
+    "peak_source": "datasheet"
    },
    {
     "case": "matmul_fp32_fp16_fp8/fp32",
@@ -296,7 +285,8 @@
     "sol_proximity": 0.6679494731644494,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
-    "peak_key": "peak_tflops.tf32_mma"
+    "peak_key": "peak_tflops.tf32_mma",
+    "peak_source": "datasheet"
    },
    {
     "case": "matmul_fp32_fp16_fp8/fp32",
@@ -308,7 +298,8 @@
     "sol_proximity": 0.5421210152066418,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
-    "peak_key": "peak_tflops.tf32_mma"
+    "peak_key": "peak_tflops.tf32_mma",
+    "peak_source": "datasheet"
    },
    {
     "case": "destindex/int8",
@@ -320,7 +311,8 @@
     "sol_proximity": 0.5264112228148115,
     "bound": "memory_only",
     "compute_mode": "memory_only",
-    "peak_key": ""
+    "peak_key": "",
+    "peak_source": ""
    },
    {
     "case": "destindex/int8",
@@ -332,7 +324,8 @@
     "sol_proximity": 0.8286166272213156,
     "bound": "memory_only",
     "compute_mode": "memory_only",
-    "peak_key": ""
+    "peak_key": "",
+    "peak_source": ""
    },
    {
     "case": "destindex/int8",
@@ -344,7 +337,8 @@
     "sol_proximity": 0.4980387293203279,
     "bound": "memory_only",
     "compute_mode": "memory_only",
-    "peak_key": ""
+    "peak_key": "",
+    "peak_source": ""
    },
    {
     "case": "destindex/int8",
@@ -356,7 +350,8 @@
     "sol_proximity": 0.17891100383248495,
     "bound": "memory_only",
     "compute_mode": "memory_only",
-    "peak_key": ""
+    "peak_key": "",
+    "peak_source": ""
    },
    {
     "case": "destindex/int8",
@@ -368,7 +363,8 @@
     "sol_proximity": 0.29477017722463195,
     "bound": "memory_only",
     "compute_mode": "memory_only",
-    "peak_key": ""
+    "peak_key": "",
+    "peak_source": ""
    },
    {
     "case": "1d_conv/fp16",
@@ -380,7 +376,8 @@
     "sol_proximity": 0.08084864197214953,
     "bound": "compute",
     "compute_mode": "fp16_mma",
-    "peak_key": "peak_tflops.fp16_mma"
+    "peak_key": "peak_tflops.fp16_mma",
+    "peak_source": "empirical"
    },
    {
     "case": "1d_conv/fp16",
@@ -392,7 +389,8 @@
     "sol_proximity": 0.11145062900205914,
     "bound": "memory",
     "compute_mode": "fp16_mma",
-    "peak_key": "peak_tflops.fp16_mma"
+    "peak_key": "peak_tflops.fp16_mma",
+    "peak_source": "empirical"
    },
    {
     "case": "1d_conv/fp16",
@@ -404,7 +402,8 @@
     "sol_proximity": 0.26558697264151376,
     "bound": "compute",
     "compute_mode": "fp16_mma",
-    "peak_key": "peak_tflops.fp16_mma"
+    "peak_key": "peak_tflops.fp16_mma",
+    "peak_source": "empirical"
    },
    {
     "case": "1d_conv/fp16",
@@ -416,7 +415,8 @@
     "sol_proximity": 0.01209258534040648,
     "bound": "compute",
     "compute_mode": "fp16_mma",
-    "peak_key": "peak_tflops.fp16_mma"
+    "peak_key": "peak_tflops.fp16_mma",
+    "peak_source": "empirical"
    },
    {
     "case": "1d_conv/fp16",
@@ -428,158 +428,57 @@
     "sol_proximity": 0.02241425753777452,
     "bound": "memory",
     "compute_mode": "fp16_mma",
-    "peak_key": "peak_tflops.fp16_mma"
+    "peak_key": "peak_tflops.fp16_mma",
+    "peak_source": "empirical"
    }
   ],
-  "evidence": {
+  "counters": {
    "matmul_fp32_fp16_fp8/fp32": {
-    "table": {
-     "MMA instruction family": {
-      "B200:triton": "tcgen05",
-      "B200:cutile": "tcgen05",
-      "GH200:triton": "WGMMA",
-      "GH200:cutile": "WGMMA"
-     },
-     "TMA load bytes (GB)": {
-      "B200:triton": 21.47483648,
-      "B200:cutile": 10.73741824,
-      "GH200:triton": 21.47483648,
-      "GH200:cutile": 21.47483648
-     },
-     "STS / LDSM instr. (M)": {
-      "B200:triton": [
-       0.13312,
-       0.0
-      ],
-      "B200:cutile": [
-       0.131584,
-       0.0
-      ],
-      "GH200:triton": [
-       0.262144,
-       0.0
-      ],
-      "GH200:cutile": [
-       21.233664,
-       20.97152
-      ]
-     }
+    "TMA load bytes (GB)": {
+     "B200:triton": 21.47483648,
+     "B200:cutile": 10.73741824,
+     "GH200:triton": 21.47483648,
+     "GH200:cutile": 21.47483648
     },
-    "table_text": {
-     "MMA instruction family": {
-      "B200:triton": "tcgen05",
-      "B200:cutile": "tcgen05",
-      "GH200:triton": "WGMMA",
-      "GH200:cutile": "WGMMA"
-     },
-     "TMA load bytes (GB)": {
-      "B200:triton": "21.5",
-      "B200:cutile": "10.7",
-      "GH200:triton": "21.5",
-      "GH200:cutile": "21.5"
-     },
-     "STS / LDSM instr. (M)": {
-      "B200:triton": "0.13 / 0.00",
-      "B200:cutile": "0.13 / 0.00",
-      "GH200:triton": "0.26 / 0.00",
-      "GH200:cutile": "21.23 / 20.97"
-     }
+    "Shared-memory stores (M)": {
+     "B200:triton": 0.13312,
+     "B200:cutile": 0.131584,
+     "GH200:triton": 0.262144,
+     "GH200:cutile": 21.233664
     }
    },
    "destindex/int8": {
-    "table": {
-     "Executed instructions (M)": {
-      "B200:triton": 5.20704,
-      "B200:cutile": 90.27584,
-      "GH200:triton": 5.20704,
-      "GH200:cutile": 92.928
-     },
-     "Global store instr. (M)": {
-      "B200:triton": 0.128,
-      "B200:cutile": 2.048,
-      "GH200:triton": 0.128,
-      "GH200:cutile": 2.048
-     },
-     "Store width": {
-      "B200:triton": "128-bit",
-      "B200:cutile": "8-bit",
-      "GH200:triton": "128-bit",
-      "GH200:cutile": "8-bit"
-     }
+    "Executed instructions (M)": {
+     "B200:triton": 5.20704,
+     "B200:cutile": 90.27584,
+     "GH200:triton": 5.20704,
+     "GH200:cutile": 92.928
     },
-    "table_text": {
-     "Executed instructions (M)": {
-      "B200:triton": "5.2",
-      "B200:cutile": "90.3",
-      "GH200:triton": "5.2",
-      "GH200:cutile": "92.9"
-     },
-     "Global store instr. (M)": {
-      "B200:triton": "0.13",
-      "B200:cutile": "2.05",
-      "GH200:triton": "0.13",
-      "GH200:cutile": "2.05"
-     },
-     "Store width": {
-      "B200:triton": "128-bit",
-      "B200:cutile": "8-bit",
-      "GH200:triton": "128-bit",
-      "GH200:cutile": "8-bit"
-     }
+    "Global store instructions (M)": {
+     "B200:triton": 0.128,
+     "B200:cutile": 2.048,
+     "GH200:triton": 0.128,
+     "GH200:cutile": 2.048
     }
    },
    "1d_conv/fp16": {
-    "table": {
-     "L1 global-load sectors (M)": {
-      "B200:triton": 146.800384,
-      "B200:tilelang": 1090.518784,
-      "GH200:triton": 209.714944,
-      "GH200:tilelang": 2181.037824
-     },
-     "Occupancy ach. / limit (%)": {
-      "B200:triton": [
-       24.60520168032664,
-       25.0
-      ],
-      "B200:tilelang": [
-       6.242116416762539,
-       18.75
-      ],
-      "GH200:triton": [
-       24.7878313032475,
-       25.0
-      ],
-      "GH200:tilelang": [
-       18.71177962616911,
-       18.75
-      ]
-     },
-     "Issue active (%)": {
-      "B200:triton": 57.83905059362362,
-      "B200:tilelang": 3.9228501160566283,
-      "GH200:triton": 61.49849107771941,
-      "GH200:tilelang": 22.402829379978858
-     }
+    "L1 global-load sectors (M)": {
+     "B200:triton": 146.800384,
+     "B200:tilelang": 1090.518784,
+     "GH200:triton": 209.714944,
+     "GH200:tilelang": 2181.037824
     },
-    "table_text": {
-     "L1 global-load sectors (M)": {
-      "B200:triton": "147",
-      "B200:tilelang": "1091",
-      "GH200:triton": "210",
-      "GH200:tilelang": "2181"
-     },
-     "Occupancy ach. / limit (%)": {
-      "B200:triton": "24.6 / 25.0",
-      "B200:tilelang": "6.2 / 18.8",
-      "GH200:triton": "24.8 / 25.0",
-      "GH200:tilelang": "18.7 / 18.8"
-     },
-     "Issue active (%)": {
-      "B200:triton": "57.8",
-      "B200:tilelang": "3.9",
-      "GH200:triton": "61.5",
-      "GH200:tilelang": "22.4"
-     }
+    "Achieved vs. Theoretical\nOccupancy (%)": {
+     "B200:triton": 24.60520168032664,
+     "B200:tilelang": 6.242116416762539,
+     "GH200:triton": 24.7878313032475,
+     "GH200:tilelang": 18.71177962616911
+    },
+    "Theoretical occupancy (%)": {
+     "B200:triton": 25.0,
+     "B200:tilelang": 18.75,
+     "GH200:triton": 25.0,
+     "GH200:tilelang": 18.75
     }
    }
   }
@@ -587,23 +486,23 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq2_cross_device_diagnosis.pdf",
-   "sha256": "ce67b0b872b3e1ae822f5d0d839d31c74be68550ac45a6ffbf299ca4e25f877a"
+   "sha256": "39d96f3e70a51909d51f62bb651c2070b748f9efe16c712648bbf8dccc72201a"
   },
   "svg": {
    "path": "main/fig_rq2_cross_device_diagnosis.svg",
-   "sha256": "fd86f84032928d6875958d64304203405454b20042fca5fb9d783d6d6af5572d"
+   "sha256": "47a608d3251b716392a794af17fa8126a963ee4d717eeee326e11b3eb408a852"
   },
   "png": {
    "path": "previews/fig_rq2_cross_device_diagnosis.png",
-   "sha256": "5d6d0538f9e0436ece84ecedde77761811d5a2635bfdfbc75e9d9c537b30e572"
+   "sha256": "6b1c1e791cffc4a8377d45d8fc4e5e1ddde4d47c1ef4477db8dbb30eaf182bc8"
   }
  },
  "layout": {
   "width_in": 6.3,
-  "height_in": 5.76,
+  "height_in": 4.95,
   "min_font_pt": 7.0,
   "max_font_pt": 8.0,
-  "n_text_objects": 132,
+  "n_text_objects": 105,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
@@ -613,8 +512,8 @@
   "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "8c5d09f68e2eb59d62ad66652ba95398e4909bf6c7cfb2b12b575bbdc22ded36",
+  "scripts/paper_figures/plot_style.py": "c3925c94937bb67effdcb7138205b5965bf52e0ff29f479d05b5bd2e30485385",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq2.py": "092f824a492c90552c71b184214adc1e2964d7bf58a441770f2b869ed9099324"
+  "scripts/paper_figures/plot_rq2.py": "4f1977fffaa0af74a92f39ce08b30d2888e1f1a8ef3efe34468e687e9f90837d"
  }
 }

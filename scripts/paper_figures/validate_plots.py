@@ -45,12 +45,14 @@ VENDOR = {"B200": "NVIDIA", "GH200": "NVIDIA", "MI300X": "AMD"}
 STATIC_KINDS = ("static", "static_isa", "static_sass", "static_isa+source", "launch_record+static_isa")
 DYNAMIC_NV_KINDS = ("ncu_counter", "dynamic_sass_count")
 SUPPORT = {"B200": ("triton", "cutile", "tilelang"), "GH200": ("triton", "cutile", "tilelang"), "MI300X": ("triton",)}
-RQ2_COUNTERS = {  # Figure 3 evidence-table row -> (evidence metric, divisor); composite rows are checked separately
+RQ2_COUNTERS = {  # Figure 3 axis label -> (evidence metric, divisor)
     "TMA load bytes (GB)": ("l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum", 1e9),
+    "Shared-memory stores (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STS*]", 1e6),
     "Executed instructions (M)": ("smsp__inst_executed.sum", 1e6),
-    "Global store instr. (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STG*]", 1e6),
+    "Global store instructions (M)": ("sass__inst_executed_per_opcode_with_modifier_all[STG*]", 1e6),
     "L1 global-load sectors (M)": ("l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum", 1e6),
-    "Issue active (%)": ("smsp__issue_active.avg.pct_of_peak_sustained_active", 1.0)}
+    "Achieved vs. Theoretical\nOccupancy (%)": ("sm__warps_active.avg.pct_of_peak_sustained_active", 1.0),
+    "Theoretical occupancy (%)": ("sm__maximum_warps_per_active_cycle_pct", 1.0)}      # launch-configuration limit
 OCC_A, OCC_T = "sm__warps_active.avg.pct_of_peak_sustained_active", "sm__maximum_warps_per_active_cycle_pct"
 SCRIPTS = ["plot_style.py", "figure_data.py", "plot_rq1.py", "plot_rq2.py", "plot_rq3.py", "plot_appendix.py", "sol_modes.py", "sol_data.py"]
 TOL = 1e-9
@@ -472,37 +474,19 @@ def main():
 
     # 13. device-native counter units and denominators (Figure 3 bars and A5 panel A) recomputed from figure_evidence.csv
     bad = []
-    for case, block in rq2["plotted_values"]["evidence"].items():
-        for lab, vals in block["table"].items():
+    for case, metrics in rq2["plotted_values"]["counters"].items():
+        for lab, vals in metrics.items():
+            metric, div = RQ2_COUNTERS[lab]
             for k, v in vals.items():
                 dev, dsl = k.split(":")
-                if VENDOR[dev] != "NVIDIA":
-                    bad.append(f"{case} {lab} {k}: non-NVIDIA value in the NCU table")
-                    continue
-                rid = lambda metric: f"rq2:{case}:{dev}:{dsl}:{metric}"                      # noqa: E731
-                if lab in RQ2_COUNTERS:
-                    metric, div = RQ2_COUNTERS[lab]
-                    r = ev[rid(metric)]
-                    kinds = DYNAMIC_NV_KINDS + (("launch_config",) if metric == OCC_T else ())
-                    ok = r["measurement_kind"] in kinds and close(float(r["value"]) / div, v)
-                elif lab == "STS / LDSM instr. (M)":
-                    ok = all(close(float(ev[rid(mm)]["value"]) / 1e6, x) for mm, x in zip(
-                        ("sass__inst_executed_per_opcode_with_modifier_all[STS*]", "sass__inst_executed_per_opcode_with_modifier_all[LDSM*]"), v))
-                elif lab == "Occupancy ach. / limit (%)":
-                    ok = close(float(ev[rid(OCC_A)]["value"]), v[0]) and close(float(ev[rid(OCC_T)]["value"]), v[1])
-                elif lab == "MMA instruction family":
-                    t5 = float(ev[rid("sass__inst_executed_per_opcode[family=tcgen05]")]["value"])
-                    ok = v == ("tcgen05" if t5 > 0 else "WGMMA")
-                elif lab == "Store width":
-                    ok = v == {"STG.E.128": "128-bit", "STG.E.U8": "8-bit"}[ev[rid("opcode_mix[STG]")]["value"].split(":")[0]]
-                else:
-                    ok = False
-                if not ok or block["table_text"][lab][k] not in t3:
+                r = ev[f"rq2:{case}:{dev}:{dsl}:{metric}"]
+                kinds = DYNAMIC_NV_KINDS + (("launch_config",) if metric == OCC_T else ())
+                if VENDOR[dev] != "NVIDIA" or r["measurement_kind"] not in kinds or not close(float(r["value"]) / div, v):
                     bad.append(f"{case} {lab} {k}")
     ax_a = [ev[i] for i in a5_axes["A_nvidia_dynamic_instruction_ratio"]]
     if {(r["metric_name"], r["measurement_kind"]) for r in ax_a} != {("smsp__inst_executed.sum", "ncu_counter")}:
         bad.append("A5 panel A ratio built from different counters")
-    check("13.counter_units_and_denominators_recomputed", not bad, "; ".join(bad[:5]) or "Figure 3 NCU tables and A5 panel A")
+    check("13.counter_units_and_denominators_recomputed", not bad, "; ".join(bad[:5]) or "Figure 3 bars and A5 panel A")
 
     # 14. no cross-vendor numeric axis; static and dynamic counts never share an axis; evidence traceable
     bad = []
@@ -629,7 +613,7 @@ def main():
     check("21.no_nki_no_rq4_numbers_no_extra_figures_top_manifest", not bad and not extra and ok,
           f"NKI in {bad}; unexpected files {extra}; top manifest {'ok' if ok else 'inconsistent'}")
 
-    # 22. occupancy shown as achieved vs. theoretical limit without reference lines: Figure 3C table, A5 overlaid bars
+    # 22. occupancy shown as achieved vs. theoretical limit without reference lines: Figure 3C and A5 overlaid bars
     bad, occ = [], []
     t2 = svg_texts(PLOTS / "main" / "fig_rq2_cross_device_diagnosis.svg")
     for dev in ("B200", "GH200"):
@@ -639,10 +623,12 @@ def main():
             if f"{av:.1f} / {tv:.1f}" not in t2:
                 bad.append(f"Fig 3 label {dev} {s_}")
             occ.append(f"{dev} {s_}: {av:.1f}/{tv:.2f}")
-    if any("= theoretical" in t for t in t2) or "Occupancy ach. / limit (%)" not in t2:
-        bad.append("Fig 3 occupancy row")
-    if not a5.get("occupancy_style"):
-        bad.append("A5 occupancy style missing")
+    if any("= theoretical" in t for t in t2) or not any("Achieved vs. Theoretical" in t for t in t2):
+        bad.append("Fig 3 occupancy title")
+    if not {"achieved", "theoretical limit"} <= set(t2):
+        bad.append("Fig 3 occupancy legend")
+    if rq2.get("occupancy_style") != a5.get("occupancy_style") or not rq2.get("occupancy_style"):
+        bad.append("Fig 3 and A5 occupancy styles differ")
     rows = {(r["device"], r["dsl"]): r for r in a5.get("occupancy_bars", [])}
     for dev in ("B200", "GH200"):
         for s_ in ("triton", "cutile", "tilelang"):
@@ -659,8 +645,8 @@ def main():
     if not ({"achieved", "theoretical limit", "issue %"} <= set(t5)) or any("(line)" in t for t in t5):
         bad.append("A5 legend / title")
     check("22.occupancy_achieved_vs_theoretical_without_reference_lines", not bad, "; ".join(bad) or
-          "; ".join(occ) + f"; A5 style {a5['occupancy_style']['theoretical_color']}, width ratio "
-          f"{a5['occupancy_style']['achieved_to_theoretical_bar_width']:.3f}")
+          "; ".join(occ) + f"; shared style {rq2['occupancy_style']['theoretical_color']}, width ratio "
+          f"{rq2['occupancy_style']['achieved_to_theoretical_bar_width']:.3f}")
 
     # 24. SOL compute-mode audit: frozen per (operator, dtype) from the algorithm, never from dtype alone or the compiled ISA
     import yaml
@@ -768,7 +754,7 @@ def main():
           f"cases {dict(sorted((f'{d}:{s_}', n) for (d, s_), n in cov.items()))}; 45 operators per column; MI300X change without the "
           f"conditional cases: Overall {100 * mi['Overall']:+.2f}%, max |row| {100 * max(abs(v) for v in mi.values()):.2f}%")
 
-    # 27. RQ3, A3, A4, A5 byte-identical to the last pre-SOL commit
+    # 27. A3, A5 byte-identical to the last pre-SOL commit
     bad = []
     for n in UNCHANGED:
         sub = FIGURES[n][0]

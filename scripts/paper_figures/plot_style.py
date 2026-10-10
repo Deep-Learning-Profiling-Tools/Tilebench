@@ -64,8 +64,8 @@ def proximity_label(v):
     """Printed value: two decimals from 0.1, otherwise three (never rounded to 0)."""
     return f"{v:.2f}" if v >= 0.0995 else (f"{v:.3f}" if v >= 0.00095 else f"{v:.1e}")
 
-# Occupancy panel (Figure A5 C): a grey theoretical-limit bar drawn first, a narrower DSL-coloured achieved bar on top;
-# labels read "achieved / theoretical" (Figure 3C lists the same pair in its counter table)
+# Occupancy panels (Figure 3C, Figure A5 C): a grey theoretical-limit bar drawn first, a narrower DSL-coloured achieved
+# bar on top; labels read "achieved / theoretical"
 OCC_THEORETICAL_COLOR = "#D9DDDF"
 OCC_ACHIEVED_RATIO = 0.18 / 0.28          # achieved bar width / theoretical bar width
 OCC_LEGEND_LABELS = ("achieved", "theoretical limit")

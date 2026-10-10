@@ -24,7 +24,7 @@ Definitions, decisions and tables: `../sol/README.md` and `../sol/sol_mode_manif
 
 - **Hybrid reference.** matmul_fp32_fp16_fp8 uses the vendor's published single-GPU dense compute rate (decision H1);
   every other P_peak and every BW_peak is a TileArena measured sustained rate (PR #323). Neither kind is a proven
-  bound. The matrix peaks are sustained library-GEMM rates (cuBLAS/hipBLASLt or a
+  bound. The empirical matrix peaks are sustained library-GEMM rates (cuBLAS/hipBLASLt or a
   verified Triton probe) at large square shapes, with power-capped clock events in the calibration telemetry.
 - **Compute mode from the algorithm.** The mode of each operator and data type is fixed from its frozen contract
   (algorithm and numerical precision), never from the input dtype alone, the compiled ISA or a profiler report
@@ -109,7 +109,7 @@ Neither figure puts both vendors' counters on one numeric axis.
   reasons the counters do not identify.
 - **Theoretical occupancy.** This is the maximum resident warp occupancy permitted by the kernel's resource and launch
   configuration (`sm__maximum_warps_per_active_cycle_pct`); it is not a predicted achieved occupancy. A5 draws it as a
-  grey background bar behind a narrower achieved bar; Figure 3C lists achieved / limit in its counter table. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
+  grey background bar behind a narrower achieved bar, and Figure 3C uses the same encoding. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
   register pressure, memory stalls or CTA scheduling. Issue activity is a separate metric and is not expressed
   relative to either value.
 - **MI300X Triton.** It comes closer to its modeled SOL (0.27) than Triton on B200 (0.081) and GH200 (0.11). No

@@ -141,8 +141,7 @@ unchanged DRAM reads.
 **6. Controlled experiment?** No.
 
 **7. Qualified?** Yes. "On B200, TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%" is a
-measurement, listed as achieved / limit in the Figure 3C table and drawn as achieved bars over grey theoretical bars in
-A5. The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and it states that no
+measurement, drawn as achieved bars over grey theoretical bars in Figure 3C and A5. The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and it states that no
 controlled experiment isolates the MI300X difference.
 
 **8. Observation vs. hypothesis.** Yes.
@@ -227,9 +226,8 @@ documented in the A5 manifest.
 - The cross-device metric is now proximity to modeled SOL (T_SOL / T_k) instead of speedup over the local PyTorch
   baseline; the compute mode is fixed per operator and dtype from the frozen algorithm and numerical contract
   (`../sol/sol_mode_manifest.json`), never from the compiled ISA or from these profiles.
-- Figure 3 keeps the three cases. Each has a defensible target (TF32-class MMA, memory-only, FP16 MMA). The two
-  NVIDIA counter columns are replaced by one counter table per case; the MI300X evidence, the interpretation and the
-  confounders are separate lines.
+- Figure 3 keeps the three cases and the layout of the speedup version (two NVIDIA counter columns, one MI300X line
+  and one confounder line per case). Each case has a defensible target (TF32-class MMA, memory-only, FP16 MMA).
 - Statements that depended on the PyTorch baseline (destindex on MI300X, the MI300X 1d_conv baseline effect) are
   removed from Figure 3 or restated for the SOL metric.
 

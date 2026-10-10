@@ -52,22 +52,21 @@ Publication-ready caption drafts for the generated figures. Every number below i
 row uses the single input case captured by every profile of that operator, with the same `case_id_v2` on all devices.
 
 - **Left panels:** Proximity to modeled SOL (T_SOL / T_k) at that input on every device, from the formal autotuned
-  latency and the device's hybrid peaks. The line marks the modeled SOL (1). The text below each panel gives the
-  target: (A) the TF32-class MMA term (XF32 on MI300X), compute-bound; (B) memory-only; (C) the larger of the FP16
-  MMA and HBM terms, compute-bound on B200 and MI300X and memory-bound on GH200.
-- **Right side:** a table of dynamic Nsight Compute counters for B200 and GH200, summed over the profiled launches; a
-  line of MI300X static ISA, rocprof counter or kernel-trace observations, which are not comparable with the NVIDIA
-  counters and therefore are not in the table; then one interpretation line and one confounder line.
+  latency and the device's hybrid peaks. The line marks the modeled SOL (1). Targets: (A) the TF32-class MMA term
+  (XF32 on MI300X), compute-bound; (B) memory-only; (C) the larger of the FP16 MMA and HBM terms, compute-bound on
+  B200 and MI300X and memory-bound on GH200.
+- **Right panels** (heading "NVIDIA Profiling (NCU)"): two dynamic Nsight Compute counters for B200 and GH200 only,
+  summed over the profiled launches.
+- **MI300X line** (labelled ROCm / ISA evidence, ISA evidence, or ISA / rocprof): static ISA or rocprof observations.
+  These are not comparable with the NVIDIA counters, so MI300X has no bars.
 
 **(A) Matrix operand delivery** (matmul, FP32, M = N = 4096, K = 20480).
 - cuTile reaches 0.67 of the modeled SOL on B200 but 0.54 on GH200; Triton reaches 0.43 and 0.78, and 0.041 on MI300X.
-- On GH200 cuTile executes 21.2 M shared-memory stores and 21.0 M LDSM, about one each per WGMMA instruction. This is
-  consistent with re-laying out an operand in shared memory. On B200 both DSLs feed tcgen05 from TMA, and cuTile's
-  larger tile reads half the TMA bytes of Triton.
+- On GH200 cuTile executes 21.2 M shared-memory stores, about one per WGMMA instruction. This is consistent with
+  re-laying out an operand in shared memory.
+- On B200 cuTile's larger tile reads half the TMA bytes of Triton.
 - Triton reads a B operand transposed before timing, so part of the difference reflects the benchmark implementation.
 - On MI300X, the same TensorDescriptor code is lowered to scalar 32-bit loads, with 4.5% MFMA utilization.
-- † B200 cuTile exceeds the modeled SOL: the calibrated TF32 rate is a sustained library-GEMM rate, not a hardware
-  bound.
 
 **(B) Indexing overhead** (destindex, INT8; memory-only target).
 - On both NVIDIA devices, cuTile executes about 17× more instructions than Triton and uses 8-bit instead of 128-bit
@@ -75,14 +74,16 @@ row uses the single input case captured by every profile of that operator, with 
 - On MI300X, Triton compiles the row copy to per-lane byte stores (static ISA) and reaches 0.50.
 
 **(C) Memory access and latency hiding** (1d_conv, FP16).
-- On both NVIDIA devices, load width (16 bit) and DRAM read traffic are the same for Triton and TileLang, but TileLang
-  touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors. Its Hopper kernel body differs from the Blackwell one.
-- Occupancy is listed as achieved / theoretical limit (%). On B200, TileLang achieves 6.2% against a limit of 18.75%,
-  with 3.9% issue activity; the theoretical limit is the maximum resident warp occupancy permitted by the kernel's
-  resource and launch configuration, and the counters do not identify the cause of the shortfall.
+- On both NVIDIA devices, load width (16 bit) and DRAM read traffic are the same for Triton and TileLang.
+- TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton. Its Hopper kernel body differs
+  from the Blackwell one.
+- The occupancy chart uses the same encoding as Figure A5: coloured foreground bars show achieved occupancy, grey
+  background bars show the theoretical limit, and the labels give achieved / theoretical (%). On B200, TileLang
+  achieves 6.2% occupancy against a theoretical limit of 18.75%. The other implementations operate close to their
+  theoretical limits. The theoretical limit is the maximum resident warp occupancy permitted by the kernel's resource
+  and launch configuration, not a predicted value, and the counters do not identify the cause of the shortfall.
 - Triton reaches 0.081 (B200), 0.11 (GH200) and 0.27 (MI300X); TileLang 0.012 and 0.022. On MI300X, 66% of Triton's
-  VALU instructions are INT32; no controlled experiment isolates the MI300X difference. PyTorch's MIOpen path is not
-  part of T_SOL / T_k.
+  VALU instructions are INT32; no controlled experiment isolates the MI300X difference.
 
 The counters are observations at one input. They are consistent with, but do not prove, the stated mechanisms.
 

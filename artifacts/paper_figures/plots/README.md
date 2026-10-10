@@ -49,7 +49,7 @@ Sizes are the printed sizes. All figures are drawn at the ACL text width of 6.30
 | slot | file | size (in) | min. font | content |
 |---|---|---|---|---|
 | Figure 2 (RQ1) | `main/fig_rq1_cross_accelerator` | 6.30 × 2.78 | 7.0 pt | proximity to modeled SOL (T_SOL / T_k): category GM of per-operator GMs, seven device/DSL columns, M2 memory-only subgroup |
-| Figure 3 (RQ2) | `main/fig_rq2_cross_device_diagnosis` | 6.30 × 5.96 | 7.0 pt | three mechanisms: T_SOL / T_k at the profiled input + NVIDIA NCU table + MI300X evidence, interpretation and confounders |
+| Figure 3 (RQ2) | `main/fig_rq2_cross_device_diagnosis` | 6.30 × 4.95 | 7.0 pt | three mechanisms: T_SOL / T_k at the profiled input + two NVIDIA NCU counters + MI300X evidence and confounder lines |
 | Figure 4 (RQ3) | `main/fig_rq3_within_device_dsl` | 6.30 × 3.55 | 7.0 pt | within-device latency ratios over the three-DSL intersection |
 | A1 | `appendix/fig_a1_performance_atlas` | 6.30 × 8.70 | 6.5 pt | 45-operator proximity to modeled SOL; change in proximity between devices over matched cases |
 | A2 | `appendix/fig_a2_shape_dtype` | 6.30 × 6.95 | 6.0 pt | per-case T_SOL / T_k for shape- or dtype-sensitive operators; three kinds of N/A |
@@ -117,7 +117,7 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 11. The A1 proximities and changes use matched `case_id_v2`, the A2 values are correct, and A2 distinguishes three
     kinds of N/A.
 12. Figure 3 uses the exact profiled case, its formal latency and its recomputed T_SOL / T_k.
-13. Counter units and denominators of the Figure 3 tables and A5 are correct when recomputed.
+13. Counter units and denominators of the Figure 3 bars and A5 are correct when recomputed.
 
 **Evidence semantics**
 
@@ -135,8 +135,8 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 
 **Occupancy representation**
 
-22. Occupancy is shown as achieved vs. theoretical limit without reference lines: the Figure 3C table values and the
-    A5 achieved bars over grey theoretical bars match the evidence, and issue activity is unchanged.
+22. Occupancy is shown as achieved vs. theoretical limit without reference lines: the Figure 3C and A5 achieved bars
+    over grey theoretical bars match the evidence, share one style, and issue activity is unchanged.
 
 **SOL methodology**
 
