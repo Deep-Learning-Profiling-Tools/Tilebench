@@ -53,9 +53,9 @@ def rope_embedding(Q, cos, sin, dtype, seq_len,
         T.copy(q2_tile, Q[row_id, head_start:head_start + ROPE_GROUP_SIZE, 1, 0:half_dim])
 
 
-def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
-        block_size: int = None, autotune: bool = False):
-    output = q.clone().contiguous()
+def _rotation_launcher(output, cos, sin, autotune):
+    """Zero-argument launcher of the in-place rotation kernel on `output`; autotuning (on a
+    scratch copy of output) happens here, before the launcher is returned."""
     batch, seq_len, n_heads, head_dim = output.shape
     half_dim = head_dim // 2
     dtype = str(output.dtype).removeprefix("torch.")
@@ -81,19 +81,35 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
             kernel = cached
         _last_autotune_config.clear()
         _last_autotune_config.update(dict(kernel.config or {}))
-        kernel(output_view, cos_view, sin_view)
-    else:
-        _last_autotune_config.clear()
-        cfg = _DEFAULT_CONFIG
-        rope_embedding(
-            output_view, cos_view, sin_view,
-            dtype=dtype,
-            seq_len=seq_len,
-            ROPE_GROUP_SIZE=cfg["ROPE_GROUP_SIZE"],
-            threads=cfg["threads"],
-        )
+        return lambda: kernel(output_view, cos_view, sin_view)
 
+    _last_autotune_config.clear()
+    cfg = _DEFAULT_CONFIG
+    return lambda: rope_embedding(
+        output_view, cos_view, sin_view,
+        dtype=dtype,
+        seq_len=seq_len,
+        ROPE_GROUP_SIZE=cfg["ROPE_GROUP_SIZE"],
+        threads=cfg["threads"],
+    )
+
+
+def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
+        block_size: int = None, autotune: bool = False):
+    output = q.clone().contiguous()
+    _rotation_launcher(output, cos, sin, autotune)()
     return output
+
+
+def prepare_timed_run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
+                      block_size: int = None, autotune: bool = False):
+    """Kernel-only timing of run(): (launch, restore). launch() runs only the rotation kernel
+    in place on a persistent copy of q; restore() copies q back into it. Autotuning and its
+    scratch clone happen here, outside the timed region."""
+    output = q.clone().contiguous()
+    launch = _rotation_launcher(output, cos, sin, autotune)
+    launch()
+    return launch, lambda: output.copy_(q)
 
 
 def get_last_config() -> dict | None:

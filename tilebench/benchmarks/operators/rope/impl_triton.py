@@ -62,10 +62,8 @@ _rope_embedding_autotuned = triton.autotune(
 )(rope_embedding)
 
 
-def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
-        block_size: int = None, autotune: bool = False):
-
-    output = q.clone().contiguous()
+def _rotation_launcher(output, cos, sin, autotune):
+    """Zero-argument launcher of the in-place rotation kernel on `output`."""
     batch, seq_len, n_heads, head_dim = output.shape
 
     BLOCK_SIZE = next_power_of_2(head_dim // 2)
@@ -73,34 +71,57 @@ def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
 
     if autotune:
         grid = lambda meta: (n_rows, triton.cdiv(n_heads, meta["ROPE_GROUP_SIZE"]))
-        _rope_embedding_autotuned[grid](
-            output,   output.stride(1),
-            cos,      cos.stride(0),
-            sin,      sin.stride(0),
-            seq_len,
-            head_dim,
-            n_heads,
-            BACKWARD_PASS=False,
-            BLOCK_SIZE=BLOCK_SIZE,
-        )
+
+        def launch():
+            _rope_embedding_autotuned[grid](
+                output,   output.stride(1),
+                cos,      cos.stride(0),
+                sin,      sin.stride(0),
+                seq_len,
+                head_dim,
+                n_heads,
+                BACKWARD_PASS=False,
+                BLOCK_SIZE=BLOCK_SIZE,
+            )
     else:
         cfg = _DEFAULT_CONFIG
         n_groups = triton.cdiv(n_heads, cfg["ROPE_GROUP_SIZE"])
-        rope_embedding[(n_rows, n_groups)](
-            output,   output.stride(1),
-            cos,      cos.stride(0),
-            sin,      sin.stride(0),
-            seq_len,
-            head_dim,
-            n_heads,
-            BACKWARD_PASS=False,
-            BLOCK_SIZE=BLOCK_SIZE,
-            ROPE_GROUP_SIZE=cfg["ROPE_GROUP_SIZE"],
-            num_warps=cfg["num_warps"],
-            num_stages=cfg["num_stages"],
-        )
 
+        def launch():
+            rope_embedding[(n_rows, n_groups)](
+                output,   output.stride(1),
+                cos,      cos.stride(0),
+                sin,      sin.stride(0),
+                seq_len,
+                head_dim,
+                n_heads,
+                BACKWARD_PASS=False,
+                BLOCK_SIZE=BLOCK_SIZE,
+                ROPE_GROUP_SIZE=cfg["ROPE_GROUP_SIZE"],
+                num_warps=cfg["num_warps"],
+                num_stages=cfg["num_stages"],
+            )
+
+    return launch
+
+
+def run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
+        block_size: int = None, autotune: bool = False):
+
+    output = q.clone().contiguous()
+    _rotation_launcher(output, cos, sin, autotune)()
     return output
+
+
+def prepare_timed_run(q: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor,
+                      block_size: int = None, autotune: bool = False):
+    """Kernel-only timing of run(): (launch, restore). launch() runs only the rotation kernel
+    in place on a persistent copy of q; restore() copies q back into it. Autotuning (if any)
+    happens here, outside the timed region."""
+    output = q.clone().contiguous()
+    launch = _rotation_launcher(output, cos, sin, autotune)
+    launch()
+    return launch, lambda: output.copy_(q)
 
 
 def get_last_config() -> dict | None:

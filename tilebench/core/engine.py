@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 import yaml
 from tilebench.core.dtypes import resolve_dtype
+from tilebench.core.prepared_timer import report_prepared_benchmark
 from tilebench.core.timer import DEFAULT_REPEAT, DEFAULT_WARMUP, report_benchmark, timing_mode
 from tilebench.core.verifier import config_tolerance, verify
 from tilebench.data.tensors import expand_cases, get_generator, infer_problem_size
@@ -225,6 +226,30 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
             proton_file_label=label,
         )
 
+    def _bench_impl(impl, args, kw, *, label: str):
+        # Opt-in split of run() for operators that update a copy of an input in place (rope):
+        # prepare_timed_run() returns (launch, restore); only launch() is timed, and restore()
+        # runs before the cache flush of every launch (core/prepared_timer.py). Every other
+        # impl is timed through run() as before.
+        prepare = getattr(impl, "prepare_timed_run", None)
+        if prepare is None:
+            return _bench(impl.run, args, kw, label=label)
+        launch, restore = prepare(*args, **kw)
+        return report_prepared_benchmark(
+            launch,
+            restore,
+            warmup=warmup,
+            repeat=repeat,
+            use_cuda_graph=use_cuda_graph,
+            proton_scope_name=proton_scope_name,
+            proton_context=proton_context,
+            proton_backend=proton_backend,
+            flush_l2=flush_l2,
+            keep_proton_files=keep_proton_files,
+            proton_output_dir=proton_output_dir,
+            proton_file_label=label,
+        )
+
     def _run_kwargs(fn, block_size):
         sig = inspect.signature(fn).parameters
         kw = {}
@@ -329,7 +354,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                 if not triton_ok:
                     print(f"  Triton verification FAILED: {triton_err}")
                 triton_stats = (
-                    _bench(impl_triton.run, inputs, triton_kw, label=f"{lbl}_triton")
+                    _bench_impl(impl_triton, inputs, triton_kw, label=f"{lbl}_triton")
                     if triton_ok else None
                 )
                 triton_ms = triton_stats["mean"] if triton_stats is not None else float("nan")
@@ -361,7 +386,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                 if not cutile_ok:
                     print(f"  cuTile verification FAILED: {cutile_err}")
                 cutile_stats = (
-                    _bench(impl_cutile.run, inputs, cutile_kw, label=f"{lbl}_cutile")
+                    _bench_impl(impl_cutile, inputs, cutile_kw, label=f"{lbl}_cutile")
                     if cutile_ok else None
                 )
                 cutile_ms = cutile_stats["mean"] if cutile_stats is not None else float("nan")
@@ -393,7 +418,7 @@ def run_benchmark_suite(operator_name, benchmark_overrides=None, enabled_backend
                 if not tilelang_ok:
                     print(f"  TileLang verification FAILED: {tilelang_err}")
                 tilelang_stats = (
-                    _bench(impl_tilelang.run, inputs, tilelang_kw, label=f"{lbl}_tilelang")
+                    _bench_impl(impl_tilelang, inputs, tilelang_kw, label=f"{lbl}_tilelang")
                     if tilelang_ok else None
                 )
                 tilelang_ms = tilelang_stats["mean"] if tilelang_stats is not None else float("nan")
