@@ -22,7 +22,7 @@ on the same line tell you whether an instruction family matters.
 | `LDGSTS` (often `.E.BYPASS.128`) | Lane-issued async global-to-shared copy (`cp.async`) | Every participating lane computes addresses and issues copies. |
 | `LDGDEPBAR` / `DEPBAR` | Commit / wait on an async-copy group | Where a lane-issued pipeline blocks for operands. |
 | `SYNCS.PHASECHK…TRYWAIT`, `SYNCS.ARRIVE` | mbarrier wait / arrive | Producer-consumer handshake. Samples here are waiting, not computing. |
-| `NANOSLEEP` | Sleep inside a wait loop | Idle role warps; large sample counts do not mean useful work is stalled. |
+| `NANOSLEEP` | Sleep inside a wait loop | Idle role warps; large sample counts do not mean useful work is stalled. Some wait loops retry with no sleep: the samples then sit on the branch after `TRYWAIT`. |
 | `BAR.SYNC` | Whole-CTA barrier (`__syncthreads`) | Serializes every warp; see barrier stall samples. |
 | `ATOMS` / `ATOMG` | Shared / global atomic | CTA-private versus global contended updates. |
 | `LDS` / `STS` (`.64`, `.128`) | Shared-memory load/store | Staging and layout conversion; check bank conflicts. |
@@ -81,13 +81,14 @@ Each entry: mechanism, where it was seen, bundle fingerprint, confirming check.
   the same threads issue `LDGSTS` copies, run `UTCHMMA`, then wait
   (`UTCBAR`, `SYNCS…TRYWAIT`, `BAR.SYNC`) inside the K loop. Triton and cuTile
   move tiles with `UTMALDG`/`UTMASTG`. Fingerprint: same register/shared
-  residency limits as Triton but lower achieved occupancy and tensor-pipe
-  activity. Confirm: wait/barrier PCs between MMA and the next copy carry the
+  residency limits as Triton but lower achieved occupancy and less tensor-pipe
+  work per unit time. Confirm: wait/barrier PCs between MMA and the next copy carry the
   samples; tensor pipe % lower at equal or fewer instructions.
 - **TF32 falls off the tcgen05 path (TileLang fp32).** fp32 GEMM emits
   `HMMA.1688.F32.TF32` with register accumulators while peers emit `UTCHMMA`.
-  Fingerprint: 200+ registers/thread, single-digit theoretical occupancy, fp16
-  near parity but fp32 far behind in the dtype trend.
+  Fingerprint: 200+ registers/thread, theoretical occupancy 6 to 13%, the
+  tcgen05 pipe (`sm__pipe_tc_cycles_active`) at zero while the general tensor
+  pipe is busy, fp16 much closer than fp32 in the dtype trend.
 - **2D TMEM lowering blocks pipelining (TileLang attention).** Outer loop runs
   serially; intermediates move TMEM -> fragment -> shared repeatedly
   (`LDTM`/`STTM`/`STS` hot). Fingerprint: similar DRAM bytes across backends,
@@ -147,6 +148,12 @@ Each entry: mechanism, where it was seen, bundle fingerprint, confirming check.
   math and bounds test, even when lanes share an index. Fingerprint: instruction
   count per element an order of magnitude above peers, ALU pipe high, identical
   DRAM bytes, gap shrinking as the element widens.
+- **Signed integer division and modulo per element (cuTile).** `//` and `%`
+  on an `int32` index tile are `floordiv` / `c_mod` ops in Tile IR and lower to
+  a multiply, shift and compare sequence for every element. In an index-heavy
+  kernel (`weight_dequant`: about half of all executed instructions) this can
+  outweigh the gather itself. Peers fold
+  the same index into one expression per thread.
 - **Vector width set by lane count, not bytes (TileLang).** Narrow dtypes get
   proportionally narrower loads and stores than the same kernel in fp32.
 - **In-kernel transposed element copies (TileLang GEMM operands).** Filling a
@@ -186,8 +193,11 @@ Each entry: mechanism, where it was seen, bundle fingerprint, confirming check.
   or dependency-stalled kernels reach 70-90% occupancy and lose; register-heavy
   kernels near 12% win. Always pair occupancy with what the resident warps are
   doing at the hot PCs.
-- **Low DRAM % is normal here.** Most TileBench kernels sit under 25% DRAM
-  throughput; gaps are usually on-chip (L1/LSU, issue, dependencies).
+- **DRAM % varies widely.** Across the B200 reports the dominant kernel's
+  DRAM throughput has a median near 58%: about a quarter are under 25% and
+  about a third are above 70%. Do not assume either regime; read it per case.
+  Two backends above 80% are both bandwidth-bound and any other difference
+  between them is hidden.
 - **Parity band.** Differences within 10% are parity unless the trend across
   shapes is consistent in sign.
 - **Torch is frequently the fastest reference** (vendor libraries) and has no
@@ -195,9 +205,11 @@ Each entry: mechanism, where it was seen, bundle fingerprint, confirming check.
 
 ## Capture Quirks
 
-- TileLang reports embed `tvm_kernels.cu` with empty content: there is no
-  capture-time CUDA. Use `impl_tilelang.py` plus SASS constants (shape bounds,
-  tile shifts, strides) to tie the capture to the winner.
+- TileLang reports embed `tvm_kernels.cu` with empty content, so the brief
+  says the embedded source is empty. That is expected. Regenerate the CUDA
+  with `tl_codegen.py`: the `tvm_kernels.cu:<line>` numbers in the annotated
+  SASS line up with the regenerated file when the winner config is right, which
+  is also the check that it is.
 - Some TileLang captures are reduced (kernel replay, far fewer replay passes,
   no stall/eligible-warp counters). `brief.md` flags missing families; a
   missing counter is not zero, and DRAM byte totals from different replay modes

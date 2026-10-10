@@ -18,8 +18,7 @@ another worktree's data silently to make this map fit.
    before using the capture to explain that case. If several hardware namespaces
    fit and the task names none, ask which experiment to investigate.
 4. Route NVIDIA `.ncu-rep` files to the NCU API and matching B200/GH200 reference.
-   Route MI300X directories to ROCm artifact discovery, not NCU. AMD navigation is
-   supported here; AMD diagnosis is not provided by this skill.
+   Route MI300X directories to the rocprof-compute path of `tb_case.py`, not NCU.
 
 Do not run device detection to identify an old capture: the agent's host may have
 no GPU or a different GPU. `nvidia-smi`/runtime device checks are relevant if new
@@ -83,7 +82,7 @@ AMD local artifacts use
 `pc_sampling/`, `analysis/`, `logs/`, and `capture.json`. The released AMD namespace
 is `AMD_MI300X`; these are not `.ncu-rep` files. The ROCm navigation/collection code
 lives in `tilebench/profiling/rocprof_compute.py` and
-`scripts/profiling/rocprof_compute_*.py`. This skill does not yet diagnose them.
+`scripts/profiling/rocprof_compute_*.py`. `tb_case.py` reads them into the MI300X bundle.
 
 ## Checkout and Collection Boundaries
 

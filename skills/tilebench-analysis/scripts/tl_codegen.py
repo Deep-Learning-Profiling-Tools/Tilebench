@@ -26,7 +26,7 @@ def parse_value(text):
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return text
+        return "custom[tfloat32]" if text == "tfloat32" else text
 
 
 def main():

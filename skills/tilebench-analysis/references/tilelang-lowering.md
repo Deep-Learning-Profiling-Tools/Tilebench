@@ -22,7 +22,7 @@ alone never shows the generated kernel. Regenerate it; nothing runs on a GPU:
 `tilebench/benchmarks/operators`, depending on the branch.
 
 The script targets the hardware given with `--hardware` (default B200) and
-needs neither a GPU nor `nvcc`. Operators that pick a kernel variant by GPU
+needs neither a GPU nor `nvcc` (only `--ptx` calls `nvcc`). Operators that pick a kernel variant by GPU
 architecture get the variant for that hardware. If an operator builds its
 kernel inside a factory function, so there is no module-level kernel to name,
 write a few lines of Python that obtain the kernel the same way the file's
@@ -30,7 +30,10 @@ write a few lines of Python that obtain the kernel the same way the file's
 
 Tensors are the kernel's positional arguments in order (`ROWSxCOLS:dtype`);
 `--kw` carries shape scalars, dtype strings and the winner config from
-`brief.md`. Read the body after `__launch_bounds__`; it is usually under 40
+`brief.md`. Pass a dtype as the string `run()` passes: `float16`, `bfloat16`,
+`float32`, `int8`; for a kernel that takes `T.tfloat32` write `dtype=tfloat32`.
+The kernel's parameter order in the generated CUDA can differ from the Python
+signature. Read the body after `__launch_bounds__`; it is usually under 40
 lines. Generate the contrast dtype too and diff the two files.
 
 **Check that it matches the capture.** Compare the generated structure with the
@@ -57,6 +60,10 @@ there is TIR. `tl_codegen.py` can write both ends of TileLang's pass pipeline:
 - `--lowered-tir`: the device function after every pass, the form the CUDA is
   printed from: per-thread buffer sizes, explicit `threadIdx` index
   expressions, unrolled loops, inserted guards and intrinsic calls.
+
+To test what a different construct would lower to, copy the implementation
+under the output directory, edit the copy and compile it the same way. That
+shows what the compiler emits (or that it refuses); it is not a measurement.
 
 Use the CUDA for what the final code does. Use the two TIR files when the
 question is which construct turned into a given piece of CUDA, or whether a
@@ -142,6 +149,10 @@ argument tells nvcc that only one block per SM must fit, so it is free to spend
 up to 255 registers per thread. This is what permits the 250+ register,
 2-blocks-per-SM kernels; nothing in the DSL source asks for it.
 
+The same declaration matters in moderate cases too: a kernel at 48 registers
+fits 10 CTAs per SM where a 32-register peer fits 16 and runs the whole grid in
+one wave.
+
 Fingerprint: `launch__registers_per_thread` near 255, register-limited
 occupancy near 12%, no `LDL`/`STL`.
 What to write instead: fewer outputs per thread (smaller tile or more threads),
@@ -149,12 +160,12 @@ or a non-unrolled tap loop. Whether that wins is a measurement, not a given.
 
 ### Half precision is converted at every load
 
-For fp16 inputs with a float32 fragment, the generated code is the fp32 kernel
-plus `(float)input[...]` on every load and `(half_t)acc[...]` on every store
+For fp16 inputs with a float32 fragment, the generated code is usually the
+fp32 kernel plus `(float)input[...]` on every load and `(half_t)acc[...]` on every store
 (`cuda_fp16.hpp`, `HADD2.F32` in SASS). Structure, guards and accumulator count
-are identical to fp32. A gap that exists only in fp16 therefore comes from the
-convert-per-load path or from how nvcc schedules it, not from a different
-algorithm; diff the fp16 and fp32 SASS around the loads.
+are then identical to fp32, and a gap that exists only in fp16 comes from the
+convert-per-load path or from how nvcc schedules it. Confirm by generating both
+dtypes and diffing them; GEMM kernels are the exception (see below).
 
 ### Element-wise fill of a shared tile is not `T.copy`
 
@@ -188,10 +199,6 @@ iteration well above a peer that accumulates in registers.
 What to write instead: accumulate per thread across the loop and reduce once
 after it, or lay the tile out so the reduced dimension stays within a thread.
 
-The same declaration matters in moderate cases too: a kernel at 48 registers
-fits 10 CTAs per SM where a 32-register peer fits 16 and runs the whole grid in
-one wave.
-
 A reduction that stays inside one warp (`AllReduce<Op, 32, …>` with 32 threads)
 is shuffle-only and has no barrier, like the peers' single-warp reductions.
 
@@ -205,8 +212,10 @@ is shuffle-only and has no barrier, like the peers' single-warp reductions.
 
 - **Warp specialization is disabled** by pass config in TileBench GEMM kernels
   (`TL_DISABLE_WARP_SPECIALIZED`), so copy, MMA and waits share threads.
-- **fp32 GEMM uses the legacy MMA path** (`HMMA…TF32`, register accumulators);
-  the tcgen05 path is taken for half-precision inputs.
+- **fp32 GEMM uses the legacy MMA path** (`tl::mma_sync`, `HMMA…TF32`, register
+  accumulators); the tcgen05 path (`tcgen05mma`) is taken for half-precision
+  inputs. The operator source selects this (`use_tmem = dtype != T.tfloat32`),
+  and TileLang 0.1.11 fails to lower the kernel when TMEM is forced for fp32.
 - **`CumSum1D` scans on one warp** while the rest wait at a barrier.
 - **`T.Pipelined(num_stages=n)`** rotates `n` shared buffers and issues the
   prologue copies before the loop; the steady-state body still contains a
@@ -220,7 +229,5 @@ PC samples. State the alternative the author could write and the measurement
 that would confirm it. Where generated code and captured SASS disagree, report
 the version mismatch instead of forcing them together.
 
-Triton and cuTile: their reports embed the Python kernel source with line
-mapping, so the DSL line is direct, but this skill has no verified lowering
-rules for their compilers. Describe their lowering from source plus SASS and
-label it as inferred.
+For Triton and cuTile use [triton-lowering](triton-lowering.md) and
+[cutile-lowering](cutile-lowering.md).

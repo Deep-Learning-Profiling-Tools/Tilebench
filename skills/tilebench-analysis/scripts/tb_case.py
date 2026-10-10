@@ -49,7 +49,9 @@ TABLE = [
     ("Issue active/cycle", "smsp__issue_active.avg.per_cycle_active"),
     ("Warp instructions executed", "smsp__inst_executed.sum"),
     ("SM throughput %", "sm__throughput.avg.pct_of_peak_sustained_elapsed"),
+    ("SMSP active cycles (avg)", "smsp__cycles_active.avg"),
     ("Tensor pipe active %", "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed"),
+    ("tcgen05 (TMEM) tensor pipe active %", "sm__pipe_tc_cycles_active.avg.pct_of_peak_sustained_elapsed"),
     ("FMA pipe active %", "sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_elapsed"),
     ("ALU pipe active %", "sm__pipe_alu_cycles_active.avg.pct_of_peak_sustained_elapsed"),
     ("L1/TEX throughput %", "l1tex__throughput.avg.pct_of_peak_sustained_elapsed"),
@@ -63,6 +65,10 @@ TABLE = [
     ("Global load L1 hit %", "l1tex__t_sector_pipe_lsu_mem_global_op_ld_hit_rate.pct"),
     ("Global load L1 miss sectors", "l1tex__t_sectors_pipe_lsu_mem_global_op_ld_lookup_miss.sum"),
     ("L2-to-L1 read bytes", "l1tex__m_xbar2l1tex_read_bytes.sum"),
+    ("TMA load insts", "smsp__sass_inst_executed_op_tma_ld.sum"),
+    ("TMA load bytes (L2-to-L1)", "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum"),
+    ("TMA store insts", "smsp__sass_inst_executed_op_tma_st.sum"),
+    ("TMA store bytes", "l1tex__m_l1tex2xbar_write_bytes_mem_global_op_tma_st.sum"),
     ("Global store insts", "smsp__sass_inst_executed_op_global_st.sum"),
     ("Global store L1 sectors", "l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum"),
     ("Shared load insts", "smsp__sass_inst_executed_op_shared_ld.sum"),
@@ -117,34 +123,40 @@ def latencies(row):
 
 
 def load_logs(repo, hardware, operator, network):
-    names = [f"{operator}_autotune.json", f"{operator}_tilelang_autotune.json"]
+    def wanted(name):
+        return name == f"{operator}_tilelang_autotune.json" or (
+            name.startswith(f"{operator}_autotune") and name.endswith(".json"))
+
     records, sources = [], []
-    for name in names:
-        for base in (f"results/{hardware}/logs/autotune_logs", "results/logs/autotune_logs", "evidence"):
-            path = repo / base / name
-            if path.exists():
-                records += json.loads(path.read_text())
-                sources.append({"source": str(path) + (" (unverified hardware: confirm it is a " + hardware + " log)" if base == "evidence" else ""),
-                                "sha256": sha256(path)})
-                break
-        else:
-            commit = ARCHIVES.get(hardware)
-            rel = f"results/{hardware}/logs/autotune_logs/{name}"
-            data = None
-            if commit:
-                shown = subprocess.run(["git", "-C", str(repo), "show", f"{commit}:{rel}"],
-                                       capture_output=True)
-                if shown.returncode == 0:
-                    data, origin = shown.stdout, f"git:{commit}:{rel}"
-                elif network:
-                    url = f"https://raw.githubusercontent.com/{GITHUB}/{commit}/{rel}"
-                    try:
-                        data, origin = urllib.request.urlopen(url, timeout=30).read(), url
-                    except OSError:
-                        data = None
-            if data:
-                records += json.loads(data)
-                sources.append({"source": origin, "sha256": hashlib.sha256(data).hexdigest()})
+    for base in (f"results/{hardware}/logs/autotune_logs", "results/logs/autotune_logs", "evidence"):
+        found = sorted(path for path in (repo / base).glob(f"{operator}_*autotune*.json") if wanted(path.name))
+        for path in found:
+            records += json.loads(path.read_text())
+            sources.append({"source": str(path) + (" (unverified hardware: confirm it is a " + hardware + " log)" if base == "evidence" else ""),
+                            "sha256": sha256(path)})
+        if found:
+            return records, sources
+    commit = ARCHIVES.get(hardware)
+    if not commit:
+        return records, sources
+    folder = f"results/{hardware}/logs/autotune_logs"
+    listed = subprocess.run(["git", "-C", str(repo), "ls-tree", "--name-only", f"{commit}:{folder}"], capture_output=True, text=True)
+    if listed.returncode == 0:
+        for name in sorted(n for n in listed.stdout.split() if wanted(n)):
+            shown = subprocess.run(["git", "-C", str(repo), "show", f"{commit}:{folder}/{name}"], capture_output=True)
+            if shown.returncode == 0:
+                records += json.loads(shown.stdout)
+                sources.append({"source": f"git:{commit}:{folder}/{name}", "sha256": hashlib.sha256(shown.stdout).hexdigest()})
+    elif network:
+        for name in (f"{operator}_autotune.json", f"{operator}_tilelang_autotune.json",
+                     f"{operator}_autotune_triton-cutile-tilelang.json", f"{operator}_autotune_triton.json"):
+            url = f"https://raw.githubusercontent.com/{GITHUB}/{commit}/{folder}/{name}"
+            try:
+                data = urllib.request.urlopen(url, timeout=30).read()
+            except OSError:
+                continue
+            records += json.loads(data)
+            sources.append({"source": url, "sha256": hashlib.sha256(data).hexdigest()})
     return records, sources
 
 
@@ -297,11 +309,13 @@ def extract_backend(report_path, out):
                     stall_totals[k] = stall_totals.get(k, 0) + v
             sleeps = [r["pc"] for r in rows if "NANOSLEEP" in r["sass"]]
             signal_wait = {"sites": 0, "samples": 0, "stalls": {}}
+            after_trywait = False
             for r in rows:
                 tokens = [t for t in r["sass"].split() if not t.startswith("@")]
                 target = int(tokens[1], 16) if len(tokens) > 1 and tokens[0] == "BRA" and tokens[1].startswith("0x") else None
                 r["signal_wait"] = bool(tokens) and (tokens[0].startswith(("NANOSLEEP", "SYNCS")) or (
-                    target is not None and any(target <= pc <= target + 0x40 for pc in sleeps)))
+                    target is not None and (after_trywait or any(target <= pc <= target + 0x40 for pc in sleeps))))
+                after_trywait = bool(tokens) and tokens[0].startswith("SYNCS") and "TRYWAIT" in tokens[0]
                 if r["signal_wait"] and r["samples"]:
                     signal_wait["sites"] += 1
                     signal_wait["samples"] += r["samples"]
@@ -311,7 +325,7 @@ def extract_backend(report_path, out):
             for r in rows:
                 tokens = [t for t in r["sass"].split() if not t.startswith("@")]
                 waited = 0 if r["signal_wait"] else r["stalls"].get("long_scoreboard", 0)
-                if tokens and tokens[0].startswith("LDG"):
+                if tokens and tokens[0].startswith(("LDG", "UTMALDG")):
                     chain.append({"kind": "load", "offset": f"{r['pc'] - base:#07x}", "op": tokens[0], "executed": r["executed"]})
                 elif total_samples and waited >= max(20, 0.002 * total_samples):
                     chain.append({"kind": "wait", "offset": f"{r['pc'] - base:#07x}", "op": tokens[0] if tokens else "?", "samples": waited,
@@ -362,6 +376,86 @@ def extract_backend(report_path, out):
                     values.setdefault(tag, {})[name] = action[name].value()
     summary["table"] = values
     return summary
+
+
+AMD_FILES = ("capture.json", "analysis/workload_csv/kernel.csv", "analysis/workload_csv/kernel_metric.csv",
+             "analysis/pc_sampling_instructions.csv")
+AMD_TABLES = ("System Speed-of-Light", "Wavefront / Wavefront Launch Stats")
+
+
+def find_amd(repo, dirs, operator, backend, dtype, network, revision, out):
+    name = f"{backend}_{dtype}"
+    for folder in [d / "AMD_MI300X" / operator / name for d in dirs] + [repo / "outputs/rocprof_compute/MI300X" / operator / name]:
+        if folder.is_dir():
+            return folder
+    if not network:
+        return None
+    from huggingface_hub import hf_hub_download
+    for rel in AMD_FILES:
+        hf_hub_download(HF_DATASET, f"AMD_MI300X/{operator}/{name}/{rel}", repo_type="dataset", revision=revision, local_dir=out / "download")
+    return out / "download" / "AMD_MI300X" / operator / name
+
+
+def extract_amd(folder, out):
+    out.mkdir(parents=True, exist_ok=True)
+    csv.field_size_limit(10 ** 9)
+    present = [rel for rel in AMD_FILES if (folder / rel).exists()]
+    capture = json.loads((folder / AMD_FILES[0]).read_text()) if AMD_FILES[0] in present else {}
+    kernels = {}
+    if AMD_FILES[1] in present:
+        with (folder / AMD_FILES[1]).open(newline="") as stream:
+            for row in csv.DictReader(stream):
+                kernels[row["kernel_name"]] = {"kernel": row["kernel_name"], "launches": number(row["dispatch_count"]),
+                                               "duration_ns_mean": number(row["duration_ns_mean"]), "metrics": {}}
+    everything = []
+    if AMD_FILES[2] in present:
+        with (folder / AMD_FILES[2]).open(newline="") as stream:
+            for row in csv.DictReader(stream):
+                value = number(row["value"])
+                if value is None:
+                    continue
+                base = " / ".join(dict.fromkeys(part for part in (row["table_name"], row["sub_table_name"], row["metric_name"]) if part))
+                key = f"{base} [{row['value_name']}]"
+                everything.append({"kernel": row["kernel_name"], "metric": key, "value": value, "unit": row["unit"]})
+                if base.startswith(AMD_TABLES) and row["kernel_name"] in kernels:
+                    kernels[row["kernel_name"]]["metrics"][key] = (value, row["unit"])
+    (out / "amd_metrics.json").write_text(json.dumps({"folder": str(folder), "metrics": everything}, indent=1) + "\n")
+    if AMD_FILES[3] in present:
+        sampled = {}
+        with (folder / AMD_FILES[3]).open(newline="") as stream:
+            for row in csv.DictReader(stream):
+                if row["operator_kernel"] == "True":
+                    sampled.setdefault(row["kernel_name"], []).append(row)
+        for name, found in sampled.items():
+            kernel = kernels.setdefault(name, {"kernel": name, "launches": None, "duration_ns_mean": None, "metrics": {}})
+            rows, stalls, kinds, by_line = [], {}, {}, {}
+            for row in sorted(found, key=lambda r: int(r["offset"], 16)):
+                reasons = {k: int(v) for k, v in json.loads(row["stall_reasons"] or "{}").items()}
+                where = row["source_line"].rsplit("/", 1)[-1] if row["source_line"] else "-"
+                hits = int(row["samples"])
+                for k, v in reasons.items():
+                    stalls[k] = stalls.get(k, 0) + v
+                for k, v in json.loads(row["instruction_types"] or "{}").items():
+                    kinds[k] = kinds.get(k, 0) + int(v)
+                by_line[where] = by_line.get(where, 0) + hits
+                rows.append({"offset": row["offset"], "samples": hits, "issued": int(row["issued"]), "stalled": int(row["stalled"]),
+                             "stalls": reasons, "source": where, "asm": row["instruction"]})
+            total = sum(r["samples"] for r in rows)
+            safe = "".join(c if c.isalnum() else "_" for c in name)[:60]
+            with (out / f"sampled_asm_{safe}.txt").open("w") as stream:
+                stream.write(f"# {name}  ({folder})\n# only instructions that received a PC sample; no execution counts\n"
+                             "# offset | samples (% of kernel) | issued | stalled | source line | instruction | stall reasons\n")
+                for r in rows:
+                    stream.write(f"{r['offset']} | {r['samples']:>6} ({100 * r['samples'] / total if total else 0:5.1f}%) | {r['issued']} | {r['stalled']} | "
+                                 f"{r['source']} | {r['asm']} | {' '.join(f'{k}={v}' for k, v in r['stalls'].items())}\n")
+            kernel.update({"samples": total, "issued": sum(r["issued"] for r in rows), "stalled": sum(r["stalled"] for r in rows),
+                           "sampled_instructions": len(rows), "listing": f"sampled_asm_{safe}.txt",
+                           "stall_samples": dict(sorted(stalls.items(), key=lambda kv: -kv[1])),
+                           "instruction_type_samples": dict(sorted(kinds.items(), key=lambda kv: -kv[1])),
+                           "samples_by_source_line": dict(sorted(by_line.items(), key=lambda kv: -kv[1])[:12]),
+                           "hot": sorted(rows, key=lambda r: -r["samples"])[:12]})
+    return {"folder": str(folder), "files": present, "missing": [rel for rel in AMD_FILES if rel not in present],
+            "params": capture.get("params"), "winner": capture.get("winner"), "kernels": list(kernels.values())}
 
 
 def survey_reports(repo, dirs, operator):
@@ -546,7 +640,7 @@ def write_brief(out, case, extracted):
                                      + " | ".join(f"{v - base_a['stall_sample_totals'].get(k, 0):+,}" for k, v in zip(reasons, row)) + f" | {rest - base_rest:+,} | "
                                      f"{a.get('signal_wait', {}).get('samples', 0) - base_a.get('signal_wait', {}).get('samples', 0):+,} |")
                 lines += ["", "The last column is not an extra reason: it counts the samples, already included under the reasons to its left, that sit on "
-                          "`NANOSLEEP`/`SYNCS` sites or on a branch into a sleep loop. Those are a warp waiting for a signal from another warp or from "
+                          "`NANOSLEEP`/`SYNCS` sites or on the branch that follows a `TRYWAIT` or enters a sleep loop. Those are a warp waiting for a signal from another warp or from "
                           "a bulk (TMA) copy, usually recorded as long_scoreboard. Subtract them before reading long_scoreboard as waiting on a load; "
                           "each backend's section gives the split by reason.", ""]
         for backend, summary in extracted.items():
@@ -574,7 +668,7 @@ def write_brief(out, case, extracted):
                     lines += ["Stalled-warp samples by reason: " + ", ".join(f"{k} {v:,}" for k, v in a["stall_sample_totals"].items()), ""]
                 waiting = a.get("signal_wait") or {}
                 if waiting.get("samples"):
-                    lines += [f"Of these, {waiting['samples']:,} samples sit on {waiting['sites']} signal-wait sites (`NANOSLEEP`/`SYNCS`, or a branch into a sleep loop): "
+                    lines += [f"Of these, {waiting['samples']:,} samples sit on {waiting['sites']} signal-wait sites (`NANOSLEEP`/`SYNCS`, or the branch after a `TRYWAIT` or into a sleep loop): "
                               + ", ".join(f"{k} {v:,}" for k, v in sorted(waiting["stalls"].items(), key=lambda kv: -kv[1]))
                               + ". They are a warp waiting for a signal, not for a load.", ""]
                 loads = [c.get("executed") or 0 for c in a.get("load_chain", []) if c["kind"] == "load"]
@@ -625,6 +719,35 @@ def write_brief(out, case, extracted):
                     if message.get("title") and message["title"] not in NOISE_RULES:
                         lines.append(f"- NCU rule (hypothesis, verify against SASS): **{message['title']}**: {message.get('message', '')[:170]}")
                 lines += ["", f"Full detail: `{backend}/detail_{tag}.json`, `{backend}/annotated_sass_{tag}.txt`, `{backend}/ncu.json`, `{backend}/embedded_source/`.", ""]
+    for backend, amd in (case.get("amd") or {}).items():
+        lines += [f"## {backend} on MI300X: rocprof-compute profile", "",
+                  f"Folder `{amd['folder']}`. " + (f"Capture shape `{json.dumps(amd['params'])}`, winner `{json.dumps(amd['winner'])}` "
+                  "(from the profile's own `capture.json`; use this config for the IR)." if amd["winner"] else
+                  "No `capture.json` here, so take the shape and winner from the benchmark row above."),
+                  "AMD terms: a wavefront is 64 work-items (the warp), a workgroup is the block, LDS is shared memory, "
+                  "VALU/SALU are the vector and scalar ALUs, VMEM is global memory access, MFMA is the matrix unit.", ""]
+        if amd["missing"]:
+            lines += [f"**Not available:** {', '.join(amd['missing'])}. What they would give is absent below, not zero.", ""]
+        for k in amd["kernels"]:
+            lines += [f"### `{k['kernel']}`", "",
+                      f"Launches {fmt(k.get('launches'))}, mean duration {fmt(k.get('duration_ns_mean'))} ns (profiler time, not benchmark latency).", ""]
+            shown = {n: v for n, v in k["metrics"].items() if n.endswith("[Avg]")}
+            if shown:
+                lines += ["| Metric (exact name) | Value | Unit |", "|---|---:|---|"]
+                lines += [f"| `{n}` | {fmt(v[0])} | {v[1]} |" for n, v in shown.items()] + [""]
+            if k.get("samples"):
+                lines += [f"PC samples: {k['samples']:,} over {k['sampled_instructions']} sampled instructions "
+                          f"({k['issued']:,} issuing, {k['stalled']:,} stalled). Only instructions that received a sample are listed, "
+                          "and there are no execution counts, so instruction totals cannot be derived here.", "",
+                          "Stalled samples by reason: " + ", ".join(f"{a} {b:,}" for a, b in k["stall_samples"].items()), "",
+                          "Samples by instruction type: " + ", ".join(f"{a} {b:,}" for a, b in k["instruction_type_samples"].items()), "",
+                          "Samples by source line: " + ", ".join(f"{a} {b:,}" for a, b in k["samples_by_source_line"].items()), "",
+                          "| Offset | % samples | Issued | Stalled | Source | Instruction | Stall reasons |", "|---|---:|---:|---:|---|---|---|"]
+                for r in k["hot"]:
+                    lines.append(f"| {r['offset']} | {100 * r['samples'] / k['samples']:.1f} | {r['issued']} | {r['stalled']} | {r['source']} | "
+                                 f"`{r['asm'][:70]}` | {', '.join(f'{a} {b}' for a, b in r['stalls'].items())} |")
+                lines += ["", f"Full listing: `{backend}/{k['listing']}`; every metric: `{backend}/amd_metrics.json`. "
+                          "The complete assembly comes from `triton_ir.py --hardware MI300X` (`.amdgcn`); match by offset and source line.", ""]
     if case.get("all_reports"):
         lines += ["## Every saved report for this operator", "",
                   "Launch facts for each backend, dtype and hardware. A row whose block size, registers or shared-memory traffic "
@@ -757,7 +880,20 @@ def main():
             else:
                 notes.append(f"{backend}: {path} contains no profiled kernels (not a valid report?).")
     else:
-        notes.append(f"{args.hardware} has no NCU reports; only benchmark and winner evidence is bundled.")
+        case["amd"] = {}
+        for backend in [b for b in args.backends.split(",") if b in case["latency_ms"]]:
+            try:
+                folder = find_amd(repo, args.reports_dir, args.operator, backend, args.dtype, not args.no_network,
+                                  args.dataset_revision, out / backend)
+            except Exception as error:
+                notes.append(f"{backend}: no local MI300X profile and download failed ({type(error).__name__}: {error}).")
+                continue
+            if folder is None:
+                notes.append(f"{backend}: no saved MI300X profile available for this dtype.")
+                continue
+            case["amd"][backend] = extract_amd(folder, out / backend)
+        notes.append(f"{args.hardware} profiles come from rocprof-compute, not Nsight Compute: sampled instructions carry no execution "
+                     "counts, and the NCU counter names in ncu-analysis do not apply. Use the AMD section of that reference.")
     case["reports"] = {b: {"report": s["report"], "sha256": s["sha256"]} for b, s in extracted.items()}
     case["all_reports"] = survey_reports(repo, args.reports_dir, args.operator)
     (out / "case.json").write_text(json.dumps(case, indent=1) + "\n")

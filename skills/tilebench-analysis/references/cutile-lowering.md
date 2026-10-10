@@ -29,13 +29,19 @@ different signature. The mangled kernel name in a saved report ends with the sam
 
 ## Reading Tile IR
 
+The rules below were checked against the 148 cuTile kernels of the B200
+profiles (cuda-tile 1.3.0), Tile IR against captured SASS: each states how many
+kernels show it. The back end is closed, so everything below the Tile IR is
+observed behaviour of this version, not a documented rule.
+
 ### Front-end passes (`cuda/tile/_compile.py`, `_transform_ir`)
 
 `eliminate_assign_ops` -> dead-code elimination -> dataflow analysis ->
 `add_divby_pass` (emits `assume_div_by` / `assume_bounded` facts from the
 arguments) -> `token_order_pass` (threads a `Token` through every memory
 operation to fix their order) -> `rewrite_patterns` -> `hoist_loop_invariants`
--> `split_loops` -> dead-code elimination.
+-> (`unhoist_partition_views` for older bytecode versions) -> `split_loops` ->
+dead-code elimination.
 
 ### `ct.gather` / `ct.scatter` are per-element pointer operations
 
@@ -47,6 +53,11 @@ $79 = raw_cmp(lhs=$75, rhs=$78, fn="lt")      # bounds mask against the array ex
 $82 = pointer_offset(pointer=$81, offset=$75)
 $86, $87 = load_pointer(pointer=$82, mask=$79, padding_value=$85, token=…)
 ```
+
+All 50 kernels with pointer loads or stores have the `pointer_offset` and
+`raw_cmp` bounds mask. In kernels whose only loads are pointer loads the SASS
+loads are almost all scalar (`LDG.E.U8`, `LDG.E.U16`, 32-bit `LDG.E`); in
+kernels whose only loads are tile loads they are almost all `LDG.E.128`.
 
 No contiguity information survives: the back end receives a tile of
 independent pointers and a mask, even when the indices are consecutive or
@@ -70,10 +81,14 @@ $111 = tile_store(view=$110, index=($11), tile=$86, allow_tma=None, …)
 ```
 
 The back end sees one tile with a known shape and stride and may use wide
-accesses or TMA (`allow_tma`). Mixing a gathered tile with a tile store forces
-the back end to re-map elements between the two ownership patterns, which
-appears in SASS as shared-memory stores, a barrier and loads before the final
-wide store.
+accesses or TMA. `allow_tma` is `None` unless the source sets it (some
+operators pass `False`). Mixing a gathered tile with a tile store forces the
+back end to re-map elements between the two ownership patterns, which appears
+in SASS as shared-memory stores, a barrier and loads before the final wide
+store: all 35 kernels that mix pointer and tile operations have `STS` and
+`BAR.SYNC`. The re-layout is not unique to gathers: 20 of the 55 kernels with
+only tile loads and stores (and no reduction) have it too, so confirm from
+SASS which ownership change causes it.
 
 ### Loops and memory operations inside them
 
@@ -94,10 +109,11 @@ into a tile and index that tile.
 ### Thread mapping and reductions are back-end choices
 
 Tile IR says only `Tile[dtype,(1,128)]` and `tile_reduce(xs=…, axis=1)`; it
-does not say how many threads own the tile. The back end picks the CTA shape,
-and it can pick one element per thread across several warps where Triton and
-TileLang put the same tile in one warp. Every reduction then crosses warps
-through shared memory: in-warp `SHFL`, `STS`, `BAR.SYNC`, `LDS`, combine,
+does not say how many threads own the tile. The back end picks the CTA shape:
+every cuTile kernel in the set launches 128, 256 or 384 threads, never a
+single warp, where Triton and TileLang can put the same tile in one warp.
+Every reduction then crosses warps through shared memory (all 38 reduction
+kernels have `BAR.SYNC` and `STS`): in-warp `SHFL`, `STS`, `BAR.SYNC`, `LDS`, combine,
 `STS`, `BAR.SYNC`, `LDS`. Read `launch__block_size` and the shared-store count
 from the report, and compare with sibling reports in the brief's all-reports
 table. Some warps of a wide CTA may exit before later phases; per-PC execution
@@ -107,9 +123,18 @@ counts show which.
 
 `a / b` on a tile is `raw_binary_arith fn="truediv"` and stays a checked IEEE
 division per element (`MUFU.RCP`, Newton `FFMA` steps, `FCHK`, a guarded slow
-path), even when `b` is one scalar broadcast to the tile. `ct.exp` uses the
-accurate `expf` expansion (an `FFMA` range-reduction chain around `MUFU.EX2`).
+path), even when `b` is one scalar broadcast to the tile: 27 of the 28 kernels
+with `truediv` have `FCHK` in SASS, and no kernel without it does. `ct.exp`
+uses the accurate `expf` expansion (an `FFMA` range-reduction chain around
+`MUFU.EX2`; all 17 kernels with `exp`).
 What to write instead: compute the reciprocal of a scalar once and multiply.
+
+Integer `//` and `%` on a tile are `raw_binary_arith fn="floordiv"` and
+`fn="c_mod"` per element (32 kernels apply them to a tile). Each lowers to a
+multiply, shift and compare sequence for every element, and nothing folds an
+index that is the same for many lanes: in `weight_dequant` fp16, `ISETP`,
+`IMAD` and `SHF` together are about half of all executed instructions. Compute
+such an index on a smaller tile or as a scalar where the algorithm allows.
 
 ### TMA can be chosen for plain tile loads and stores
 
@@ -117,7 +142,8 @@ What to write instead: compute the reciprocal of a scalar once and multiply.
 the back end. When it picks TMA for a simple streaming tile, data is staged
 through shared memory behind mbarriers (`UTMALDG`/`UTMASTG`, `SYNCS…TRYWAIT`,
 `NANOSLEEP`), and the wait loops themselves execute a large number of
-instructions. Shared memory per CTA rises and can cap resident CTAs.
+instructions. It is the minority choice: 13 of the 125 kernels without `ct.mma`
+use TMA. Shared memory per CTA rises and can cap resident CTAs.
 
 ### Hints and matmul
 
@@ -126,7 +152,9 @@ instructions. Shared memory per CTA rises and can cap resident CTAs.
 per SM whatever the hint says). `ct.mma` appears as a single IR op; whether it
 becomes `UTCHMMA` with tensor memory and role warps (`NANOSLEEP`, `SYNCS`,
 `LDTM`/`STTM` per iteration) or legacy `HMMA` with register accumulators is
-decided in the back end and must be read from SASS.
+decided in the back end and must be read from SASS. Of the 23 `tile_mma`
+kernels, 19 take the tcgen05 path (`UTCHMMA`, or `UTCQMMA` for fp8) and 4 the
+legacy one (`HMMA`, `IMMA`); 20 have `NANOSLEEP` wait loops and `LDTM`/`STTM`.
 
 ## Using This in a Report
 

@@ -42,8 +42,11 @@ does not show it; never fill a cell from what the DSL usually does.
    spent, and the explanation has to land there. An instruction-count
    difference is only the cause if the excess sits in executing instructions
    (`not_selected`, pipe throttles, no stall recorded); if the excess is
-   `long_scoreboard`, the gap is load waiting even when the slower backend also
-   executes more instructions.
+   `long_scoreboard`, the gap is waiting even when the slower backend also
+   executes more instructions. First take out the samples the brief lists
+   "at signal waits": those are warps polling an mbarrier, which may be an
+   idle role warp or a compute warp waiting for a TMA copy, not a pending
+   `LDG`.
 3. **Check the memory hierarchy.** Equal sectors and equal bytes mean equal
    traffic, not equal waiting. Read the brief's load order line for each
    kernel: loads issued before the first wait overlap, and a load issued after

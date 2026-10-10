@@ -23,11 +23,12 @@ and launches nothing:
 
 Give one `--arg` per kernel parameter, in any order:
 
-- `ptr:<dtype>` for a tensor pointer (`i8`, `i32`, `fp16`, `bf16`, `fp32`).
+- `ptr:<dtype>` for a tensor pointer (`i8`, `i32`, `i64`, `fp8e4nv`, `fp16`, `bf16`, `fp32`, or the long names).
 - `desc:<dtype>:<AxB>` for a `TensorDescriptor` argument with that block shape.
 - `int:<value>` for a runtime integer. Pass the real value from the benchmark
-  shape: Triton records whether it is divisible by 16 and specialises a value of
-  1, and both change the IR. A wrong value can silently give a different layout
+  shape: Triton records whether it is divisible by 16 and turns a value of
+  exactly 1 into a constant (`backends/compiler.py`, `get_int_specialization`),
+  and both change the IR. A wrong value can silently give a different layout
   (for example `sizePerThread = [1]` and scalar loads instead of 16-byte loads).
 - `float:<value>` for a runtime float, `const:<json>` for a `tl.constexpr`.
 
@@ -45,6 +46,10 @@ compiler would emit; it is not a measurement.
 
 ## Reading `ttgir`
 
+The rules below were checked against the 148 Triton kernels of the B200
+profiles (Triton 3.6.0): each states how many kernels show it. They describe
+this version and target; confirm in the case's own IR before citing one.
+
 ### Layout decides which elements a thread owns
 
 Each tensor type carries a layout, most often
@@ -56,8 +61,9 @@ Each tensor type carries a layout, most often
 `sizePerThread` consecutive elements belong to one thread, then the next lane,
 then the next warp; a tensor larger than the product wraps, so the thread owns
 several such runs. The `Coalesce` pass picks the layout so that a memory access
-is contiguous per thread, up to 16 bytes. Operations connected by data flow
-share one layout unless a conversion is inserted.
+is contiguous per thread, up to 16 bytes: no kernel in the set has a global
+load wider than 128 bits (`ld.global.v4.b32`, `LDG.E.128`). Operations
+connected by data flow share one layout unless a conversion is inserted.
 
 Consequences seen:
 
@@ -83,7 +89,9 @@ store, a dot result feeding an elementwise op, a transposed store), the
 compiler inserts `ttg.convert_layout`. Unless the two layouts differ only
 within a thread, it lowers to shared-memory stores, a barrier and loads
 (`STS…`/`BAR.SYNC`/`LDS…` in SASS). `RemoveLayoutConversions` deletes the ones
-it can; those that remain are real cost. Count them
+it can; those that remain are usually real cost: of the 51 kernels that keep a
+`convert_layout`, 45 have shared stores and a barrier in their PTX, 4 a barrier
+only, and 2 neither (a within-thread conversion). Count them
 (`triton_ir.py` prints the count) and find their `#loc` source line.
 
 ### Masks and loads
@@ -94,7 +102,10 @@ can be outstanding per warp. The mask and pointer arithmetic are tensor ops
 evaluated per element (`arith.cmpi`, `arith.andi`, `tt.addptr`): separable row
 and column tests are recomputed for every element unless written to broadcast
 late. Shapes passed as runtime scalars keep `//` and `%` as real divisions;
-`tl.constexpr` folds them.
+`tl.constexpr` folds them. Read this from the PTX, not `ttgir`: a division by a
+constant is still `arith.divsi`/`remsi` in `ttgir` and is turned into a
+multiply and shift later (15 of 15 kernels), while a runtime divisor stays
+`div`/`rem` in PTX (22 of 22).
 
 A scalar loaded inside a Python loop (a stencil coefficient per tap) becomes a
 `tt.load` plus `tt.broadcast` per iteration: every thread reloads it.
@@ -104,7 +115,9 @@ A scalar loaded inside a Python loop (a stencil coefficient per tap) becomes a
 `tl.max`, `tl.sum`, `tl.argmax` are `tt.reduce` with an explicit combiner
 region. With one warp per CTA (`warpsPerCTA = [1]`) a reduction is register
 shuffles only (`shfl.sync.bfly`, `redux.sync` in PTX; `SHFL`, `CREDUX` in
-SASS). With more warps it also goes through shared memory and barriers. A
+SASS): all 5 one-warp reduction kernels are shuffle-only. With more warps it
+also goes through shared memory and barriers (35 of 37; the exceptions reduce
+along an axis that stays inside a thread or a warp). A
 paired reduction such as argmax carries a compare/select combiner
 (`FSETP`/`FSEL`/`ISETP`/`SEL` per shuffle step). Choosing `num_warps` larger
 than the tile needs therefore adds shared-memory traffic; the all-reports
@@ -129,31 +142,55 @@ and one convert per operand. This changes both cost and rounding.
 
 `tl.dot` is rewritten by `AccelerateMatmul`. In the IR look for:
 
-- `ttng.tmem_alloc` / `ttng.tmem_load` (accumulator in tensor memory, the
-  tcgen05 path, `UTCHMMA` in SASS) versus an MMA-layout register accumulator
-  (`HMMA` in SASS). Small-CTA kernels that keep register MMA can out-run TMEM
-  kernels when the work per CTA is tiny.
+- `ttng.tmem_alloc` and `ttng.tc_gen5_mma` (accumulator in tensor memory, the
+  tcgen05 path; `UTCHMMA` in SASS, `UTCQMMA` for fp8) versus a `tt.dot` left
+  with an MMA-layout register accumulator (`mma.sync` in PTX; `HMMA`/`IMMA` in
+  SASS). On B200, 20 of the 23 dot kernels take the tcgen05 path. The three
+  that do not are `matmul_int8`, `block_sparse_attention` fp16 and the
+  `kv_gemm` kernel of `linear_self_attention` fp32.
 - `ttg.local_alloc` with `#ttg.nvmma_shared<{swizzlingByteWidth…}>`: operand
   staging buffers; `ttg.memdesc_index` indexes the pipeline stage.
-- TMA: tensors loaded through `TensorDescriptor` appear as descriptor loads
-  (`UTMALDG` in SASS). Plain pointer loads into a dot become
-  `ttg.async_copy_global_to_local` + `ttg.async_commit_group` + `ttg.async_wait`
-  (lane-issued async copies, `LDGSTS`/`DEPBAR` in SASS).
+- TMA: tensors loaded through `TensorDescriptor` appear as
+  `ttng.async_tma_copy_global_to_local` (`UTMALDG` in SASS; 17 kernels). Plain
+  pointer loads into a dot become `ttg.async_copy_global_to_local` +
+  `ttg.async_commit_group` + `ttg.async_wait` (lane-issued async copies,
+  `LDGSTS`/`DEPBAR` in SASS; the fp32 convolutions). The fp16 convolutions use
+  neither: ordinary loads and shared stores feed the MMA.
 - `num_stages` is realised by the `Pipeline` pass after `AssignLatencies` and
   `ScheduleLoops`: count the stage buffers and waits inside `scf.for`.
-- An f32 `tl.dot` goes through `F32DotTC` (TF32 on tensor cores).
+- An f32 `tl.dot` goes through `F32DotTC` (TF32 on tensor cores). On the
+  tcgen05 path the SASS shows plain `UTCHMMA`; the `tf32` kind is visible in the
+  PTX. On the register path it is `HMMA.1688.F32.TF32`.
 
 ### Pass order (from `triton/backends/nvidia/compiler.py`, `make_ttgir`)
 
-`convert_to_ttgpuir` -> `coalesce` -> `f32_dot_tc` -> `plan_cta` ->
-`remove_layout_conversions` -> `optimize_thread_locality` -> `accelerate_matmul`
--> `remove_layout_conversions` -> `optimize_dot_operands` ->
-`optimize_descriptor_encoding` -> LICM/CSE -> `assign_latencies` ->
-`schedule_loops` -> `pipeline` -> `optimize_accumulator_init` ->
-`hoist_tmem_alloc` -> `promote_lhs_to_tmem` -> `warp_specialize` -> `pipeline`.
-The one-line roles above are read from pass names and their effect on the IR,
-not from the pass sources; diff `ttir` against `ttgir` to see what a pass did to
-this kernel.
+Common prefix: `convert_to_ttgpuir` -> `coalesce` -> `f32_dot_tc` -> `plan_cta`
+-> `remove_layout_conversions` -> `optimize_thread_locality` ->
+`accelerate_matmul` -> `remove_layout_conversions` -> `optimize_dot_operands` ->
+`optimize_descriptor_encoding` -> `loop_aware_cse`.
+
+Then the pipeline branches on the target:
+
+- Hopper and Ampere-class (`cuda:80`, `cuda:90`, so GH200): `fuse_nested_loops`
+  -> LICM -> `combine_tensor_select_and_if` -> `hopper_warpspec` ->
+  `assign_latencies` -> `schedule_loops` -> `pipeline`.
+- Blackwell (`cuda:100`, so B200): `fuse_nested_loops` -> LICM ->
+  `optimize_accumulator_init` -> `hoist_tmem_alloc` -> `promote_lhs_to_tmem` ->
+  `assign_latencies` -> `schedule_loops` -> `warp_specialize` -> `pipeline` ->
+  `optimize_partition_warps` -> `combine_tensor_select_and_if` ->
+  `hoist_tmem_alloc` -> `remove_tmem_tokens`.
+
+Common suffix: `loop_aware_cse` -> `prefetch` -> `optimize_dot_operands` ->
+`coalesce_async_copy` -> `optimize_tmem_layouts` -> `tma_lowering` (Hopper and
+later) -> `remove_layout_conversions` -> `interleave_tmem` ->
+`reduce_data_duplication` -> `reorder_instructions` -> `fence_insertion` ->
+`lower_mma`.
+
+The order is copied from the source. What each pass does is read from its name
+and its effect on the IR, not from the pass sources; diff `ttir` against
+`ttgir` to see what happened to this kernel. The GH200 and B200 branches differ,
+so a rule about tensor memory or warp specialization on one does not carry to
+the other.
 
 ## Using This in a Report
 

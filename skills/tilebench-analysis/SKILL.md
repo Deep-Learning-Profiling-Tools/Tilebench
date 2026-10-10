@@ -1,15 +1,15 @@
 ---
 name: tilebench-analysis
-description: Explain TileBench kernel performance (Triton, cuTile, TileLang on B200/GH200/MI300X) from saved benchmark results, autotune winners and released NCU profiles, with no GPU needed. Resolves a case into an evidence bundle, applies TileBench-specific mechanism knowledge, and works with ncu-report-skill for counter interpretation. Use for "why is X slower than Y on <operator>", single-backend diagnosis, and scale/dtype/hardware trend questions.
+description: Explain TileBench kernel performance (Triton, cuTile, TileLang on B200/GH200/MI300X) from saved benchmark results, autotune winners and released NCU profiles, with no GPU needed. Resolves a case into an evidence bundle, and applies TileBench-specific mechanism knowledge. Use for "why is X slower than Y on <operator>", single-backend diagnosis, and scale/dtype/hardware trend questions.
 ---
 
 # TileBench Analysis
 
 This skill is the TileBench layer: it knows where the evidence is, how the three
 DSLs lower code, and which mechanisms the study has already found. It carries
-its own Nsight Compute method ([ncu-analysis](references/ncu-analysis.md): the
-six analysis dimensions and diagnosis patterns of `ncu-report-skill`, restated
-for saved TileBench reports and three-backend comparison). The NCU pass says
+its own Nsight Compute method ([ncu-analysis](references/ncu-analysis.md): six
+analysis dimensions and diagnosis patterns for saved TileBench reports and
+three-backend comparison). The NCU pass says
 what is slow, from counters and SASS; the IR pass says why the DSL produced
 it; the report joins the two.
 
@@ -18,7 +18,7 @@ it; the report joins the two.
 | Resolve case, CSV trends, winner configs, saved reports, evidence bundle | This skill (`scripts/tb_case.py`) |
 | DSL/operator mechanisms, Blackwell SASS meanings, capture quirks | This skill ([mechanisms](references/mechanisms.md)) |
 | Why a DSL emitted a pattern: construct, compiler rule, intermediate code, alternative | This skill: [TileLang](references/tilelang-lowering.md) (`scripts/tl_codegen.py`), [Triton](references/triton-lowering.md) (`scripts/triton_ir.py`), [cuTile](references/cutile-lowering.md) (`scripts/cutile_ir.py`) |
-| NCU analysis of each kernel: six dimensions, patterns, metric names, report API (Pass A) | This skill ([ncu-analysis](references/ncu-analysis.md)); `ncu-report-skill` is optional further reading |
+| NCU analysis of each kernel: six dimensions, patterns, metric names, report API (Pass A) | This skill ([ncu-analysis](references/ncu-analysis.md)) |
 | Comparison verdict and report | This skill |
 
 What each step needs:
@@ -27,7 +27,7 @@ What each step needs:
 |---|---|
 | Read saved reports, build the bundle | Nsight Compute's Python module (`<nsight-compute>/extras/python` on `PYTHONPATH`); no GPU |
 | Triton IR (`triton_ir.py`) | Triton only; no GPU, explicit target |
-| TileLang generated CUDA (`tl_codegen.py`) | TileLang only; no GPU and no `nvcc` (the target is forced with `--arch`, default `sm_100`). Operators whose source selects a kernel by device capability need the profiled GPU or that selection forced |
+| TileLang generated CUDA (`tl_codegen.py`) | TileLang only; no GPU and no `nvcc` (the target is forced with `--arch`, default `sm_100`); `--ptx` additionally needs `nvcc`. Operators whose source selects a kernel by device capability need the profiled GPU or that selection forced |
 | cuTile Tile IR (`cutile_ir.py`) | cuda-tile only; no GPU, driver or `tileiras` (the signature is built from the shapes given) |
 
 If a step's requirement is missing, say which, do the rest, and label what
@@ -43,8 +43,8 @@ kernel altogether.
 | `--hardware` | Reports | Triton IR | TileLang CUDA / TIR | cuTile Tile IR | Status |
 |---|---|---|---|---|---|
 | `B200` | yes | `cuda:100` | `sm_100` | `sm_100` | Verified identical to IR generated on a B200 |
-| `GH200` | yes | `cuda:90` | `sm_90` | `sm_90` | Scripts run; check the result against the GH200 report's SASS before citing it |
-| `MI300X` | none (no Nsight Compute on AMD) | `hip:gfx942` | not available | not available | Triton IR only, unverified; benchmark and winner evidence only |
+| `GH200` | yes | `cuda:90` | `sm_90` | `sm_90` | Scripts run; check the result against the GH200 report's SASS before citing it. Hopper has TMA but no tensor memory, so do not carry a Blackwell TMEM/tcgen05 explanation over |
+| `MI300X` | rocprof-compute profiles (counters and sampled instructions, no execution counts) | `hip:gfx942` | not available | not available | Triton only, so there is no cross-DSL comparison: compare with PyTorch on MI300X or with Triton on B200/GH200. Bundle and IR tested; no full analysis run yet |
 
 For a GPU outside TileBench, the IR scripts also accept its architecture in
 place of a name (`--hardware sm_89`; for Triton also `backend:arch`). That
@@ -82,8 +82,9 @@ GitHub), finds or downloads the saved reports, and writes:
 - `brief.md`: benchmark row and ratios, scale/dtype/hardware trend tables with
   winners, NCU side-by-side with exact metric names, a per-element work ledger,
   the instructions / issue-rate time model (a first-order check, not a verdict),
-  each slower backend's excess PC samples by stall reason, and per backend the
-  order of global loads and load waits, the dynamic opcode
+  each slower backend's excess PC samples by stall reason (with the samples
+  that sit on mbarrier/sleep waits counted separately), and per backend the
+  order of global and TMA loads and load waits, the dynamic opcode
   mix, stall totals, PC samples by opcode and by source line, hottest PCs with
   SASS, NCU rule output and capture warnings. It ends with suggested contrast
   cases. **Read this first and in full.**
@@ -100,8 +101,10 @@ extraction by hand; write extra code only for a question the bundle cannot answe
 If a backend's capture is reduced (the brief says no SASS or PC samples) and
 another hardware's report for that backend exists, bundle it as a proxy for the
 generated code and label what you take from it as inferred.
-MI300X has no NCU reports: the bundle gives benchmark and winner evidence only,
-and counter-level diagnosis is out of scope there.
+MI300X has no NCU reports. Its bundle carries the rocprof-compute profile
+instead: headline counters, stall and instruction-type samples, and the sampled
+instructions in `<backend>/sampled_asm_*.txt`, with the profile's own winner
+config. Follow the AMD section of [ncu-analysis](references/ncu-analysis.md).
 
 ## 2. Diagnose
 
@@ -124,7 +127,7 @@ diagnosis is not steered by what a DSL is expected to do.
 2. Work from the raw extraction, not only the summary: read
    `<backend>/annotated_sass_*.txt` end to end for the hot region, and query
    the report through the NCU Python API for any counter the brief does not
-   list (`ncu.json` holds every metric name). `brief.md` is a starting table,
+   list (`ncu.json` holds every metric; its layout is in ncu-analysis). `brief.md` is a starting table,
    not the analysis. Its time model is a first-order check, never a verdict.
 3. Match each kernel against the pattern table in ncu-analysis and state its
    binding resource: DRAM bandwidth, load latency, instruction issue, a specific pipe,
