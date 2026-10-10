@@ -125,15 +125,35 @@ def collect_font_sizes(fig):
     return sizes
 
 
+def _segment_hits_box(p, q, B):
+    """Liang-Barsky: does the segment p-q intersect the box B?"""
+    t0, t1, dx, dy = 0.0, 1.0, q[0] - p[0], q[1] - p[1]
+    for a, b in ((-dx, p[0] - B.x0), (dx, B.x1 - p[0]), (-dy, p[1] - B.y0), (dy, B.y1 - p[1])):
+        if a == 0:
+            if b < 0:
+                return False
+            continue
+        t = b / a
+        t0, t1 = (max(t0, t), t1) if a < 0 else (t0, min(t1, t))
+        if t0 > t1:
+            return False
+    return True
+
+
 def text_overlaps(fig, renderer, tol_pt=0.5):
-    """Pairs of visible, non-empty text artists whose rendered boxes intersect by more than tol_pt in both directions."""
-    boxes = []
+    """Pairs of visible, non-empty text artists whose rendered text boxes intersect by more than tol_pt in both directions
+    (an annotation's box is its text only), and (annotation, text) pairs where a leader line crosses another text box."""
+    boxes, leaders = [], []
     for t in fig.findobj(matplotlib.text.Text):
         if not (t.get_visible() and t.get_text().strip()) or t.get_alpha() == 0:
             continue
-        bb = t.get_window_extent(renderer)
+        bb = matplotlib.text.Text.get_window_extent(t, renderer)
         if bb.width > 0 and bb.height > 0:
             boxes.append((t.get_text().strip()[:40], bb))
+        if isinstance(t, matplotlib.text.Annotation) and t.arrow_patch is not None:
+            t.update_positions(renderer)
+            v = t.arrow_patch.get_path().vertices            # display coordinates (the patch has an identity transform)
+            leaders.append((t.get_text().strip()[:40], v[0], v[-1]))
     tol = tol_pt * fig.dpi / 72
     out = []
     for i in range(len(boxes)):
@@ -142,6 +162,10 @@ def text_overlaps(fig, renderer, tol_pt=0.5):
             b, B = boxes[j]
             if min(A.x1, B.x1) - max(A.x0, B.x0) > tol and min(A.y1, B.y1) - max(A.y0, B.y0) > tol:
                 out.append([a, b])
+    for a, p, q in leaders:
+        for b, B in boxes:
+            if b != a and _segment_hits_box(p, q, B.padded(-tol)):
+                out.append([f"leader of {a}", b])
     return out
 
 

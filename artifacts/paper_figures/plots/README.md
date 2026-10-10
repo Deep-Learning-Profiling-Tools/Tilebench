@@ -50,9 +50,9 @@ Sizes are the printed sizes. All figures are drawn at the ACL text width of 6.30
 |---|---|---|---|---|
 | Figure 2 (RQ1) | `main/fig_rq1_cross_accelerator` | 6.30 × 2.78 | 7.0 pt | proximity to modeled SOL (T_SOL / T_k): category GM of per-operator GMs, seven device/DSL columns, M2 memory-only subgroup |
 | Figure 3 (RQ2) | `main/fig_rq2_cross_device_diagnosis` | 6.30 × 4.95 | 7.0 pt | three mechanisms: T_SOL / T_k at the profiled input + two NVIDIA NCU counters + MI300X evidence and confounder lines |
-| Figure 4 (RQ3) | `main/fig_rq3_within_device_dsl` | 6.30 × 3.55 | 7.0 pt | within-device latency ratios over the three-DSL intersection |
+| Figure 4 (RQ3) | `main/fig_rq3_within_device_dsl` | 6.30 × 3.95 | 8.0 pt | within-device latency ratios over the three-DSL intersection |
 | A1 | `appendix/fig_a1_performance_atlas` | 6.30 × 8.70 | 6.5 pt | 45-operator proximity to modeled SOL; change in proximity between devices over matched cases |
-| A2 | `appendix/fig_a2_shape_dtype` | 6.30 × 6.95 | 6.0 pt | per-case T_SOL / T_k for shape- or dtype-sensitive operators; three kinds of N/A |
+| A2 | `appendix/fig_a2_shape_dtype` | 6.30 × 4.73 | 6.0 pt | per-case T_SOL / T_k for four shape-sensitive operators (streamk_matmul in three dtypes) |
 | A3 | `appendix/fig_a3_execution_paths` | 6.30 × 5.60 | 6.0 pt | matrix instruction family + operand path + staging |
 | A4 | `appendix/fig_a4_within_device_matrix` | 6.30 × 7.90 | 7.0 pt | slowdown vs. the fastest DSL on the device, 45 operators |
 | A5 | `appendix/fig_a5_profiling_evidence` | 6.30 × 6.10 | 6.0 pt | counters and diagnostic experiments per mechanism |
@@ -104,7 +104,7 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 2. They were produced by the current plotting code.
 3. Every figure is 6.30 in wide, the PNGs are ≥ 300 dpi, and no content lies outside the canvas.
 4. Fonts are ≥ 7 pt in the main figures and ≥ 6 pt in the appendix figures, and the PDF fonts are TrueType.
-5. No two text labels overlap.
+5. No two text labels overlap, and no leader line crosses another text label.
 6. All plotted values are finite.
 7. The extraction packages, results CSVs and inputs are unchanged.
 
@@ -114,8 +114,8 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 9. RQ1 is a recomputed operator-balanced GM of T_SOL / T_k over exactly the 7 supported columns (with the M2
    subgroups), and its rendered labels match.
 10. The per-operator DSL winners and the A4 slowdowns are correct.
-11. The A1 proximities and changes use matched `case_id_v2`, the A2 values are correct, and A2 distinguishes three
-    kinds of N/A.
+11. The A1 proximities and changes use matched `case_id_v2`, the A2 values are correct, and every kind of N/A that A2
+    draws has its own legend entry (none is listed that is not drawn).
 12. Figure 3 uses the exact profiled case, its formal latency and its recomputed T_SOL / T_k.
 13. Counter units and denominators of the Figure 3 bars and A5 are correct when recomputed.
 

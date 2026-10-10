@@ -93,12 +93,14 @@ The counters are observations at one input. They are consistent with, but do not
 
 - **Points.** Each point is one operator. x is the cuTile/Triton latency ratio and y is the TileLang/Triton latency
   ratio, each a geometric mean over the input cases that are valid for all three DSLs on that device. Values below 1
-  mean faster than Triton. Both panels use the same log-scaled axes.
+  mean faster than Triton.
 - **Winner counts.** The panel headers count the operators for which each DSL has the lowest geometric-mean latency:
   B200: Triton 22, TileLang 18, cuTile 5; GH200: Triton 26, TileLang 17, cuTile 2.
   These are numerical winners without uncertainty estimates. The winner is within 5% of the runner-up in
   B200: 8, 8 and 3 and GH200: 14, 11 and 0 of these operators (Triton, TileLang and cuTile).
-- **Labels.** Labels mark operators that are at least 2× from Triton on either axis.
+- **Axes.** Both log-scaled axes are fitted to the data and shared by the two panels.
+- **Labels.** Every operator at least 2× from Triton on either axis is labelled; operators at least 1.5× from Triton
+  are labelled where a free position exists next to the marker.
 - **† Histogramming.** For histogramming, TileLang privatizes the histogram in shared memory, while Triton and cuTile
   update global partial rows atomically. Its position therefore reflects a different algorithm, not better code
   generation for the same algorithm.
@@ -125,11 +127,9 @@ device's hybrid SOL reference.
 - **Cells.** Each cell is one input case, coloured by T_SOL / T_k (log scale from 0.001 to 1; amber above 1). Rows are
   device and DSL pairs; columns are input cases ordered by the swept parameter, grouped by a second parameter where one
   exists. Panels with more than 12 ungrouped cases label every second case, but every case is drawn.
-- **Panels.** The operators and axes are the same as in the speedup version of this figure: flash_decode,
-  linear_self_attention, top_k_selection and streamk_matmul for shape sensitivity, and matmul with all of its data
-  types for dtype sensitivity.
-- **Missing values.** Grey hatched rows distinguish an unsupported data type (FP8 E4M3FN matmul on MI300X, the only
-  case here), an unavailable calibration and a missing measurement; the last two do not occur in these panels.
+- **Panels.** flash_decode, linear_self_attention, top_k_selection and streamk_matmul (BF16, FP16 and FP32), with the
+  same axes as in the speedup version of this figure. matmul is not shown because its rows barely vary with K.
+- **Coverage.** Every device and DSL pair has a value for every input case shown.
 
 ## Appendix Figure A3: `appendix/fig_a3_execution_paths`
 

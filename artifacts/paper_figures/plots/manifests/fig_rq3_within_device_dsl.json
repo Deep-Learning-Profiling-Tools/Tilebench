@@ -2,7 +2,7 @@
  "figure": "fig_rq3_within_device_dsl",
  "rq": "RQ3",
  "script": "scripts/paper_figures/plot_rq3.py",
- "source_git_commit": "89066ac6a6cbd9aca21db1c0f53d098072a57a30",
+ "source_git_commit": "2d50f118e9491a4489fb684daae17fff934f55ff",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "b876056c05ce9b4472354777589da987b4642e94eff17f2aa34fbbc90bc3c423",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
@@ -16,10 +16,16 @@
  "axes": {
   "x": "cuTile/Triton latency ratio (log2)",
   "y": "TileLang/Triton latency ratio (log2)",
-  "limits": [
-   0.125,
-   8
-  ],
+  "limits": {
+   "x": [
+    0.5,
+    4.157583269562252
+   ],
+   "y": [
+    0.1892125013519123,
+    6.9610607189192155
+   ]
+  },
   "shared_between_panels": true
  },
  "case_coverage": {
@@ -121,7 +127,7 @@
  "excluded_cases": {
   "invalid_or_missing_rows": 0
  },
- "selection_criteria": "all 45 operators; labels on operators at least 2x from Triton on either axis",
+ "selection_criteria": "all 45 operators; labels on every operator at least 2x from Triton on either axis, and on those at least 1.5x where a collision-free slot exists within 0.36 in of the marker",
  "algorithm_differences": {
   "histogramming": "TileLang privatizes the histogram in shared memory; Triton and cuTile update global partial rows atomically"
  },
@@ -135,7 +141,11 @@
    "linear_self_attention",
    "flash_decode",
    "streamk_matmul",
-   "destindex"
+   "destindex",
+   "radix_sort",
+   "moe_topk_gating",
+   "matmul_fp32_fp16_fp8",
+   "softmax"
   ],
   "GH200": [
    "1d_conv",
@@ -145,7 +155,11 @@
    "flash_decode",
    "linear_self_attention",
    "matmul_fp32_fp16_fp8",
-   "block_sparse_attention"
+   "block_sparse_attention",
+   "matmul_int8",
+   "radix_sort",
+   "moe_topk_gating",
+   "destindex"
   ]
  },
  "winners": {
@@ -1107,22 +1121,22 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq3_within_device_dsl.pdf",
-   "sha256": "9f3a7ae343b14e94f6ab7d927800819a3a0a06846fdf9d29547397c4cff9bc08"
+   "sha256": "c2f21bf107e11ae9ebaf08d6c634d9fd4643c86b1792034d04e2afaf563fffd4"
   },
   "svg": {
    "path": "main/fig_rq3_within_device_dsl.svg",
-   "sha256": "246eb32a0ee7514f3ee279dde1d91ec47fdad7a7521e94543659461e44f74e2f"
+   "sha256": "84d594ea5086316163033f141b59179649422b0ae5551d1d3d89a846381a7234"
   },
   "png": {
    "path": "previews/fig_rq3_within_device_dsl.png",
-   "sha256": "0f3b9aa91ac403c4b5bd50d443ff3ef4b931112cdbf7513a55db1621037b9fed"
+   "sha256": "8d1ef6a75fca9a1811717d5c6e688dbe4a3d9d30f378dc2c7886813d8e992ba5"
   }
  },
  "layout": {
   "width_in": 6.3,
-  "height_in": 3.55,
-  "min_font_pt": 7.0,
-  "max_font_pt": 8.0,
+  "height_in": 3.95,
+  "min_font_pt": 8.0,
+  "max_font_pt": 10.0,
   "n_text_objects": 53,
   "content_overflow_in": {
    "left": 0.0,
@@ -1133,8 +1147,8 @@
   "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "c3925c94937bb67effdcb7138205b5965bf52e0ff29f479d05b5bd2e30485385",
+  "scripts/paper_figures/plot_style.py": "80c381fb2cb3e32a14ab1f6dc50f841be6fe7fb84972afc7e1009ead03d59bb7",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq3.py": "0295fcb591df90a18d42533a551a61a38366fcc3fdc5a5d48efcc6ed5b210948"
+  "scripts/paper_figures/plot_rq3.py": "7364d021e2aa63392479e700f476a3ef272ccbee67f5e7306b3b010fed2fcd5b"
  }
 }

@@ -36,90 +36,167 @@ def compute(D):
 
 
 ALGO_DIFF = {"histogramming": "TileLang privatizes the histogram in shared memory; Triton and cuTile update global partial rows atomically"}
-LABEL_MIN_LOG2 = 1.0          # label operators at least 2x slower or faster than Triton on either axis
+LABEL_MIN_LOG2 = 1.0              # always label operators at least 2x slower or faster than Triton on either axis
+LABEL_OPT_LOG2 = math.log2(1.5)   # label those at least 1.5x only where a free slot exists next to the marker
+OPT_MAX_R = 0.36                  # free slot: within this distance (inches), no collision with labels, leaders or markers
+FS, FS_LAB, FS_TITLE = 8.5, 8.0, 10.0          # tick/axis/legend text, operator labels, panel titles (pt)
+H_IN = 3.95
+L_IN, R_IN, GAP_IN, T_IN, B_IN = 0.62, 0.08, 0.2, 0.5, 0.98     # margins around the two panels (inches)
+MARGIN_LOG2 = 0.3                              # axis padding beyond the data (octaves)
+PAD, MARK_R = 0.015, 0.05                      # label box padding, marker radius (inches)
+
+
+def boxes_hit(a, b):
+    return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
+
+
+def seg_hits_box(seg, b):
+    """Liang-Barsky: does the segment intersect the box (x0, y0, x1, y1)?"""
+    (x0, y0), (x1, y1) = seg
+    t0, t1, dx, dy = 0.0, 1.0, x1 - x0, y1 - y0
+    for p_, q_ in ((-dx, x0 - b[0]), (dx, b[2] - x0), (-dy, y0 - b[1]), (dy, b[3] - y0)):
+        if p_ == 0:
+            if q_ < 0:
+                return False
+            continue
+        t = q_ / p_
+        if p_ < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def seg_point_dist(seg, q):
+    (x0, y0), (x1, y1) = seg
+    dx, dy = x1 - x0, y1 - y0
+    t = max(0.0, min(1.0, ((q[0] - x0) * dx + (q[1] - y0) * dy) / (dx * dx + dy * dy or 1.0)))
+    return math.hypot(x0 + t * dx - q[0], y0 + t * dy - q[1])
+
+
+def segs_cross(s1, s2):
+    def orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    (a, b), (c, d) = s1, s2
+    return orient(a, b, c) * orient(a, b, d) < 0 and orient(c, d, a) * orient(c, d, b) < 0
 
 
 def plot(D, out_root):
     PS.apply()
     pts, winners = compute(D)
-    allv = [v for p in pts.values() for v in (p["x_cutile_over_triton"], p["y_tilelang_over_triton"])]
-    lo = 2 ** math.floor(math.log2(min(allv)) - 0.15)
-    hi = 2 ** math.ceil(math.log2(max(allv)) + 0.15)
-    fig, axes = plt.subplots(1, 2, figsize=(PS.DOUBLE_COL_IN, 3.55), sharex=True, sharey=True)
-    fig.subplots_adjust(left=0.085, right=0.995, bottom=0.2, top=0.93, wspace=0.08)
-    labelled = {}
     L = math.log2
-    for k, (ax, dev) in enumerate(zip(axes, DEVS)):
+    xs = [p["x_cutile_over_triton"] for p in pts.values()]
+    ys = [p["y_tilelang_over_triton"] for p in pts.values()]
+    # limits follow the data (shared by both panels); x reaches down to 1/2 so the lower-left quadrant note fits
+    xlim = (min(0.5, 2 ** (L(min(xs)) - MARGIN_LOG2)), 2 ** (L(max(xs)) + MARGIN_LOG2))
+    ylim = (2 ** (L(min(ys)) - MARGIN_LOG2), 2 ** (L(max(ys)) + MARGIN_LOG2))
+    W = PS.DOUBLE_COL_IN
+    AW, AH = (W - L_IN - R_IN - GAP_IN) / 2, H_IN - T_IN - B_IN
+    fig = plt.figure(figsize=(W, H_IN))
+    renderer = fig.canvas.get_renderer()
+
+    def text_wh(s):               # rendered label size (inches)
+        t = fig.text(0, 0, s, fontsize=FS_LAB)
+        bb = t.get_window_extent(renderer)
+        t.remove()
+        return bb.width / fig.dpi, bb.height / fig.dpi
+
+    def to_in(x, y):              # data -> inches inside the axes
+        return ((L(x) - L(xlim[0])) / (L(xlim[1]) - L(xlim[0])) * AW, (L(y) - L(ylim[0])) / (L(ylim[1]) - L(ylim[0])) * AH)
+
+    def from_in(px, py):
+        return (2 ** (L(xlim[0]) + px / AW * (L(xlim[1]) - L(xlim[0]))), 2 ** (L(ylim[0]) + py / AH * (L(ylim[1]) - L(ylim[0]))))
+
+    def ticks(lo, hi):
+        return [t for t in (1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16) if lo <= t <= hi]
+
+    def tick_label(t):
+        return f"{t:g}×" if t >= 1 else f"1/{int(1 / t)}×"
+
+    labelled = {}
+    for k, dev in enumerate(DEVS):
+        ax = fig.add_axes([(L_IN + k * (AW + GAP_IN)) / W, B_IN / H_IN, AW / W, AH / H_IN])
         ax.set_xscale("log", base=2)
         ax.set_yscale("log", base=2)
-        ax.set_xlim(lo, hi)
-        ax.set_ylim(lo, hi)
-        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(*xlim)
+        ax.set_ylim(*ylim)
         ax.axvline(1, color="#9A9FA4", lw=0.6, zorder=0)
         ax.axhline(1, color="#9A9FA4", lw=0.6, zorder=0)
         ax.grid(True, which="major", color=PS.GRID, lw=0.35, zorder=0)
-        ticks = [t for t in (1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16) if lo <= t <= hi]
-        tl = [f"{t:g}×" if t >= 1 else f"1/{int(1/t)}×" for t in ticks]
-        ax.set_xticks(ticks)
-        ax.set_yticks(ticks)
-        ax.set_xticklabels(tl)
-        ax.set_yticklabels(tl)
+        ax.set_xticks(ticks(*xlim))
+        ax.set_xticklabels([tick_label(t) for t in ticks(*xlim)], fontsize=FS)
+        ax.set_yticks(ticks(*ylim))
+        ax.set_yticklabels([tick_label(t) for t in ticks(*ylim)] if k == 0 else [], fontsize=FS)
         ax.minorticks_off()
         for op in D.operators():
             p = pts[(dev, op)]
             c = p["category"]
-            ax.scatter(p["x_cutile_over_triton"], p["y_tilelang_over_triton"], marker=PS.CATEGORY_MARKERS[c], s=20,
-                       color=PS.CATEGORY_COLORS[c], edgecolor="white", linewidth=0.4, zorder=3, alpha=0.95)
+            ax.scatter(p["x_cutile_over_triton"], p["y_tilelang_over_triton"], marker=PS.CATEGORY_MARKERS[c], s=34,
+                       color=PS.CATEGORY_COLORS[c], edgecolor="white", linewidth=0.5, zorder=3, alpha=0.95)
             if op in ALGO_DIFF:
-                ax.scatter(p["x_cutile_over_triton"], p["y_tilelang_over_triton"], marker="o", s=95, facecolor="none",
-                           edgecolor=PS.INK, linewidth=0.6, zorder=4)
-        # greedy label placement in log2 axis units, avoiding markers, the winner box and labels already placed
-        cw, ch = 0.105, 0.23                      # approx. character width / line height at 7 pt
-        obstacles = [(L(pts[(dev, o)]["x_cutile_over_triton"]), L(pts[(dev, o)]["y_tilelang_over_triton"])) for o in D.operators()]
-        boxes = [(L(lo) + 0.05, L(lo) + 0.05, L(lo) + 1.5, L(lo) + 0.6)]            # quadrant note (lower left)
-        cand = [o for o in D.operators() if max(abs(L(pts[(dev, o)]["x_cutile_over_triton"])), abs(L(pts[(dev, o)]["y_tilelang_over_triton"])))
-                >= LABEL_MIN_LOG2]
-        cand.sort(key=lambda o: -math.hypot(L(pts[(dev, o)]["x_cutile_over_triton"]), L(pts[(dev, o)]["y_tilelang_over_triton"])))
+                ax.scatter(p["x_cutile_over_triton"], p["y_tilelang_over_triton"], marker="o", s=150, facecolor="none",
+                           edgecolor=PS.INK, linewidth=0.7, zorder=4)
+        # greedy label placement in inches inside the axes, by cost: label on label or on the quadrant note >> leader line
+        # through a label > crossing leader lines > label over a marker > distance
+        marks = [to_in(pts[(dev, o)]["x_cutile_over_triton"], pts[(dev, o)]["y_tilelang_over_triton"]) for o in D.operators()]
+        boxes = [(0.0, 0.0, 0.95, 0.36)]                                   # quadrant note (lower left)
+        lines = []
+        dist = {o: max(abs(L(pts[(dev, o)]["x_cutile_over_triton"])), abs(L(pts[(dev, o)]["y_tilelang_over_triton"]))) for o in D.operators()}
+        far = lambda o: -math.hypot(L(pts[(dev, o)]["x_cutile_over_triton"]), L(pts[(dev, o)]["y_tilelang_over_triton"]))  # noqa: E731
+        cand = sorted((o for o in D.operators() if dist[o] >= LABEL_MIN_LOG2), key=far) + \
+            sorted((o for o in D.operators() if LABEL_OPT_LOG2 <= dist[o] < LABEL_MIN_LOG2), key=far)
         for op in cand:
             p = pts[(dev, op)]
             x, y = p["x_cutile_over_triton"], p["y_tilelang_over_triton"]
-            lx, ly = L(x), L(y)
+            px, py = to_in(x, y)
             lab = LABEL_ALIASES.get(op, op) + ("†" if op in ALGO_DIFF else "")
-            wl = cw * len(lab)
+            wl, hl = text_wh(lab)
             best = None
-            for ang in range(0, 360, 20):
-                for r in (0.3, 0.5, 0.75, 1.0):
-                    tx, ty = lx + r * math.cos(math.radians(ang)), ly + r * math.sin(math.radians(ang))
+            for ang in range(0, 360, 15):
+                for r in (0.12, 0.18, 0.26, 0.36, 0.5, 0.65, 0.8):
+                    tx, ty = px + r * math.cos(math.radians(ang)), py + r * math.sin(math.radians(ang))
                     left = ang <= 90 or ang >= 270
-                    bx0, bx1 = (tx, tx + wl) if left else (tx - wl, tx)
-                    by0, by1 = ty - ch / 2, ty + ch / 2
-                    if bx0 < L(lo) + 0.05 or bx1 > L(hi) - 0.05 or by0 < L(lo) + 0.02 or by1 > L(hi) - 0.02:
+                    box = ((tx, ty - hl / 2 - PAD, tx + wl, ty + hl / 2 + PAD) if left else (tx - wl, ty - hl / 2 - PAD, tx, ty + hl / 2 + PAD))
+                    if box[0] < 0.04 or box[2] > AW - 0.04 or box[1] < 0.02 or box[3] > AH - 0.02:
                         continue
-                    cost = r + sum(3.0 for (ox, oy) in obstacles if bx0 - 0.12 < ox < bx1 + 0.12 and by0 - 0.12 < oy < by1 + 0.12)
-                    cost += sum(8.0 for (a0, b0, a1, b1) in boxes if not (bx1 < a0 or bx0 > a1 or by1 < b0 or by0 > b1))
+                    seg = ((px, py), (tx, ty))
+                    cost = r + 200.0 * sum(boxes_hit(box, b_) for b_ in boxes)
+                    cost += 60.0 * (sum(seg_hits_box(seg, b_) for b_ in boxes) + sum(seg_hits_box(l_, box) for l_ in lines))
+                    cost += 30.0 * sum(segs_cross(seg, l_) for l_ in lines)
+                    cost += 6.0 * sum(box[0] - MARK_R < ox < box[2] + MARK_R and box[1] - MARK_R < oy < box[3] + MARK_R for ox, oy in marks)
+                    cost += 6.0 * sum(seg_point_dist(seg, m_) < 1.5 * MARK_R for m_ in marks if m_ != (px, py))  # leader past a marker
                     if best is None or cost < best[0]:
-                        best = (cost, tx, ty, left, (bx0, by0, bx1, by1))
-            _, tx, ty, left, box = best
+                        best = (cost, tx, ty, left, box, seg)
+            cost, tx, ty, left, box, seg = best
+            if dist[op] < LABEL_MIN_LOG2 and cost > OPT_MAX_R:
+                continue                                                   # optional label: no free slot next to the marker
             boxes.append(box)
-            ax.annotate(lab, (x, y), xytext=(2 ** tx, 2 ** ty), fontsize=7, color="#3B3F43", ha="left" if left else "right",
-                        va="center", arrowprops=dict(arrowstyle="-", lw=0.4, color="#8E959B", shrinkA=0, shrinkB=2.5))
+            lines.append(seg)
+            ax.annotate(lab, (x, y), xytext=from_in(tx, ty), fontsize=FS_LAB, color="#3B3F43", ha="left" if left else "right",
+                        va="center", arrowprops=dict(arrowstyle="-", lw=0.45, color="#8E959B", shrinkA=1, shrinkB=3.5,
+                                                     relpos=(0.0 if left else 1.0, 0.5)))   # leader ends at the near end of the label
             labelled.setdefault(dev, []).append(op)
         w = winners[dev]["counts"]
-        ax.set_title(f"{'AB'[k]}  {dev}", loc="left", fontsize=8, fontweight="bold")
-        ax.text(1.0, 1.015, f"fastest: Triton {w['triton']}, TileLang {w['tilelang']}, cuTile {w['cutile']}",
-                transform=ax.transAxes, fontsize=7, color=PS.INK, va="bottom", ha="right")
-        ax.text(0.025, 0.025, "both faster\nthan Triton", transform=ax.transAxes, fontsize=7, color=PS.MUTED, ha="left", va="bottom")
-        ax.set_xlabel("cuTile / Triton latency")
+        ax.text(0.0, 1.0 + 0.27 / AH, f"{'AB'[k]}  {dev}", transform=ax.transAxes, fontsize=FS_TITLE, fontweight="bold", va="bottom",
+                ha="left")
+        ax.text(0.0, 1.0 + 0.05 / AH, f"fastest: Triton {w['triton']}, TileLang {w['tilelang']}, cuTile {w['cutile']}",
+                transform=ax.transAxes, fontsize=FS, color=PS.INK, va="bottom", ha="left")
+        ax.text(0.04 / AW, 0.04 / AH, "both faster\nthan Triton", transform=ax.transAxes, fontsize=FS, color=PS.MUTED, ha="left",
+                va="bottom")
+        ax.set_xlabel("cuTile / Triton latency", fontsize=FS + 0.5)
         if k == 0:
-            ax.set_ylabel("TileLang / Triton latency")
-    handles = [Line2D([], [], marker=PS.CATEGORY_MARKERS[c], ls="", color=PS.CATEGORY_COLORS[c], markersize=4.5, label=PS.CATEGORY_SHORT[c])
+            ax.set_ylabel("TileLang / Triton latency", fontsize=FS + 0.5)
+    handles = [Line2D([], [], marker=PS.CATEGORY_MARKERS[c], ls="", color=PS.CATEGORY_COLORS[c], markersize=6, label=PS.CATEGORY_SHORT[c])
                for c in D.cat_order]
-    handles.append(Line2D([], [], marker="o", ls="", markerfacecolor="none", markeredgecolor=PS.INK, markersize=7, markeredgewidth=0.6,
+    handles.append(Line2D([], [], marker="o", ls="", markerfacecolor="none", markeredgecolor=PS.INK, markersize=9, markeredgewidth=0.7,
                           label="† different algorithm"))
-    fig.legend(handles=handles, loc="lower center", ncol=6, fontsize=7, handletextpad=0.2, columnspacing=0.9, bbox_to_anchor=(0.53, 0.0))
+    fig.legend(handles=handles, loc="lower center", ncol=3, fontsize=FS, handletextpad=0.3, columnspacing=1.6,
+               bbox_to_anchor=((L_IN + (W - L_IN - R_IN) / 2) / W, 0.0))
     paths, layout = PS.save(fig, out_root, "main", NAME)
     plt.close(fig)
-    return paths, layout, pts, winners, labelled, (lo, hi)
+    return paths, layout, pts, winners, labelled, {"x": list(xlim), "y": list(ylim)}
 
 
 def main(out_root=FD.PLOTS):
@@ -134,7 +211,8 @@ def main(out_root=FD.PLOTS):
         "axes": {"x": "cuTile/Triton latency ratio (log2)", "y": "TileLang/Triton latency ratio (log2)", "limits": lim, "shared_between_panels": True},
         "case_coverage": {dev: {op: pts[(dev, op)]["n_cases"] for op in D.operators()} for dev in DEVS},
         "excluded_cases": {"invalid_or_missing_rows": len(D.excluded)},
-        "selection_criteria": f"all 45 operators; labels on operators at least {2 ** LABEL_MIN_LOG2:g}x from Triton on either axis",
+        "selection_criteria": f"all 45 operators; labels on every operator at least {2 ** LABEL_MIN_LOG2:g}x from Triton on either axis, and on "
+                              f"those at least {2 ** LABEL_OPT_LOG2:g}x where a collision-free slot exists within {OPT_MAX_R} in of the marker",
         "algorithm_differences": ALGO_DIFF,
         "labelled_operators": labelled, "winners": winners, "profiling_evidence_ids": [],
         "known_limitations": D.manifest["device_limitations"] | {"figure": ["B200 TileLang measured in a later campaign than B200 Triton/cuTile",

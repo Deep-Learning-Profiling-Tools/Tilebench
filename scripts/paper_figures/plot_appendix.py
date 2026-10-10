@@ -172,10 +172,10 @@ def fig_a1(D, out_root):
 
 # ---------------------------------------------------------------------------------------------- A2
 A2_GRID = {"flash_decode": ("seq_len", None), "linear_self_attention": ("M", "D"), "top_k_selection": ("N", "k"),
-           "streamk_matmul": ("n", "m"), "matmul_fp32_fp16_fp8": ("K", None)}
+           "streamk_matmul": ("n", "m")}
 # Panels kept from the speedup version of A2 (selected there by a median within-(device, DSL, dtype) log2-speedup range
-# >= 0.5, plus matmul_fp32_fp16_fp8 for dtype sensitivity); the same input-shape and dtype axes are shown.
-A2_SELECTED = ["flash_decode", "linear_self_attention", "top_k_selection", "streamk_matmul", "matmul_fp32_fp16_fp8"]
+# >= 0.5); the same input-shape and dtype axes are shown. matmul_fp32_fp16_fp8 is not shown: its rows barely vary with K.
+A2_SELECTED = ["flash_decode", "linear_self_attention", "top_k_selection", "streamk_matmul"]
 A2_MAX_TICKS = 12          # panels with more ungrouped cases label every second case (all cases are still drawn)
 NA_STYLE = {"unsupported_dtype": ("N/A: unsupported dtype", "////"), "calibration_unavailable": ("N/A: calibration unavailable", "xxxx"),
             "missing_measurement": ("N/A: not measured", "....")}
@@ -221,9 +221,11 @@ def fig_a2(D, out_root):
         for dt in sorted({r["dtype"] for k in S.cases if k[2] == op for r in S.cases[k].values()}):
             panels.append((op, dt))
     ncol, nrow = 2, math.ceil(len(panels) / 2)
-    H = 1.36 * nrow + 0.15
+    any_na = any(not any(r["dtype"] == dt for r in S.cases.get((dev, dsl, op), {}).values()) for op, dt in panels for dev, dsl in S_COLS)
+    LEG_H = 0.5 + (0.17 if any_na else 0.0)               # legend band below the panels (inches)
+    H = 1.36 * nrow + 0.15 + LEG_H
     fig, axes = plt.subplots(nrow, ncol, figsize=(W, H))
-    fig.subplots_adjust(left=0.105, right=0.995, top=1 - 0.3 / H, bottom=0.42 / H, hspace=1.05, wspace=0.04)
+    fig.subplots_adjust(left=0.105, right=0.995, top=1 - 0.3 / H, bottom=(0.42 + LEG_H) / H, hspace=1.05, wspace=0.04)
     norm = PS.proximity_norm(0.001)
     cmap = PS.PROXIMITY.copy()
     cmap.set_over(PS.PROXIMITY_ABOVE_ONE)
@@ -282,10 +284,10 @@ def fig_a2(D, out_root):
         ax.set_xlabel(inner_k, fontsize=6.5, labelpad=1)
     for ax in list(axes.flat)[len(panels):]:
         ax.axis("off")
-    assert len(panels) < nrow * ncol, "A2 places its colour bar in the empty last panel slot"
-    pos = list(axes.flat)[-1].get_position()
-    top_in = pos.y1 * H                                   # the empty last panel slot, laid out in inches from its top
-    cax = fig.add_axes([pos.x0 + 0.1 * pos.width, (top_in - 0.12) / H, 0.8 * pos.width, 0.07 / H])
+    # legend band below the panels, centred: colour bar, then one hatch entry per kind of missing value that occurs
+    cw_in = 2.6
+    xc = (axes.flat[0].get_position().x0 + axes.flat[ncol - 1].get_position().x1) / 2      # centre of the heat-map area
+    cax = fig.add_axes([xc - cw_in / 2 / W, (LEG_H - 0.1) / H, cw_in / W, 0.07 / H])
     cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation="horizontal", ticks=[0.001, 0.01, 0.1, 1],
                       extend="max", extendfrac=0.06)
     cb.ax.set_xticklabels(["≤0.001", "0.01", "0.1", "1 (SOL)"])
@@ -293,27 +295,29 @@ def fig_a2(D, out_root):
     cb.ax.tick_params(labelsize=6.5, length=2)
     cb.set_label("T_SOL / T_k per input case (amber: above 1)", fontsize=6.5, labelpad=2)
     cb.outline.set_linewidth(0.4)
-    for k, (kind, (lab, hatch)) in enumerate(NA_STYLE.items()):        # the three kinds of missing value, each with its hatch
-        y_ = (top_in - 0.56 - 0.14 * k) / H
-        fig.add_artist(Rectangle((pos.x0 + 0.1 * pos.width, y_), 0.22 / W, 0.1 / H, transform=fig.transFigure,
-                                 facecolor=PS.NA_FILL, edgecolor="#B5B9BC", hatch=hatch, lw=0.4))
-        fig.text(pos.x0 + 0.1 * pos.width + 0.3 / W, y_ + 0.05 / H, lab + ("" if any(r["kind"] == kind for r in na_rows) else " (none in these panels)"),
-                 fontsize=6.5, color=PS.INK, va="center")
-    fig.text(pos.x0 + 0.1 * pos.width, (top_in - 0.98) / H, "T = Triton, C = cuTile, TL = TileLang", fontsize=6.5, color=PS.MUTED, va="center")
+    kinds = [k for k in NA_STYLE if any(r["kind"] == k for r in na_rows)]
+    assert bool(kinds) == any_na, (kinds, any_na)
+    fig.text(xc, (LEG_H - 0.42) / H, "T = Triton, C = cuTile, TL = TileLang", fontsize=6.5, color=PS.MUTED, ha="center", va="center")
+    for k, kind in enumerate(kinds):
+        x_ = xc * W - 1.9 * len(kinds) / 2 + 1.9 * k
+        fig.add_artist(Rectangle((x_ / W, 0.04 / H), 0.22 / W, 0.1 / H, transform=fig.transFigure,
+                                 facecolor=PS.NA_FILL, edgecolor="#B5B9BC", hatch=NA_STYLE[kind][1], lw=0.4))
+        fig.text((x_ + 0.3) / W, 0.09 / H, NA_STYLE[kind][0], fontsize=6.5, color=PS.INK, va="center")
     m = base_manifest(name, "scripts/paper_figures/plot_appendix.py", ["benchmark_cases_normalized.csv.gz", "comparison_manifest.json"], D)
     m.update(sol_manifest_fields(S))
     m.update({"metric": "Proximity to modeled SOL (T_SOL / T_k), per input case",
               "metric_formula": "per input case: T_SOL[o,d,c] / T_k[o,b,d,c] (formal autotuned latency); log colour scale 0.001 to 1, > 1 amber",
               "aggregation_order": ["none (each cell is one input case)"],
               "selection_criteria": {"rule": "panels kept from the speedup version of A2 (median within-(device, DSL, dtype) log2-speedup "
-                                             "range >= 0.5, plus matmul_fp32_fp16_fp8 for dtype sensitivity with all its dtypes); same "
-                                             "input-shape and dtype axes", "selected": A2_SELECTED,
+                                             "range >= 0.5); same input-shape and dtype axes; matmul_fp32_fp16_fp8 removed (its rows "
+                                             "barely vary with K)", "selected": A2_SELECTED,
                                      "median_log2_range_of_sol_proximity": var},
               "tick_labels": ticks_shown,
               "case_coverage": {f"{op}|{dt}": sum(1 for v in values if v["operator"] == op and v["dtype"] == dt) for op, dt in panels},
               "not_available_rows": na_rows,
               "not_available_kinds": {k: v[0] for k, v in NA_STYLE.items()},
-              "excluded_cases": {"MI300X matmul fp8_e4m3fn": "unsupported dtype (row shown as N/A)", "invalid_or_missing_rows": len(D.excluded)},
+              "excluded_cases": {**{f"{r['device']} {r['dsl']} {r['operator']} {r['dtype']}": f"{r['kind']} (row shown as N/A)" for r in na_rows},
+                                 "invalid_or_missing_rows": len(D.excluded)},
               "x_axis": {op: {"inner": A2_GRID[op][0], "outer_group": A2_GRID[op][1]} for op in A2_SELECTED},
               "profiling_evidence_ids": [], "plotted_values": values})
     return finish(m, fig, out_root, name)

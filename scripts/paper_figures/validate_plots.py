@@ -441,9 +441,11 @@ def main():
     for r in a2["not_available_rows"]:
         if r["kind"] != "unsupported_dtype" or f"MI300X/triton/{r['operator']}/{r['dtype']}" not in cm["known_unsupported"]:
             bad.append(f"A2 N/A kind {r}")
-    if not {"N/A: unsupported dtype"} <= set(t2a) or not any(t.startswith("N/A: calibration unavailable") for t in t2a) \
-            or not any(t.startswith("N/A: not measured") for t in t2a):
-        bad.append("A2 does not distinguish the three N/A kinds")
+    for kind in {r["kind"] for r in a2["not_available_rows"]}:            # every N/A kind drawn has its own legend entry
+        if a2["not_available_kinds"][kind] not in t2a:
+            bad.append(f"A2 legend lacks {kind}")
+    if any("none in these panels" in t for t in t2a):
+        bad.append("A2 legend lists an N/A kind that is not drawn")
     check("11.sol_a1_proximity_and_matched_change_a2_per_case", not bad and not miss,
           f"{bad[:4]}; missing labels {dict(list(miss.items())[:4])}" if bad or miss else
           f"A1 {len(m['plotted_values']['left'])}+{len(m['plotted_values']['right'])} cells; A2 {len(a2['plotted_values'])} cases")
