@@ -5,63 +5,80 @@ Publication-ready caption drafts for the generated figures. Every number below i
 
 ## Figure 2 (RQ1): `main/fig_rq1_cross_accelerator`
 
-**Figure 2:** Speedup of each tile DSL over the PyTorch baseline on the same accelerator.
+**Figure 2:** Proximity to modeled SOL (T_SOL / T_k) of each tile DSL on each accelerator.
 
-- **Cells.** Each cell aggregates one workload category (row) for one supported device and DSL (column). We first take
-  the geometric mean of `torch_ms / dsl_ms` over each operator's valid autotuned input cases, then the geometric mean
-  over the operators in the category, so every operator has equal weight. *Overall* covers all 45 operators. Colour is
-  log-scaled and centred at 1×.
+- **Metric.** For one operator, input case and device, T_SOL = max(F / P_peak, Q / BW_peak). F and Q are the frozen
+  analytical operation count and memory traffic of the operator's algorithm. P_peak is the device's empirically
+  measured sustained peak for the arithmetic mode that the algorithm and its numerical contract require, and BW_peak
+  is its measured HBM bandwidth (TileArena empirical profiles, PR #323). T_k is the formal autotuned latency. Larger
+  values mean the implementation reaches a larger fraction of its own device's modeled limit; 1 is the modeled
+  target.
+- **Compute mode.** The mode is fixed per operator and data type from the algorithm, not from the input dtype or from
+  the instructions a compiler emitted. For example, FP16 `vector_add` uses the FP16 vector peak (measured as packed
+  FP16x2 FMA), FP16 `matmul` and `1d_conv` (implicit GEMM) use the FP16 MMA peak, FP32 GEMMs use the TF32-class matrix
+  peak (TF32 on NVIDIA, XF32 on MI300X), and FP16 operators whose contract requires FP32 arithmetic use the FP32 vector
+  peak. Operators without arithmetic on their data (copies, transposes, indexing), comparison and sorting operators and
+  integer operators without a calibrated integer peak use a memory-only target Q / BW_peak.
+- **Cells.** We first take the geometric mean of T_SOL / T_k over each operator's valid autotuned input cases, then the
+  geometric mean over the operators of a category, so every operator has equal weight. *Overall* covers all 45
+  operators; the two rows below it split them into the 13 operators with memory-only targets and the 32 with a compute
+  term. Colour is log-scaled from 0.01 to 1.
 - **Overall values.**
 
   | device | Triton | cuTile | TileLang |
   |---|---|---|---|
-  | B200 | 2.02 | 1.58 | 1.71 |
-  | GH200 | 1.85 | 1.53 | 1.57 |
-  | MI300X | 1.27 | – | – |
+  | B200 | 0.24 | 0.19 | 0.20 |
+  | GH200 | 0.32 | 0.26 | 0.27 |
+  | MI300X | 0.19 | – | – |
 
-- **Comparability.** MI300X has only Triton results. Each device is normalized by its own PyTorch baseline and
-  benchmark protocol, so the values describe how each DSL compares with the vendor libraries on that device. They are
-  not absolute hardware speedups across GPUs.
-- **Coverage.** MI300X has 2,180 valid cases instead of 2,200 because FP8 matmul is not supported there.
+- **Comparability.** Each column is compared with its own device's empirically calibrated envelope. The values compare
+  how close each DSL comes to that envelope; they do not compare absolute latency or imply identical hardware
+  capabilities. MI300X has only Triton results.
+- **Coverage.** All 45 operators have a target in every column. MI300X has 2,180 valid cases instead of 2,200 because
+  FP8 E4M3FN matmul is not supported there. Its 100 BF16 cases of leaky_relu, mul2, vector_add, weight_dequant and
+  jacobi_stencil_2d have no calibrated BF16 vector peak; they use a conditional memory-dominance target, valid because
+  their compute term would reach the memory term only below 3.99 TFLOP/s. Without them, MI300X Overall changes by
+  +0.29% (largest row change +1.52%, Stencil/Convolution).
+- **Values above 1.** No aggregate exceeds 1. 549 of 15,380 case values do; they are kept and audited
+  (`sol/sol_above_one_audit.json`).
 
 ## Figure 3 (RQ2): `main/fig_rq2_cross_device_diagnosis`
 
-**Figure 3:** Three mechanisms behind performance changes across devices. Each row uses the single input case captured
-by every profile of that operator, with the same `case_id_v2` on all devices.
+**Figure 3:** Explaining performance differences across accelerators in three cases with distinct mechanisms. Each
+row uses the single input case captured by every profile of that operator, with the same `case_id_v2` on all devices.
 
-- **Left panels:** speedup over the local PyTorch baseline from the formal autotuned latency. No profiler duration is
-  used.
-- **Right panels** (heading "NVIDIA Profiling (NCU)"): two dynamic Nsight Compute counters for B200 and GH200 only,
-  summed over the profiled launches.
-- **MI300X line** (labelled ROCm / ISA evidence, ISA evidence, or ISA / PyTorch trace): static ISA, rocprof-compute or
-  PyTorch kernel-trace observations. These are not comparable with the NVIDIA counters, so MI300X has no bars.
+- **Left panels:** Proximity to modeled SOL (T_SOL / T_k) at that input on every device, from the formal autotuned
+  latency and the device's empirical peaks. The line marks the modeled SOL (1). The text below each panel gives the
+  target: (A) the TF32-class MMA term (XF32 on MI300X), compute-bound; (B) memory-only; (C) the larger of the FP16
+  MMA and HBM terms, compute-bound on B200 and MI300X and memory-bound on GH200.
+- **Right side:** a table of dynamic Nsight Compute counters for B200 and GH200, summed over the profiled launches; a
+  line of MI300X static ISA, rocprof counter or kernel-trace observations, which are not comparable with the NVIDIA
+  counters and therefore are not in the table; then one interpretation line and one confounder line.
 
 **(A) Matrix operand delivery** (matmul, FP32, M = N = 4096, K = 20480).
-- cuTile reaches 1.04× on B200 but 0.61× on GH200.
-- On GH200 it executes 21.2 M shared-memory stores, about one per WGMMA instruction. This is consistent with re-laying
-  out the B operand in shared memory.
-- On B200 its larger tile reads half the TMA bytes of Triton.
+- cuTile reaches 1.13 of the modeled SOL on B200 but 0.65 on GH200; Triton reaches 0.73 and 0.94, and 0.085 on MI300X.
+- On GH200 cuTile executes 21.2 M shared-memory stores and 21.0 M LDSM, about one each per WGMMA instruction. This is
+  consistent with re-laying out an operand in shared memory. On B200 both DSLs feed tcgen05 from TMA, and cuTile's
+  larger tile reads half the TMA bytes of Triton.
 - Triton reads a B operand transposed before timing, so part of the difference reflects the benchmark implementation.
-- On MI300X, the same TensorDescriptor code is lowered to scalar 32-bit loads.
+- On MI300X, the same TensorDescriptor code is lowered to scalar 32-bit loads, with 4.5% MFMA utilization.
+- † B200 cuTile exceeds the modeled SOL: the calibrated TF32 rate is a sustained library-GEMM rate, not a hardware
+  bound.
 
-**(B) Indexing overhead** (destindex, INT8).
+**(B) Indexing overhead** (destindex, INT8; memory-only target).
 - On both NVIDIA devices, cuTile executes about 17× more instructions than Triton and uses 8-bit instead of 128-bit
-  stores, while both write the same 2.05 M sectors.
-- On MI300X, Triton itself compiles the row copy to per-lane byte stores, and its speedup falls from 4.98× on B200 to
-  2.17×. The PyTorch baseline also differs between vendors.
+  stores, while both write the same 2.05 M sectors. cuTile reaches 0.18 (B200) and 0.29 (GH200), Triton 0.53 and 0.83.
+- On MI300X, Triton compiles the row copy to per-lane byte stores (static ISA) and reaches 0.50.
 
 **(C) Memory access and latency hiding** (1d_conv, FP16).
-- On both NVIDIA devices, load width (16 bit) and DRAM read traffic are the same for Triton and TileLang.
-- TileLang touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors than Triton. Its Hopper kernel body differs
-  from the Blackwell one.
-- The occupancy chart uses the same encoding as Figure A5: coloured foreground bars show achieved occupancy, grey
-  background bars show the theoretical limit, and the labels give achieved / theoretical (%). On B200,
-  TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%. The other implementations operate close to
-  their theoretical limits. The theoretical limit is the maximum resident warp occupancy permitted by the kernel's
-  resource and launch configuration, not a predicted value, and the counters do not identify the cause of the
-  shortfall.
-- Triton's speedup of 1.48× on MI300X comes with a different PyTorch path (MIOpen implicit GEMM plus layout
-  transposes). It is not a comparison of the Triton kernels alone.
+- On both NVIDIA devices, load width (16 bit) and DRAM read traffic are the same for Triton and TileLang, but TileLang
+  touches 7.4× (B200) and 10.4× (GH200) more L1 load sectors. Its Hopper kernel body differs from the Blackwell one.
+- Occupancy is listed as achieved / theoretical limit (%). On B200, TileLang achieves 6.2% against a limit of 18.75%,
+  with 3.9% issue activity; the theoretical limit is the maximum resident warp occupancy permitted by the kernel's
+  resource and launch configuration, and the counters do not identify the cause of the shortfall.
+- Triton reaches 0.081 (B200), 0.11 (GH200) and 0.27 (MI300X); TileLang 0.012 and 0.022. On MI300X, 66% of Triton's
+  VALU instructions are INT32; no controlled experiment isolates the MI300X difference. PyTorch's MIOpen path is not
+  part of T_SOL / T_k.
 
 The counters are observations at one input. They are consistent with, but do not prove, the stated mechanisms.
 
@@ -84,28 +101,31 @@ The counters are observations at one input. They are consistent with, but do not
 
 ## Appendix Figure A1: `appendix/fig_a1_performance_atlas`
 
-**Figure A1:** Performance of all 45 operators on every supported device and DSL.
+**Figure A1:** Proximity to modeled SOL of all 45 operators on every supported device and DSL.
 
-- **(A)** Geometric-mean speedup of each operator over the local PyTorch baseline, across its valid autotuned input
-  cases. The colour is clipped at 1/16× and 16×; the printed values are not.
-- **(B)** Change in relative speedup between two devices, shown as 2^Δ with Δ = log2(S_dev2 / S_dev1). Both S are
-  computed over the input cases valid on both devices. A value above 1 means that the DSL gains relative to PyTorch
-  on the second device.
+- **(A)** Geometric mean of T_SOL / T_k over each operator's valid autotuned input cases (definition as in Figure 2).
+  Colour is log-scaled from 0.001 to 1; amber cells exceed the modeled SOL and are audited (rope on B200 Triton and
+  TileLang, rmsnorm and layernorm on GH200, matmul_fp32_fp16_fp8 on B200 cuTile). ‡ marks the MI300X operators whose
+  BF16 cases use the conditional memory-dominance target.
+- **(B)** Change in proximity between two devices, shown as 2^Δ with Δ = log2(R_dev2 / R_dev1). Both R are computed
+  over the input cases valid on both devices. A value above 1 means that the DSL comes closer to its device's modeled
+  SOL on the second device.
 
-Panel B is not an absolute hardware speedup, because it mixes hardware, compiler, library and protocol changes.
+Panel B is a ratio of normalized SOL proximities, not an absolute accelerator speedup: each R is relative to its own
+device's empirical envelope.
 
 ## Appendix Figure A2: `appendix/fig_a2_shape_dtype`
 
-**Figure A2:** Sensitivity to input shape and data type.
+**Figure A2:** Sensitivity of the proximity to modeled SOL to input shape and data type.
 
-- **Cells.** Each cell is one input case, coloured by its speedup over the local PyTorch baseline (log scale, clipped
-  at 1/16× and 16×). Rows are device and DSL pairs; columns are input cases ordered by the swept parameter, grouped by
-  a second parameter where one exists. Panels with more than 12 ungrouped cases label every second case, but every
-  case is drawn.
-- **Shape sensitivity.** We show the operators whose median within-(device, DSL, dtype) range of log2 speedup is at
-  least 0.5: flash_decode (3.08), linear_self_attention (2.63), top_k_selection (3.19) and streamk_matmul (0.73).
-- **Dtype sensitivity.** We show matmul with all of its data types. vector_add (0.18) is not shown.
-- **Unsupported.** FP8 E4M3FN is not supported on MI300X.
+- **Cells.** Each cell is one input case, coloured by T_SOL / T_k (log scale from 0.001 to 1; amber above 1). Rows are
+  device and DSL pairs; columns are input cases ordered by the swept parameter, grouped by a second parameter where one
+  exists. Panels with more than 12 ungrouped cases label every second case, but every case is drawn.
+- **Panels.** The operators and axes are the same as in the speedup version of this figure: flash_decode,
+  linear_self_attention, top_k_selection and streamk_matmul for shape sensitivity, and matmul with all of its data
+  types for dtype sensitivity.
+- **Missing values.** Grey hatched rows distinguish an unsupported data type (FP8 E4M3FN matmul on MI300X, the only
+  case here), an unavailable calibration and a missing measurement; the last two do not occur in these panels.
 
 ## Appendix Figure A3: `appendix/fig_a3_execution_paths`
 

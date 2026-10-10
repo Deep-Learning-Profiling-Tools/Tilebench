@@ -12,8 +12,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import figure_data as FD  # noqa: E402
 import plot_style as PS  # noqa: E402
+import sol_data as SD  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.colors import LogNorm  # noqa: E402
+from matplotlib.colors import LogNorm, to_rgba  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.patches import Patch, Rectangle  # noqa: E402
 
@@ -73,25 +74,39 @@ def category_labels(fig, ax, D, ops, ys, ymax, x_in, H, fontsize=6.5):
 
 
 # ---------------------------------------------------------------------------------------------- A1
+COND_MARK = "‡"            # MI300X bf16 conditional memory-dominance target (decision D2)
+
+
+def sol_manifest_fields(S):
+    prov = json.load(open(SD.SOL / "sol_provenance.json"))
+    return {"sol_inputs": SD.sol_input_hashes(), "sol_code_sha256": SD.sol_code_hashes(), "peaks": prov["peaks"],
+            "mode_decisions": SD.SM.DECISIONS, "conditional_memory_dominance": prov["conditional_memory_dominance"]}
+
+
 def fig_a1(D, out_root):
     name = "fig_a1_performance_atlas"
+    S = SD.Sol()
     ops, ys, ymax = row_layout(D)
-    S = {(o, d, s): D.speedup_op(d, s, o) for o in ops for d, s in S_COLS}
-    DL = {(o,) + c: D.delta_op(c[0], c[1], c[2], o) for o in ops for c in D_COLS}
+    assert ops == S.operators()
+    R = {(o, d, s): S.r_op(d, s, o) for o in ops for d, s in S_COLS}
+    COND = {(o, d, s): sum(1 for r in S.cases.get((d, s, o), {}).values() if r["target_status"] == SD.CONDITIONAL)
+            for o in ops for d, s in S_COLS}
+    DL = {(o,) + c: S.delta_op(c[0], c[1], c[2], o) for o in ops for c in D_COLS}
     H, bot, top = 8.7, 0.62, 0.95
     fig = plt.figure(figsize=(W, H))
     axL = axes_in(fig, H, 1.42, bot, 2.98, H - bot - top)
     axR = axes_in(fig, H, 4.62, bot, 1.64, H - bot - top)
-    nS, nD = PS.log2_norm(4.0), PS.log2_norm(2.0)
+    nP, nD = PS.proximity_norm(0.001), PS.log2_norm(2.0)
     xl = [j + 0.25 * (j >= 3) + 0.25 * (j >= 6) for j in range(len(S_COLS))]
     xr = [j + 0.25 * (j >= 2) for j in range(len(D_COLS))]
     for o in ops:
         y = ymax - ys[o] - 1
         for j, (d, s) in enumerate(S_COLS):
-            v, n = S[(o, d, s)]
-            c = PS.DIVERGING(nS(max(-4, min(4, math.log2(v)))))
+            v, n = R[(o, d, s)]
+            c = to_rgba(PS.proximity_color(v, nP))
             axL.add_patch(Rectangle((xl[j] + 0.03, y + 0.05), 0.94, 0.9, facecolor=c, edgecolor="white", lw=0.5))
-            axL.text(xl[j] + 0.5, y + 0.5, f"{v:.2f}", ha="center", va="center", fontsize=6.5, color="white" if lum(c) < 0.45 else PS.INK)
+            axL.text(xl[j] + 0.5, y + 0.5, PS.proximity_label(v) + (COND_MARK if COND[(o, d, s)] else ""), ha="center", va="center",
+                     fontsize=6.5, color="white" if lum(c) < 0.45 else PS.INK)
         for j, c_ in enumerate(D_COLS):
             v, n = DL[(o,) + c_]
             c = PS.DIVERGING(nD(max(-2, min(2, v))))
@@ -114,46 +129,66 @@ def fig_a1(D, out_root):
     for j, (s, a, b) in enumerate(D_COLS):
         axR.text(xr[j] + 0.5, ymax + 0.25, f"{PS.DSL_LABEL[s]}\n{b}\nvs. {a}", ha="center", va="bottom", fontsize=6.5, clip_on=False,
                  linespacing=1.05)
-    fig.text(1.42 / W, (H - 0.08) / H, "A  Speedup vs. local PyTorch (GM over cases)", ha="left", va="top", fontsize=7.5, fontweight="bold")
-    fig.text(4.62 / W, (H - 0.08) / H, "B  Change in relative speedup", ha="left", va="top", fontsize=7.5, fontweight="bold")
-    for cax_x, cax_w, norm, ticks, labels, lab in (
-            (1.6, 2.6, nS, [-4, -2, 0, 2, 4], ["1/16×", "1/4×", "1×", "4×", "16×"], "speedup vs. local PyTorch (colour clipped at 1/16× and 16×)"),
-            (4.7, 1.48, nD, [-2, -1, 0, 1, 2], ["1/4×", "1/2×", "1×", "2×", "4×"], "S(dev 2) / S(dev 1) over matched cases")):
-        cax = axes_in(fig, H, cax_x, 0.36, cax_w, 0.07)
-        cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=PS.DIVERGING), cax=cax, orientation="horizontal", ticks=ticks)
-        cb.ax.set_xticklabels(labels)
-        cb.ax.tick_params(labelsize=6.5, length=2, pad=1)
-        cb.outline.set_linewidth(0.4)
-        cax.set_title(lab, fontsize=6.5, pad=2)
+    fig.text(1.42 / W, (H - 0.08) / H, "A  Proximity to modeled SOL, T_SOL / T_k (GM over cases)", ha="left", va="top", fontsize=7.5,
+             fontweight="bold")
+    fig.text(4.62 / W, (H - 0.08) / H, "B  Change in SOL proximity", ha="left", va="top", fontsize=7.5, fontweight="bold")
+    cax = axes_in(fig, H, 1.6, 0.36, 2.25, 0.07)
+    cmap = PS.PROXIMITY.copy()
+    cmap.set_over(PS.PROXIMITY_ABOVE_ONE)
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=nP, cmap=cmap), cax=cax, orientation="horizontal", ticks=[0.001, 0.01, 0.1, 1],
+                      extend="max", extendfrac=0.06)
+    cb.ax.set_xticklabels(["≤0.001", "0.01", "0.1", "1 (SOL)"])
+    cb.ax.minorticks_off()
+    cb.ax.tick_params(labelsize=6.5, length=2, pad=1)
+    cb.outline.set_linewidth(0.4)
+    cax.set_title("T_SOL / T_k (amber: above 1, audited)", fontsize=6.5, pad=2)
+    fig.text(1.42 / W, 0.04 / H, f"{COND_MARK} MI300X bf16 cases use the conditional memory-dominance target (no calibrated BF16 vector peak)",
+             ha="left", va="bottom", fontsize=6.5, color=PS.MUTED)
+    cax = axes_in(fig, H, 4.7, 0.36, 1.48, 0.07)
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=nD, cmap=PS.DIVERGING), cax=cax, orientation="horizontal", ticks=[-2, -1, 0, 1, 2])
+    cb.ax.set_xticklabels(["1/4×", "1/2×", "1×", "2×", "4×"])
+    cb.ax.tick_params(labelsize=6.5, length=2, pad=1)
+    cb.outline.set_linewidth(0.4)
+    cax.set_title("R(dev 2) / R(dev 1), matched cases:\nratio of SOL proximities, not a speedup", fontsize=6.5, pad=2, linespacing=1.05)
     m = base_manifest(name, "scripts/paper_figures/plot_appendix.py", ["benchmark_cases_normalized.csv.gz", "category_mapping.csv", "comparison_manifest.json"], D)
-    m.update({"metric_formula": {"left": "S[o,b,d] = GM_cases(torch_ms/dsl_ms) (valid autotune cases)",
-                                 "right": "Δ = log2(S_dev2/S_dev1), both S over the case_id_v2 valid on both devices; cell shows 2^Δ; not an absolute hardware speedup"},
-              "aggregation_order": ["GM over input cases within operator"], "colour_scale": {"left": "log2 S clipped to ±4", "right": "Δ clipped to ±2"},
-              "case_coverage": {"left": {f"{o}|{d}|{s}": S[(o, d, s)][1] for o in ops for d, s in S_COLS},
+    m.update(sol_manifest_fields(S))
+    m.update({"metric": "Proximity to modeled SOL (T_SOL / T_k)",
+              "metric_formula": {"left": "R[o,b,d] = GM over valid autotune cases of T_SOL[o,d,c] / T_k[o,b,d,c]",
+                                 "right": "Δ = log2(R_dev2 / R_dev1), both R over the case_id_v2 valid on both devices; cell shows 2^Δ; a ratio of "
+                                          "normalized SOL proximities, not an absolute accelerator speedup"},
+              "aggregation_order": ["GM over input cases within operator"],
+              "colour_scale": {"left": "log scale 0.001 (floor) to 1 = modeled SOL; > 1 amber", "right": "Δ clipped to ±2"},
+              "case_coverage": {"left": {f"{o}|{d}|{s}": R[(o, d, s)][1] for o in ops for d, s in S_COLS},
                                 "right_matched_cases": {f"{o}|{s}|{b}/{a}": DL[(o, s, a, b)][1] for o in ops for s, a, b in D_COLS}},
+              "conditional_cells": {f"{o}|{d}|{s}": n for (o, d, s), n in COND.items() if n},
               "excluded_cases": {"invalid_or_missing_rows": len(D.excluded), "known_unsupported": D.manifest["known_unsupported"],
                                  "not_shown": "cuTile/TileLang on MI300X do not exist; Triton MI300X/B200 for matmul fp8 excluded by matching"},
               "selection_criteria": "all 45 operators", "profiling_evidence_ids": [],
-              "plotted_values": {"left": [{"operator": o, "device": d, "dsl": s, "speedup": S[(o, d, s)][0]} for o in ops for d, s in S_COLS],
+              "plotted_values": {"left": [{"operator": o, "device": d, "dsl": s, "sol_proximity": R[(o, d, s)][0], "n_cases": R[(o, d, s)][1]}
+                                          for o in ops for d, s in S_COLS],
                                  "right": [{"operator": o, "dsl": s, "from": a, "to": b, "delta_log2": DL[(o, s, a, b)][0]} for o in ops for s, a, b in D_COLS]}})
     return finish(m, fig, out_root, name)
 
 
 # ---------------------------------------------------------------------------------------------- A2
-A2_CANDIDATES = ["matmul_fp32_fp16_fp8", "flash_decode", "linear_self_attention", "top_k_selection", "vector_add", "streamk_matmul"]
 A2_GRID = {"flash_decode": ("seq_len", None), "linear_self_attention": ("M", "D"), "top_k_selection": ("N", "k"),
-           "streamk_matmul": ("n", "m"), "matmul_fp32_fp16_fp8": ("K", None), "vector_add": ("n", None)}
+           "streamk_matmul": ("n", "m"), "matmul_fp32_fp16_fp8": ("K", None)}
+# Panels kept from the speedup version of A2 (selected there by a median within-(device, DSL, dtype) log2-speedup range
+# >= 0.5, plus matmul_fp32_fp16_fp8 for dtype sensitivity); the same input-shape and dtype axes are shown.
+A2_SELECTED = ["flash_decode", "linear_self_attention", "top_k_selection", "streamk_matmul", "matmul_fp32_fp16_fp8"]
 A2_MAX_TICKS = 12          # panels with more ungrouped cases label every second case (all cases are still drawn)
+NA_STYLE = {"unsupported_dtype": ("N/A: unsupported dtype", "////"), "calibration_unavailable": ("N/A: calibration unavailable", "xxxx"),
+            "missing_measurement": ("N/A: not measured", "....")}
 
 
-def a2_variation(D, op):
+def a2_variation(S, op):
     rng = []
-    for (dev, dsl, o), c in D.cases.items():
+    for (dev, dsl, o), c in S.cases.items():
         if o != op:
             continue
         by = {}
-        for cid, (t, d, dt, p) in c.items():
-            by.setdefault(dt, []).append(math.log2(t / d))
+        for r in c.values():
+            by.setdefault(r["dtype"], []).append(math.log2(r["R_SOL"]))
         rng += [max(v) - min(v) for v in by.values()]
     rng.sort()
     return rng[len(rng) // 2]
@@ -167,44 +202,60 @@ def fmt_num(v):
     return str(v)
 
 
+def na_kind(D, S, dev, dsl, op, dt):
+    """Why a (device, DSL) row of a panel has no value."""
+    if f"{dev}/{dsl}/{op}/{dt}" in D.manifest["known_unsupported"]:
+        return "unsupported_dtype"
+    row = next(r for r in S.manifest["rows"] if r["operator"] == op and r["dtype"] == dt)
+    if row["target_status"][dev] == "missing_calibration":
+        return "calibration_unavailable"
+    return "missing_measurement"
+
+
 def fig_a2(D, out_root):
     name = "fig_a2_shape_dtype"
-    var = {o: a2_variation(D, o) for o in A2_CANDIDATES}
-    shape_sel = [o for o in A2_CANDIDATES if var[o] >= 0.5 and o != "matmul_fp32_fp16_fp8"]
-    selected = shape_sel + ["matmul_fp32_fp16_fp8"]
+    S = SD.Sol()
+    var = {o: a2_variation(S, o) for o in A2_SELECTED}
     panels = []
-    for op in selected:
-        for dt in sorted({D.cases[k][c][2] for k in D.cases if k[2] == op for c in D.cases[k]}):
+    for op in A2_SELECTED:
+        for dt in sorted({r["dtype"] for k in S.cases if k[2] == op for r in S.cases[k].values()}):
             panels.append((op, dt))
     ncol, nrow = 2, math.ceil(len(panels) / 2)
     H = 1.36 * nrow + 0.15
     fig, axes = plt.subplots(nrow, ncol, figsize=(W, H))
     fig.subplots_adjust(left=0.105, right=0.995, top=1 - 0.3 / H, bottom=0.42 / H, hspace=1.05, wspace=0.04)
-    norm = PS.log2_norm(4.0)
-    values, ticks_shown = [], {}
+    norm = PS.proximity_norm(0.001)
+    cmap = PS.PROXIMITY.copy()
+    cmap.set_over(PS.PROXIMITY_ABOVE_ONE)
+    cmap.set_bad(PS.NA_FILL)
+    values, ticks_shown, na_rows = [], {}, []
     for idx, (ax, (op, dt)) in enumerate(zip(axes.flat, panels)):
         outer_k, inner_k = A2_GRID[op][1], A2_GRID[op][0]
         allp = {}
-        for (dev, dsl, o), c in D.cases.items():
+        for (dev, dsl, o), c in S.cases.items():
             if o == op:
-                for cid, (t, d, dtt, p) in c.items():
-                    if dtt == dt:
-                        allp[cid] = json.loads(p)
+                for cid, r in c.items():
+                    if r["dtype"] == dt:
+                        allp[cid] = json.loads(r["params_full_json"])
         order = sorted(allp, key=lambda cid: ((allp[cid][outer_k] if outer_k else 0), allp[cid][inner_k]))
         mat = np.full((len(S_COLS), len(order)), np.nan)
         for i, (dev, dsl) in enumerate(S_COLS):
             for j, cid in enumerate(order):
-                c = D.case(dev, dsl, op, cid)
-                if c is not None:
-                    mat[i, j] = math.log2(c[0] / c[1])
-                    values.append({"operator": op, "dtype": dt, "device": dev, "dsl": dsl, "case_id_v2": cid, "speedup": c[0] / c[1]})
-        cm = PS.DIVERGING.copy()
-        cm.set_bad(PS.NA_FILL)
-        ax.imshow(np.clip(mat, -4, 4), aspect="auto", cmap=cm, norm=norm, interpolation="nearest")
+                r = S.case(dev, dsl, op, cid)
+                if r is not None:
+                    mat[i, j] = r["R_SOL"]
+                    values.append({"operator": op, "dtype": dt, "device": dev, "dsl": dsl, "case_id_v2": cid, "sol_proximity": r["R_SOL"],
+                                   "T_SOL_ms": r["T_SOL_ms"], "dsl_ms": r["dsl_ms"], "target_status": r["target_status"]})
+        ax.imshow(np.ma.masked_invalid(mat), aspect="auto", cmap=cmap, norm=norm, interpolation="nearest")
         for i in range(len(S_COLS)):
             if np.all(np.isnan(mat[i])):
-                ax.text(len(order) / 2 - 0.5, i, "N/A (unsupported dtype)" if S_COLS[i][0] == "MI300X" else "N/A", ha="center",
-                        va="center", fontsize=6, color=PS.MUTED)
+                kind = na_kind(D, S, S_COLS[i][0], S_COLS[i][1], op, dt)
+                na_rows.append({"operator": op, "dtype": dt, "device": S_COLS[i][0], "dsl": S_COLS[i][1], "kind": kind})
+                ax.add_patch(Rectangle((-0.5, i - 0.5), len(order), 1, facecolor=PS.NA_FILL, edgecolor="#B5B9BC", hatch=NA_STYLE[kind][1], lw=0))
+                ax.text(len(order) / 2 - 0.5, i, NA_STYLE[kind][0], ha="center", va="center", fontsize=6, color=PS.INK,
+                        bbox=dict(boxstyle="square,pad=0.1", facecolor=PS.NA_FILL, edgecolor="none"))
+            else:
+                assert not np.any(np.isnan(mat[i])), (op, dt, S_COLS[i])          # no partially missing row in these panels
         ax.set_yticks(range(len(S_COLS)))
         ax.set_yticklabels([f"{d} {PS.DSL_SHORT[s]}" for d, s in S_COLS] if idx % ncol == 0 else [], fontsize=6.5)
         step = 2 if (outer_k is None and len(order) > A2_MAX_TICKS) else 1
@@ -233,23 +284,37 @@ def fig_a2(D, out_root):
         ax.axis("off")
     assert len(panels) < nrow * ncol, "A2 places its colour bar in the empty last panel slot"
     pos = list(axes.flat)[-1].get_position()
-    cax = fig.add_axes([pos.x0 + 0.1 * pos.width, pos.y0 + 0.55 * pos.height, 0.8 * pos.width, 0.07 * pos.height])
-    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=PS.DIVERGING), cax=cax, orientation="horizontal", ticks=[-4, -2, 0, 2, 4])
-    cb.ax.set_xticklabels(["1/16×", "1/4×", "1×", "4×", "16×"])
+    top_in = pos.y1 * H                                   # the empty last panel slot, laid out in inches from its top
+    cax = fig.add_axes([pos.x0 + 0.1 * pos.width, (top_in - 0.12) / H, 0.8 * pos.width, 0.07 / H])
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation="horizontal", ticks=[0.001, 0.01, 0.1, 1],
+                      extend="max", extendfrac=0.06)
+    cb.ax.set_xticklabels(["≤0.001", "0.01", "0.1", "1 (SOL)"])
+    cb.ax.minorticks_off()
     cb.ax.tick_params(labelsize=6.5, length=2)
-    cb.set_label("speedup vs. local PyTorch (per input case)", fontsize=6.5, labelpad=2)
+    cb.set_label("T_SOL / T_k per input case (amber: above 1)", fontsize=6.5, labelpad=2)
     cb.outline.set_linewidth(0.4)
-    fig.text(pos.x0 + 0.1 * pos.width, pos.y0 + 0.02 * pos.height, "T = Triton, C = cuTile, TL = TileLang", fontsize=6.5, color=PS.MUTED)
+    for k, (kind, (lab, hatch)) in enumerate(NA_STYLE.items()):        # the three kinds of missing value, each with its hatch
+        y_ = (top_in - 0.56 - 0.14 * k) / H
+        fig.add_artist(Rectangle((pos.x0 + 0.1 * pos.width, y_), 0.22 / W, 0.1 / H, transform=fig.transFigure,
+                                 facecolor=PS.NA_FILL, edgecolor="#B5B9BC", hatch=hatch, lw=0.4))
+        fig.text(pos.x0 + 0.1 * pos.width + 0.3 / W, y_ + 0.05 / H, lab + ("" if any(r["kind"] == kind for r in na_rows) else " (none in these panels)"),
+                 fontsize=6.5, color=PS.INK, va="center")
+    fig.text(pos.x0 + 0.1 * pos.width, (top_in - 0.98) / H, "T = Triton, C = cuTile, TL = TileLang", fontsize=6.5, color=PS.MUTED, va="center")
     m = base_manifest(name, "scripts/paper_figures/plot_appendix.py", ["benchmark_cases_normalized.csv.gz", "comparison_manifest.json"], D)
-    m.update({"metric_formula": "per input case: torch_ms/dsl_ms (formal autotuned CSV), log2 colour scale clipped to ±4",
+    m.update(sol_manifest_fields(S))
+    m.update({"metric": "Proximity to modeled SOL (T_SOL / T_k), per input case",
+              "metric_formula": "per input case: T_SOL[o,d,c] / T_k[o,b,d,c] (formal autotuned latency); log colour scale 0.001 to 1, > 1 amber",
               "aggregation_order": ["none (each cell is one input case)"],
-              "selection_criteria": {"rule": "candidates with median within-(device,DSL,dtype) log2-speedup range >= 0.5 are shown for shape sensitivity; matmul_fp32_fp16_fp8 is kept for dtype sensitivity with ALL its dtypes",
-                                     "variation_median_log2_range": var, "selected": selected,
-                                     "not_selected": {o: f"median log2 range {var[o]:.2f} < 0.5" for o in A2_CANDIDATES if o not in selected}},
+              "selection_criteria": {"rule": "panels kept from the speedup version of A2 (median within-(device, DSL, dtype) log2-speedup "
+                                             "range >= 0.5, plus matmul_fp32_fp16_fp8 for dtype sensitivity with all its dtypes); same "
+                                             "input-shape and dtype axes", "selected": A2_SELECTED,
+                                     "median_log2_range_of_sol_proximity": var},
               "tick_labels": ticks_shown,
               "case_coverage": {f"{op}|{dt}": sum(1 for v in values if v["operator"] == op and v["dtype"] == dt) for op, dt in panels},
+              "not_available_rows": na_rows,
+              "not_available_kinds": {k: v[0] for k, v in NA_STYLE.items()},
               "excluded_cases": {"MI300X matmul fp8_e4m3fn": "unsupported dtype (row shown as N/A)", "invalid_or_missing_rows": len(D.excluded)},
-              "x_axis": {op: {"inner": A2_GRID[op][0], "outer_group": A2_GRID[op][1]} for op in selected},
+              "x_axis": {op: {"inner": A2_GRID[op][0], "outer_group": A2_GRID[op][1]} for op in A2_SELECTED},
               "profiling_evidence_ids": [], "plotted_values": values})
     return finish(m, fig, out_root, name)
 

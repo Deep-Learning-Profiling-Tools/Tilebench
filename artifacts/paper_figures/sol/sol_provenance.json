@@ -1,0 +1,146 @@
+{
+ "schema": "tilearena-sol-provenance/1",
+ "formula": {
+  "T_SOL": "max(F / P_peak[mode], Q / BW_peak); memory-only targets: Q / BW_peak",
+  "R_SOL": "T_SOL / T_k (T_k = formal autotuned dsl_ms); not clipped",
+  "units": "F in FLOP (OP for int8_mma); P in TFLOP/s (TOP/s) -> x1e12; BW in GB/s -> x1e9; Q in bytes; terms in s -> x1e3 ms; dsl_ms in ms",
+  "aggregation": [
+   "GM of case-level R_SOL within an operator",
+   "GM of operator values within a category",
+   "GM of the 45 operator values (Overall)"
+  ],
+  "cross_device": "log2(R_dev2 / R_dev1), both GM over the case_id_v2 valid on both devices"
+ },
+ "peaks": {
+  "B200": {
+   "file": "tilebench/data/peak_performance/empirical/B200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "23645505dbb60159c2d7541d09f34366cc5daf9e18feb4242126ac1d39173597",
+   "git_blob": "5752abb92e37346ba5fdd9605a32739bcd9f4042",
+   "calibration_id": "B200-20261006T063415Z-39b55bd3"
+  },
+  "GH200": {
+   "file": "tilebench/data/peak_performance/empirical/GH200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "2bead47d1578ca155cc98b003365961c1638224d9434d731b0d83cc0c0854853",
+   "git_blob": "2a595d682e3e46b50f867f9025eab0f5bd421836",
+   "calibration_id": "GH200-20261007T215924Z-0a3f4803-int8layout"
+  },
+  "MI300X": {
+   "file": "tilebench/data/peak_performance/empirical/MI300X.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "8dfe09c8a1554d1502d9b806563066d52f072cf8278a71ee8d94e3421240edbf",
+   "git_blob": "966606d133062ccb9964e43ca88408db4d1c1283",
+   "calibration_id": "MI300X-20261009T060617Z-eccfca2c"
+  }
+ },
+ "legacy_peak_files_used": false,
+ "inputs": {
+  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
+  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844"
+ },
+ "frozen_mode_manifest_rows": 110,
+ "coverage_cases": {
+  "B200:cutile": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "B200:tilelang": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "B200:triton": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:cutile": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:tilelang": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:triton": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "MI300X:triton": {
+   "ok": 1340,
+   "ok; memory_only": 740,
+   "bf16_vector_peak_unavailable; conditional_memory_dominance": 100
+  }
+ },
+ "coverage_operators": {
+  "B200:triton": 45,
+  "B200:cutile": 45,
+  "B200:tilelang": 45,
+  "GH200:triton": 45,
+  "GH200:cutile": 45,
+  "GH200:tilelang": 45,
+  "MI300X:triton": 45
+ },
+ "invalid_or_missing_rows": 0,
+ "missing_peak_mode_mappings": [],
+ "memory_only_operators": [
+  "2d_max_pooling",
+  "argmax",
+  "bitonic_sort",
+  "destindex",
+  "histogramming",
+  "interleave",
+  "matrix_copy",
+  "matrix_transpose",
+  "quantize_global",
+  "radix_sort",
+  "relu",
+  "reverse_array",
+  "top_k_selection"
+ ],
+ "above_one": {
+  "n_cases": 549,
+  "by_operator": {
+   "layernorm|B200|cutile": 5,
+   "layernorm|B200|tilelang": 14,
+   "layernorm|GH200|cutile": 26,
+   "layernorm|GH200|tilelang": 49,
+   "layernorm|GH200|triton": 37,
+   "matmul_fp32_fp16_fp8|B200|cutile": 56,
+   "matmul_fp32_fp16_fp8|B200|triton": 30,
+   "matmul_fp32_fp16_fp8|GH200|cutile": 17,
+   "matmul_fp32_fp16_fp8|GH200|triton": 24,
+   "rmsnorm|B200|cutile": 14,
+   "rmsnorm|B200|tilelang": 32,
+   "rmsnorm|B200|triton": 16,
+   "rmsnorm|GH200|cutile": 43,
+   "rmsnorm|GH200|tilelang": 53,
+   "rmsnorm|GH200|triton": 48,
+   "rope|B200|cutile": 2,
+   "rope|B200|tilelang": 18,
+   "rope|B200|triton": 16,
+   "rope|GH200|cutile": 4,
+   "rope|GH200|tilelang": 10,
+   "rope|GH200|triton": 11,
+   "swiglu|B200|cutile": 1,
+   "swiglu|B200|tilelang": 4,
+   "swiglu|B200|triton": 7,
+   "swiglu|GH200|cutile": 1,
+   "swiglu|GH200|tilelang": 2,
+   "swiglu|GH200|triton": 8,
+   "weight_dequant|B200|triton": 1
+  }
+ },
+ "conditional_memory_dominance": {
+  "status_label": "bf16_vector_peak_unavailable; conditional_memory_dominance",
+  "n_cases": 100,
+  "operators": [
+   "jacobi_stencil_2d/bf16",
+   "leaky_relu/bf16",
+   "mul2/bf16",
+   "vector_add/bf16",
+   "weight_dequant/bf16"
+  ],
+  "max_critical_throughput_tflops": 3.9875200000000004,
+  "approved_threshold_tflops": 3.99
+ }
+}

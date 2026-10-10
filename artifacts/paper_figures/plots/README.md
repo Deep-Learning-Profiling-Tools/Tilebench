@@ -1,7 +1,8 @@
 # TileArena paper figures
 
 Matplotlib figures for RQ1–RQ3 and the evaluation appendix. They are generated on CPU from the harmonized cross-device
-data in `../combined/`. No GPU benchmark, autotuning, NCU or ROCm profiling run was involved in producing them.
+data in `../combined/` and, for the cross-device figures (2, 3, A1, A2), the algorithm-aware SOL tables in `../sol/`.
+No GPU benchmark, autotuning, calibration, NCU or ROCm profiling run was involved in producing them.
 
 ## Regenerate
 
@@ -12,13 +13,15 @@ source /projects/kzhou6/bcui2/research/tilebench/tilebench_env.sh   # any env wi
 CUDA_VISIBLE_DEVICES= PYTHONPATH=.:scripts/paper_figures python scripts/paper_figures/build_all_figures.py
 ```
 
-`build_all_figures.py` runs four steps in order:
+`build_all_figures.py` runs five steps in order:
 
 1. `build_figure_evidence.py` writes `combined/figure_evidence.csv`, `combined/execution_path_matrix.csv` and
    `combined/rq2_case_selection.json` from the NVIDIA/AMD packages.
-2. `plot_rq1.py`, `plot_rq2.py`, `plot_rq3.py` and `plot_appendix.py [a1 a2 a3 a4 a5]` draw the figures.
-3. It writes `plot_manifest.json`.
-4. `validate_plots.py` checks the result and writes `qa_plots.json`; it exits 1 on failure.
+2. `sol_modes.py` writes the frozen compute-mode manifest `sol/sol_mode_manifest.{json,csv}`, and `sol_data.py` the
+   case-level SOL tables in `sol/` (see `../sol/README.md`).
+3. `plot_rq1.py`, `plot_rq2.py`, `plot_rq3.py` and `plot_appendix.py [a1 a2 a3 a4 a5]` draw the figures.
+4. It writes `plot_manifest.json`.
+5. `validate_plots.py` checks the result and writes `qa_plots.json`; it exits 1 on failure.
 
 The combined layer is rebuilt and checked by `build_combined.py` / `validate_combined.py` (see `../combined/README.md`).
 
@@ -45,11 +48,11 @@ Sizes are the printed sizes. All figures are drawn at the ACL text width of 6.30
 
 | slot | file | size (in) | min. font | content |
 |---|---|---|---|---|
-| Figure 2 (RQ1) | `main/fig_rq1_cross_accelerator` | 6.30 × 2.20 | 7.0 pt | category GM of per-operator GM speedups, seven device/DSL columns |
-| Figure 3 (RQ2) | `main/fig_rq2_cross_device_diagnosis` | 6.30 × 4.95 | 7.0 pt | three mechanisms: formal speedup at the profiled input + two NVIDIA counters + MI300X note |
+| Figure 2 (RQ1) | `main/fig_rq1_cross_accelerator` | 6.30 × 2.78 | 7.0 pt | proximity to modeled SOL (T_SOL / T_k): category GM of per-operator GMs, seven device/DSL columns, M2 memory-only subgroup |
+| Figure 3 (RQ2) | `main/fig_rq2_cross_device_diagnosis` | 6.30 × 5.96 | 7.0 pt | three mechanisms: T_SOL / T_k at the profiled input + NVIDIA NCU table + MI300X evidence, interpretation and confounders |
 | Figure 4 (RQ3) | `main/fig_rq3_within_device_dsl` | 6.30 × 3.55 | 7.0 pt | within-device latency ratios over the three-DSL intersection |
-| A1 | `appendix/fig_a1_performance_atlas` | 6.30 × 8.70 | 6.5 pt | 45-operator speedups; cross-device Δ over matched cases |
-| A2 | `appendix/fig_a2_shape_dtype` | 6.30 × 6.95 | 6.0 pt | per-case speedups for shape- or dtype-sensitive operators |
+| A1 | `appendix/fig_a1_performance_atlas` | 6.30 × 8.70 | 6.5 pt | 45-operator proximity to modeled SOL; change in proximity between devices over matched cases |
+| A2 | `appendix/fig_a2_shape_dtype` | 6.30 × 6.95 | 6.0 pt | per-case T_SOL / T_k for shape- or dtype-sensitive operators; three kinds of N/A |
 | A3 | `appendix/fig_a3_execution_paths` | 6.30 × 5.60 | 6.0 pt | matrix instruction family + operand path + staging |
 | A4 | `appendix/fig_a4_within_device_matrix` | 6.30 × 7.90 | 7.0 pt | slowdown vs. the fastest DSL on the device, 45 operators |
 | A5 | `appendix/fig_a5_profiling_evidence` | 6.30 × 6.10 | 6.0 pt | counters and diagnostic experiments per mechanism |
@@ -59,7 +62,7 @@ Sizes are the printed sizes. All figures are drawn at the ACL text width of 6.30
 Every manifest records:
 - the script and the sha256 of the plotting code;
 - the generating commit;
-- the input-file hashes;
+- the input-file hashes (and, for Figures 2, 3, A1 and A2, the SOL tables, the SOL code and the PR #323 peaks);
 - the metric formula and aggregation order;
 - the case coverage and excluded cases;
 - the selection criteria;
@@ -71,11 +74,17 @@ Every manifest records:
 
 ## Data protocol
 
-Defined in `../combined/comparison_manifest.json`:
-- `S[o,b,d]` is the geometric mean (GM) over valid autotuned cases of `torch_ms / dsl_ms`.
-- Category and overall values are a GM over operators.
+Cross-device figures (2, 3, A1, A2), defined in `../sol/README.md`:
+- `T_SOL[o,d,c] = max(F / P_peak[mode(o, dtype), d], Q / BW_peak[d])`; memory-only targets use `Q / BW_peak` alone. The
+  mode is frozen per operator and dtype from the algorithm and numerical contract; peaks are the PR #323 empirical
+  profiles.
+- `R[o,b,d,c] = T_SOL / T_k` ("Proximity to modeled SOL"), never clipped; values above 1 are audited.
+- `R[o,b,d]` is the geometric mean (GM) over valid autotuned cases; category and overall values are a GM over
+  operators.
+- Cross-device change = `log2(R_dev2 / R_dev1)`, with both R computed over the matched `case_id_v2`.
+
+Within-device figures (4, A4), defined in `../combined/comparison_manifest.json`:
 - Within-device ratios use only the cases valid for every DSL being compared.
-- Cross-device Δ = `log2(S_dev2 / S_dev1)`, with both S computed over the matched `case_id_v2`.
 - The winner is the DSL with the lowest GM latency over the three-DSL intersection; this is a numerical winner, not a
   significance test.
 
@@ -102,11 +111,13 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 **Values**
 
 8. No profiler duration is used as benchmark latency.
-9. RQ1 is a recomputed operator-balanced GM over exactly the 7 supported columns, and its rendered labels match.
+9. RQ1 is a recomputed operator-balanced GM of T_SOL / T_k over exactly the 7 supported columns (with the M2
+   subgroups), and its rendered labels match.
 10. The per-operator DSL winners and the A4 slowdowns are correct.
-11. The A1 deltas use matched `case_id_v2`, and the A2 values are correct.
-12. Figure 3 uses the exact profiled case and its formal latency.
-13. Counter units and denominators are correct when recomputed.
+11. The A1 proximities and changes use matched `case_id_v2`, the A2 values are correct, and A2 distinguishes three
+    kinds of N/A.
+12. Figure 3 uses the exact profiled case, its formal latency and its recomputed T_SOL / T_k.
+13. Counter units and denominators of the Figure 3 tables and A5 are correct when recomputed.
 
 **Evidence semantics**
 
@@ -124,13 +135,24 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 
 **Occupancy representation**
 
-22. Occupancy is shown as achieved vs. theoretical limit without reference lines: in Figure 3C and A5 the achieved
-    bars over grey theoretical bars and their labels match the evidence, both figures share one occupancy style, and
-    issue activity is unchanged.
+22. Occupancy is shown as achieved vs. theoretical limit without reference lines: the Figure 3C table values and the
+    A5 achieved bars over grey theoretical bars match the evidence, and issue activity is unchanged.
+
+**SOL methodology**
+
+24. The compute-mode audit: one approved mode per operator and dtype, equal to the approved rev-2 declaration, MMA
+    modes exactly for operators whose sources use a matrix-multiply primitive in all three DSLs, no dtype mapped to a
+    single mode, and exactly the 100 MI300X BF16 conditional cases with their critical throughput below 3.99 TFLOP/s.
+25. The numerics: PR #323 peaks, calibration IDs and file hashes; every case-level T_SOL / T_k reproduced without the
+    SOL helpers; one T_SOL per device and case for all DSLs; FLOP/OP units; values above 1 kept.
+26. Coverage per device and DSL, 45 operators per column, no missing mapping, the MI300X BF16 sensitivity table, and
+    the memory-only subgroup beside Overall.
+27. Figures 4, A3, A4 and A5 are byte-identical to the last pre-SOL commit (`8b3844ae`).
+28. Every value above 1 is assigned to an audited cause whose statistic supports it.
 
 **Reproducibility**
 
-23. Two independent rebuilds are byte-identical to each other and to the committed outputs.
+23. Two independent rebuilds (including the SOL tables) are byte-identical to each other and to the committed outputs.
 
 ## Style
 
@@ -140,4 +162,5 @@ All figures share `scripts/paper_figures/plot_style.py`:
   `#8E959B`.
 - **Ratio colour scale:** diverging red–neutral–teal and centred at 1×.
 - **Slowdown colour scale:** sequential from neutral to copper.
+- **Proximity colour scale:** log scale from light neutral to dark teal at 1 (the modeled SOL); amber above 1.
 - **Unavailable data:** never drawn as zero.

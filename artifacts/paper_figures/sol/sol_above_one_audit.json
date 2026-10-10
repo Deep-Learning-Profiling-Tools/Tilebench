@@ -1,0 +1,378 @@
+{
+ "schema": "tilearena-sol-above-one-audit/1",
+ "n_cases": 549,
+ "causes": {
+  "q_counts_second_read": {
+   "operators": [
+    "rmsnorm",
+    "layernorm"
+   ],
+   "kind": "performance model",
+   "explanation": "the frozen Q = 3 * n * dtype_size counts two traversals of the input; the contract allows a kernel to keep the row on chip and read it once, so at the compulsory 2/3 Q every case falls below 1"
+  },
+  "output_resident_in_l2": {
+   "operators": [
+    "rope"
+   ],
+   "kind": "timing boundary",
+   "explanation": "short launches (at most 37 us) whose written output is largely L2-resident: the write-back to HBM can finish after the timed launch, so less than Q reaches HBM inside the measured interval; Q (one read of q, one write) is otherwise complete. Cases whose output exceeds L2 (n_cases - n_output_within_L2, GH200 only) are only partly explained by this and remain flagged"
+  },
+  "at_stream_copy_rate": {
+   "operators": [
+    "swiglu",
+    "weight_dequant"
+   ],
+   "kind": "measurement",
+   "explanation": "working sets far above L2 within 2.2% of the calibrated stream-copy bandwidth, which is a sustained measured rate rather than a hardware bound"
+  },
+  "above_library_gemm_rate": {
+   "operators": [
+    "matmul_fp32_fp16_fp8"
+   ],
+   "kind": "calibration / measurement",
+   "explanation": "compute-bound GEMMs whose achieved rate exceeds the calibrated sustained library-GEMM rate (torch.matmul / torch._scaled_mm at M = 4096-16384, telemetry with SW power-cap clock events); the numerical contract is met (TF32-class, native FP16 and e4m3 operands, fp32 accumulation)"
+  }
+ },
+ "l2_bytes": {
+  "B200": 126500000.0,
+  "GH200": 50000000.0
+ },
+ "groups": [
+  {
+   "cause": "above_library_gemm_rate",
+   "kind": "calibration / measurement",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp16",
+   "device": "B200",
+   "n_cases": 33,
+   "dsls": [
+    "cutile",
+    "triton"
+   ],
+   "max_R_SOL": 1.1546264820584682,
+   "bound": [
+    "compute"
+   ],
+   "max_achieved_over_calibrated": 1.1546264820584682
+  },
+  {
+   "cause": "above_library_gemm_rate",
+   "kind": "calibration / measurement",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp16",
+   "device": "GH200",
+   "n_cases": 22,
+   "dsls": [
+    "cutile",
+    "triton"
+   ],
+   "max_R_SOL": 1.1173282641999813,
+   "bound": [
+    "compute"
+   ],
+   "max_achieved_over_calibrated": 1.1173282641999813
+  },
+  {
+   "cause": "above_library_gemm_rate",
+   "kind": "calibration / measurement",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 19,
+   "dsls": [
+    "cutile"
+   ],
+   "max_R_SOL": 1.1749777369090324,
+   "bound": [
+    "compute"
+   ],
+   "max_achieved_over_calibrated": 1.1749777369090326
+  },
+  {
+   "cause": "above_library_gemm_rate",
+   "kind": "calibration / measurement",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp8_e4m3fn",
+   "device": "B200",
+   "n_cases": 34,
+   "dsls": [
+    "cutile",
+    "triton"
+   ],
+   "max_R_SOL": 1.303344133893851,
+   "bound": [
+    "compute"
+   ],
+   "max_achieved_over_calibrated": 1.3033441338938507
+  },
+  {
+   "cause": "above_library_gemm_rate",
+   "kind": "calibration / measurement",
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp8_e4m3fn",
+   "device": "GH200",
+   "n_cases": 19,
+   "dsls": [
+    "triton"
+   ],
+   "max_R_SOL": 1.1671805420842902,
+   "bound": [
+    "compute"
+   ],
+   "max_achieved_over_calibrated": 1.1671805420842902
+  },
+  {
+   "cause": "at_stream_copy_rate",
+   "kind": "measurement",
+   "operator": "swiglu",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 12,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.0198150392260994,
+   "min_Q_over_L2": 5.5703009644268775
+  },
+  {
+   "cause": "at_stream_copy_rate",
+   "kind": "measurement",
+   "operator": "swiglu",
+   "dtype": "fp32",
+   "device": "GH200",
+   "n_cases": 11,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.0052333585164372,
+   "min_Q_over_L2": 13.08622848
+  },
+  {
+   "cause": "at_stream_copy_rate",
+   "kind": "measurement",
+   "operator": "weight_dequant",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 1,
+   "dsls": [
+    "triton"
+   ],
+   "max_R_SOL": 1.001114293238577,
+   "min_Q_over_L2": 6.631513043478261
+  },
+  {
+   "cause": "output_resident_in_l2",
+   "kind": "timing boundary",
+   "operator": "rope",
+   "dtype": "fp16",
+   "device": "B200",
+   "n_cases": 21,
+   "dsls": [
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.3778961625498705,
+   "n_output_within_L2": 21,
+   "max_T_k_us": 31.8
+  },
+  {
+   "cause": "output_resident_in_l2",
+   "kind": "timing boundary",
+   "operator": "rope",
+   "dtype": "fp16",
+   "device": "GH200",
+   "n_cases": 17,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.3538620845705447,
+   "n_output_within_L2": 13,
+   "max_T_k_us": 32.0
+  },
+  {
+   "cause": "output_resident_in_l2",
+   "kind": "timing boundary",
+   "operator": "rope",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 15,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.375320655703983,
+   "n_output_within_L2": 15,
+   "max_T_k_us": 34.0
+  },
+  {
+   "cause": "output_resident_in_l2",
+   "kind": "timing boundary",
+   "operator": "rope",
+   "dtype": "fp32",
+   "device": "GH200",
+   "n_cases": 8,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.3538620845705447,
+   "n_output_within_L2": 5,
+   "max_T_k_us": 36.8
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "layernorm",
+   "dtype": "bf16",
+   "device": "GH200",
+   "n_cases": 26,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.170287564628776,
+   "max_R_SOL_at_two_thirds_Q": 0.7801917097525174
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "layernorm",
+   "dtype": "fp16",
+   "device": "GH200",
+   "n_cases": 33,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.2113502861946979,
+   "max_R_SOL_at_two_thirds_Q": 0.807566857463132
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "layernorm",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 19,
+   "dsls": [
+    "cutile",
+    "tilelang"
+   ],
+   "max_R_SOL": 1.2141857273954304,
+   "max_R_SOL_at_two_thirds_Q": 0.8094571515969536
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "layernorm",
+   "dtype": "fp32",
+   "device": "GH200",
+   "n_cases": 53,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.3605313559231091,
+   "max_R_SOL_at_two_thirds_Q": 0.9070209039487395
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "bf16",
+   "device": "B200",
+   "n_cases": 8,
+   "dsls": [
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.0632898132971544,
+   "max_R_SOL_at_two_thirds_Q": 0.7088598755314363
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "bf16",
+   "device": "GH200",
+   "n_cases": 44,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.2786475243166255,
+   "max_R_SOL_at_two_thirds_Q": 0.8524316828777504
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "fp16",
+   "device": "B200",
+   "n_cases": 7,
+   "dsls": [
+    "tilelang"
+   ],
+   "max_R_SOL": 1.0949353434548077,
+   "max_R_SOL_at_two_thirds_Q": 0.7299568956365384
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "fp16",
+   "device": "GH200",
+   "n_cases": 45,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.2834008608382488,
+   "max_R_SOL_at_two_thirds_Q": 0.8556005738921658
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "fp32",
+   "device": "B200",
+   "n_cases": 47,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.2686147427614327,
+   "max_R_SOL_at_two_thirds_Q": 0.8457431618409551
+  },
+  {
+   "cause": "q_counts_second_read",
+   "kind": "performance model",
+   "operator": "rmsnorm",
+   "dtype": "fp32",
+   "device": "GH200",
+   "n_cases": 55,
+   "dsls": [
+    "cutile",
+    "tilelang",
+    "triton"
+   ],
+   "max_R_SOL": 1.3838527003679935,
+   "max_R_SOL_at_two_thirds_Q": 0.9225684669119957
+  }
+ ],
+ "note": "values above 1 are kept in every table and figure; this audit explains them, it does not change them"
+}

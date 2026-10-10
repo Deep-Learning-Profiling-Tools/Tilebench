@@ -44,9 +44,28 @@ CATEGORY_MARKERS = {"Point-wise": "o", "Reduction/Normalization": "s", "Matrix M
 
 DIVERGING = LinearSegmentedColormap.from_list("tilearena_div", [NEGATIVE, NEUTRAL, POSITIVE], N=256)
 SEQUENTIAL = LinearSegmentedColormap.from_list("tilearena_seq", ["#F7F5F0", "#E7C9B5", "#C98E70", "#9C5B47"], N=256)
+# Proximity to modeled SOL (T_SOL / T_k): log scale, light (far from the target) to dark teal (at the target, 1);
+# values above 1 get a separate amber colour (they exceed the modeled target and are audited, never clipped to 1).
+PROXIMITY = LinearSegmentedColormap.from_list("tilearena_prox", ["#F7F5F0", "#CFE0DD", "#8DB8B5", "#4F8D93", "#2A5F6B"], N=256)
+PROXIMITY_ABOVE_ONE = "#D9A441"
 
-# Occupancy panels (Figure 3C, Figure A5 C): a grey theoretical-limit bar drawn first, a narrower DSL-coloured achieved
-# bar on top; labels read "achieved / theoretical"
+
+def proximity_norm(vmin):
+    """Log norm from vmin to 1 (the modeled SOL target)."""
+    from matplotlib.colors import LogNorm
+    return LogNorm(vmin=vmin, vmax=1.0)
+
+
+def proximity_color(v, norm):
+    return PROXIMITY_ABOVE_ONE if v > 1.0 else PROXIMITY(norm(max(v, norm.vmin)))
+
+
+def proximity_label(v):
+    """Printed value: two decimals from 0.1, otherwise three (never rounded to 0)."""
+    return f"{v:.2f}" if v >= 0.0995 else (f"{v:.3f}" if v >= 0.00095 else f"{v:.1e}")
+
+# Occupancy panel (Figure A5 C): a grey theoretical-limit bar drawn first, a narrower DSL-coloured achieved bar on top;
+# labels read "achieved / theoretical" (Figure 3C lists the same pair in its counter table)
 OCC_THEORETICAL_COLOR = "#D9DDDF"
 OCC_ACHIEVED_RATIO = 0.18 / 0.28          # achieved bar width / theoretical bar width
 OCC_LEGEND_LABELS = ("achieved", "theoretical limit")

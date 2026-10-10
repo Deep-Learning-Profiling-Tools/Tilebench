@@ -2,7 +2,7 @@
  "figure": "fig_a1_performance_atlas",
  "rq": "Evaluation Appendix",
  "script": "scripts/paper_figures/plot_appendix.py",
- "source_git_commit": "7b8002c3468e6a095a9777ec97076ba0a98f1b28",
+ "source_git_commit": "8b3844aeff28b32a7a55c81006dfd33945aa6f81",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
@@ -31,15 +31,104 @@
    "Only Triton (and the PyTorch reference) exist on MI300X."
   ]
  },
+ "sol_inputs": {
+  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844",
+  "sol_cases.csv.gz": "0f3d97f220a43d98ae26daa5460284bc100a2dbd28e452a8be074cbd3b53cc45",
+  "sol_provenance.json": "73a2428cebc6c372180f4d3d8e1781c1edbf659d9d1188700eccc48e836d9465",
+  "sol_operator_summary.csv": "68edc40a7a0a7db29abf6c2e8d3055dc5a725c64163da359949967dc9e678b82",
+  "sol_sensitivity_mi300x_bf16.csv": "2972987f44ef2bff5cee1c77e82465f499a175f701d70a327e5d1b2bfbd0ee15",
+  "sol_above_one_cases.csv": "466209a26647cbb840dcdeef523bface534c8c0272395e67cd95f8627086d78d",
+  "sol_above_one_audit.json": "62aad77f3dcaa53158b85fde5ace0c76efbe372d87a4c6a7b15db8acd1ed75d3"
+ },
+ "sol_code_sha256": {
+  "scripts/paper_figures/sol_modes.py": "4fa04908d5e7ea21fb33f8f729d93275e25e22e5883c8342eb208b6cbc2b778b",
+  "scripts/paper_figures/sol_data.py": "ab47a0825dd217fd5fc80c8936035d4e4c462f2dae9bafa00eaf7d9990d9e17f"
+ },
+ "peaks": {
+  "B200": {
+   "file": "tilebench/data/peak_performance/empirical/B200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "23645505dbb60159c2d7541d09f34366cc5daf9e18feb4242126ac1d39173597",
+   "git_blob": "5752abb92e37346ba5fdd9605a32739bcd9f4042",
+   "calibration_id": "B200-20261006T063415Z-39b55bd3"
+  },
+  "GH200": {
+   "file": "tilebench/data/peak_performance/empirical/GH200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "2bead47d1578ca155cc98b003365961c1638224d9434d731b0d83cc0c0854853",
+   "git_blob": "2a595d682e3e46b50f867f9025eab0f5bd421836",
+   "calibration_id": "GH200-20261007T215924Z-0a3f4803-int8layout"
+  },
+  "MI300X": {
+   "file": "tilebench/data/peak_performance/empirical/MI300X.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "8dfe09c8a1554d1502d9b806563066d52f072cf8278a71ee8d94e3421240edbf",
+   "git_blob": "966606d133062ccb9964e43ca88408db4d1c1283",
+   "calibration_id": "MI300X-20261009T060617Z-eccfca2c"
+  }
+ },
+ "mode_decisions": {
+  "D1_tf32_class_on_cdna3": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: map to xf32_mma (architecture-specific realisation of the TF32 class, documented as not bit-identical to NVIDIA TF32)",
+   "question": "Score the TF32-class contract (fp32 operands at 10-bit mantissa, fp32 accumulation) on MI300X against the calibrated XF32 matrix rate (peak_tflops.xf32_mma)?",
+   "evidence": [
+    "contracts (batched_matmul, matmul_fp32_fp16_fp8, streamk_matmul, 1d/2d/3d_conv, linear_self_attention) define the fp32 class as operands rounded to TF32 (10-bit mantissa) with fp32 accumulation; narrower operand formats are forbidden",
+    "Triton 3.6 AMD backend (backends/amd/compiler.py): 'Enable XF32 (TF32) for CDNA3 GPUs' -- gfx942 accepts input_precision='tf32' and lowers it to v_mfma_f32_*_xf32",
+    "CDNA3 XF32: fp32 operands with the mantissa cut to 10 bits (low 13 bits truncated), fp32 accumulation",
+    "not bit-identical to NVIDIA TF32 (operand rounding and internal accumulation details differ; on NVIDIA the DSLs also differ: Triton feeds fp32 registers to the tf32 MMA, cuTile casts to ct.tfloat32)"
+   ],
+   "affects": "MI300X fp32 cases of batched_matmul, matmul_fp32_fp16_fp8, streamk_matmul, 1d_conv, 2d_conv, 3d_conv, linear_self_attention (140 cases; compute-bound for the GEMM/conv cases, so material)",
+   "if_rejected": "these MI300X cases get status missing_calibration (MI300X has no TF32 mode)"
+  },
+  "D2_mi300x_bf16_vector": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: conditional memory-dominance assumption, not a measured BF16 vector peak; only for the identified 100 MI300X bf16 cases after per-case verification of the critical throughput P* = F * BW / Q; status 'bf16_vector_peak_unavailable; conditional_memory_dominance'; no BF16 vector peak is fabricated and no FP16/FP32/BF16-MMA rate is substituted; RQ1 aggregates are reported with and without these cases (appendix)",
+   "status_label": "bf16_vector_peak_unavailable; conditional_memory_dominance",
+   "max_critical_throughput_tflops": 3.99,
+   "question": "MI300X has no calibrated bf16_vector (gfx942 has no packed BF16 FMA). Exclude the bf16 cases that need it, or approve a memory-term-dominance rule?",
+   "evidence": [
+    "affected: leaky_relu, mul2, vector_add, weight_dequant, jacobi_stencil_2d at bf16 on MI300X (100 cases)",
+    "for every one of them the compute term F/P would reach the memory term Q/BW only if P <= 3.99 TFLOP/s; MI300X fp16_vector is 145.92 and fp32_vector 130.24 TFLOP/s"
+   ],
+   "default": "missing_calibration: excluded from every aggregate and reported as missing (no substitution)",
+   "alternative": "dominance rule: T_SOL = Q/BW, flagged, valid for any bf16 vector peak above P* (P* <= 3.99)"
+  },
+  "D3_memory_only_M2": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: adopt the approved v2 decision M2 for the paper, including int8 mul2/vector_add; the memory-only subgroup is reported beside the overall aggregate",
+   "question": "Adopt the approved v2 decision M2 (memory-only bound T_SOL = Q/BW when F is an element, comparison, conversion or integer count without a calibrated arithmetic unit) for the paper?",
+   "evidence": [
+    "M2 approved 2026-10-06 (arithmetic_modes.yaml), with the condition that these tasks are not described as a full compute+memory roofline and the memory-only subgroup is reported beside the overall aggregate",
+    "no-arithmetic operators (copy, transpose, reverse, interleave, destindex, quantize_global conversion) and comparison/selection operators (relu, argmax, 2d_max_pooling, bitonic_sort, top_k_selection, radix_sort, histogramming) have no FMA-type work for any calibrated peak to represent",
+    "integer arithmetic without MMA: mul2/int8 and vector_add/int8 (int32_vector is not calibrated on any device); their compute term would reach the memory term only below 3.42 TOP/s"
+   ],
+   "if_rejected": "the int8 mul2/vector_add cases get status missing_calibration; no-arithmetic and comparison operators stay memory-only (they have no arithmetic term to model)"
+  }
+ },
+ "conditional_memory_dominance": {
+  "status_label": "bf16_vector_peak_unavailable; conditional_memory_dominance",
+  "n_cases": 100,
+  "operators": [
+   "jacobi_stencil_2d/bf16",
+   "leaky_relu/bf16",
+   "mul2/bf16",
+   "vector_add/bf16",
+   "weight_dequant/bf16"
+  ],
+  "max_critical_throughput_tflops": 3.9875200000000004,
+  "approved_threshold_tflops": 3.99
+ },
+ "metric": "Proximity to modeled SOL (T_SOL / T_k)",
  "metric_formula": {
-  "left": "S[o,b,d] = GM_cases(torch_ms/dsl_ms) (valid autotune cases)",
-  "right": "\u0394 = log2(S_dev2/S_dev1), both S over the case_id_v2 valid on both devices; cell shows 2^\u0394; not an absolute hardware speedup"
+  "left": "R[o,b,d] = GM over valid autotune cases of T_SOL[o,d,c] / T_k[o,b,d,c]",
+  "right": "\u0394 = log2(R_dev2 / R_dev1), both R over the case_id_v2 valid on both devices; cell shows 2^\u0394; a ratio of normalized SOL proximities, not an absolute accelerator speedup"
  },
  "aggregation_order": [
   "GM over input cases within operator"
  ],
  "colour_scale": {
-  "left": "log2 S clipped to \u00b14",
+  "left": "log scale 0.001 (floor) to 1 = modeled SOL; > 1 amber",
   "right": "\u0394 clipped to \u00b12"
  },
  "case_coverage": {
@@ -543,6 +632,13 @@
    "top_k_selection|tilelang|GH200/B200": 20
   }
  },
+ "conditional_cells": {
+  "leaky_relu|MI300X|triton": 20,
+  "mul2|MI300X|triton": 20,
+  "vector_add|MI300X|triton": 20,
+  "weight_dequant|MI300X|triton": 20,
+  "jacobi_stencil_2d|MI300X|triton": 20
+ },
  "excluded_cases": {
   "invalid_or_missing_rows": 0,
   "known_unsupported": {
@@ -558,1891 +654,2206 @@
     "operator": "dequantize_rowwise",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 5.952959104427645
+    "sol_proximity": 0.33526733500886513,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 5.1551465780360255
+    "sol_proximity": 0.2903349787020556,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 5.799113863026509
+    "sol_proximity": 0.32660285685883184,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 5.192903188762237
+    "sol_proximity": 0.46461238843948166,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 4.607193755338197
+    "sol_proximity": 0.4122085886953269,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 5.017736751024709
+    "sol_proximity": 0.4489401345858398,
+    "n_cases": 20
    },
    {
     "operator": "dequantize_rowwise",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 6.41115524795801
+    "sol_proximity": 0.39237884162245096,
+    "n_cases": 20
    },
    {
     "operator": "dropout",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.5635837967480644
+    "sol_proximity": 0.7340417176997562,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.5537021678832146
+    "sol_proximity": 0.729402677668316,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.5723853166051325
+    "sol_proximity": 0.7381736886038344,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.507224847510719
+    "sol_proximity": 0.8066357155484583,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.477974367608457
+    "sol_proximity": 0.7909814607602196,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.5189863091112241
+    "sol_proximity": 0.8129302077137697,
+    "n_cases": 60
    },
    {
     "operator": "dropout",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.117502997471325
+    "sol_proximity": 0.5889938019752006,
+    "n_cases": 60
    },
    {
     "operator": "fused_activation",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.7954181782630807
+    "sol_proximity": 0.8266467449546434,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.77677826866123
+    "sol_proximity": 0.8180645545851969,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.776177625651573
+    "sol_proximity": 0.8177880064278796,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.8517075984256894
+    "sol_proximity": 0.8820005781198076,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.8331697105673497
+    "sol_proximity": 0.8731706592805281,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.82902732632755
+    "sol_proximity": 0.8711975695241304,
+    "n_cases": 20
    },
    {
     "operator": "fused_activation",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.2435190887390148
+    "sol_proximity": 0.5998577051539947,
+    "n_cases": 20
    },
    {
     "operator": "leaky_relu",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.0286289341652484
+    "sol_proximity": 0.8123734099428511,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.032215930018237
+    "sol_proximity": 0.8152062877239024,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.0191760774035974
+    "sol_proximity": 0.8049078903311598,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0109360797265443
+    "sol_proximity": 0.8850680959045492,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.9970380273822329
+    "sol_proximity": 0.8729004396383996,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.0131951958101653
+    "sol_proximity": 0.8870459376401995,
+    "n_cases": 60
    },
    {
     "operator": "leaky_relu",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.7654080765043583
+    "sol_proximity": 0.6667856389916145,
+    "n_cases": 60
    },
    {
     "operator": "mul2",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.085347575338554
+    "sol_proximity": 0.6431346604296106,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.037093941158054
+    "sol_proximity": 0.614541438001772,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.1186462177480772
+    "sol_proximity": 0.662866137760396,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0421553414352789
+    "sol_proximity": 0.7495229420764553,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.9986996449187879
+    "sol_proximity": 0.7182694041363585,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.041612304381914
+    "sol_proximity": 0.7491323873158432,
+    "n_cases": 80
    },
    {
     "operator": "mul2",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.8247927248728902
+    "sol_proximity": 0.5923230706510348,
+    "n_cases": 80
    },
    {
     "operator": "quantize_global",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.0140882298508587
+    "sol_proximity": 0.7345657706741299,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.0086781241504668
+    "sol_proximity": 0.7306469021316743,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.9753058235944512
+    "sol_proximity": 0.7064733154993716,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.025479653639618
+    "sol_proximity": 0.7971195627869392,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.0104686076691503
+    "sol_proximity": 0.7854512684834045,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.0201791075554223
+    "sol_proximity": 0.7929993747732909,
+    "n_cases": 20
    },
    {
     "operator": "quantize_global",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.6464286111453487
+    "sol_proximity": 0.5812348511772951,
+    "n_cases": 20
    },
    {
     "operator": "relu",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.1216822767142982
+    "sol_proximity": 0.6295699362307918,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.0583626753529236
+    "sol_proximity": 0.5940303558890108,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.1546343144897881
+    "sol_proximity": 0.6480650241462032,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0299996511883
+    "sol_proximity": 0.7379630621395147,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.0107737119994205
+    "sol_proximity": 0.7241882681966573,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.038532497780763
+    "sol_proximity": 0.7440765842100087,
+    "n_cases": 80
    },
    {
     "operator": "relu",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.9111613941328385
+    "sol_proximity": 0.5904408206751824,
+    "n_cases": 80
    },
    {
     "operator": "rope",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 10.209512177985024
+    "sol_proximity": 1.0459249529516,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 8.939576073283176
+    "sol_proximity": 0.9158249210004185,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 10.25143395951003
+    "sol_proximity": 1.050219676989809,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 6.699746294438015
+    "sol_proximity": 0.9871845933640753,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 6.439988703620542
+    "sol_proximity": 0.9489102049924943,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 6.708641031330693
+    "sol_proximity": 0.9884952022791864,
+    "n_cases": 40
    },
    {
     "operator": "rope",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 3.9300239154134124
+    "sol_proximity": 0.6828900690741079,
+    "n_cases": 40
    },
    {
     "operator": "sigmoid",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.2356970180544675
+    "sol_proximity": 0.8082579028178364,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.9454892983651894
+    "sol_proximity": 0.6184357381039426,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.2121926809851988
+    "sol_proximity": 0.7928839350011613,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0355189176489352
+    "sol_proximity": 0.8785105799625981,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.951934109751511
+    "sol_proximity": 0.807599139514223,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.028700661709049
+    "sol_proximity": 0.8727261274740986,
+    "n_cases": 60
    },
    {
     "operator": "sigmoid",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.8915188740827625
+    "sol_proximity": 0.6293620483724894,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.8078355952185379
+    "sol_proximity": 0.9009456543930162,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.4704202976427707
+    "sol_proximity": 0.7327927278323099,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.6928824425127955
+    "sol_proximity": 0.8436580649335909,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.653574200891078
+    "sol_proximity": 0.9418262844164096,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.4810223150091353
+    "sol_proximity": 0.8435459039764758,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.6359518805223423
+    "sol_proximity": 0.9317891391182195,
+    "n_cases": 60
    },
    {
     "operator": "swiglu",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.2223350994273932
+    "sol_proximity": 0.6898831551280482,
+    "n_cases": 60
    },
    {
     "operator": "vector_add",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.0303985102564492
+    "sol_proximity": 0.6927799016208269,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.0211877697062843
+    "sol_proximity": 0.6865871365220011,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.0558617124637992
+    "sol_proximity": 0.7098998746648182,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0152503250624745
+    "sol_proximity": 0.7735431269373302,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.9928469067958662
+    "sol_proximity": 0.7564734350670316,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.0171612830452663
+    "sol_proximity": 0.7749991308183078,
+    "n_cases": 80
    },
    {
     "operator": "vector_add",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.7364134174350361
+    "sol_proximity": 0.5818208260076703,
+    "n_cases": 80
    },
    {
     "operator": "weight_dequant",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 12.627701346635842
+    "sol_proximity": 0.6100566977748225,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 7.29992682757611
+    "sol_proximity": 0.3526666597650684,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 13.802588763638013
+    "sol_proximity": 0.6668166668458748,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 9.238868538814282
+    "sol_proximity": 0.7588318636229384,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 7.657111230549718
+    "sol_proximity": 0.6289146728991006,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 9.335798186708304
+    "sol_proximity": 0.766793152934798,
+    "n_cases": 60
    },
    {
     "operator": "weight_dequant",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 7.028485351560714
+    "sol_proximity": 0.6153711084600106,
+    "n_cases": 60
    },
    {
     "operator": "argmax",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.988222869928741
+    "sol_proximity": 0.43255251791560884,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 2.0580387734907846
+    "sol_proximity": 0.4477414815539749,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 2.370323566510444
+    "sol_proximity": 0.5156813365724667,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.6518594314086916
+    "sol_proximity": 0.5975237718827555,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.5824259674880978
+    "sol_proximity": 0.5724077453808285,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.7288100130777164
+    "sol_proximity": 0.6253589501873867,
+    "n_cases": 40
    },
    {
     "operator": "argmax",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.9639414157254845
+    "sol_proximity": 0.4324437366830338,
+    "n_cases": 40
    },
    {
     "operator": "batch_normalization",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.8559748746353746
+    "sol_proximity": 0.43001506660792804,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 2.5638033038244172
+    "sol_proximity": 0.3860237210960889,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.26701600198666
+    "sol_proximity": 0.4919042237312474,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 2.1246793829465602
+    "sol_proximity": 0.6219604830826518,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.8599899236193729
+    "sol_proximity": 0.5444775530408896,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 2.0683163698250095
+    "sol_proximity": 0.6054612563520487,
+    "n_cases": 60
    },
    {
     "operator": "batch_normalization",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 3.889035157309253
+    "sol_proximity": 0.3287481007297841,
+    "n_cases": 60
    },
    {
     "operator": "cross_entropy",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.490353742934366
+    "sol_proximity": 0.1830443054307067,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.7643339897809762
+    "sol_proximity": 0.1296808899633333,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 2.3425976225263114
+    "sol_proximity": 0.1721840344712245,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.8491245139157473
+    "sol_proximity": 0.2872012932049438,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.4424236633269087
+    "sol_proximity": 0.22403355660438556,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.9523935258724623
+    "sol_proximity": 0.30324077219014145,
+    "n_cases": 40
    },
    {
     "operator": "cross_entropy",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.940824835672365
+    "sol_proximity": 0.1674292292075565,
+    "n_cases": 40
    },
    {
     "operator": "histogramming",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.21159229450853
+    "sol_proximity": 0.030595401134867393,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.7457325276573158
+    "sol_proximity": 0.018831405520162398,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 4.819975486940871
+    "sol_proximity": 0.12171510511545726,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.24974269526302
+    "sol_proximity": 0.05526268009746763,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.7581034047628303
+    "sol_proximity": 0.033522761202770736,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 5.364901852695837
+    "sol_proximity": 0.23723191658859394,
+    "n_cases": 20
    },
    {
     "operator": "histogramming",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.6052561206804902
+    "sol_proximity": 0.01955670045003828,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.8435768286119374
+    "sol_proximity": 0.46084273105146006,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 2.971776117493589
+    "sol_proximity": 0.4816192790288589,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.1704341808975065
+    "sol_proximity": 0.5138146899505132,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 3.1907361585230185
+    "sol_proximity": 0.6061671470781617,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 3.143626120536685
+    "sol_proximity": 0.5972173135895358,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 3.1841533110286044
+    "sol_proximity": 0.6049165560900348,
+    "n_cases": 20
    },
    {
     "operator": "kl_divergence",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 2.64951487426852
+    "sol_proximity": 0.44328593188668003,
+    "n_cases": 20
    },
    {
     "operator": "l2_norm",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 6.003705662636324
+    "sol_proximity": 0.6726548012313918,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 5.2388557339801505
+    "sol_proximity": 0.5869610637895486,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 6.347270791579438
+    "sol_proximity": 0.7111478164632187,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 4.053286840674406
+    "sol_proximity": 0.7297370946748617,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 4.122324848568069
+    "sol_proximity": 0.7421664137146362,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 4.3890634345025985
+    "sol_proximity": 0.7901889318311082,
+    "n_cases": 60
    },
    {
     "operator": "l2_norm",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 3.0825885444138708
+    "sol_proximity": 0.5757484498971294,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.9966262047142491
+    "sol_proximity": 0.7578559334419654,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.6516329714594964
+    "sol_proximity": 0.6269074523481489,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 2.3075759110993572
+    "sol_proximity": 0.8758825722938368,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.3970093401321024
+    "sol_proximity": 0.9860795365296083,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.3292394443157276
+    "sol_proximity": 0.9382441316131661,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.5212439576660592
+    "sol_proximity": 1.0737705852288484,
+    "n_cases": 60
    },
    {
     "operator": "layernorm",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.1699884114536692
+    "sol_proximity": 0.7397661033521116,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.8281283283065255
+    "sol_proximity": 0.6039485416014991,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.6055601559369823
+    "sol_proximity": 0.5304199380411485,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.8403209454657532
+    "sol_proximity": 0.6079765484091189,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.3150492553745095
+    "sol_proximity": 0.6368898642969226,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.3002712700817012
+    "sol_proximity": 0.6297327566758563,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.3150100212386084
+    "sol_proximity": 0.6368708628615106,
+    "n_cases": 60
    },
    {
     "operator": "mean_reduction",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.8145865049943353
+    "sol_proximity": 0.47146967293623215,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 9.560113036502896
+    "sol_proximity": 0.060691787033381885,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 4.877146333202901
+    "sol_proximity": 0.030962262209157713,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 9.245646460503593
+    "sol_proximity": 0.05869541540191753,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 8.730772847008996
+    "sol_proximity": 0.10122006845052288,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 4.480964278746422
+    "sol_proximity": 0.05194998414996479,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 9.041323529748567
+    "sol_proximity": 0.10482043257808396,
+    "n_cases": 60
    },
    {
     "operator": "moe_topk_gating",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 9.654955566095005
+    "sol_proximity": 0.08278276371781475,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.2776257218806437
+    "sol_proximity": 0.8747000016005106,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.1907345072228812
+    "sol_proximity": 0.8152117302714559,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.419124535303503
+    "sol_proximity": 0.9715742349599168,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.1747995577906876
+    "sol_proximity": 1.0305791208978456,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.1789283335675411
+    "sol_proximity": 1.0342010409796816,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.2956575156774328
+    "sol_proximity": 1.1366003456816416,
+    "n_cases": 60
    },
    {
     "operator": "rmsnorm",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.1206780409271648
+    "sol_proximity": 0.7860608261017259,
+    "n_cases": 60
    },
    {
     "operator": "softmax",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.3984752847205133
+    "sol_proximity": 0.516706906543264,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.5762768004500232
+    "sol_proximity": 0.33957952979755346,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 2.141973855775499
+    "sol_proximity": 0.4614484426689741,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.6672790545963245
+    "sol_proximity": 0.6545660643714044,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.330404632627876
+    "sol_proximity": 0.5223107205719423,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.6070062019237974
+    "sol_proximity": 0.63090322049801,
+    "n_cases": 40
    },
    {
     "operator": "softmax",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.9984717280498421
+    "sol_proximity": 0.4294004894236602,
+    "n_cases": 40
    },
    {
     "operator": "batched_matmul",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.807137148848682
+    "sol_proximity": 0.23757756227562044,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.7137018684046854
+    "sol_proximity": 0.21007526456811487,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.6128650416882454
+    "sol_proximity": 0.18039435158687847,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.017100526598867
+    "sol_proximity": 0.3534469207630752,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.883832451469448
+    "sol_proximity": 0.3071356766346055,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.8670271900419028
+    "sol_proximity": 0.30129577413839237,
+    "n_cases": 60
    },
    {
     "operator": "batched_matmul",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.29425916479090436
+    "sol_proximity": 0.06641156859455442,
+    "n_cases": 60
    },
    {
     "operator": "block_sparse_attention",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.945275227882543
+    "sol_proximity": 0.1813056179427826,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.7232957236224953
+    "sol_proximity": 0.0674133799922459,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.7149204431597632
+    "sol_proximity": 0.06663277816378767,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.906037768091126
+    "sol_proximity": 0.3028737877671797,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.8776684000272864
+    "sol_proximity": 0.13946352856693017,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.1113342044922931
+    "sol_proximity": 0.17659356263800643,
+    "n_cases": 20
    },
    {
     "operator": "block_sparse_attention",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.4249058933317928
+    "sol_proximity": 0.04245102312688377,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.678132224137141
+    "sol_proximity": 0.4943168164372813,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.7203880621475405
+    "sol_proximity": 0.5251187317241827,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.4039596249346227
+    "sol_proximity": 0.2944618006037982,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.7134682917896811
+    "sol_proximity": 0.6054353422185723,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.8291762513723218
+    "sol_proximity": 0.7036228705411056,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.5262798418349224
+    "sol_proximity": 0.4465908573803708,
+    "n_cases": 20
    },
    {
     "operator": "flash_attention",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.3098135095124314
+    "sol_proximity": 0.13565809082290398,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.9787888182227493
+    "sol_proximity": 0.007464819087623631,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.5859593520542599
+    "sol_proximity": 0.002210483764363901,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.9939351749252765
+    "sol_proximity": 0.007521957480351434,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.891418388268599
+    "sol_proximity": 0.01617036573200748,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.6139125661701084
+    "sol_proximity": 0.005248542989757671,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.9209621631606513
+    "sol_proximity": 0.0164229453030171,
+    "n_cases": 20
    },
    {
     "operator": "flash_decode",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.275855423489748
+    "sol_proximity": 0.005344013932808299,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.5649642946312514
+    "sol_proximity": 0.009307441226696661,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.2803788205344607
+    "sol_proximity": 0.004619069591005394,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.17217396893202982
+    "sol_proximity": 0.0028364608380214646,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.5426564038608519
+    "sol_proximity": 0.017422589938187228,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.44201701295785667
+    "sol_proximity": 0.014191449889241224,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.1893994563420603
+    "sol_proximity": 0.006080881085869312,
+    "n_cases": 20
    },
    {
     "operator": "linear_self_attention",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.27372371165384746
+    "sol_proximity": 0.005419529971516752,
+    "n_cases": 20
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.8675179433864122
+    "sol_proximity": 0.8990971802078228,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.1013473611780924
+    "sol_proximity": 1.141438415670307,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.5209567597224657
+    "sol_proximity": 0.5399205367998265,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.9806714388463653
+    "sol_proximity": 0.9872205989748888,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.6109448725690216
+    "sol_proximity": 0.6150249096147233,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.41092809387580276
+    "sol_proximity": 0.41367237068605367,
+    "n_cases": 60
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.09364558430691441
+    "sol_proximity": 0.07759642231564161,
+    "n_cases": 40
    },
    {
     "operator": "matmul_int8",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 10.34142299059642
+    "sol_proximity": 0.18327005089050408,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 10.161166392510802
+    "sol_proximity": 0.18007555474287143,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 10.881827450110054
+    "sol_proximity": 0.19284706489395192,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 13.496214704748484
+    "sol_proximity": 0.5645099021149965,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 6.800152319911208
+    "sol_proximity": 0.2844318502972186,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 6.856702707236527
+    "sol_proximity": 0.28679719897549266,
+    "n_cases": 20
    },
    {
     "operator": "matmul_int8",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.8702915403242883
+    "sol_proximity": 0.07386755183516532,
+    "n_cases": 20
    },
    {
     "operator": "streamk_matmul",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.46316050023753397
+    "sol_proximity": 0.5297873943503587,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.22592168249704186
+    "sol_proximity": 0.2584211292542718,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.296820248192247
+    "sol_proximity": 0.3395186459111909,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.5308747995362512
+    "sol_proximity": 0.5159068583429633,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.37039556222686165
+    "sol_proximity": 0.35995231082651347,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.4595364125892775
+    "sol_proximity": 0.446579847301531,
+    "n_cases": 60
    },
    {
     "operator": "streamk_matmul",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.07551256662180796
+    "sol_proximity": 0.0695006000295648,
+    "n_cases": 60
    },
    {
     "operator": "1d_conv",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.5393787056495709
+    "sol_proximity": 0.10046168234561637,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.3065046201905226
+    "sol_proximity": 0.05708784842360709,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.09721487203508783
+    "sol_proximity": 0.018106702195254742,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.5693492177125837
+    "sol_proximity": 0.14325224458174754,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.46009003985874386
+    "sol_proximity": 0.11576187139461837,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.10069601989306827
+    "sol_proximity": 0.025335822762844754,
+    "n_cases": 40
    },
    {
     "operator": "1d_conv",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.9190735803630632
+    "sol_proximity": 0.3059224733803936,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.23803942622167218
+    "sol_proximity": 0.03884050625356657,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.15251320760403445
+    "sol_proximity": 0.024885332180979207,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.061508422947724524
+    "sol_proximity": 0.010036229393039123,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.2528415593856224
+    "sol_proximity": 0.054002247588209776,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.17109218641736057
+    "sol_proximity": 0.036542104208537166,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.05364144895311756
+    "sol_proximity": 0.011456814355976046,
+    "n_cases": 40
    },
    {
     "operator": "2d_conv",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.5275261487670956
+    "sol_proximity": 0.11004303415704796,
+    "n_cases": 40
    },
    {
     "operator": "2d_max_pooling",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.6432914200254123
+    "sol_proximity": 0.3385988961898951,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 2.0283538614964782
+    "sol_proximity": 0.25982696171223363,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.3615534699072382
+    "sol_proximity": 0.4306064347543488,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 2.5846945970453694
+    "sol_proximity": 0.5122417151063726,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 2.47005383844862
+    "sol_proximity": 0.48952190175905375,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 2.2843190043673998
+    "sol_proximity": 0.45271247364575945,
+    "n_cases": 60
    },
    {
     "operator": "2d_max_pooling",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.6318356072230522
+    "sol_proximity": 0.3641893403521825,
+    "n_cases": 60
    },
    {
     "operator": "3d_conv",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.11929831814139849
+    "sol_proximity": 0.047243529397453264,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.05457959164959389
+    "sol_proximity": 0.02161415670204483,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.029054687320893013
+    "sol_proximity": 0.011505996027131675,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.18491448259960028
+    "sol_proximity": 0.06803183681918513,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.08894516606957653
+    "sol_proximity": 0.03272379177029279,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.04199157060200308
+    "sol_proximity": 0.015449107278214597,
+    "n_cases": 40
    },
    {
     "operator": "3d_conv",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.0927022905189452
+    "sol_proximity": 0.19650788516591583,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 13.862636534541279
+    "sol_proximity": 0.12319162096862228,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 11.414659822534821
+    "sol_proximity": 0.10143744610483664,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 10.048925796827792
+    "sol_proximity": 0.08930072247224108,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 13.79665996860697
+    "sol_proximity": 0.1472737583499186,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 11.105973709097048
+    "sol_proximity": 0.11855177209526123,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 14.792678832308473
+    "sol_proximity": 0.15790585639238017,
+    "n_cases": 40
    },
    {
     "operator": "gaussian_blur",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 5.183335607369912
+    "sol_proximity": 0.13870751055095445,
+    "n_cases": 40
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 5.777217506924839
+    "sol_proximity": 0.3554449443259634,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 6.6743498468975115
+    "sol_proximity": 0.41064126578216364,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 6.897629063507735
+    "sol_proximity": 0.42437858285946506,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 5.616458503641675
+    "sol_proximity": 0.5524351551888288,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 6.1216156933225125
+    "sol_proximity": 0.602122443058069,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 6.263969790624587
+    "sol_proximity": 0.6161243995906146,
+    "n_cases": 60
    },
    {
     "operator": "jacobi_stencil_2d",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 3.2195975690465173
+    "sol_proximity": 0.3907359478073844,
+    "n_cases": 60
    },
    {
     "operator": "bitonic_sort",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 36.432208381814554
+    "sol_proximity": 0.0012495010258506268,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 36.58899041917737
+    "sol_proximity": 0.001254878117309558,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 36.527972738408224
+    "sol_proximity": 0.0012527854180716441,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 33.40287172237294
+    "sol_proximity": 0.002009902818532144,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 31.164443745594436
+    "sol_proximity": 0.0018752131206821547,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 33.93952948658415
+    "sol_proximity": 0.00204219435208172,
+    "n_cases": 40
    },
    {
     "operator": "bitonic_sort",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 20.092289386790323
+    "sol_proximity": 0.0010828664172079143,
+    "n_cases": 40
    },
    {
     "operator": "destindex",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 3.4935934055914264
+    "sol_proximity": 0.6483263718145056,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.6671536418986022
+    "sol_proximity": 0.30938336160686747,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.2792281257716236
+    "sol_proximity": 0.6085453647041352,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 2.5328532856468353
+    "sol_proximity": 0.8003630094469907,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.5447526212577576
+    "sol_proximity": 0.4881304668561749,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 2.3706076172066286
+    "sol_proximity": 0.7490945715163747,
+    "n_cases": 80
    },
    {
     "operator": "destindex",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.6928993123560754
+    "sol_proximity": 0.5587527794324464,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 3.6273941570962682
+    "sol_proximity": 0.7634748076315336,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 3.561756368115627
+    "sol_proximity": 0.7496597116852279,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.490660256406252
+    "sol_proximity": 0.7346957767336104,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 2.8673508132649683
+    "sol_proximity": 0.8465356771221773,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 2.8216622466671133
+    "sol_proximity": 0.8330469189685782,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 2.73636140685223
+    "sol_proximity": 0.8078633230661436,
+    "n_cases": 80
    },
    {
     "operator": "interleave",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.9932705197886755
+    "sol_proximity": 0.6348049964304738,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 1.076576093231898
+    "sol_proximity": 0.45227094234386367,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 1.08853784475284
+    "sol_proximity": 0.4572960888861937,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.0754565180325417
+    "sol_proximity": 0.4518006074240926,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.0438818157552427
+    "sol_proximity": 0.5430914703425405,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.0138685907229676
+    "sol_proximity": 0.5274767462746568,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.040104692226685
+    "sol_proximity": 0.5411263785669879,
+    "n_cases": 80
    },
    {
     "operator": "matrix_copy",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.8631685805287308
+    "sol_proximity": 0.4401003716344332,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 5.699244703349617
+    "sol_proximity": 0.7834815282788659,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 5.679622361154172
+    "sol_proximity": 0.7807840230037084,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 4.595844948672512
+    "sol_proximity": 0.6317959328895586,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 5.1587412897716005
+    "sol_proximity": 0.8837954703051116,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 5.11271221114411
+    "sol_proximity": 0.8759097693350023,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 4.548177070734691
+    "sol_proximity": 0.7791936186508889,
+    "n_cases": 80
    },
    {
     "operator": "matrix_transpose",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 4.110634935938658
+    "sol_proximity": 0.626170644088173,
+    "n_cases": 80
    },
    {
     "operator": "radix_sort",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 0.6870489447919877
+    "sol_proximity": 0.017465966444711368,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 0.3664928547724527
+    "sol_proximity": 0.009316879026166264,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 0.38628444262133954
+    "sol_proximity": 0.009820015246484407,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 0.6520411161523154
+    "sol_proximity": 0.02732981925713281,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 0.3517884478445892
+    "sol_proximity": 0.014744951596110759,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 0.36946476734418443
+    "sol_proximity": 0.015485841403652301,
+    "n_cases": 20
    },
    {
     "operator": "radix_sort",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 0.6234747575248873
+    "sol_proximity": 0.021813786757768693,
+    "n_cases": 20
    },
    {
     "operator": "reverse_array",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 2.328036511688249
+    "sol_proximity": 0.5470268497649707,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 2.3082428125252457
+    "sol_proximity": 0.5423758553136502,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 1.9864552172666616
+    "sol_proximity": 0.4667643029844743,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 1.8861065499502403
+    "sol_proximity": 0.7060746205418632,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 1.7951672635093225
+    "sol_proximity": 0.6720309859615088,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 1.6674245216670158
+    "sol_proximity": 0.6242097703596311,
+    "n_cases": 80
    },
    {
     "operator": "reverse_array",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 1.3025218349228076
+    "sol_proximity": 0.5502603219402425,
+    "n_cases": 80
    },
    {
     "operator": "top_k_selection",
     "device": "B200",
     "dsl": "triton",
-    "speedup": 3.659133244462607
+    "sol_proximity": 0.0019526439600456075,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "B200",
     "dsl": "cutile",
-    "speedup": 3.239555802177466
+    "sol_proximity": 0.0017287424774501607,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "B200",
     "dsl": "tilelang",
-    "speedup": 3.446383151955698
+    "sol_proximity": 0.0018391129254047018,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "GH200",
     "dsl": "triton",
-    "speedup": 2.336091756885282
+    "sol_proximity": 0.0026553786178355747,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "GH200",
     "dsl": "cutile",
-    "speedup": 3.0589769133528897
+    "sol_proximity": 0.003477064573439529,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "GH200",
     "dsl": "tilelang",
-    "speedup": 2.421443654394462
+    "sol_proximity": 0.002752396041474678,
+    "n_cases": 20
    },
    {
     "operator": "top_k_selection",
     "device": "MI300X",
     "dsl": "triton",
-    "speedup": 3.5405817636186123
+    "sol_proximity": 0.003111741867497928,
+    "n_cases": 20
    }
   ],
   "right": [
@@ -2451,1275 +2862,1275 @@
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.19706565386126113
+    "delta_log2": 0.47071569407195274
    },
    {
     "operator": "dequantize_rowwise",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 0.10697736102522169
+    "delta_log2": 0.226935320065829
    },
    {
     "operator": "dequantize_rowwise",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1621251771185856
+    "delta_log2": 0.5056561708146284
    },
    {
     "operator": "dequantize_rowwise",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.20879568159512318
+    "delta_log2": 0.4589856663380912
    },
    {
     "operator": "dropout",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.05296188536532463
+    "delta_log2": 0.13605522771210676
    },
    {
     "operator": "dropout",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.4845778381769401
+    "delta_log2": -0.31760960535229965
    },
    {
     "operator": "dropout",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.07208872814271364
+    "delta_log2": 0.11692838493471741
    },
    {
     "operator": "dropout",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.04984592999214133
+    "delta_log2": 0.13917118308528978
    },
    {
     "operator": "fused_activation",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.044536394587402606
+    "delta_log2": 0.09350865434308513
    },
    {
     "operator": "fused_activation",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.5298912533170036
+    "delta_log2": -0.4626506337128006
    },
    {
     "operator": "fused_activation",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.04507670053901773
+    "delta_log2": 0.09404896029470029
    },
    {
     "operator": "fused_activation",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.042300764817064906
+    "delta_log2": 0.09127302457274816
    },
    {
     "operator": "leaky_relu",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.025030860498017487
+    "delta_log2": 0.12364543932137168
    },
    {
     "operator": "leaky_relu",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.42642161138546275
+    "delta_log2": -0.28491998671761026
    },
    {
     "operator": "leaky_relu",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.05002436509759839
+    "delta_log2": 0.09865193472179103
    },
    {
     "operator": "leaky_relu",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.00849117800184221
+    "delta_log2": 0.1401851218175471
    },
    {
     "operator": "mul2",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.05858679148326831
+    "delta_log2": 0.22085179548834608
    },
    {
     "operator": "mul2",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.3960536176421829
+    "delta_log2": -0.11873656328685443
    },
    {
     "operator": "mul2",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.05442381766958502
+    "delta_log2": 0.22501476930202824
    },
    {
     "operator": "mul2",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.10293544672932235
+    "delta_log2": 0.1765031402422916
    },
    {
     "operator": "quantize_global",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.016115689634757516
+    "delta_log2": 0.1179044645128479
    },
    {
     "operator": "quantize_global",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.6496202194320218
+    "delta_log2": -0.3377704604812356
    },
    {
     "operator": "quantize_global",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.0025586276911462253
+    "delta_log2": 0.10434740256923675
    },
    {
     "operator": "quantize_global",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.06489588463616967
+    "delta_log2": 0.1666846595142596
    },
    {
     "operator": "relu",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.12302023288396395
+    "delta_log2": 0.22918195604775204
    },
    {
     "operator": "relu",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.2998855551908135
+    "delta_log2": -0.09257418275681795
    },
    {
     "operator": "relu",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.06637404039919637
+    "delta_log2": 0.28582814853252
    },
    {
     "operator": "relu",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.15288964470768854
+    "delta_log2": 0.19931254422402764
    },
    {
     "operator": "rope",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.6077355644307986
+    "delta_log2": -0.08338755511137104
    },
    {
     "operator": "rope",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.377303937395516
+    "delta_log2": -0.6150540804757751
    },
    {
     "operator": "rope",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.4731482607803262
+    "delta_log2": 0.05119974853910023
    },
    {
     "operator": "rope",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.6117332719101872
+    "delta_log2": -0.08738526259076082
    },
    {
     "operator": "sigmoid",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.25497114052554487
+    "delta_log2": 0.12024395230558046
    },
    {
     "operator": "sigmoid",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.47098780442064125
+    "delta_log2": -0.3609255242711426
    },
    {
     "operator": "sigmoid",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.00980058867569362
+    "delta_log2": 0.3850156815068192
    },
    {
     "operator": "sigmoid",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.2367957988186527
+    "delta_log2": 0.1384192940124727
    },
    {
     "operator": "swiglu",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.12867569977685017
+    "delta_log2": 0.0640209014292936
    },
    {
     "operator": "swiglu",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.5646236350501884
+    "delta_log2": -0.3850880497374528
    },
    {
     "operator": "swiglu",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.010364791509980736
+    "delta_log2": 0.20306139271612458
    },
    {
     "operator": "swiglu",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.049351478954948076
+    "delta_log2": 0.14334512225119597
    },
    {
     "operator": "vector_add",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.02136692354356947
+    "delta_log2": 0.15908465137227606
    },
    {
     "operator": "vector_add",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.48461459481802477
+    "delta_log2": -0.25182213838641554
    },
    {
     "operator": "vector_add",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.040604982523828846
+    "delta_log2": 0.1398465923920173
    },
    {
     "operator": "vector_add",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.053872441657244544
+    "delta_log2": 0.12657913325860168
    },
    {
     "operator": "weight_dequant",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.45080396118046306
+    "delta_log2": 0.31483692843712396
    },
    {
     "operator": "weight_dequant",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.845306320386058
+    "delta_log2": 0.012513380174456717
    },
    {
     "operator": "weight_dequant",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.0689182117876729
+    "delta_log2": 0.8345591014052622
    },
    {
     "operator": "weight_dequant",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5640935994979406
+    "delta_log2": 0.20154729011964542
    },
    {
     "operator": "argmax",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.26738856223721874
+    "delta_log2": 0.4661208037005886
    },
    {
     "operator": "argmax",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.0444621115868504
+    "delta_log2": -0.0003628643355871809
    },
    {
     "operator": "argmax",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.37913215697246
+    "delta_log2": 0.35437720896534675
    },
    {
     "operator": "argmax",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.45530467773030314
+    "delta_log2": 0.27820468820750416
    },
    {
     "operator": "batch_normalization",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.4267381343503977
+    "delta_log2": 0.5324357111349447
    },
    {
     "operator": "batch_normalization",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 0.44542898960351873
+    "delta_log2": -0.3874046494028178
    },
    {
     "operator": "batch_normalization",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.46299077632820196
+    "delta_log2": 0.4961830691571404
    },
    {
     "operator": "batch_normalization",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.6595166439044102
+    "delta_log2": 0.2996572015809325
    },
    {
     "operator": "cross_entropy",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.42950831052015986
+    "delta_log2": 0.6498693537000234
    },
    {
     "operator": "cross_entropy",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.3596807677679301
+    "delta_log2": -0.1286414811023838
    },
    {
     "operator": "cross_entropy",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.29062872017268954
+    "delta_log2": 0.7887489440474937
    },
    {
     "operator": "cross_entropy",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.26286529735001246
+    "delta_log2": 0.8165123668701709
    },
    {
     "operator": "histogramming",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.04472678648895415
+    "delta_log2": 0.8529907164323862
    },
    {
     "operator": "histogramming",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.0012866392841993
+    "delta_log2": -0.6456518309187493
    },
    {
     "operator": "histogramming",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.02373637344963162
+    "delta_log2": 0.8320003033930643
    },
    {
     "operator": "histogramming",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.15452596875201025
+    "delta_log2": 0.9627898986954422
    },
    {
     "operator": "kl_divergence",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.1661825333363595
+    "delta_log2": 0.39544116832246806
    },
    {
     "operator": "kl_divergence",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.10197855734906354
+    "delta_log2": -0.05603691714153152
    },
    {
     "operator": "kl_divergence",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.0811042116847827
+    "delta_log2": 0.31036284667089176
    },
    {
     "operator": "kl_divergence",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.006229374221886506
+    "delta_log2": 0.2354880092079954
    },
    {
     "operator": "l2_norm",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5667609743885531
+    "delta_log2": 0.11751047192683993
    },
    {
     "operator": "l2_norm",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.9617109139383782
+    "delta_log2": -0.22442769829643114
    },
    {
     "operator": "l2_norm",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3457935370503438
+    "delta_log2": 0.3384779092650501
    },
    {
     "operator": "l2_norm",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5322232717576147
+    "delta_log2": 0.15204817455777733
    },
    {
     "operator": "layernorm",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5152225997837855
+    "delta_log2": 0.3797803964693221
    },
    {
     "operator": "layernorm",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.771070025923219
+    "delta_log2": -0.034854425076635775
    },
    {
     "operator": "layernorm",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3132921145425815
+    "delta_log2": 0.5817108817105264
    },
    {
     "operator": "layernorm",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.6011265756140286
+    "delta_log2": 0.29387642063907937
    },
    {
     "operator": "mean_reduction",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.47525050927224227
+    "delta_log2": 0.07661828012672588
    },
    {
     "operator": "mean_reduction",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.1662275272049536
+    "delta_log2": -0.35726065922428984
    },
    {
     "operator": "mean_reduction",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3042640819003504
+    "delta_log2": 0.24760470749861752
    },
    {
     "operator": "mean_reduction",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.48488359529629194
+    "delta_log2": 0.06698519410267573
    },
    {
     "operator": "moe_topk_gating",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.13091830968335005
+    "delta_log2": 0.7379221494402716
    },
    {
     "operator": "moe_topk_gating",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 0.014241943249814404
+    "delta_log2": 0.44782911347623844
    },
    {
     "operator": "moe_topk_gating",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1222280337480824
+    "delta_log2": 0.7466124253755365
    },
    {
     "operator": "moe_topk_gating",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.0322402176553859
+    "delta_log2": 0.8366002414682336
    },
    {
     "operator": "rmsnorm",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.12105063557634563
+    "delta_log2": 0.23659506791808058
    },
    {
     "operator": "rmsnorm",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.18909339682164877
+    "delta_log2": -0.15414734261259266
    },
    {
     "operator": "rmsnorm",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.0143757574492908
+    "delta_log2": 0.34326994604513494
    },
    {
     "operator": "rmsnorm",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.13131678118368711
+    "delta_log2": 0.22632892231073848
    },
    {
     "operator": "softmax",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.524621983029369
+    "delta_log2": 0.3411926409461419
    },
    {
     "operator": "softmax",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.2643240901224486
+    "delta_log2": -0.2670223320623306
    },
    {
     "operator": "softmax",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.2446558026217555
+    "delta_log2": 0.6211588213537544
    },
    {
     "operator": "softmax",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.4145653743160873
+    "delta_log2": 0.4512492496594231
    },
    {
     "operator": "batched_matmul",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.33357653471627624
+    "delta_log2": 0.5730949841718929
    },
    {
     "operator": "batched_matmul",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.4557264881227143
+    "delta_log2": -1.8388921094711888
    },
    {
     "operator": "batched_matmul",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.30845135383414535
+    "delta_log2": 0.547969803289764
    },
    {
     "operator": "batched_matmul",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.5005078225270577
+    "delta_log2": 0.7400262719826768
    },
    {
     "operator": "block_sparse_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.029397583320674187
+    "delta_log2": 0.7402930962160763
    },
    {
     "operator": "block_sparse_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -2.1947590311189034
+    "delta_log2": -2.094552398972866
    },
    {
     "operator": "block_sparse_attention",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.27909034285032036
+    "delta_log2": 1.0487810223870708
    },
    {
     "operator": "block_sparse_attention",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.6364381226755212
+    "delta_log2": 1.40612880221227
    },
    {
     "operator": "flash_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.07328271281713765
+    "delta_log2": 0.2925369076275611
    },
    {
     "operator": "flash_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.1301665468893165
+    "delta_log2": -1.8654608927810017
    },
    {
     "operator": "flash_attention",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.20290452254046218
+    "delta_log2": 0.4221587173508851
    },
    {
     "operator": "flash_attention",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.3816190308434527
+    "delta_log2": 0.600873225653875
    },
    {
     "operator": "flash_decode",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.06514912451761595
+    "delta_log2": 1.115173107523689
    },
    {
     "operator": "flash_decode",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.633152796186678
+    "delta_log2": -0.4821835274056819
    },
    {
     "operator": "flash_decode",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.06723261215483874
+    "delta_log2": 1.2475548441961446
    },
    {
     "operator": "flash_decode",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.053789404076723064
+    "delta_log2": 1.1265328279645808
    },
    {
     "operator": "linear_self_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.058120683493007315
+    "delta_log2": 0.9045025962157711
    },
    {
     "operator": "linear_self_attention",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.045439277686977
+    "delta_log2": -0.7802168669598072
    },
    {
     "operator": "linear_self_attention",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.6567245250286222
+    "delta_log2": 1.6193478047373995
    },
    {
     "operator": "linear_self_attention",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.13756515221516696
+    "delta_log2": 1.1001884319239452
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.17687626315829488
+    "delta_log2": 0.1348954376056285
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -3.0084526843143955
+    "delta_log2": -3.466247493743672
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.8501554495102319
+    "delta_log2": -0.892136275062898
    },
    {
     "operator": "matmul_fp32_fp16_fp8",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3422776649345997
+    "delta_log2": -0.38425849048726546
    },
    {
     "operator": "matmul_int8",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.38412011440248006
+    "delta_log2": 1.6230278407933885
    },
    {
     "operator": "matmul_int8",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -3.5707921328333425
+    "delta_log2": -1.3109583780098557
    },
    {
     "operator": "matmul_int8",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5794270500111509
+    "delta_log2": 0.6594806763797554
    },
    {
     "operator": "matmul_int8",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.66633398097416
+    "delta_log2": 0.5725737454167467
    },
    {
     "operator": "streamk_matmul",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.19685943772600575
+    "delta_log2": -0.03830289147156375
    },
    {
     "operator": "streamk_matmul",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -2.616723561661489
+    "delta_log2": -2.9303161785041274
    },
    {
     "operator": "streamk_matmul",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.7132440756396685
+    "delta_log2": 0.4780817464420977
    },
    {
     "operator": "streamk_matmul",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.6305896701509757
+    "delta_log2": 0.3954273409534058
    },
    {
     "operator": "1d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.07801525374635428
+    "delta_log2": 0.5119124044675198
    },
    {
     "operator": "1d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 1.8310395567701014
+    "delta_log2": 1.6065207527536831
    },
    {
     "operator": "1d_conv",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.5860074039835205
+    "delta_log2": 1.0199045547046832
    },
    {
     "operator": "1d_conv",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.05075771970657627
+    "delta_log2": 0.4846548704277424
    },
    {
     "operator": "2d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.0870330723565991
+    "delta_log2": 0.4754574486802403
    },
    {
     "operator": "2d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 1.148042062662189
+    "delta_log2": 1.5024339136475617
    },
    {
     "operator": "2d_conv",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.16583969001455423
+    "delta_log2": 0.5542640663381923
    },
    {
     "operator": "2d_conv",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.19743577868426326
+    "delta_log2": 0.19098859763937395
    },
    {
     "operator": "2d_max_pooling",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.032341665009682816
+    "delta_log2": 0.597247475417789
    },
    {
     "operator": "2d_max_pooling",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.6958397632531752
+    "delta_log2": 0.10511142578845879
    },
    {
     "operator": "2d_max_pooling",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.2842331245737098
+    "delta_log2": 0.9138222650011828
    },
    {
     "operator": "2d_max_pooling",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5573639610660092
+    "delta_log2": 0.07222517936146239
    },
    {
     "operator": "3d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.6322845176303531
+    "delta_log2": 0.5260932941256082
    },
    {
     "operator": "3d_conv",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": 3.1952547793774717
+    "delta_log2": 2.056398551359217
    },
    {
     "operator": "3d_conv",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.7045546002489843
+    "delta_log2": 0.5983633767442396
    },
    {
     "operator": "3d_conv",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.5313288211742304
+    "delta_log2": 0.4251375976694879
    },
    {
     "operator": "gaussian_blur",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.006882622268013409
+    "delta_log2": 0.2575962571650876
    },
    {
     "operator": "gaussian_blur",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.419248957134634
+    "delta_log2": 0.17114177424924681
    },
    {
     "operator": "gaussian_blur",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.03955197949786128
+    "delta_log2": 0.22492689993524057
    },
    {
     "operator": "gaussian_blur",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": 0.5578420468639036
+    "delta_log2": 0.8223209262970035
    },
    {
     "operator": "jacobi_stencil_2d",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.040714095941229926
+    "delta_log2": 0.6361790161291583
    },
    {
     "operator": "jacobi_stencil_2d",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.8434944407143449
+    "delta_log2": 0.1365678751007435
    },
    {
     "operator": "jacobi_stencil_2d",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1247148324258413
+    "delta_log2": 0.5521782796445461
    },
    {
     "operator": "jacobi_stencil_2d",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1390232915793176
+    "delta_log2": 0.5378698204910713
    },
    {
     "operator": "bitonic_sort",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1252423085430379
+    "delta_log2": 0.6857736609816655
    },
    {
     "operator": "bitonic_sort",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.8585724891813724
+    "delta_log2": -0.2064968033479446
    },
    {
     "operator": "bitonic_sort",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.23150864639529173
+    "delta_log2": 0.5795073231294107
    },
    {
     "operator": "bitonic_sort",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.10603512343736159
+    "delta_log2": 0.7049808460873438
    },
    {
     "operator": "destindex",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.4639482010140831
+    "delta_log2": 0.3039342331625832
    },
    {
     "operator": "destindex",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -1.04521554363934
+    "delta_log2": -0.2145101554829255
    },
    {
     "operator": "destindex",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.11001124512507668
+    "delta_log2": 0.6578711890515893
    },
    {
     "operator": "destindex",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.4680993812534288
+    "delta_log2": 0.29978305292323776
    },
    {
     "operator": "interleave",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.33921509329833754
+    "delta_log2": 0.14899031835579166
    },
    {
     "operator": "interleave",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.8637959977863803
+    "delta_log2": -0.26626706981917586
    },
    {
     "operator": "interleave",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3360435288465583
+    "delta_log2": 0.15216188280757226
    },
    {
     "operator": "interleave",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3512411594267283
+    "delta_log2": 0.1369642522274021
    },
    {
     "operator": "matrix_copy",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.04449190908749033
+    "delta_log2": 0.2640078966471885
    },
    {
     "operator": "matrix_copy",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.3187360373423343
+    "delta_log2": -0.039354718199433106
    },
    {
     "operator": "matrix_copy",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.10252089175336393
+    "delta_log2": 0.2059789139813151
    },
    {
     "operator": "matrix_copy",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.04822044526610376
+    "delta_log2": 0.2602793604685751
    },
    {
     "operator": "matrix_transpose",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.1437516403807614
+    "delta_log2": 0.17381327544846698
    },
    {
     "operator": "matrix_transpose",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.47140948536495175
+    "delta_log2": -0.32334338731581774
    },
    {
     "operator": "matrix_transpose",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.15170618731482588
+    "delta_log2": 0.16585872851440134
    },
    {
     "operator": "matrix_transpose",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.015041703514958201
+    "delta_log2": 0.3025232123142691
    },
    {
     "operator": "radix_sort",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.0754499388706906
+    "delta_log2": 0.6459294451633464
    },
    {
     "operator": "radix_sort",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.14008172790776535
+    "delta_log2": 0.32069376231357033
    },
    {
     "operator": "radix_sort",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.05907696367484498
+    "delta_log2": 0.6623024203591936
    },
    {
     "operator": "radix_sort",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.06422678144942837
+    "delta_log2": 0.6571526025846105
    },
    {
     "operator": "reverse_array",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3037025058284822
+    "delta_log2": 0.3682090141510623
    },
    {
     "operator": "reverse_array",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.8378061274530548
+    "delta_log2": 0.008502656178183172
    },
    {
     "operator": "reverse_array",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.3626767218908136
+    "delta_log2": 0.30923479808873117
    },
    {
     "operator": "reverse_array",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.2525748123592921
+    "delta_log2": 0.4193367076202523
    },
    {
     "operator": "top_k_selection",
     "dsl": "triton",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.6474050098117425
+    "delta_log2": 0.4434886667433854
    },
    {
     "operator": "top_k_selection",
     "dsl": "triton",
     "from": "B200",
     "to": "MI300X",
-    "delta_log2": -0.04751551790098897
+    "delta_log2": 0.6722934714763594
    },
    {
     "operator": "top_k_selection",
     "dsl": "cutile",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.08274679015175176
+    "delta_log2": 1.0081468864033756
    },
    {
     "operator": "top_k_selection",
     "dsl": "tilelang",
     "from": "B200",
     "to": "GH200",
-    "delta_log2": -0.5092156695860705
+    "delta_log2": 0.5816780069690567
    }
   ]
  },
  "outputs": {
   "pdf": {
    "path": "appendix/fig_a1_performance_atlas.pdf",
-   "sha256": "5cbd10b0f1bcf5cf91197fcd0095cc13b018b87e6bf0209e62da5e604dd92699"
+   "sha256": "bcacfa233107b0629c2ed72e3158b5d1dac3aee27b03a66b6f993d2a90a94f22"
   },
   "svg": {
    "path": "appendix/fig_a1_performance_atlas.svg",
-   "sha256": "5d5169e11666f44495da1054b0907409727d2a2018a125c35b69ee7a3e9bc0d4"
+   "sha256": "d90da242aeedaa09999dbbbce16bb963e56ffc3026b3db3492b2b8664c305e9d"
   },
   "png": {
    "path": "previews/fig_a1_performance_atlas.png",
-   "sha256": "06999a73f619156c15bd6fa34b48fdec454481592a8d3eb74795185e29f51d7d"
+   "sha256": "8ad172ba78135f44f0705224b21a7377703c19aa276d0430bbb2d8d922b5a758"
   }
  },
  "layout": {
@@ -3737,8 +4148,8 @@
   "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "d710869fdc68797ae42ba1e235be2331336c15fc5286a353188d4d0fa0f8bada",
+  "scripts/paper_figures/plot_style.py": "8c5d09f68e2eb59d62ad66652ba95398e4909bf6c7cfb2b12b575bbdc22ded36",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_appendix.py": "1dd6b9aa4e4d8aac8a96731de267bac9f6c7663abd9aa9686877cc2925e89a06"
+  "scripts/paper_figures/plot_appendix.py": "1601168c0b10a2a4b2c085360ebc2dce7e18c4c03e2e5e87ca61885f0dc0421d"
  }
 }

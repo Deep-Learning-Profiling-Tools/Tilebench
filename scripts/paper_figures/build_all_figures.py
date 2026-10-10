@@ -2,7 +2,8 @@
 
   CUDA_VISIBLE_DEVICES= PYTHONPATH=.:scripts/paper_figures python scripts/paper_figures/build_all_figures.py
 
-Order: figure evidence -> RQ1, RQ2, RQ3 -> appendix A1-A5 -> plots/plot_manifest.json -> validate_plots.py.
+Order: figure evidence -> SOL mode manifest + SOL tables (sol/) -> RQ1, RQ2, RQ3 -> appendix A1-A5 -> plots/plot_manifest.json ->
+validate_plots.py.
 """
 import json
 import subprocess
@@ -47,6 +48,8 @@ def run(cmd):
 
 def main():
     run([sys.executable, str(HERE / "build_figure_evidence.py"), "--repo", str(FD.REPO)])
+    run([sys.executable, str(HERE / "sol_modes.py")])
+    run([sys.executable, str(HERE / "sol_data.py")])
     plot_rq1.main()
     plot_rq2.main()
     plot_rq3.main()
@@ -59,8 +62,10 @@ def main():
                      "manifest": f"manifests/{name}.json", "outputs": m["outputs"]})
     qa = json.load(open(FD.COMBINED / "qa_combined.json"))
     top = {"schema": "tilearena-plot-manifest/1", "source_git_commit": FD.git_head(), "combined_qa_status": qa["status"],
-           "inputs": ("plot scripts read artifacts/paper_figures/combined/ only; build_figure_evidence.py reads the NVIDIA/AMD packages and "
-                      "writes combined/{figure_evidence.csv,execution_path_matrix.csv,rq2_case_selection.json}"),
+           "inputs": ("plot scripts read artifacts/paper_figures/combined/ and artifacts/paper_figures/sol/; build_figure_evidence.py reads "
+                      "the NVIDIA/AMD packages and writes combined/{figure_evidence.csv,execution_path_matrix.csv,rq2_case_selection.json}; "
+                      "sol_modes.py and sol_data.py write sol/ from the frozen contracts, the PR #323 empirical peaks (merge 72d7cec6) "
+                      "and combined/benchmark_cases_normalized.csv.gz"),
            "figures": figs + TODO, "excluded": EXCLUDED}
     json.dump(top, open(FD.PLOTS / "plot_manifest.json", "w"), indent=1)
     run([sys.executable, str(HERE / "validate_plots.py")])

@@ -1,7 +1,7 @@
 # Scientific audit of the mechanisms in Figure 3 and Figure A5
 
 This audit covers every mechanism the figures state. For each one it answers the same eight questions:
-1. the measured performance difference;
+1. the measured performance difference (for Figure 3: proximity to modeled SOL, T_SOL / T_k, at the profiled case);
 2. the formal CSV values (`torch_ms`, `dsl_ms` at the profiled `case_id_v2`, autotune mode);
 3. the supporting counters or ISA;
 4. whether the counters are directly comparable;
@@ -14,10 +14,12 @@ The counter values come from `combined/figure_evidence.csv` (evidence IDs in the
 
 ## Figure 3A / A5 B: matrix operand delivery (matmul FP32, M = N = 4096, K = 20480; case `357a02eb8c…`)
 
-**1. Measured difference.**
-- cuTile goes from 1.035× on B200 to 0.613× on GH200.
-- Triton goes from 0.670× to 0.883×, and is at 0.082× on MI300X.
-- The ranking of cuTile and Triton reverses between B200 and GH200.
+**1. Measured difference (T_SOL / T_k).**
+- cuTile goes from 1.13 on B200 to 0.65 on GH200.
+- Triton goes from 0.73 to 0.94, and is at 0.085 on MI300X.
+- The ranking of cuTile and Triton reverses between B200 and GH200; both DSLs share one T_SOL per device.
+- T_SOL is the TF32-class MMA term (compute-bound): 1.034 ms (B200, TF32), 1.677 ms (GH200, TF32), 2.160 ms (MI300X,
+  XF32, decision D1). B200 cuTile's 1.13 exceeds it and is marked † (sustained library-GEMM calibration; SOL audit).
 
 **2. Formal CSV values (ms).**
 
@@ -59,9 +61,11 @@ interpretation, with its confounders listed under the row.
 
 ## Figure 3B / A5 A: indexing overhead (destindex INT8, case `79fc14733c…`)
 
-**1. Measured difference.**
-- Triton: 4.978× (B200), 4.468× (GH200), 2.168× (MI300X).
-- cuTile: 1.692× (B200), 1.589× (GH200).
+**1. Measured difference (T_SOL / T_k).**
+- Triton: 0.53 (B200), 0.83 (GH200), 0.50 (MI300X).
+- cuTile: 0.18 (B200), 0.29 (GH200).
+- T_SOL is memory-only (no arithmetic on the data, decision M2): 0.0192 ms (B200), 0.0360 ms (GH200), 0.0329 ms
+  (MI300X).
 
 **2. Formal CSV values (ms).**
 
@@ -81,22 +85,25 @@ interpretation, with its confounders listed under the row.
 text.
 
 **5. Implementation or autotune effects?** The cuTile instruction expansion has the same size on both NVIDIA devices,
-so it is not an architecture effect. The PyTorch baseline (ATen index_copy) differs by vendor, which affects the MI300X
-speedup.
+so it is not an architecture effect. The PyTorch baseline (ATen index_copy) differs by vendor; it affected the earlier
+speedup version of this row but does not enter T_SOL / T_k.
 
 **6. Controlled experiment?** No.
 
-**7. Qualified?** Yes. The text says "uses 8-bit instead of 128-bit stores" (a measurement) and states that the
-baseline differs by vendor.
+**7. Qualified?** Yes. The text says "uses 8-bit instead of 128-bit stores" (a measurement), and the confounder line
+states that NVIDIA counts are dynamic, MI300X counts static, and that the memory-only target does not model index
+arithmetic.
 
 **8. Observation vs. hypothesis.** Yes. Instruction and store counts are observations, and no causal share of the
 latency is claimed.
 
 ## Figure 3C / A5 C: memory access and latency hiding (1d_conv FP16, case `4b8e7fcaf4…`)
 
-**1. Measured difference.**
-- Triton: 0.516× (B200), 0.515× (GH200), 1.483× (MI300X).
-- TileLang: 0.077× (B200), 0.104× (GH200).
+**1. Measured difference (T_SOL / T_k).**
+- Triton: 0.081 (B200), 0.11 (GH200), 0.27 (MI300X).
+- TileLang: 0.012 (B200), 0.022 (GH200).
+- T_SOL is the larger of the FP16-MMA and HBM terms: 0.2034 ms (B200, compute-bound), 0.3683 ms (GH200, memory-bound),
+  0.4365 ms (MI300X, compute-bound).
 
 **2. Formal CSV values (ms).**
 
@@ -127,14 +134,16 @@ unchanged DRAM reads.
 
 **5. Implementation or autotune effects?** Yes.
 - TileLang uses a different kernel body and configuration on Hopper (64×16 vs 128×64 blocks).
-- The MI300X change in Triton's speedup comes with a different PyTorch path.
+- On MI300X the PyTorch path (MIOpen implicit GEMM plus transposes) explained the earlier speedup but does not enter
+  T_SOL / T_k. Triton's higher proximity on MI300X has no controlled explanation; 66% of its VALU instructions are
+  INT32 (rocprof).
 
 **6. Controlled experiment?** No.
 
 **7. Qualified?** Yes. "On B200, TileLang achieves 6.2% occupancy against a theoretical limit of 18.75%" is a
-measurement, shown as achieved bars over grey theoretical bars in both Figure 3C (with achieved / theoretical labels)
-and A5. The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and the MI300X
-case is labelled a baseline effect.
+measurement, listed as achieved / limit in the Figure 3C table and drawn as achieved bars over grey theoretical bars in
+A5. The text makes no claim about why B200 TileLang falls short of its theoretical occupancy, and it states that no
+controlled experiment isolates the MI300X difference.
 
 **8. Observation vs. hypothesis.** Yes.
 
@@ -212,6 +221,17 @@ caption say so and label the latencies diagnostic.
 bar and the note "st.cg has no ISA effect" next to `st.cs` bars. The 131.8 µs value is not reproduced by the
 ISA-identical `.cg`-store run (98.9 µs) or by the sweep (97–105 µs). It is now excluded as run-to-run variation and
 documented in the A5 manifest.
+
+## SOL revision of Figures 2, 3, A1 and A2
+
+- The cross-device metric is now proximity to modeled SOL (T_SOL / T_k) instead of speedup over the local PyTorch
+  baseline; the compute mode is fixed per operator and dtype from the frozen algorithm and numerical contract
+  (`../sol/sol_mode_manifest.json`), never from the compiled ISA or from these profiles.
+- Figure 3 keeps the three cases. Each has a defensible target (TF32-class MMA, memory-only, FP16 MMA). The two
+  NVIDIA counter columns are replaced by one counter table per case; the MI300X evidence, the interpretation and the
+  confounders are separate lines.
+- Statements that depended on the PyTorch baseline (destindex on MI300X, the MI300X 1d_conv baseline effect) are
+  removed from Figure 3 or restated for the SOL metric.
 
 ## Claims removed or weakened in this revision
 

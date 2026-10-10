@@ -1,31 +1,40 @@
-"""Figure 2 (RQ1): category x (device, DSL) geometric-mean speedup over the local PyTorch baseline."""
-import math
+"""Figure 2 (RQ1): category x (device, DSL) proximity to the modeled, device-specific empirical SOL (T_SOL / T_k).
+
+T_SOL comes from the algorithm-aware compute mode of each operator and dtype (sol_modes.py) and the PR #323 empirical
+peaks (sol_data.py); T_k is the formal autotuned latency. Cell = GM over the row's operators of each operator's GM over
+its valid cases. The two rows under Overall split the 45 operators into memory-only targets (approved decision M2) and
+targets with a compute term, as M2 requires."""
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import figure_data as FD  # noqa: E402
 import plot_style as PS  # noqa: E402
+import sol_data as SD  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.colors import to_rgba  # noqa: E402
 from matplotlib.patches import Rectangle  # noqa: E402
 
 NAME = "fig_rq1_cross_accelerator"
-COLUMNS = [("B200", "triton"), ("B200", "cutile"), ("B200", "tilelang"), ("GH200", "triton"), ("GH200", "cutile"),
-           ("GH200", "tilelang"), ("MI300X", "triton")]          # the seven supported device/DSL combinations
+COLUMNS = SD.COLUMNS          # the seven supported device/DSL combinations
+MEM, CMP = "Memory-only targets", "Compute+memory targets"
 ROW_LABEL = {"Point-wise": "Point-wise", "Reduction/Normalization": "Reduction/\nNormalization",
              "Matrix Multiplication/Attention": "Matrix Multiplication/\nAttention", "Stencil/Convolution": "Stencil/\nConvolution",
              "Data Layout": "Data Layout", "Overall": "Overall (45 operators)"}
 GAP = 0.3          # horizontal gap between device groups, in cell widths
+VMIN = 0.01        # colour floor of the log scale (printed values are not clipped)
 
 
-def compute(D):
-    rows = list(D.cat_order) + ["Overall"]
+def compute(S):
+    rows = list(S.cat_order) + ["Overall", MEM, CMP]
+    groups = {r: [o for o in S.operators() if S.categories[o] == r] for r in S.cat_order}
+    groups.update({"Overall": S.operators(), MEM: S.memory_only_ops, CMP: [o for o in S.operators() if o not in S.memory_only_ops]})
     vals, counts = {}, {}
     for r in rows:
-        ops = D.operators() if r == "Overall" else [o for o in D.operators() if D.categories[o] == r]
         for dev, dsl in COLUMNS:
-            vals[(r, dev, dsl)], counts[(r, dev, dsl)] = D.speedup_group(dev, dsl, ops)
-    return rows, vals, counts
+            vals[(r, dev, dsl)], counts[(r, dev, dsl)] = S.r_group(dev, dsl, groups[r])
+    return rows, groups, vals, counts
 
 
 def luminance(rgba):
@@ -43,62 +52,91 @@ def xpositions():
     return xs, x
 
 
-def plot(D, out_root):
+def plot(S, out_root):
     PS.apply()
-    rows, vals, counts = compute(D)
-    norm = PS.log2_norm(2.0)                       # colour: log2 speedup, +-2 (1/4x .. 4x)
+    rows, groups, vals, counts = compute(S)
+    norm = PS.proximity_norm(VMIN)
     xpos, xmax = xpositions()
-    fig = plt.figure(figsize=(PS.DOUBLE_COL_IN, 2.2))
-    ax = fig.add_axes([0.205, 0.02, 0.665, 0.74])
-    cax = fig.add_axes([0.905, 0.08, 0.014, 0.62])
-    n = len(rows)
-    ys = {r: n - 1 - i + (0 if r == "Overall" else 0.2) for i, r in enumerate(rows)}
+    fig = plt.figure(figsize=(PS.DOUBLE_COL_IN, 2.78))
+    ax = fig.add_axes([0.215, 0.02, 0.645, 0.79])
+    cax = fig.add_axes([0.885, 0.08, 0.014, 0.66])
+    ys, y = {}, 0.0
+    for r in reversed(rows):                       # bottom-up: the two subgroup rows, a gap, Overall, a gap, the categories
+        ys[r] = y
+        y += {CMP: 0.8, MEM: 1.05, "Overall": 1.2}.get(r, 1.0)
+    ytop = y
     for r in rows:
+        sub = r in (MEM, CMP)
+        h = 0.72 if sub else 0.9
         for ci, (dev, dsl) in enumerate(COLUMNS):
             v = vals[(r, dev, dsl)]
-            c = PS.DIVERGING(norm(max(-2.0, min(2.0, math.log2(v)))))
-            ax.add_patch(Rectangle((xpos[ci] + 0.03, ys[r] + 0.05), 0.94, 0.9, facecolor=c, edgecolor="white", lw=0.8))
-            ax.text(xpos[ci] + 0.5, ys[r] + 0.5, f"{v:.2f}", ha="center", va="center", fontsize=7.5,
-                    color="white" if luminance(c) < 0.45 else PS.INK, fontweight="bold" if r == "Overall" else "normal")
+            c = PS.proximity_color(v, norm)
+            ax.add_patch(Rectangle((xpos[ci] + 0.03, ys[r] + 0.04), 0.94, h, facecolor=c, edgecolor="white", lw=0.8))
+            ax.text(xpos[ci] + 0.5, ys[r] + 0.04 + h / 2, PS.proximity_label(v), ha="center", va="center", fontsize=7 if sub else 7.5,
+                    color="white" if luminance(to_rgba(c)) < 0.45 else PS.INK, fontweight="bold" if r == "Overall" else "normal")
     ax.set_xlim(-0.02, xmax + 0.02)
-    ax.set_ylim(0, n + 0.2)
+    ax.set_ylim(0, ytop)
     ax.axis("off")
     for r in rows:
-        ax.text(-0.12, ys[r] + 0.5, ROW_LABEL[r], ha="right", va="center", fontsize=7.5, linespacing=1.05,
-                fontweight="bold" if r == "Overall" else "normal")
-    top = n + 0.2
+        sub = r in (MEM, CMP)
+        lab = (f"memory-only targets ({len(groups[r])})" if r == MEM else f"with compute term ({len(groups[r])})") if sub \
+            else ROW_LABEL[r]
+        ax.text(-0.12, ys[r] + (0.4 if sub else 0.49), lab, ha="right", va="center", fontsize=7 if sub else 7.5, linespacing=1.05,
+                fontweight="bold" if r == "Overall" else "normal", color=PS.MUTED if sub else PS.INK)
+    top = ytop
     for ci, (dev, dsl) in enumerate(COLUMNS):
         ax.text(xpos[ci] + 0.5, top + 0.08, PS.DSL_LABEL[dsl], ha="center", va="bottom", fontsize=7.5, clip_on=False)
     for dev in PS.DEVICES:
         cs = [xpos[i] for i, (d, _) in enumerate(COLUMNS) if d == dev]
         ax.plot([cs[0] + 0.06, cs[-1] + 0.94], [top + 0.62] * 2, color="#9A9FA4", lw=0.6, clip_on=False)
         ax.text((cs[0] + cs[-1] + 1) / 2, top + 0.7, dev, ha="center", va="bottom", fontsize=8, fontweight="bold", clip_on=False)
-    ticks = [0.25, 0.5, 1, 2, 4]
-    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=PS.DIVERGING), cax=cax, ticks=[math.log2(t) for t in ticks])
-    cb.ax.set_yticklabels(["1/4×", "1/2×", "1×", "2×", "4×"])
+    ticks = [0.01, 0.03, 0.1, 0.3, 1]
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=PS.PROXIMITY), cax=cax, ticks=ticks)
+    cb.ax.set_yticklabels(["≤0.01", "0.03", "0.1", "0.3", "1"])
+    cb.ax.minorticks_off()
     cb.ax.tick_params(labelsize=7, length=2, width=0.4)
     cb.outline.set_linewidth(0.4)
-    cb.set_label("speedup vs. local\nPyTorch (GM)", fontsize=7, labelpad=3, linespacing=1.05)
+    cb.set_label("proximity to modeled SOL\nT_SOL / T_k (GM)", fontsize=7, labelpad=3, linespacing=1.1)
+    assert not any(v > 1 for v in vals.values()), "an aggregate exceeds 1: add the >1 key before publishing"
     paths, layout = PS.save(fig, out_root, "main", NAME)
     plt.close(fig)
-    table = [{"row": r, "device": d, "dsl": s, "speedup": vals[(r, d, s)], "n_operators": counts[(r, d, s)]} for r in rows for d, s in COLUMNS]
-    return paths, layout, table
+    table = [{"row": r, "device": d, "dsl": s, "sol_proximity": vals[(r, d, s)], "n_operators": counts[(r, d, s)],
+              "operators": len(groups[r])} for r in rows for d, s in COLUMNS]
+    return paths, layout, table, groups
 
 
 def main(out_root=FD.PLOTS):
+    S = SD.Sol()
     D = FD.Data("autotune")
-    paths, layout, table = plot(D, out_root)
+    paths, layout, table, groups = plot(S, out_root)
     m = D.manifest
+    prov = json.load(open(SD.SOL / "sol_provenance.json"))
     manifest = {
         "figure": NAME, "rq": "RQ1", "script": "scripts/paper_figures/plot_rq1.py", "source_git_commit": FD.git_head(),
         "source_data_files": FD.input_hashes(["benchmark_cases_normalized.csv.gz", "category_mapping.csv", "comparison_manifest.json"]),
-        "metric_formula": "S[o,b,d] = GM_cases(torch_ms/dsl_ms) over valid autotune cases; cell = GM over the row's operators of S[o,b,d]",
-        "aggregation_order": ["geometric mean over input cases within an operator", "geometric mean over operators (category or all 45)"],
-        "colour_scale": "diverging, log2(speedup) in [-2, 2] centred at 0 (1x); printed values are not clipped",
-        "columns": [f"{d}:{s}" for d, s in COLUMNS], "case_coverage": m["intersections_case_id_v2"]["per_device_valid_autotune"],
+        "sol_inputs": SD.sol_input_hashes(),
+        "sol_code_sha256": SD.sol_code_hashes(),
+        "metric": "Proximity to modeled SOL (T_SOL / T_k)",
+        "metric_formula": "R[o,b,d,c] = T_SOL[o,d,c] / T_k[o,b,d,c]; T_SOL = max(F / P_peak[mode(o,dtype)], Q / BW_peak) (memory-only "
+                          "targets: Q / BW_peak); cell = GM over the row's operators of GM over each operator's valid cases",
+        "aggregation_order": ["geometric mean of case-level R within an operator", "geometric mean over operators (category, all 45, or "
+                              "an M2 subgroup)"],
+        "colour_scale": f"sequential log scale from {VMIN} (floor) to 1 = modeled SOL; values > 1 drawn in amber; printed values not clipped",
+        "peaks": prov["peaks"], "mode_decisions": SD.SM.DECISIONS,
+        "columns": [f"{d}:{s}" for d, s in COLUMNS],
+        "case_coverage": prov["coverage_cases"], "operator_coverage": prov["coverage_operators"],
+        "row_operators": {r: len(v) for r, v in groups.items()},
+        "memory_only_subgroup": {"operators": groups[MEM], "rule": "approved decision M2: memory-only target Q / BW_peak; reported "
+                                 "beside the overall aggregate; not a compute+memory roofline"},
+        "conditional_memory_dominance": prov["conditional_memory_dominance"],
+        "sensitivity": "sol/sol_sensitivity_mi300x_bf16.csv (every row with and without the 100 MI300X bf16 conditional cases)",
+        "above_one_cases": prov["above_one"]["n_cases"],
         "excluded_cases": {"invalid_or_missing_rows": len(D.excluded), "known_unsupported": m["known_unsupported"],
+                           "missing_peak_mode_mappings": prov["missing_peak_mode_mappings"],
                            "not_shown": "cuTile and TileLang do not run on MI300X (no column)", "nki": "no finalized NKI results; not shown"},
         "selection_criteria": "all 45 operators; the seven supported device/DSL combinations; autotuned results",
+        "interpretation": "each column is compared with its own device's empirically calibrated envelope; differences between columns are "
+                          "differences in proximity, not absolute latency or hardware capability",
         "profiling_evidence_ids": [], "known_limitations": m["device_limitations"],
         "plotted_values": table,
         "outputs": {k: {"path": v, "sha256": PS.sha256(v)} for k, v in paths.items()}, "layout": layout,

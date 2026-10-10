@@ -6,16 +6,53 @@ These limitations apply to the figures in this directory. Device-level entries r
 
 ## What the figures can and cannot show
 
-- **Local baselines.** Every speedup is relative to the PyTorch baseline on the same device, measured under that
-  device's benchmark protocol. Figures 2, 3 (left) and A1 show how each DSL compares with the vendor libraries on each
-  accelerator. They are not absolute hardware comparisons.
-- **Cross-device deltas.** Figure A1 (B) uses only input cases valid on both devices. The deltas still combine
-  hardware, compiler, library and protocol changes and do not isolate any one of them.
+- **Modeled, device-specific target.** Figures 2, 3 (left), A1 and A2 show proximity to modeled SOL (T_SOL / T_k):
+  each value is relative to its own device's empirically calibrated envelope. They compare how close each DSL comes to
+  that envelope, not absolute latency or hardware capability (see "Modeled SOL target" below).
+- **Cross-device changes.** Figure A1 (B) uses only input cases valid on both devices. A change in proximity still
+  combines hardware, compiler and protocol changes and does not isolate any one of them; it is not an accelerator
+  speedup.
 - **No uncertainty.** Winner counts (Figure 4) and the 5% near-parity band (Figures 4 and A4) have no uncertainty
   analysis; each value is one campaign measurement.
 - **Observations, not proofs.** The counters in Figures 3, A3 and A5 describe one profiled input per operator and data
   type. They support the stated mechanisms but do not measure each mechanism's contribution to the formal latency. The
   only controlled experiments are the MI300X diagnostics in A5, and neither of them is a single-factor experiment.
+
+## Modeled SOL target (Figures 2, 3, A1, A2)
+
+Definitions, decisions and tables: `../sol/README.md` and `../sol/sol_mode_manifest.{json,csv}`.
+
+- **Empirical, sustained peaks.** P_peak and BW_peak are TileArena's measured sustained rates (PR #323), not vendor
+  datasheet peaks and not proven bounds. The matrix peaks are sustained library-GEMM rates (cuBLAS/hipBLASLt or a
+  verified Triton probe) at large square shapes, with power-capped clock events in the calibration telemetry.
+- **Compute mode from the algorithm.** The mode of each operator and data type is fixed from its frozen contract
+  (algorithm and numerical precision), never from the input dtype alone, the compiled ISA or a profiler report
+  (Figure A3 shows observed paths and is not used for it). A compiler that does not use an available path is measured
+  against that path's peak.
+- **TF32 class on MI300X (decision D1).** FP32 GEMM and convolution contracts require 10-bit-mantissa operands with FP32
+  accumulation. NVIDIA realises this as TF32, CDNA3 as XF32 (low 13 mantissa bits truncated; Triton maps
+  `input_precision="tf32"` to XF32 on gfx942). The two are the same precision class but not bit-identical.
+- **Conditional memory dominance (decision D2).** MI300X has no calibrated BF16 vector peak (no packed BF16 FMA on
+  gfx942). Its 100 BF16 cases of leaky_relu, mul2, vector_add, weight_dequant and jacobi_stencil_2d use Q / BW_peak,
+  which holds for any BF16 vector peak above each case's critical throughput F · BW / Q (at most 3.99 TFLOP/s). No BF16
+  peak is assumed or substituted. Without these cases MI300X Overall changes by +0.29%, Point-wise by +0.34% and
+  Stencil/Convolution by +1.52% (`../sol/sol_sensitivity_mi300x_bf16.csv`).
+- **Memory-only targets (decision M2).** Copies, transposes, indexing, conversion, comparison, sorting and integer
+  operators without a calibrated integer peak are scored against Q / BW_peak only. They are not a compute+memory
+  roofline, and Figure 2 reports the 13 fully memory-only operators separately beside Overall.
+- **Operation counts.** F is the frozen config expression. For non-matrix operators it is mostly a simplified
+  per-element count (for example n for vector_add, 6n for layernorm) in which exponentials, conversions and comparisons
+  are not weighted, compared with an FMA-based peak that counts two operations per FMA. This only matters for
+  compute-bound cases; outside the matrix (MMA) operators the only one is gaussian_blur (FP32 arithmetic, approved
+  decision C1). The attention operators count only their GEMM FLOPs; the softmax work has no calibrated mode
+  and is not modeled. For linear_self_attention, adding its FP32 vector part at the FP32 vector rate changes no target.
+- **Values above 1.** 549 of 15,380 case values exceed 1. They are kept and assigned to one audited cause each
+  (`../sol/sol_above_one_audit.json`): rmsnorm and layernorm count a second read of the input in Q (all below 1 at
+  2/3 Q); rope's short launches leave part of their written output in L2 inside the timed interval (7 GH200 cases with
+  an output larger than L2 are only partly explained); swiglu and weight_dequant FP32 are within 2.2% of the
+  calibrated copy rate; matmul exceeds the sustained library-GEMM rate by up to 1.30× (B200 FP8).
+- **Protocol effects remain.** T_k still carries each device's benchmark protocol (warmup, repeats, flush size; see
+  below), so part of a cross-device change in proximity can come from the protocol.
 
 ## Benchmark protocols differ between devices
 
@@ -57,7 +94,8 @@ Neither figure puts both vendors' counters on one numeric axis.
 
 - **What is device-independent.** cuTile's 8-bit stores (STG.E.U8) and its 17.3× / 17.8× instruction count appear on
   both NVIDIA devices, so they are not architecture effects.
-- **MI300X.** The per-lane byte stores are static ISA. The PyTorch baseline (ATen index_copy) also differs by vendor.
+- **MI300X.** The per-lane byte stores are static ISA. The PyTorch baseline (ATen index_copy) differs by vendor but no
+  longer enters Figure 3, whose target is memory-only.
 - **weight_dequant on GH200 (†).** A different Triton autotuned configuration inflates its instruction count. It is
   shown as a confounder example.
 
@@ -71,13 +109,14 @@ Neither figure puts both vendors' counters on one numeric axis.
   128×64 on B200). Its occupancy reaches the theoretical value on GH200 (18.7%) but not on B200 (6.2% of 18.75%), for
   reasons the counters do not identify.
 - **Theoretical occupancy.** This is the maximum resident warp occupancy permitted by the kernel's resource and launch
-  configuration (`sm__maximum_warps_per_active_cycle_pct`); it is not a predicted achieved occupancy. Figures 3C and
-  A5 draw it as a grey background bar behind a narrower achieved bar, and Figure 3C also labels each bar
-  achieved / theoretical. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
+  configuration (`sm__maximum_warps_per_active_cycle_pct`); it is not a predicted achieved occupancy. A5 draws it as a
+  grey background bar behind a narrower achieved bar; Figure 3C lists achieved / limit in its counter table. The gap between achieved and theoretical occupancy is an observation, not evidence of a specific cause such as
   register pressure, memory stalls or CTA scheduling. Issue activity is a separate metric and is not expressed
   relative to either value.
-- **MI300X Triton.** Its higher speedup (1.48×) comes with a different PyTorch path: MIOpen implicit GEMM plus three
-  layout transposes, from the kernel trace.
+- **MI300X Triton.** It comes closer to its modeled SOL (0.27) than Triton on B200 (0.081) and GH200 (0.11). No
+  controlled experiment explains this; 66% of its VALU instructions are INT32 (index arithmetic). The PyTorch path
+  (MIOpen implicit GEMM plus three layout transposes), which explained its speedup in the earlier version, is not part
+  of T_SOL / T_k.
 
 ### Supporting cases moved out of Figure 3
 
@@ -100,8 +139,9 @@ advantage reflects a different algorithm, not better code generation for the sam
 
 ## Missing or reduced evidence
 
-- **MI300X FP8 matmul.** FP8 E4M3FN matmul is not supported on MI300X. It is shown as N/A in A2 and excluded from the
-  matched intersections (2,180 vs. 2,200 cases).
+- **MI300X FP8 matmul.** FP8 E4M3FN matmul is not supported on MI300X (its FP8 format is E4M3FNUZ, a different mode
+  that is never substituted). It is shown as N/A (unsupported dtype) in A2 and excluded from the matched intersections
+  (2,180 vs. 2,200 cases).
 - **cuTile and TileLang on MI300X.** They do not exist and have no column in Figures 2 and A1.
 - **Reduced B200 TileLang reports.** 13 B200 TileLang NCU reports are reduced (8, kernel replay) or targeted (5)
   collections without per-opcode or PC-sampling data. FP16/FP8 TMA bytes in A5 are therefore "n/c", and six A3 cells

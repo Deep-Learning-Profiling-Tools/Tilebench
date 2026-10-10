@@ -8,10 +8,14 @@
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{\tilearenafigdir/main/fig_rq1_cross_accelerator.pdf}
-  \caption{Speedup of each tile DSL over the PyTorch baseline on the same accelerator. Each cell is the geometric mean
-  over the operators of a workload category (row; \emph{Overall}: all 45 operators) of each operator's geometric-mean
-  \texttt{torch\_ms}/\texttt{dsl\_ms} over its valid autotuned input cases. MI300X has only Triton results. Values are
-  relative to each device's own PyTorch baseline and benchmark protocol and are not absolute hardware speedups.}
+  \caption{Proximity to modeled SOL, $T_{\text{SOL}}/T_k$, of each tile DSL on each accelerator.
+  $T_{\text{SOL}}=\max(F/P_{\text{peak}},\,Q/BW_{\text{peak}})$ uses the operator's frozen operation count $F$ and memory
+  traffic $Q$ and the device's empirically measured sustained peak for the arithmetic mode that the algorithm and its
+  numerical contract require (memory-only for copies, indexing, comparisons and integer operators); $T_k$ is the formal
+  autotuned latency. Each cell is the geometric mean over the operators of a workload category (row; \emph{Overall}:
+  all 45 operators, split below into 13 memory-only and 32 compute+memory targets) of each operator's geometric mean
+  over its valid input cases. Each column is relative to its own device's calibrated envelope; values do not compare
+  absolute latency or hardware capability. MI300X has only Triton results.}
   \label{fig:rq1-cross-accelerator}
 \end{figure*}
 
@@ -19,11 +23,12 @@
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{\tilearenafigdir/main/fig_rq2_cross_device_diagnosis.pdf}
-  \caption{Three mechanisms behind performance changes across devices, each at the input case captured by every profile
-  (identical on all devices). Left: speedup over the local PyTorch baseline from the formal autotuned latency. Right:
-  dynamic Nsight Compute counters for B200 and GH200; the MI300X line reports static ISA or kernel-trace observations,
-  which are not comparable with the NVIDIA counters. The counters are consistent with, but do not prove, the stated
-  mechanisms; the main confounders are listed under each row.}
+  \caption{Explaining performance differences across accelerators, each case at the input captured by every profile
+  (identical on all devices). Left: proximity to modeled SOL ($T_{\text{SOL}}/T_k$) from the formal autotuned latency,
+  with the target stated below each panel. Right: dynamic Nsight Compute counters for B200 and GH200 in a table; the
+  MI300X line reports static ISA, rocprof or kernel-trace observations, which are not comparable with the NVIDIA
+  counters. Interpretations and confounders are listed separately. The counters are consistent with, but do not prove,
+  the stated mechanisms. $\dagger$~Above the modeled SOL: the calibrated TF32 rate is a sustained library-GEMM rate.}
   \label{fig:rq2-cross-device-diagnosis}
 \end{figure*}
 
@@ -42,19 +47,22 @@
 \begin{figure*}[p]
   \centering
   \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a1_performance_atlas.pdf}
-  \caption{Performance of all 45 operators. (A)~Geometric-mean speedup over the local PyTorch baseline. (B)~Change in
-  relative speedup between two devices, $2^{\Delta}$ with $\Delta=\log_2(S_{\text{dev2}}/S_{\text{dev1}})$, both $S$
-  over the input cases valid on both devices; not an absolute hardware speedup.}
+  \caption{Proximity to modeled SOL of all 45 operators. (A)~Geometric mean of $T_{\text{SOL}}/T_k$ over each
+  operator's valid input cases; amber: above 1 (kept and audited); $\ddagger$: MI300X BF16 cases with the conditional
+  memory-dominance target. (B)~Change in proximity between two devices, $2^{\Delta}$ with
+  $\Delta=\log_2(R_{\text{dev2}}/R_{\text{dev1}})$, both $R$ over the input cases valid on both devices: a ratio of
+  normalized SOL proximities, not an absolute accelerator speedup.}
   \label{fig:a1-performance-atlas}
 \end{figure*}
 
 \begin{figure*}[p]
   \centering
   \includegraphics[width=\textwidth]{\tilearenafigdir/appendix/fig_a2_shape_dtype.pdf}
-  \caption{Sensitivity to input shape and data type. Each cell is one input case (speedup over the local PyTorch
-  baseline, log scale); rows are device and DSL pairs (T: Triton, C: cuTile, TL: TileLang). Operators whose median
-  within-(device, DSL, dtype) range of $\log_2$ speedup is at least 0.5 are shown, together with matmul for all data
-  types; FP8 is not supported on MI300X.}
+  \caption{Sensitivity of the proximity to modeled SOL to input shape and data type. Each cell is one input case
+  ($T_{\text{SOL}}/T_k$, log scale; amber: above 1); rows are device and DSL pairs (T: Triton, C: cuTile, TL:
+  TileLang). The operators and axes are those of the speedup version (shape-sensitive operators, and matmul for all
+  data types). Hatched rows distinguish an unsupported data type (FP8 on MI300X) from unavailable calibration and
+  missing measurements.}
   \label{fig:a2-shape-dtype}
 \end{figure*}
 

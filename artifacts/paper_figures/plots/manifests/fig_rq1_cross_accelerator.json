@@ -2,18 +2,94 @@
  "figure": "fig_rq1_cross_accelerator",
  "rq": "RQ1",
  "script": "scripts/paper_figures/plot_rq1.py",
- "source_git_commit": "7b8002c3468e6a095a9777ec97076ba0a98f1b28",
+ "source_git_commit": "8b3844aeff28b32a7a55c81006dfd33945aa6f81",
  "source_data_files": {
   "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
   "comparison_manifest.json": "2e9c7b5b8111d55d3d4be617d142103557b485c85007b78eaff06cd0b97ef09b"
  },
- "metric_formula": "S[o,b,d] = GM_cases(torch_ms/dsl_ms) over valid autotune cases; cell = GM over the row's operators of S[o,b,d]",
+ "sol_inputs": {
+  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844",
+  "sol_cases.csv.gz": "0f3d97f220a43d98ae26daa5460284bc100a2dbd28e452a8be074cbd3b53cc45",
+  "sol_provenance.json": "73a2428cebc6c372180f4d3d8e1781c1edbf659d9d1188700eccc48e836d9465",
+  "sol_operator_summary.csv": "68edc40a7a0a7db29abf6c2e8d3055dc5a725c64163da359949967dc9e678b82",
+  "sol_sensitivity_mi300x_bf16.csv": "2972987f44ef2bff5cee1c77e82465f499a175f701d70a327e5d1b2bfbd0ee15",
+  "sol_above_one_cases.csv": "466209a26647cbb840dcdeef523bface534c8c0272395e67cd95f8627086d78d",
+  "sol_above_one_audit.json": "62aad77f3dcaa53158b85fde5ace0c76efbe372d87a4c6a7b15db8acd1ed75d3"
+ },
+ "sol_code_sha256": {
+  "scripts/paper_figures/sol_modes.py": "4fa04908d5e7ea21fb33f8f729d93275e25e22e5883c8342eb208b6cbc2b778b",
+  "scripts/paper_figures/sol_data.py": "ab47a0825dd217fd5fc80c8936035d4e4c462f2dae9bafa00eaf7d9990d9e17f"
+ },
+ "metric": "Proximity to modeled SOL (T_SOL / T_k)",
+ "metric_formula": "R[o,b,d,c] = T_SOL[o,d,c] / T_k[o,b,d,c]; T_SOL = max(F / P_peak[mode(o,dtype)], Q / BW_peak) (memory-only targets: Q / BW_peak); cell = GM over the row's operators of GM over each operator's valid cases",
  "aggregation_order": [
-  "geometric mean over input cases within an operator",
-  "geometric mean over operators (category or all 45)"
+  "geometric mean of case-level R within an operator",
+  "geometric mean over operators (category, all 45, or an M2 subgroup)"
  ],
- "colour_scale": "diverging, log2(speedup) in [-2, 2] centred at 0 (1x); printed values are not clipped",
+ "colour_scale": "sequential log scale from 0.01 (floor) to 1 = modeled SOL; values > 1 drawn in amber; printed values not clipped",
+ "peaks": {
+  "B200": {
+   "file": "tilebench/data/peak_performance/empirical/B200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "23645505dbb60159c2d7541d09f34366cc5daf9e18feb4242126ac1d39173597",
+   "git_blob": "5752abb92e37346ba5fdd9605a32739bcd9f4042",
+   "calibration_id": "B200-20261006T063415Z-39b55bd3"
+  },
+  "GH200": {
+   "file": "tilebench/data/peak_performance/empirical/GH200.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "2bead47d1578ca155cc98b003365961c1638224d9434d731b0d83cc0c0854853",
+   "git_blob": "2a595d682e3e46b50f867f9025eab0f5bd421836",
+   "calibration_id": "GH200-20261007T215924Z-0a3f4803-int8layout"
+  },
+  "MI300X": {
+   "file": "tilebench/data/peak_performance/empirical/MI300X.json",
+   "commit": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+   "sha256": "8dfe09c8a1554d1502d9b806563066d52f072cf8278a71ee8d94e3421240edbf",
+   "git_blob": "966606d133062ccb9964e43ca88408db4d1c1283",
+   "calibration_id": "MI300X-20261009T060617Z-eccfca2c"
+  }
+ },
+ "mode_decisions": {
+  "D1_tf32_class_on_cdna3": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: map to xf32_mma (architecture-specific realisation of the TF32 class, documented as not bit-identical to NVIDIA TF32)",
+   "question": "Score the TF32-class contract (fp32 operands at 10-bit mantissa, fp32 accumulation) on MI300X against the calibrated XF32 matrix rate (peak_tflops.xf32_mma)?",
+   "evidence": [
+    "contracts (batched_matmul, matmul_fp32_fp16_fp8, streamk_matmul, 1d/2d/3d_conv, linear_self_attention) define the fp32 class as operands rounded to TF32 (10-bit mantissa) with fp32 accumulation; narrower operand formats are forbidden",
+    "Triton 3.6 AMD backend (backends/amd/compiler.py): 'Enable XF32 (TF32) for CDNA3 GPUs' -- gfx942 accepts input_precision='tf32' and lowers it to v_mfma_f32_*_xf32",
+    "CDNA3 XF32: fp32 operands with the mantissa cut to 10 bits (low 13 bits truncated), fp32 accumulation",
+    "not bit-identical to NVIDIA TF32 (operand rounding and internal accumulation details differ; on NVIDIA the DSLs also differ: Triton feeds fp32 registers to the tf32 MMA, cuTile casts to ct.tfloat32)"
+   ],
+   "affects": "MI300X fp32 cases of batched_matmul, matmul_fp32_fp16_fp8, streamk_matmul, 1d_conv, 2d_conv, 3d_conv, linear_self_attention (140 cases; compute-bound for the GEMM/conv cases, so material)",
+   "if_rejected": "these MI300X cases get status missing_calibration (MI300X has no TF32 mode)"
+  },
+  "D2_mi300x_bf16_vector": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: conditional memory-dominance assumption, not a measured BF16 vector peak; only for the identified 100 MI300X bf16 cases after per-case verification of the critical throughput P* = F * BW / Q; status 'bf16_vector_peak_unavailable; conditional_memory_dominance'; no BF16 vector peak is fabricated and no FP16/FP32/BF16-MMA rate is substituted; RQ1 aggregates are reported with and without these cases (appendix)",
+   "status_label": "bf16_vector_peak_unavailable; conditional_memory_dominance",
+   "max_critical_throughput_tflops": 3.99,
+   "question": "MI300X has no calibrated bf16_vector (gfx942 has no packed BF16 FMA). Exclude the bf16 cases that need it, or approve a memory-term-dominance rule?",
+   "evidence": [
+    "affected: leaky_relu, mul2, vector_add, weight_dequant, jacobi_stencil_2d at bf16 on MI300X (100 cases)",
+    "for every one of them the compute term F/P would reach the memory term Q/BW only if P <= 3.99 TFLOP/s; MI300X fp16_vector is 145.92 and fp32_vector 130.24 TFLOP/s"
+   ],
+   "default": "missing_calibration: excluded from every aggregate and reported as missing (no substitution)",
+   "alternative": "dominance rule: T_SOL = Q/BW, flagged, valid for any bf16 vector peak above P* (P* <= 3.99)"
+  },
+  "D3_memory_only_M2": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-09: adopt the approved v2 decision M2 for the paper, including int8 mul2/vector_add; the memory-only subgroup is reported beside the overall aggregate",
+   "question": "Adopt the approved v2 decision M2 (memory-only bound T_SOL = Q/BW when F is an element, comparison, conversion or integer count without a calibrated arithmetic unit) for the paper?",
+   "evidence": [
+    "M2 approved 2026-10-06 (arithmetic_modes.yaml), with the condition that these tasks are not described as a full compute+memory roofline and the memory-only subgroup is reported beside the overall aggregate",
+    "no-arithmetic operators (copy, transpose, reverse, interleave, destindex, quantize_global conversion) and comparison/selection operators (relu, argmax, 2d_max_pooling, bitonic_sort, top_k_selection, radix_sort, histogramming) have no FMA-type work for any calibrated peak to represent",
+    "integer arithmetic without MMA: mul2/int8 and vector_add/int8 (int32_vector is not calibrated on any device); their compute term would reach the memory term only below 3.42 TOP/s"
+   ],
+   "if_rejected": "the int8 mul2/vector_add cases get status missing_calibration; no-arithmetic and comparison operators stay memory-only (they have no arithmetic term to model)"
+  }
+ },
  "columns": [
   "B200:triton",
   "B200:cutile",
@@ -24,23 +100,99 @@
   "MI300X:triton"
  ],
  "case_coverage": {
-  "B200:triton": 2200,
-  "B200:cutile": 2200,
-  "B200:tilelang": 2200,
-  "GH200:triton": 2200,
-  "GH200:cutile": 2200,
-  "GH200:tilelang": 2200,
-  "MI300X:triton": 2180
+  "B200:cutile": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "B200:tilelang": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "B200:triton": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:cutile": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:tilelang": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "GH200:triton": {
+   "ok": 1460,
+   "ok; memory_only": 740
+  },
+  "MI300X:triton": {
+   "ok": 1340,
+   "ok; memory_only": 740,
+   "bf16_vector_peak_unavailable; conditional_memory_dominance": 100
+  }
  },
+ "operator_coverage": {
+  "B200:triton": 45,
+  "B200:cutile": 45,
+  "B200:tilelang": 45,
+  "GH200:triton": 45,
+  "GH200:cutile": 45,
+  "GH200:tilelang": 45,
+  "MI300X:triton": 45
+ },
+ "row_operators": {
+  "Point-wise": 12,
+  "Reduction/Normalization": 11,
+  "Matrix Multiplication/Attention": 8,
+  "Stencil/Convolution": 6,
+  "Data Layout": 8,
+  "Overall": 45,
+  "Memory-only targets": 13,
+  "Compute+memory targets": 32
+ },
+ "memory_only_subgroup": {
+  "operators": [
+   "2d_max_pooling",
+   "argmax",
+   "bitonic_sort",
+   "destindex",
+   "histogramming",
+   "interleave",
+   "matrix_copy",
+   "matrix_transpose",
+   "quantize_global",
+   "radix_sort",
+   "relu",
+   "reverse_array",
+   "top_k_selection"
+  ],
+  "rule": "approved decision M2: memory-only target Q / BW_peak; reported beside the overall aggregate; not a compute+memory roofline"
+ },
+ "conditional_memory_dominance": {
+  "status_label": "bf16_vector_peak_unavailable; conditional_memory_dominance",
+  "n_cases": 100,
+  "operators": [
+   "jacobi_stencil_2d/bf16",
+   "leaky_relu/bf16",
+   "mul2/bf16",
+   "vector_add/bf16",
+   "weight_dequant/bf16"
+  ],
+  "max_critical_throughput_tflops": 3.9875200000000004,
+  "approved_threshold_tflops": 3.99
+ },
+ "sensitivity": "sol/sol_sensitivity_mi300x_bf16.csv (every row with and without the 100 MI300X bf16 conditional cases)",
+ "above_one_cases": 549,
  "excluded_cases": {
   "invalid_or_missing_rows": 0,
   "known_unsupported": {
    "MI300X/triton/matmul_fp32_fp16_fp8/fp8_e4m3fn": "UNSUPPORTED_DTYPE on gfx942 (FP8 there is E4M3FNUZ; the PyTorch reference rejects e4m3fn); no CSV row, no winner, no profile"
   },
+  "missing_peak_mode_mappings": [],
   "not_shown": "cuTile and TileLang do not run on MI300X (no column)",
   "nki": "no finalized NKI results; not shown"
  },
  "selection_criteria": "all 45 operators; the seven supported device/DSL combinations; autotuned results",
+ "interpretation": "each column is compared with its own device's empirically calibrated envelope; differences between columns are differences in proximity, not absolute latency or hardware capability",
  "profiling_evidence_ids": [],
  "known_limitations": {
   "B200": [
@@ -70,317 +222,471 @@
    "row": "Point-wise",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 2.073002655994765,
-   "n_operators": 12
+   "sol_proximity": 0.7078478200650968,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 1.8400858183142594,
-   "n_operators": 12
+   "sol_proximity": 0.6283159992389983,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 2.0751065978445213,
-   "n_operators": 12
+   "sol_proximity": 0.7085662323872359,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 1.861877401233256,
-   "n_operators": 12
+   "sol_proximity": 0.7930037775401271,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 1.758811066211983,
-   "n_operators": 12
+   "sol_proximity": 0.7491061541225225,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 1.8560275570717106,
-   "n_operators": 12
+   "sol_proximity": 0.7905122340501776,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Point-wise",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 1.430509963459842,
-   "n_operators": 12
+   "sol_proximity": 0.5956496520259978,
+   "n_operators": 12,
+   "operators": 12
   },
   {
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 2.5624592888888236,
-   "n_operators": 11
+   "sol_proximity": 0.3234514272408513,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 2.0455486773099287,
-   "n_operators": 11
+   "sol_proximity": 0.2582033759660008,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 3.046765113202508,
-   "n_operators": 11
+   "sol_proximity": 0.38458387557849755,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 2.088385593158668,
-   "n_operators": 11
+   "sol_proximity": 0.43731818147805185,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 1.7614996603871451,
-   "n_operators": 11
+   "sol_proximity": 0.3688666646036304,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 2.4571389690578553,
-   "n_operators": 11
+   "sol_proximity": 0.5145369461977493,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Reduction/Normalization",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 1.7120158698473464,
-   "n_operators": 11
+   "sol_proximity": 0.28862317821038114,
+   "n_operators": 11,
+   "operators": 11
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 1.2211856388430975,
-   "n_operators": 8
+   "sol_proximity": 0.1376841433496744,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 0.7917803431140013,
-   "n_operators": 8
+   "sol_proximity": 0.08927029175190727,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 0.7519769196031564,
-   "n_operators": 8
+   "sol_proximity": 0.08478260364441628,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 1.3331032175201138,
-   "n_operators": 8
+   "sol_proximity": 0.21878518554890036,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 0.8484668933261036,
-   "n_operators": 8
+   "sol_proximity": 0.1392480223952725,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 0.8361305553128126,
-   "n_operators": 8
+   "sol_proximity": 0.13722341697405638,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Matrix Multiplication/Attention",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 0.3090658607423443,
-   "n_operators": 8
+   "sol_proximity": 0.03807030404719723,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Stencil/Convolution",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 1.2165998792257777,
-   "n_operators": 6
+   "sol_proximity": 0.1182436386077708,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 0.8563114234785912,
-   "n_operators": 6
+   "sol_proximity": 0.08322652354523014,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 0.5859679117466111,
-   "n_operators": 6
+   "sol_proximity": 0.056951327363610686,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 1.3217235988911036,
-   "n_operators": 6
+   "sol_proximity": 0.16730843934501188,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 1.0273554916030767,
-   "n_operators": 6
+   "sol_proximity": 0.13004628509080574,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 0.6028667891005131,
-   "n_operators": 6
+   "sol_proximity": 0.0763130065181317,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Stencil/Convolution",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 1.763954855813741,
-   "n_operators": 6
+   "sol_proximity": 0.22523925521714713,
+   "n_operators": 6,
+   "operators": 6
   },
   {
    "row": "Data Layout",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 3.368575543266297,
-   "n_operators": 8
+   "sol_proximity": 0.08942256002320384,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 2.7909253180008498,
-   "n_operators": 8
+   "sol_proximity": 0.07408819649839768,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 2.932253883193186,
-   "n_operators": 8
+   "sol_proximity": 0.07783991942744642,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 2.7976933257746937,
-   "n_operators": 8
+   "sol_proximity": 0.11631031655610072,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 2.464349963085593,
-   "n_operators": 8
+   "sol_proximity": 0.10245201704948541,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 2.505638242466631,
-   "n_operators": 8
+   "sol_proximity": 0.10416852142851174,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Data Layout",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 2.2645855436944125,
-   "n_operators": 8
+   "sol_proximity": 0.08904771353728379,
+   "n_operators": 8,
+   "operators": 8
   },
   {
    "row": "Overall",
    "device": "B200",
    "dsl": "triton",
-   "speedup": 2.017760784083047,
-   "n_operators": 45
+   "sol_proximity": 0.2382501533118287,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "B200",
    "dsl": "cutile",
-   "speedup": 1.5806477041879328,
-   "n_operators": 45
+   "sol_proximity": 0.18663736594816555,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "B200",
    "dsl": "tilelang",
-   "speedup": 1.7096833151652127,
-   "n_operators": 45
+   "sol_proximity": 0.20187344068038063,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "GH200",
    "dsl": "triton",
-   "speedup": 1.8532931547825087,
-   "n_operators": 45
+   "sol_proximity": 0.3150370303491062,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "GH200",
    "dsl": "cutile",
-   "speedup": 1.5275942928009292,
-   "n_operators": 45
+   "sol_proximity": 0.25967223174615567,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "GH200",
    "dsl": "tilelang",
-   "speedup": 1.5662387034022753,
-   "n_operators": 45
+   "sol_proximity": 0.2662413060040641,
+   "n_operators": 45,
+   "operators": 45
   },
   {
    "row": "Overall",
    "device": "MI300X",
    "dsl": "triton",
-   "speedup": 1.270165835657553,
-   "n_operators": 45
+   "sol_proximity": 0.19173017803642947,
+   "n_operators": 45,
+   "operators": 45
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "B200",
+   "dsl": "triton",
+   "sol_proximity": 0.1407052017800634,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "B200",
+   "dsl": "cutile",
+   "sol_proximity": 0.11803420965236151,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "B200",
+   "dsl": "tilelang",
+   "sol_proximity": 0.14822922190109877,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "GH200",
+   "dsl": "triton",
+   "sol_proximity": 0.18663023599057882,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "GH200",
+   "dsl": "cutile",
+   "sol_proximity": 0.16455232353205543,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "sol_proximity": 0.19394794702470575,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Memory-only targets",
+   "device": "MI300X",
+   "dsl": "triton",
+   "sol_proximity": 0.13325917653860106,
+   "n_operators": 13,
+   "operators": 13
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "B200",
+   "dsl": "triton",
+   "sol_proximity": 0.2950882534533662,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "B200",
+   "dsl": "cutile",
+   "sol_proximity": 0.22482187655454317,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "B200",
+   "dsl": "tilelang",
+   "sol_proximity": 0.22886307881491713,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "GH200",
+   "dsl": "triton",
+   "sol_proximity": 0.38970373430923244,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "GH200",
+   "dsl": "cutile",
+   "sol_proximity": 0.3125448638436331,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "GH200",
+   "dsl": "tilelang",
+   "sol_proximity": 0.30281087857371985,
+   "n_operators": 32,
+   "operators": 32
+  },
+  {
+   "row": "Compute+memory targets",
+   "device": "MI300X",
+   "dsl": "triton",
+   "sol_proximity": 0.2222671465505788,
+   "n_operators": 32,
+   "operators": 32
   }
  ],
  "outputs": {
   "pdf": {
    "path": "main/fig_rq1_cross_accelerator.pdf",
-   "sha256": "c2f4e7688ccdef1ebc9aa48d9b926a6e61c44872c087cd64400207a6852145ea"
+   "sha256": "aac832eb813998689fbd3532f0a2ff871ee33b775b47bd2016c83e3431b93eb0"
   },
   "svg": {
    "path": "main/fig_rq1_cross_accelerator.svg",
-   "sha256": "e41e9a0388ef2e1e81404a51e02b66bff50ed7dd92e5a0cef6d5ee4115473e22"
+   "sha256": "b7b4a3c5de5c6a3ba9a0ce4e447d7c0135124e05d611d24013845ba2f011fad2"
   },
   "png": {
    "path": "previews/fig_rq1_cross_accelerator.png",
-   "sha256": "c0ececd15afaceb5d9b2fcba0525dbf200fa3630ec2b4a10fb68249a91ce2835"
+   "sha256": "8c0b7f7c8ba579f94da29b04deeb3a05531bac97eb7298205d5c1c3ccc6b0b64"
   }
  },
  "layout": {
   "width_in": 6.3,
-  "height_in": 2.2,
+  "height_in": 2.78,
   "min_font_pt": 7.0,
   "max_font_pt": 8.0,
-  "n_text_objects": 64,
+  "n_text_objects": 80,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
@@ -390,8 +696,8 @@
   "text_overlaps": []
  },
  "code_sha256": {
-  "scripts/paper_figures/plot_style.py": "d710869fdc68797ae42ba1e235be2331336c15fc5286a353188d4d0fa0f8bada",
+  "scripts/paper_figures/plot_style.py": "8c5d09f68e2eb59d62ad66652ba95398e4909bf6c7cfb2b12b575bbdc22ded36",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq1.py": "1ec4d4260402c393e86e5376d52d66fd3c8182561f4211b6513ebc79694bc73f"
+  "scripts/paper_figures/plot_rq1.py": "821bb9311285a092f858b771767259bbdc38d036599a179253590288a92aad0d"
  }
 }
