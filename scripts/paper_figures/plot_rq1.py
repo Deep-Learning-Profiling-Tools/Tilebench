@@ -1,7 +1,7 @@
-"""Figure 2 (RQ1): category x (device, DSL) proximity to the modeled, device-specific empirical SOL (T_SOL / T_k).
+"""Figure 2 (RQ1): category x (device, DSL) proximity to the modeled, device-specific hybrid SOL reference (T_SOL / T_k).
 
-T_SOL comes from the algorithm-aware compute mode of each operator and dtype (sol_modes.py) and the PR #323 empirical
-peaks (sol_data.py); T_k is the formal autotuned latency. Cell = GM over the row's operators of each operator's GM over
+T_SOL comes from the algorithm-aware compute mode of each operator and dtype (sol_modes.py) and the hybrid peaks
+(sol_data.py: published dense rates for matmul_fp32_fp16_fp8, PR #323 empirical peaks otherwise); T_k is the formal autotuned latency. Cell = GM over the row's operators of each operator's GM over
 its valid cases. The two rows under Overall split the 45 operators into memory-only targets (approved decision M2) and
 targets with a compute term, as M2 requires."""
 import json
@@ -135,7 +135,8 @@ def main(out_root=FD.PLOTS):
                            "missing_peak_mode_mappings": prov["missing_peak_mode_mappings"],
                            "not_shown": "cuTile and TileLang do not run on MI300X (no column)", "nki": "no finalized NKI results; not shown"},
         "selection_criteria": "all 45 operators; the seven supported device/DSL combinations; autotuned results",
-        "interpretation": "each column is compared with its own device's empirically calibrated envelope; differences between columns are "
+        "interpretation": "each column is compared with its own device's hybrid SOL reference (published dense compute rates for the direct GEMM, "
+                          "empirically calibrated rates otherwise); differences between columns are "
                           "differences in proximity, not absolute latency or hardware capability",
         "profiling_evidence_ids": [], "known_limitations": m["device_limitations"],
         "plotted_values": table,

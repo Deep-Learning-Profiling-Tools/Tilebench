@@ -15,11 +15,11 @@ The counter values come from `combined/figure_evidence.csv` (evidence IDs in the
 ## Figure 3A / A5 B: matrix operand delivery (matmul FP32, M = N = 4096, K = 20480; case `357a02eb8c…`)
 
 **1. Measured difference (T_SOL / T_k).**
-- cuTile goes from 1.13 on B200 to 0.65 on GH200.
-- Triton goes from 0.73 to 0.94, and is at 0.085 on MI300X.
+- cuTile goes from 0.67 on B200 to 0.54 on GH200.
+- Triton goes from 0.43 to 0.78, and is at 0.041 on MI300X.
 - The ranking of cuTile and Triton reverses between B200 and GH200; both DSLs share one T_SOL per device.
-- T_SOL is the TF32-class MMA term (compute-bound): 1.034 ms (B200, TF32), 1.677 ms (GH200, TF32), 2.160 ms (MI300X,
-  XF32, decision D1). B200 cuTile's 1.13 exceeds it and is marked † (sustained library-GEMM calibration; SOL audit).
+- T_SOL is the TF32-class MMA term at the published dense rate (hybrid policy H1; compute-bound): 0.611 ms (B200,
+  TF32), 1.391 ms (GH200, TF32), 1.051 ms (MI300X, XF32, decision D1).
 
 **2. Formal CSV values (ms).**
 

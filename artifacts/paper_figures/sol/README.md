@@ -1,8 +1,10 @@
-# Algorithm-aware empirical SOL (Figures 2, 3, A1, A2)
+# Algorithm-aware hybrid SOL reference (Figures 2, 3, A1, A2)
 
 The cross-device figures report **proximity to modeled SOL**, `T_SOL / T_k`, instead of speedup over the local PyTorch
-baseline. Larger values mean that an implementation reaches a larger fraction of its own device's modeled,
-empirically calibrated limit; 1 is the modeled target. The quantity compares proximity to each accelerator's envelope,
+baseline. Larger values mean that an implementation reaches a larger fraction of its own device's modeled
+limit; 1 is the modeled target. The reference is hybrid (decision H1): published dense compute rates for the direct
+GEMM, empirically calibrated rates otherwise; it is neither uniformly empirical nor uniformly hardware-theoretical.
+The quantity compares proximity to each accelerator's reference,
 not absolute latency, and it is not the "SOL Efficiency" metric of SOL-ExecBench.
 
 Everything here is CPU-only and derived; nothing was recalibrated, rerun or profiled.
@@ -19,10 +21,15 @@ R[o,b,d,c]   = T_SOL[o,d,c] / T_k[o,b,d,c]                                 never
 - **F, Q.** The frozen `flops_expr` / `bytes_expr` of `tilebench/benchmarks/operators/<op>/config.yaml` (identical at
   all 315 operator/commit configurations the formal data was measured with), evaluated with the engine's convention:
   `n = params["n"]` or `infer_problem_size`, `dtype_size`, and every numeric case parameter. Two approved overrides of
-  `arithmetic_modes.yaml` apply: M3 (causal F of flash_attention) and M4 (compulsory Q of radix_sort).
+  `arithmetic_modes.yaml` apply: M3 (causal F of flash_attention) and M4 (compulsory Q of radix_sort), plus the paper
+  decision N1: rmsnorm Q = (2n + K)·dtype_size and layernorm Q = (2n + 2K)·dtype_size (compulsory I/O: one read of x and
+  of each K-length parameter vector, one write of y; the frozen 3n·dtype_size counted an optional second read).
 - **Units.** F in FLOP (OP for INT8 MMA); P in TFLOP/s (TOP/s) times 1e12; BW in GB/s times 1e9; Q in bytes; terms in s
   times 1e3 = ms; `T_k` is the formal autotuned `dsl_ms` of `combined/benchmark_cases_normalized.csv.gz`.
-- **Peaks.** Only the PR #323 empirical profiles, read from merge commit
+- **Peaks (hybrid policy, decision H1).** `matmul_fp32_fp16_fp8` uses the vendor's published single-GPU dense rate of
+  its mode (`sol_modes.DATASHEET_DENSE`: B200 FP16 2250, TF32 1125, FP8 4500; GH200 96 GB FP16 990, TF32 494, FP8 1979;
+  MI300X FP16 1307.4, XF32 653.7 TFLOP/s; sources in `sol_modes.DATASHEET_SOURCES`). Every other compute peak and every
+  bandwidth come from the PR #323 empirical profiles, read from merge commit
   `72d7cec623e6238643ed5d2099d9aa9889c4ea87` (not merged into this branch). The legacy `peak_performance/<device>.json`
   is never read.
 
@@ -105,23 +112,23 @@ All 45 operators have a target in every column; no operator/dtype lacks a mappin
 
 ## Values above 1
 
-549 of 15,380 case values exceed 1 (no category aggregate does). They are kept and each is assigned to one cause in
+24 of 15,380 case values exceed 1 (no operator or category aggregate does). They are kept, not clipped, and audited in
 `sol_above_one_audit.json`:
 
-- **Performance model (rmsnorm, layernorm; 337 cases).** The frozen Q = 3·n·dtype_size counts two reads of the input;
-  the contract allows one when the row stays on chip. At 2/3 Q every case is below 1 (max 0.92).
-- **Timing boundary (rope; 61 cases).** Launches of at most 37 µs whose output is largely L2-resident; its write-back
-  can finish after the timed launch. 54 cases have an output that fits in L2; 7 GH200 cases do not and are only partly
-  explained.
-- **Measurement (swiglu, weight_dequant FP32; 24 cases).** Working sets at least 5.6× the L2, within 2.2% of the calibrated
-  stream-copy rate.
-- **Calibration (matmul FP16, FP32 TF32-class and FP8 on B200/GH200; 127 cases).** Compute-bound GEMMs above the
-  sustained library-GEMM rate (up to 1.30× for B200 FP8, 1.17× for B200 cuTile FP32), which was measured with
-  `torch.matmul` / `torch._scaled_mm` at M = 4096–16384 under power-capped clocks. The numerical contract is met.
+- **Measurement (swiglu, weight_dequant FP32; 24 cases: swiglu B200 12, GH200 11; weight_dequant B200 Triton 1).**
+  Working sets at least 5.3× the L2, at most 2.0% above the calibrated stream-copy bandwidth (max R 1.0198). The copy
+  probe is a sustained 1:1 read/write rate, not a bound: swiglu reads two inputs per output, and every case stays below
+  the calibrated read-only probe of the same calibration run and below the datasheet HBM bandwidth.
+
+Earlier causes that no longer produce values above 1:
+- **rope (61 cases):** remeasured with the input restored before the cache flush (#324, #325, #326).
+- **matmul_fp32_fp16_fp8 (127 cases):** scored against the published dense rates (decision H1; max R now 0.84).
+- **rmsnorm, layernorm (337 cases):** compulsory-I/O Q (decision N1; max R now 0.92).
 
 ## Known limitations of the model
 
-- The peaks are measured sustained rates, not proven bounds.
+- The empirical peaks are measured sustained rates and the GEMM datasheet peaks are vendor dense specifications;
+  neither is a proven bound.
 - Simplified operation counts (exponentials, conversions and comparisons are not weighted) only matter for
   compute-bound cases; outside the matrix operators the only one is gaussian_blur.
 - The attention operators count only their GEMM FLOPs.

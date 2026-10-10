@@ -7,8 +7,8 @@ These limitations apply to the figures in this directory. Device-level entries r
 ## What the figures can and cannot show
 
 - **Modeled, device-specific target.** Figures 2, 3 (left), A1 and A2 show proximity to modeled SOL (T_SOL / T_k):
-  each value is relative to its own device's empirically calibrated envelope. They compare how close each DSL comes to
-  that envelope, not absolute latency or hardware capability (see "Modeled SOL target" below).
+  each value is relative to its own device's hybrid SOL reference. They compare how close each DSL comes to
+  that reference, not absolute latency or hardware capability (see "Modeled SOL target" below).
 - **Cross-device changes.** Figure A1 (B) uses only input cases valid on both devices. A change in proximity still
   combines hardware, compiler and protocol changes and does not isolate any one of them; it is not an accelerator
   speedup.
@@ -22,8 +22,9 @@ These limitations apply to the figures in this directory. Device-level entries r
 
 Definitions, decisions and tables: `../sol/README.md` and `../sol/sol_mode_manifest.{json,csv}`.
 
-- **Empirical, sustained peaks.** P_peak and BW_peak are TileArena's measured sustained rates (PR #323), not vendor
-  datasheet peaks and not proven bounds. The matrix peaks are sustained library-GEMM rates (cuBLAS/hipBLASLt or a
+- **Hybrid reference.** matmul_fp32_fp16_fp8 uses the vendor's published single-GPU dense compute rate (decision H1);
+  every other P_peak and every BW_peak is a TileArena measured sustained rate (PR #323). Neither kind is a proven
+  bound. The matrix peaks are sustained library-GEMM rates (cuBLAS/hipBLASLt or a
   verified Triton probe) at large square shapes, with power-capped clock events in the calibration telemetry.
 - **Compute mode from the algorithm.** The mode of each operator and data type is fixed from its frozen contract
   (algorithm and numerical precision), never from the input dtype alone, the compiled ISA or a profiler report
@@ -46,11 +47,9 @@ Definitions, decisions and tables: `../sol/README.md` and `../sol/sol_mode_manif
   compute-bound cases; outside the matrix (MMA) operators the only one is gaussian_blur (FP32 arithmetic, approved
   decision C1). The attention operators count only their GEMM FLOPs; the softmax work has no calibrated mode
   and is not modeled. For linear_self_attention, adding its FP32 vector part at the FP32 vector rate changes no target.
-- **Values above 1.** 549 of 15,380 case values exceed 1. They are kept and assigned to one audited cause each
-  (`../sol/sol_above_one_audit.json`): rmsnorm and layernorm count a second read of the input in Q (all below 1 at
-  2/3 Q); rope's short launches leave part of their written output in L2 inside the timed interval (7 GH200 cases with
-  an output larger than L2 are only partly explained); swiglu and weight_dequant FP32 are within 2.2% of the
-  calibrated copy rate; matmul exceeds the sustained library-GEMM rate by up to 1.30× (B200 FP8).
+- **Values above 1.** 24 of 15,380 case values exceed 1. They are kept and audited
+  (`../sol/sol_above_one_audit.json`): swiglu and weight_dequant FP32 at large working sets are within 2% of the
+  calibrated copy rate, which is a sustained 1:1 read/write rate rather than a bound.
 - **Protocol effects remain.** T_k still carries each device's benchmark protocol (warmup, repeats, flush size; see
   below), so part of a cross-device change in proximity can come from the protocol.
 

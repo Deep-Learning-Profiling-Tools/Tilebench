@@ -59,13 +59,21 @@ PR323 = "72d7cec623e6238643ed5d2099d9aa9889c4ea87"          # merge commit of PR
 CALIBRATION_IDS = {"B200": "B200-20261006T063415Z-39b55bd3", "GH200": "GH200-20261007T215924Z-0a3f4803-int8layout",
                    "MI300X": "MI300X-20261009T060617Z-eccfca2c"}
 UNCHANGED_BASELINE = "8b3844aeff28b32a7a55c81006dfd33945aa6f81"   # last commit before the SOL version of RQ1/RQ2/A1/A2
-UNCHANGED = ("fig_rq3_within_device_dsl", "fig_a3_execution_paths", "fig_a4_within_device_matrix", "fig_a5_profiling_evidence")
+# RQ3 and A4 are regenerated: their RoPE latency ratios come from the merged cold-input RoPE CSVs (#324-#326)
+UNCHANGED = ("fig_a3_execution_paths", "fig_a5_profiling_evidence")
 SOL_FIGURES = ("fig_rq1_cross_accelerator", "fig_rq2_cross_device_diagnosis", "fig_a1_performance_atlas", "fig_a2_shape_dtype")
 # independent copies of the algorithm-level mode -> PR #323 key mapping and of the rev-2 names
 PEAK_KEY = {"fp16_mma": "peak_tflops.fp16_mma", "bf16_mma": "peak_tflops.bf16_mma", "fp8_e4m3fn_mma": "peak_tflops.fp8_e4m3fn_mma",
             "int8_mma": "peak_tops.int8_mma", "fp32_vector": "peak_tflops.fp32_vector", "fp16_vector": "peak_tflops.fp16_vector",
             "bf16_vector": "peak_tflops.bf16_vector"}
 TF32_CLASS_KEY = {"B200": "peak_tflops.tf32_mma", "GH200": "peak_tflops.tf32_mma", "MI300X": "peak_tflops.xf32_mma"}
+# independent copy of the hybrid policy H1: published single-GPU dense rates (TFLOP/s) for the direct GEMM operator only
+DATASHEET_OPS = ("matmul_fp32_fp16_fp8",)
+DATASHEET_DENSE = {("B200", "fp16_mma"): 2250.0, ("B200", "tf32_class_mma"): 1125.0, ("B200", "fp8_e4m3fn_mma"): 4500.0,
+                   ("GH200", "fp16_mma"): 990.0, ("GH200", "tf32_class_mma"): 494.0, ("GH200", "fp8_e4m3fn_mma"): 1979.0,
+                   ("MI300X", "fp16_mma"): 1307.4, ("MI300X", "tf32_class_mma"): 653.7}
+# independent copy of the paper decision N1 (compulsory-I/O Q of the row normalisations)
+PAPER_Q_OVERRIDES = {"rmsnorm": "(2 * n + K) * dtype_size", "layernorm": "(2 * n + 2 * K) * dtype_size"}
 REV2 = {"mma_fp16_f32acc": "fp16_mma", "mma_bf16_f32acc": "bf16_mma", "mma_tf32_f32acc": "tf32_class_mma",
         "mma_fp8_e4m3_f32acc": "fp8_e4m3fn_mma", "mma_int8_i32acc": "int8_mma", "fp32_fma_vector": "fp32_vector",
         "fp16x2_fma_vector": "fp16_vector", "bf16x2_fma_vector": "bf16_vector", "memory_only": "memory_only",
@@ -193,6 +201,7 @@ def sol_recompute():
     peaks = {d: json.loads(git_show(PR323, f"tilebench/data/peak_performance/empirical/{d}.json")) for d in SUPPORT}
     modes_doc = yaml.safe_load(git_show(PR323, "tilebench/llm/v2/manifests/arithmetic_modes.yaml"))
     ov = {d["override"]["operator"]: d["override"] for d in modes_doc["decisions"].values() if d.get("override") and d["status"] == "approved"}
+    ov.update({op: {"Q": q} for op, q in PAPER_Q_OVERRIDES.items()})
     man = {(r["operator"], r["dtype"]): r for r in json.load(open(SOLD / "sol_mode_manifest.json"))["rows"]}
     cfg = {}
     T, R, cond, pstar = {}, defaultdict(dict), set(), []
@@ -215,7 +224,7 @@ def sol_recompute():
                 t = mem
             else:
                 sec, k = (TF32_CLASS_KEY[dev] if mode == "tf32_class_mma" else PEAK_KEY[mode]).split(".")
-                pk = peaks[dev][sec].get(k)
+                pk = DATASHEET_DENSE[(dev, mode)] if op in DATASHEET_OPS else peaks[dev][sec].get(k)
                 if pk is None:
                     assert (mode, dev) == ("bf16_vector", "MI300X"), (op, dt, dev, mode)
                     pstar.append(F / mem / 1e12)
@@ -703,6 +712,15 @@ def main():
             bad.append(f"{d} peak provenance")
     if prov["legacy_peak_files_used"]:
         bad.append("legacy peak file used")
+    pol = prov.get("peak_policy", {})
+    if tuple(pol.get("datasheet_compute_operators", ())) != DATASHEET_OPS or \
+            {tuple(k.split("/")): v["value"] for k, v in pol.get("datasheet_dense", {}).items()} != DATASHEET_DENSE:
+        bad.append("hybrid peak policy differs from the independent copy")
+    for mr in MAN["rows"]:
+        for d_, src in mr["peak_source"].items():
+            want = ("datasheet" if mr["operator"] in DATASHEET_OPS else "empirical") if mr["peak_value"][d_] is not None else None
+            if src != want:
+                bad.append(f"peak source {mr['operator']}/{mr['dtype']}/{d_}: {src}")
     tab = read_csv(SOLD / "sol_cases.csv.gz")
     tsol = defaultdict(set)
     n_above = 0
@@ -760,7 +778,7 @@ def main():
         old = json.loads(git_show(UNCHANGED_BASELINE, f"artifacts/paper_figures/plots/manifests/{n}.json"))
         if old["plotted_values"] != M[n]["plotted_values"]:
             bad.append(f"{n} plotted values")
-    check("27.rq3_a3_a4_a5_unchanged_byte_for_byte", not bad, "; ".join(bad) or f"12 files identical to {UNCHANGED_BASELINE[:8]}")
+    check("27.a3_a5_unchanged_byte_for_byte", not bad, "; ".join(bad) or f"{3 * len(UNCHANGED)} files identical to {UNCHANGED_BASELINE[:8]}")
 
     # 28. every R_SOL > 1 is kept and assigned to an audited cause whose statistic supports it
     bad = []
@@ -768,16 +786,10 @@ def main():
     if sum(g["n_cases"] for g in aud["groups"]) != n_above:
         bad.append("audit does not cover every value above 1")
     for g in aud["groups"]:
-        if g["cause"] == "q_counts_second_read" and not g["max_R_SOL_at_two_thirds_Q"] < 1:
-            bad.append(f"{g['operator']}/{g['dtype']}/{g['device']}: still above 1 at 2/3 Q")
-        if g["cause"] == "above_library_gemm_rate" and g["bound"] != ["compute"]:
-            bad.append(f"{g['operator']}/{g['dtype']}/{g['device']}: not compute-bound")
-        if g["cause"] == "at_stream_copy_rate" and not (g["max_R_SOL"] < 1.03 and g["min_Q_over_L2"] > 2):
-            bad.append(f"{g['operator']}/{g['dtype']}/{g['device']}: not a large working set at the copy rate")
-    part = sum(g["n_cases"] - g["n_output_within_L2"] for g in aud["groups"] if g["cause"] == "output_resident_in_l2")
+        if g["cause"] != "at_stream_copy_rate" or not (g["max_R_SOL"] < 1.03 and g["min_Q_over_L2"] > 2):
+            bad.append(f"{g['operator']}/{g['dtype']}/{g['device']}: {g['cause']} is not a large working set at the copy rate")
     check("28.values_above_one_kept_and_audited", not bad, "; ".join(bad[:5]) or
-          f"{n_above} cases in {len(aud['groups'])} groups; causes {sorted({g['cause'] for g in aud['groups']})}; "
-          f"{part} rope cases only partly explained (output larger than L2), kept flagged")
+          f"{n_above} cases in {len(aud['groups'])} groups; causes {sorted({g['cause'] for g in aud['groups']})}; kept, not clipped")
 
     # 23. reproducibility: two independent rebuilds into temp dirs, byte-identical to each other and to the committed outputs
     if a.skip_reproducibility:

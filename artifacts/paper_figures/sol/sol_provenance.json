@@ -1,5 +1,59 @@
 {
  "schema": "tilearena-sol-provenance/1",
+ "reference": "hybrid SOL reference (decision H1): neither uniformly empirical nor uniformly hardware-theoretical",
+ "peak_policy": {
+  "datasheet_compute_operators": [
+   "matmul_fp32_fp16_fp8"
+  ],
+  "datasheet_dense": {
+   "B200/fp16_mma": {
+    "value": 2250.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "B200/tf32_class_mma": {
+    "value": 1125.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "B200/fp8_e4m3fn_mma": {
+    "value": 4500.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "GH200/fp16_mma": {
+    "value": 990.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "GH200/tf32_class_mma": {
+    "value": 494.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "GH200/fp8_e4m3fn_mma": {
+    "value": 1979.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "MI300X/fp16_mma": {
+    "value": 1307.4,
+    "unit": "TFLOP/s",
+    "source": "amd_mi300x_datasheet"
+   },
+   "MI300X/tf32_class_mma": {
+    "value": 653.7,
+    "unit": "TFLOP/s",
+    "source": "amd_mi300x_datasheet"
+   }
+  },
+  "sources": {
+   "nvidia_hgx_b200": "NVIDIA HGX B200 specifications (https://www.nvidia.com/en-us/data-center/hgx/): FP16/BF16 36, TF32 18, FP8 72 PFLOPS for 8 GPUs, sparse; 'Dense is 1/2 sparse spec' -> /8/2. The per-GPU Blackwell datasheet (3384703, sha256 5f87dd70...) prints TF32 2.2 PF sparse, a rounding of 2.25",
+   "nvidia_gh200_datasheet": "NVIDIA GH200 Grace Hopper Superchip datasheet 3773000 (MAR25, sha256 a155d829...), 96GB HBM3 column, dense values: TF32 494, FP16 990, FP8 1979 TFLOPS",
+   "amd_mi300x_datasheet": "AMD Instinct MI300X data sheet (2025-06-16, sha256 60d78bc2...), dense column: TF32 653.7, FP16 1307.4 TFLOPS"
+  },
+  "everything_else": "PR #323 empirical profile (compute modes and HBM bandwidth)"
+ },
  "formula": {
   "T_SOL": "max(F / P_peak[mode], Q / BW_peak); memory-only targets: Q / BW_peak",
   "R_SOL": "T_SOL / T_k (T_k = formal autotuned dsl_ms); not clipped",
@@ -36,8 +90,8 @@
  },
  "legacy_peak_files_used": false,
  "inputs": {
-  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
-  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844"
+  "benchmark_cases_normalized.csv.gz": "b876056c05ce9b4472354777589da987b4642e94eff17f2aa34fbbc90bc3c423",
+  "sol_mode_manifest.json": "dffe029867bd8ea6f92be62d00152431f58a8c1d358ef6edacc001e53c04d12d"
  },
  "frozen_mode_manifest_rows": 110,
  "coverage_cases": {
@@ -98,29 +152,8 @@
   "top_k_selection"
  ],
  "above_one": {
-  "n_cases": 549,
+  "n_cases": 24,
   "by_operator": {
-   "layernorm|B200|cutile": 5,
-   "layernorm|B200|tilelang": 14,
-   "layernorm|GH200|cutile": 26,
-   "layernorm|GH200|tilelang": 49,
-   "layernorm|GH200|triton": 37,
-   "matmul_fp32_fp16_fp8|B200|cutile": 56,
-   "matmul_fp32_fp16_fp8|B200|triton": 30,
-   "matmul_fp32_fp16_fp8|GH200|cutile": 17,
-   "matmul_fp32_fp16_fp8|GH200|triton": 24,
-   "rmsnorm|B200|cutile": 14,
-   "rmsnorm|B200|tilelang": 32,
-   "rmsnorm|B200|triton": 16,
-   "rmsnorm|GH200|cutile": 43,
-   "rmsnorm|GH200|tilelang": 53,
-   "rmsnorm|GH200|triton": 48,
-   "rope|B200|cutile": 2,
-   "rope|B200|tilelang": 18,
-   "rope|B200|triton": 16,
-   "rope|GH200|cutile": 4,
-   "rope|GH200|tilelang": 10,
-   "rope|GH200|triton": 11,
    "swiglu|B200|cutile": 1,
    "swiglu|B200|tilelang": 4,
    "swiglu|B200|triton": 7,

@@ -8,9 +8,12 @@ Publication-ready caption drafts for the generated figures. Every number below i
 **Figure 2:** Proximity to modeled SOL (T_SOL / T_k) of each tile DSL on each accelerator.
 
 - **Metric.** For one operator, input case and device, T_SOL = max(F / P_peak, Q / BW_peak). F and Q are the frozen
-  analytical operation count and memory traffic of the operator's algorithm. P_peak is the device's empirically
-  measured sustained peak for the arithmetic mode that the algorithm and its numerical contract require, and BW_peak
-  is its measured HBM bandwidth (TileArena empirical profiles, PR #323). T_k is the formal autotuned latency. Larger
+  analytical operation count and memory traffic of the operator's algorithm (RMSNorm and LayerNorm use their
+  compulsory I/O). P_peak is the peak of the arithmetic mode that the algorithm and its numerical contract require:
+  the vendor's published single-GPU dense rate for the direct GEMM (matmul_fp32_fp16_fp8) and the device's empirically
+  measured sustained rate (TileArena empirical profiles, PR #323) for every other operator. BW_peak is the measured
+  HBM bandwidth. This hybrid SOL reference is neither uniformly empirical nor uniformly hardware-theoretical. T_k is
+  the formal autotuned latency. Larger
   values mean the implementation reaches a larger fraction of its own device's modeled limit; 1 is the modeled
   target.
 - **Compute mode.** The mode is fixed per operator and data type from the algorithm, not from the input dtype or from
@@ -27,19 +30,20 @@ Publication-ready caption drafts for the generated figures. Every number below i
 
   | device | Triton | cuTile | TileLang |
   |---|---|---|---|
-  | B200 | 0.24 | 0.19 | 0.20 |
-  | GH200 | 0.32 | 0.26 | 0.27 |
-  | MI300X | 0.19 | – | – |
+  | B200 | 0.23 | 0.18 | 0.19 |
+  | GH200 | 0.31 | 0.25 | 0.26 |
+  | MI300X | 0.18 | – | – |
 
-- **Comparability.** Each column is compared with its own device's empirically calibrated envelope. The values compare
-  how close each DSL comes to that envelope; they do not compare absolute latency or imply identical hardware
+- **Comparability.** Each column is compared with its own device's hybrid SOL reference. The values compare
+  how close each DSL comes to that reference; they do not compare absolute latency or imply identical hardware
   capabilities. MI300X has only Triton results.
 - **Coverage.** All 45 operators have a target in every column. MI300X has 2,180 valid cases instead of 2,200 because
   FP8 E4M3FN matmul is not supported there. Its 100 BF16 cases of leaky_relu, mul2, vector_add, weight_dequant and
   jacobi_stencil_2d have no calibrated BF16 vector peak; they use a conditional memory-dominance target, valid because
   their compute term would reach the memory term only below 3.99 TFLOP/s. Without them, MI300X Overall changes by
   +0.29% (largest row change +1.52%, Stencil/Convolution).
-- **Values above 1.** No aggregate exceeds 1. 549 of 15,380 case values do; they are kept and audited
+- **Values above 1.** No aggregate exceeds 1. 24 of 15,380 case values do (SwiGLU and weight_dequant FP32 at large working sets, at most
+  2% above the empirical copy bandwidth); they are kept and audited
   (`sol/sol_above_one_audit.json`).
 
 ## Figure 3 (RQ2): `main/fig_rq2_cross_device_diagnosis`
@@ -48,7 +52,7 @@ Publication-ready caption drafts for the generated figures. Every number below i
 row uses the single input case captured by every profile of that operator, with the same `case_id_v2` on all devices.
 
 - **Left panels:** Proximity to modeled SOL (T_SOL / T_k) at that input on every device, from the formal autotuned
-  latency and the device's empirical peaks. The line marks the modeled SOL (1). The text below each panel gives the
+  latency and the device's hybrid peaks. The line marks the modeled SOL (1). The text below each panel gives the
   target: (A) the TF32-class MMA term (XF32 on MI300X), compute-bound; (B) memory-only; (C) the larger of the FP16
   MMA and HBM terms, compute-bound on B200 and MI300X and memory-bound on GH200.
 - **Right side:** a table of dynamic Nsight Compute counters for B200 and GH200, summed over the profiled launches; a
@@ -56,7 +60,7 @@ row uses the single input case captured by every profile of that operator, with 
   counters and therefore are not in the table; then one interpretation line and one confounder line.
 
 **(A) Matrix operand delivery** (matmul, FP32, M = N = 4096, K = 20480).
-- cuTile reaches 1.13 of the modeled SOL on B200 but 0.65 on GH200; Triton reaches 0.73 and 0.94, and 0.085 on MI300X.
+- cuTile reaches 0.67 of the modeled SOL on B200 but 0.54 on GH200; Triton reaches 0.43 and 0.78, and 0.041 on MI300X.
 - On GH200 cuTile executes 21.2 M shared-memory stores and 21.0 M LDSM, about one each per WGMMA instruction. This is
   consistent with re-laying out an operand in shared memory. On B200 both DSLs feed tcgen05 from TMA, and cuTile's
   larger tile reads half the TMA bytes of Triton.
@@ -104,15 +108,14 @@ The counters are observations at one input. They are consistent with, but do not
 **Figure A1:** Proximity to modeled SOL of all 45 operators on every supported device and DSL.
 
 - **(A)** Geometric mean of T_SOL / T_k over each operator's valid autotuned input cases (definition as in Figure 2).
-  Colour is log-scaled from 0.001 to 1; amber cells exceed the modeled SOL and are audited (rope on B200 Triton and
-  TileLang, rmsnorm and layernorm on GH200, matmul_fp32_fp16_fp8 on B200 cuTile). ‡ marks the MI300X operators whose
+  Colour is log-scaled from 0.001 to 1; amber would mark an operator above the modeled SOL; none is. ‡ marks the MI300X operators whose
   BF16 cases use the conditional memory-dominance target.
 - **(B)** Change in proximity between two devices, shown as 2^Δ with Δ = log2(R_dev2 / R_dev1). Both R are computed
   over the input cases valid on both devices. A value above 1 means that the DSL comes closer to its device's modeled
   SOL on the second device.
 
 Panel B is a ratio of normalized SOL proximities, not an absolute accelerator speedup: each R is relative to its own
-device's empirical envelope.
+device's hybrid SOL reference.
 
 ## Appendix Figure A2: `appendix/fig_a2_shape_dtype`
 

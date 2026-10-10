@@ -76,8 +76,8 @@ Every manifest records:
 
 Cross-device figures (2, 3, A1, A2), defined in `../sol/README.md`:
 - `T_SOL[o,d,c] = max(F / P_peak[mode(o, dtype), d], Q / BW_peak[d])`; memory-only targets use `Q / BW_peak` alone. The
-  mode is frozen per operator and dtype from the algorithm and numerical contract; peaks are the PR #323 empirical
-  profiles.
+  mode is frozen per operator and dtype from the algorithm and numerical contract; peaks follow the hybrid policy
+  (published dense rates for matmul_fp32_fp16_fp8, PR #323 empirical profiles otherwise).
 - `R[o,b,d,c] = T_SOL / T_k` ("Proximity to modeled SOL"), never clipped; values above 1 are audited.
 - `R[o,b,d]` is the geometric mean (GM) over valid autotuned cases; category and overall values are a GM over
   operators.
@@ -143,11 +143,12 @@ helpers. It compares the recomputed numbers with the manifests and with the text
 24. The compute-mode audit: one approved mode per operator and dtype, equal to the approved rev-2 declaration, MMA
     modes exactly for operators whose sources use a matrix-multiply primitive in all three DSLs, no dtype mapped to a
     single mode, and exactly the 100 MI300X BF16 conditional cases with their critical throughput below 3.99 TFLOP/s.
-25. The numerics: PR #323 peaks, calibration IDs and file hashes; every case-level T_SOL / T_k reproduced without the
+25. The numerics: PR #323 peaks, calibration IDs and file hashes, the hybrid datasheet table and each row's peak source; every case-level T_SOL / T_k reproduced without the
     SOL helpers; one T_SOL per device and case for all DSLs; FLOP/OP units; values above 1 kept.
 26. Coverage per device and DSL, 45 operators per column, no missing mapping, the MI300X BF16 sensitivity table, and
     the memory-only subgroup beside Overall.
-27. Figures 4, A3, A4 and A5 are byte-identical to the last pre-SOL commit (`8b3844ae`).
+27. Figures A3 and A5 are byte-identical to the last pre-SOL commit (`8b3844ae`); Figures 4 and A4 are regenerated
+    with the merged cold-input RoPE latencies (#324-#326).
 28. Every value above 1 is assigned to an audited cause whose statistic supports it.
 
 **Reproducibility**

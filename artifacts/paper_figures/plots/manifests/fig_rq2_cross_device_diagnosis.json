@@ -2,29 +2,29 @@
  "figure": "fig_rq2_cross_device_diagnosis",
  "rq": "RQ2",
  "script": "scripts/paper_figures/plot_rq2.py",
- "source_git_commit": "8b3844aeff28b32a7a55c81006dfd33945aa6f81",
+ "source_git_commit": "c79a9bb0ebe574c2f12dabca28e35eb73aa64efb",
  "source_data_files": {
-  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
+  "benchmark_cases_normalized.csv.gz": "b876056c05ce9b4472354777589da987b4642e94eff17f2aa34fbbc90bc3c423",
   "profile_index_normalized.csv": "1deeb5c7ffd7267f10a424261615088443be948878691d1a2d4d58099a7c132c",
   "figure_evidence.csv": "8d438bf5b552b4b53fc4ba0769a22a975c19b87cf0fe1e3badd15bf9a074fef7",
   "rq2_case_selection.json": "b248ac1628cc1b8a1e8abf8f5c0d2cf0932a073335e18be2ad66b17fc8e30591"
  },
  "sol_inputs": {
-  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844",
-  "sol_cases.csv.gz": "0f3d97f220a43d98ae26daa5460284bc100a2dbd28e452a8be074cbd3b53cc45",
-  "sol_provenance.json": "73a2428cebc6c372180f4d3d8e1781c1edbf659d9d1188700eccc48e836d9465",
-  "sol_operator_summary.csv": "68edc40a7a0a7db29abf6c2e8d3055dc5a725c64163da359949967dc9e678b82",
-  "sol_sensitivity_mi300x_bf16.csv": "2972987f44ef2bff5cee1c77e82465f499a175f701d70a327e5d1b2bfbd0ee15",
-  "sol_above_one_cases.csv": "466209a26647cbb840dcdeef523bface534c8c0272395e67cd95f8627086d78d",
-  "sol_above_one_audit.json": "62aad77f3dcaa53158b85fde5ace0c76efbe372d87a4c6a7b15db8acd1ed75d3"
+  "sol_mode_manifest.json": "dffe029867bd8ea6f92be62d00152431f58a8c1d358ef6edacc001e53c04d12d",
+  "sol_cases.csv.gz": "a553ee28474aef26a3103a215d24020077a41b53d35d0fbdf4a4f5aabf31f51e",
+  "sol_provenance.json": "b07a840955b0db781f519e34d2929b4bad8e5b4b58ab58ab5a47c90c87be671e",
+  "sol_operator_summary.csv": "1d09f1c282136cb7e9d7a3e3f8dae44fc9f361c841d34edf12e14a6ce0f60f8c",
+  "sol_sensitivity_mi300x_bf16.csv": "2162b403c1db524d53048c7c6a4858fb880657102e6a9341891577c8e7244121",
+  "sol_above_one_cases.csv": "1bfc38852b92dc9bc56e783e77cd22237d317be0622ccfa57d3fab0971e10197",
+  "sol_above_one_audit.json": "7d54083e6c511152e77660c33b5b04042b4bd0244c5acc49fb2adf0b4447077c"
  },
  "sol_code_sha256": {
-  "scripts/paper_figures/sol_modes.py": "4fa04908d5e7ea21fb33f8f729d93275e25e22e5883c8342eb208b6cbc2b778b",
-  "scripts/paper_figures/sol_data.py": "ab47a0825dd217fd5fc80c8936035d4e4c462f2dae9bafa00eaf7d9990d9e17f"
+  "scripts/paper_figures/sol_modes.py": "9920d13f7824b89508814e9332a056bf6849607aba1d24f9c5444d36967594e7",
+  "scripts/paper_figures/sol_data.py": "fe1b46c2455ba1ac292eb90dce52ad18a8928f58d7c006ddb2ff3889433bc134"
  },
  "metric": "Proximity to modeled SOL (T_SOL / T_k)",
  "metric_formula": {
-  "left": "T_SOL / T_k at the case_id_v2 captured by every profile of the case (one input case, identical on all devices; not an operator aggregate); T_SOL from the frozen algorithm-level compute mode and the device's PR #323 empirical peaks; T_k = formal autotuned latency",
+  "left": "T_SOL / T_k at the case_id_v2 captured by every profile of the case (one input case, identical on all devices; not an operator aggregate); T_SOL from the frozen algorithm-level compute mode and the device's hybrid peaks (published dense rates for matmul_fp32_fp16_fp8, PR #323 empirical peaks otherwise); T_k = formal autotuned latency",
   "right": "NVIDIA dynamic counters summed over the profiled run() launches (B200 and GH200 only), as a table; MI300X static ISA, rocprof counters and kernel traces as separate text"
  },
  "aggregation_order": [
@@ -124,12 +124,7 @@
   }
  },
  "above_one": {
-  "values": [
-   {
-    "case": "matmul_fp32_fp16_fp8/fp32",
-    "value": 1.1309080415826467
-   }
-  ],
+  "values": [],
   "audit": "sol/sol_above_one_cases.csv; the calibrated MMA ceiling is a sustained library-GEMM rate (power-capped telemetry), not a hardware bound"
  },
  "peaks": {
@@ -250,7 +245,7 @@
    "the counters describe the profiled launches; they support, but do not prove, the attribution of the change in proximity",
    "B200 and GH200 use different benchmark protocols and cuda-tile versions",
    "MI300X cannot be compared numerically with the NVIDIA counters (different counters and static vs dynamic counts)",
-   "T_SOL is a modeled target from empirical sustained rates, not a proven bound"
+   "T_SOL is a modeled hybrid reference (published dense GEMM rates, empirical sustained rates otherwise), not a proven bound"
   ]
  },
  "plotted_values": {
@@ -260,9 +255,9 @@
     "dsl": "triton",
     "device": "B200",
     "case_id_v2": "357a02eb8c422be84c0f0184cc996e44cab791e9e9da48aae2bbc1390d89189b",
-    "T_SOL_ms": 1.0342154040273304,
+    "T_SOL_ms": 0.6108397932088889,
     "dsl_ms": 1.413,
-    "sol_proximity": 0.7319288068133972,
+    "sol_proximity": 0.4322999244224267,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
     "peak_key": "peak_tflops.tf32_mma"
@@ -272,9 +267,9 @@
     "dsl": "triton",
     "device": "GH200",
     "case_id_v2": "357a02eb8c422be84c0f0184cc996e44cab791e9e9da48aae2bbc1390d89189b",
-    "T_SOL_ms": 1.677312099975592,
+    "T_SOL_ms": 1.3910825250202428,
     "dsl_ms": 1.7811,
-    "sol_proximity": 0.9417282016594195,
+    "sol_proximity": 0.7810243810118707,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
     "peak_key": "peak_tflops.tf32_mma"
@@ -284,9 +279,9 @@
     "dsl": "triton",
     "device": "MI300X",
     "case_id_v2": "357a02eb8c422be84c0f0184cc996e44cab791e9e9da48aae2bbc1390d89189b",
-    "T_SOL_ms": 2.1601746742109893,
+    "T_SOL_ms": 1.0512387446229157,
     "dsl_ms": 25.4433,
-    "sol_proximity": 0.08490151333400106,
+    "sol_proximity": 0.041316918191544164,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
     "peak_key": "peak_tflops.xf32_mma"
@@ -296,9 +291,9 @@
     "dsl": "cutile",
     "device": "B200",
     "case_id_v2": "357a02eb8c422be84c0f0184cc996e44cab791e9e9da48aae2bbc1390d89189b",
-    "T_SOL_ms": 1.0342154040273304,
+    "T_SOL_ms": 0.6108397932088889,
     "dsl_ms": 0.9145,
-    "sol_proximity": 1.1309080415826467,
+    "sol_proximity": 0.6679494731644494,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
     "peak_key": "peak_tflops.tf32_mma"
@@ -308,9 +303,9 @@
     "dsl": "cutile",
     "device": "GH200",
     "case_id_v2": "357a02eb8c422be84c0f0184cc996e44cab791e9e9da48aae2bbc1390d89189b",
-    "T_SOL_ms": 1.677312099975592,
+    "T_SOL_ms": 1.3910825250202428,
     "dsl_ms": 2.566,
-    "sol_proximity": 0.6536680046670273,
+    "sol_proximity": 0.5421210152066418,
     "bound": "compute",
     "compute_mode": "tf32_class_mma",
     "peak_key": "peak_tflops.tf32_mma"
@@ -592,23 +587,23 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq2_cross_device_diagnosis.pdf",
-   "sha256": "16f20038539083d585bd9170ee34be041d85a770003e68ab9c9292e847ab8c3f"
+   "sha256": "ce67b0b872b3e1ae822f5d0d839d31c74be68550ac45a6ffbf299ca4e25f877a"
   },
   "svg": {
    "path": "main/fig_rq2_cross_device_diagnosis.svg",
-   "sha256": "2bdfef1737e9ae79aefd22fcce4c87301c775fd4729e7460413308e3f97a0a32"
+   "sha256": "fd86f84032928d6875958d64304203405454b20042fca5fb9d783d6d6af5572d"
   },
   "png": {
    "path": "previews/fig_rq2_cross_device_diagnosis.png",
-   "sha256": "9c91013bf4e434b77645391077106d9fc36a38dfe35a93e0ca010fa7aa648a11"
+   "sha256": "5d6d0538f9e0436ece84ecedde77761811d5a2635bfdfbc75e9d9c537b30e572"
   }
  },
  "layout": {
   "width_in": 6.3,
-  "height_in": 5.96,
+  "height_in": 5.76,
   "min_font_pt": 7.0,
   "max_font_pt": 8.0,
-  "n_text_objects": 133,
+  "n_text_objects": 132,
   "content_overflow_in": {
    "left": 0.0,
    "bottom": 0.0,
@@ -620,6 +615,6 @@
  "code_sha256": {
   "scripts/paper_figures/plot_style.py": "8c5d09f68e2eb59d62ad66652ba95398e4909bf6c7cfb2b12b575bbdc22ded36",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq2.py": "ecb8ed284149cef3ce5a277b5393776d76433b94ab6007c75c14502a54a877fb"
+  "scripts/paper_figures/plot_rq2.py": "092f824a492c90552c71b184214adc1e2964d7bf58a441770f2b869ed9099324"
  }
 }

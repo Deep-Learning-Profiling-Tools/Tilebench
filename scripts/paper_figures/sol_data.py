@@ -1,10 +1,12 @@
-"""Algorithm-aware empirical SOL target and proximity per input case (RQ1, RQ2, A1, A2).
+"""Algorithm-aware hybrid SOL target and proximity per input case (RQ1, RQ2, A1, A2).
 
     T_SOL[o,d,c] = max(F / P_peak[mode(o, dtype), d], Q / BW_peak[d])      (compute term omitted for memory-only targets)
     R_SOL[o,b,d,c] = T_SOL[o,d,c] / T_k[o,b,d,c]                            ("proximity to modeled SOL"; never clipped)
 
-mode(o, dtype) is the frozen algorithm-level decision of sol_modes.py; P_peak and BW_peak are the PR #323 empirical
-profiles; F and Q are the frozen config.yaml expressions (plus the approved M3/M4 overrides), evaluated with the
+mode(o, dtype) is the frozen algorithm-level decision of sol_modes.py; P_peak follows the hybrid policy (H1): the vendor's
+published dense rate for sol_modes.DATASHEET_COMPUTE_OPS, the PR #323 empirical profile for every other operator;
+BW_peak is the PR #323 empirical bandwidth everywhere. F and Q are the frozen config.yaml expressions (plus the approved
+M3/M4/N1 overrides), evaluated with the
 engine's own convention (n = params['n'] or infer_problem_size, dtype_size, every numeric case parameter); T_k is the
 formal autotuned latency from combined/benchmark_cases_normalized.csv.gz. T_SOL depends on (operator, dtype, case,
 device) only, so every DSL of a device shares one denominator.
@@ -39,7 +41,7 @@ COLUMNS = [("B200", "triton"), ("B200", "cutile"), ("B200", "tilelang"), ("GH200
 CONDITIONAL = SM.DECISIONS["D2_mi300x_bf16_vector"]["status_label"]
 UNIT_OF_SECTION = {"peak_tflops": "FLOP", "peak_tops": "OP"}
 CASE_FIELDS = ["device", "dsl", "operator", "category", "dtype", "case_id_v2", "params_full_json", "compute_mode", "peak_key",
-               "peak_value", "peak_unit", "bw_GBs", "F", "F_unit", "Q_bytes", "compute_term_ms", "memory_term_ms", "T_SOL_ms",
+               "peak_value", "peak_unit", "peak_source", "bw_GBs", "F", "F_unit", "Q_bytes", "compute_term_ms", "memory_term_ms", "T_SOL_ms",
                "bound", "critical_throughput", "target_status", "dsl_ms", "R_SOL", "above_one"]
 
 
@@ -59,6 +61,7 @@ def target(row, device, params, peaks):
     bw = peaks[device]["peak_bw_GBs"]                               # GB/s
     mem_s = Q / (bw * 1e9)
     out = {"compute_mode": mode, "peak_key": row["device_specific_peak_key"][device], "peak_value": None, "peak_unit": None,
+           "peak_source": None,
            "bw_GBs": bw, "F": F, "F_unit": "FLOP" if row["f_kind"] != "int_op_count" else "OP", "Q_bytes": Q,
            "compute_term_ms": None, "memory_term_ms": mem_s * 1e3, "critical_throughput": None,
            "target_status": row["target_status"][device]}
@@ -79,7 +82,7 @@ def target(row, device, params, peaks):
             out["bound"] = "conditional_memory_dominance"
             t = mem_s
         else:
-            out["peak_value"], out["peak_unit"] = p, row["peak_unit"][device]
+            out["peak_value"], out["peak_unit"], out["peak_source"] = p, row["peak_unit"][device], row["peak_source"][device]
             comp_s = F / (p * 1e12)
             out["compute_term_ms"] = comp_s * 1e3
             out["bound"] = "compute" if comp_s > mem_s else "memory"
@@ -167,32 +170,15 @@ SOL_FILES = ("sol_mode_manifest.json", "sol_cases.csv.gz", "sol_provenance.json"
              "sol_sensitivity_mi300x_bf16.csv", "sol_above_one_cases.csv", "sol_above_one_audit.json")
 
 # Audit of R_SOL > 1 (values are kept, never clipped). Each case is assigned to one documented cause; the statistic that
-# supports it is recomputed per group. L2 capacities: B200 126.5 MB (repository notes), GH200 50 MB (H100 L2).
-L2_BYTES = {"B200": 126.5e6, "GH200": 50e6}
+# supports it is recomputed per group. L2 capacities as recorded by the runs (torch L2_cache_size): B200 126.5 MiB, GH200 60 MiB.
+L2_BYTES = {"B200": 132644864, "GH200": 62914560}
 ABOVE_ONE_CAUSES = {
-    "q_counts_second_read": {
-        "operators": ("rmsnorm", "layernorm"),
-        "kind": "performance model",
-        "explanation": "the frozen Q = 3 * n * dtype_size counts two traversals of the input; the contract allows a kernel to keep "
-                       "the row on chip and read it once, so at the compulsory 2/3 Q every case falls below 1"},
-    "output_resident_in_l2": {
-        "operators": ("rope",),
-        "kind": "timing boundary",
-        "explanation": "short launches (at most 37 us) whose written output is largely L2-resident: the write-back to HBM can finish "
-                       "after the timed launch, so less than Q reaches HBM inside the measured interval; Q (one read of q, one write) "
-                       "is otherwise complete. Cases whose output exceeds L2 (n_cases - n_output_within_L2, GH200 only) are only "
-                       "partly explained by this and remain flagged"},
     "at_stream_copy_rate": {
         "operators": ("swiglu", "weight_dequant"),
         "kind": "measurement",
         "explanation": "working sets far above L2 within 2.2% of the calibrated stream-copy bandwidth, which is a sustained "
-                       "measured rate rather than a hardware bound"},
-    "above_library_gemm_rate": {
-        "operators": ("matmul_fp32_fp16_fp8",),
-        "kind": "calibration / measurement",
-        "explanation": "compute-bound GEMMs whose achieved rate exceeds the calibrated sustained library-GEMM rate "
-                       "(torch.matmul / torch._scaled_mm at M = 4096-16384, telemetry with SW power-cap clock events); the "
-                       "numerical contract is met (TF32-class, native FP16 and e4m3 operands, fp32 accumulation)"},
+                       "measured rate for a 1:1 read/write stream rather than a hardware bound (swiglu reads two inputs per "
+                       "output); every case stays below the calibrated read-only probe and the datasheet HBM bandwidth"},
 }
 
 
@@ -244,16 +230,8 @@ def write_above_one_audit(out, above):
     for (cause, op, dt, dev), rs in sorted(groups.items()):
         g = {"cause": cause, "kind": ABOVE_ONE_CAUSES[cause]["kind"], "operator": op, "dtype": dt, "device": dev,
              "n_cases": len(rs), "dsls": sorted({r["dsl"] for r in rs}), "max_R_SOL": max(r["R_SOL"] for r in rs)}
-        if cause == "q_counts_second_read":
-            g["max_R_SOL_at_two_thirds_Q"] = max(r["R_SOL"] * 2 / 3 for r in rs)
-        if cause == "output_resident_in_l2":
-            g["n_output_within_L2"] = sum(1 for r in rs if r["Q_bytes"] / 2 <= L2_BYTES[dev])
-            g["max_T_k_us"] = max(r["dsl_ms"] for r in rs) * 1e3
         if cause == "at_stream_copy_rate":
             g["min_Q_over_L2"] = min(r["Q_bytes"] / L2_BYTES[dev] for r in rs)
-        if cause == "above_library_gemm_rate":
-            g["bound"] = sorted({r["bound"] for r in rs})
-            g["max_achieved_over_calibrated"] = max(r["F"] / (r["dsl_ms"] * 1e-3) / (r["peak_value"] * 1e12) for r in rs)
         rows.append(g)
     doc = {"schema": "tilearena-sol-above-one-audit/1", "n_cases": len(above), "causes": ABOVE_ONE_CAUSES,
            "l2_bytes": L2_BYTES, "groups": rows,
@@ -304,6 +282,12 @@ def main(out=SOL):
         cov[f"{r['device']}:{r['dsl']}"][r["target_status"]] += 1
     prov = {
         "schema": "tilearena-sol-provenance/1",
+        "reference": "hybrid SOL reference (decision H1): neither uniformly empirical nor uniformly hardware-theoretical",
+        "peak_policy": {"datasheet_compute_operators": list(SM.DATASHEET_COMPUTE_OPS),
+                        "datasheet_dense": {f"{d}/{m}": {"value": v, "unit": u, "source": s}
+                                            for (d, m), (v, u, s) in SM.DATASHEET_DENSE.items()},
+                        "sources": SM.DATASHEET_SOURCES,
+                        "everything_else": "PR #323 empirical profile (compute modes and HBM bandwidth)"},
         "formula": {"T_SOL": "max(F / P_peak[mode], Q / BW_peak); memory-only targets: Q / BW_peak",
                     "R_SOL": "T_SOL / T_k (T_k = formal autotuned dsl_ms); not clipped",
                     "units": "F in FLOP (OP for int8_mma); P in TFLOP/s (TOP/s) -> x1e12; BW in GB/s -> x1e9; Q in bytes; "

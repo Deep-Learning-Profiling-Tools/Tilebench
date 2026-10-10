@@ -1,6 +1,6 @@
 """Figure 3 (RQ2): explaining performance differences across accelerators, for three cases with distinct mechanisms.
 
-Left of each row: proximity to the modeled, device-specific empirical SOL (T_SOL / T_k, sol_data.py) at the input case
+Left of each row: proximity to the modeled, device-specific hybrid SOL reference (T_SOL / T_k, sol_data.py) at the input case
 captured by every profile, on every device. Right: the hardware/compiler evidence for that case. NVIDIA dynamic NCU
 counters of the profiled run() are shown as a small table (B200 and GH200 only); MI300X static ISA, rocprof counters and
 kernel traces are separate text lines and never share a numeric column with NVIDIA counters. Observations,
@@ -290,7 +290,8 @@ def main(out_root=FD.PLOTS):
         "metric": "Proximity to modeled SOL (T_SOL / T_k)",
         "metric_formula": {"left": "T_SOL / T_k at the case_id_v2 captured by every profile of the case (one input case, identical on all "
                                    "devices; not an operator aggregate); T_SOL from the frozen algorithm-level compute mode and the "
-                                   "device's PR #323 empirical peaks; T_k = formal autotuned latency",
+                                   "device's hybrid peaks (published dense rates for matmul_fp32_fp16_fp8, PR #323 "
+                                   "empirical peaks otherwise); T_k = formal autotuned latency",
                            "right": "NVIDIA dynamic counters summed over the profiled run() launches (B200 and GH200 only), as a table; "
                                     "MI300X static ISA, rocprof counters and kernel traces as separate text"},
         "aggregation_order": ["none: one input case per row"],
@@ -316,7 +317,8 @@ def main(out_root=FD.PLOTS):
             "figure": ["the counters describe the profiled launches; they support, but do not prove, the attribution of the change in proximity",
                        "B200 and GH200 use different benchmark protocols and cuda-tile versions",
                        "MI300X cannot be compared numerically with the NVIDIA counters (different counters and static vs dynamic counts)",
-                       "T_SOL is a modeled target from empirical sustained rates, not a proven bound"]},
+                       "T_SOL is a modeled hybrid reference (published dense GEMM rates, empirical sustained rates otherwise), "
+                       "not a proven bound"]},
         "plotted_values": {"sol_proximity": values, "evidence": plotted},
         "outputs": {k: {"path": v, "sha256": PS.sha256(v)} for k, v in paths.items()}, "layout": layout,
     }

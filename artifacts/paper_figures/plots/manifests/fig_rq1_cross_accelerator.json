@@ -2,24 +2,24 @@
  "figure": "fig_rq1_cross_accelerator",
  "rq": "RQ1",
  "script": "scripts/paper_figures/plot_rq1.py",
- "source_git_commit": "8b3844aeff28b32a7a55c81006dfd33945aa6f81",
+ "source_git_commit": "c79a9bb0ebe574c2f12dabca28e35eb73aa64efb",
  "source_data_files": {
-  "benchmark_cases_normalized.csv.gz": "ed18c4ceaa3221be102240de405195be2fef882bc7f8febf924f85060b5b216b",
+  "benchmark_cases_normalized.csv.gz": "b876056c05ce9b4472354777589da987b4642e94eff17f2aa34fbbc90bc3c423",
   "category_mapping.csv": "f9ebe5eba4f6a50e788bbeacf46900d1d4c006fe64b96d2300840fdf9f1deb8b",
-  "comparison_manifest.json": "2e9c7b5b8111d55d3d4be617d142103557b485c85007b78eaff06cd0b97ef09b"
+  "comparison_manifest.json": "afe076fcbee79f9f5733c9fffcb01fc2bc183bb4347d90fbdb5c90b13740f1d2"
  },
  "sol_inputs": {
-  "sol_mode_manifest.json": "6e6ed042ec1d4fa0756b9c05e1f269dcd01e6b22ee6fbe00831d139967b81844",
-  "sol_cases.csv.gz": "0f3d97f220a43d98ae26daa5460284bc100a2dbd28e452a8be074cbd3b53cc45",
-  "sol_provenance.json": "73a2428cebc6c372180f4d3d8e1781c1edbf659d9d1188700eccc48e836d9465",
-  "sol_operator_summary.csv": "68edc40a7a0a7db29abf6c2e8d3055dc5a725c64163da359949967dc9e678b82",
-  "sol_sensitivity_mi300x_bf16.csv": "2972987f44ef2bff5cee1c77e82465f499a175f701d70a327e5d1b2bfbd0ee15",
-  "sol_above_one_cases.csv": "466209a26647cbb840dcdeef523bface534c8c0272395e67cd95f8627086d78d",
-  "sol_above_one_audit.json": "62aad77f3dcaa53158b85fde5ace0c76efbe372d87a4c6a7b15db8acd1ed75d3"
+  "sol_mode_manifest.json": "dffe029867bd8ea6f92be62d00152431f58a8c1d358ef6edacc001e53c04d12d",
+  "sol_cases.csv.gz": "a553ee28474aef26a3103a215d24020077a41b53d35d0fbdf4a4f5aabf31f51e",
+  "sol_provenance.json": "b07a840955b0db781f519e34d2929b4bad8e5b4b58ab58ab5a47c90c87be671e",
+  "sol_operator_summary.csv": "1d09f1c282136cb7e9d7a3e3f8dae44fc9f361c841d34edf12e14a6ce0f60f8c",
+  "sol_sensitivity_mi300x_bf16.csv": "2162b403c1db524d53048c7c6a4858fb880657102e6a9341891577c8e7244121",
+  "sol_above_one_cases.csv": "1bfc38852b92dc9bc56e783e77cd22237d317be0622ccfa57d3fab0971e10197",
+  "sol_above_one_audit.json": "7d54083e6c511152e77660c33b5b04042b4bd0244c5acc49fb2adf0b4447077c"
  },
  "sol_code_sha256": {
-  "scripts/paper_figures/sol_modes.py": "4fa04908d5e7ea21fb33f8f729d93275e25e22e5883c8342eb208b6cbc2b778b",
-  "scripts/paper_figures/sol_data.py": "ab47a0825dd217fd5fc80c8936035d4e4c462f2dae9bafa00eaf7d9990d9e17f"
+  "scripts/paper_figures/sol_modes.py": "9920d13f7824b89508814e9332a056bf6849607aba1d24f9c5444d36967594e7",
+  "scripts/paper_figures/sol_data.py": "fe1b46c2455ba1ac292eb90dce52ad18a8928f58d7c006ddb2ff3889433bc134"
  },
  "metric": "Proximity to modeled SOL (T_SOL / T_k)",
  "metric_formula": "R[o,b,d,c] = T_SOL[o,d,c] / T_k[o,b,d,c]; T_SOL = max(F / P_peak[mode(o,dtype)], Q / BW_peak) (memory-only targets: Q / BW_peak); cell = GM over the row's operators of GM over each operator's valid cases",
@@ -88,6 +88,27 @@
     "integer arithmetic without MMA: mul2/int8 and vector_add/int8 (int32_vector is not calibrated on any device); their compute term would reach the memory term only below 3.42 TOP/s"
    ],
    "if_rejected": "the int8 mul2/vector_add cases get status missing_calibration; no-arithmetic and comparison operators stay memory-only (they have no arithmetic term to model)"
+  },
+  "H1_hybrid_matmul_datasheet_peak": {
+   "status": "approved",
+   "decided_by": "study owner with Keren, 2026-10-10: hybrid SOL reference; matmul_fp32_fp16_fp8 uses the vendor's published single-GPU dense compute rate (DATASHEET_DENSE), every other operator and every bandwidth term keeps the PR #323 empirical profile",
+   "question": "Score the direct GEMM operator against published dense Tensor-Core rates instead of the empirical library-GEMM rates?",
+   "evidence": [
+    "the empirical MMA rates are sustained torch.matmul / torch._scaled_mm rates measured under SW power-cap clock events; 127 matmul_fp32_fp16_fp8 cases exceeded them (max 1.30)",
+    "published dense values, no sparsity and no maximum-clock extrapolation: see DATASHEET_SOURCES"
+   ],
+   "affects": "matmul_fp32_fp16_fp8 (400 cases); batched_matmul, streamk_matmul, matmul_int8 and every MMA-mode convolution/attention operator stay empirical"
+  },
+  "N1_norm_compulsory_io_Q": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-10: paper-only compulsory-I/O Q for rmsnorm and layernorm",
+   "question": "Replace the frozen Q = 3 * n * dtype_size of the row normalisations by their compulsory I/O?",
+   "evidence": [
+    "rmsnorm reads x (batch, M, K) and rms_w (K), writes y (batch, M, K): Q = (2n + K) * dtype_size",
+    "layernorm reads X, WEIGHT (K) and BIAS (K), writes Y: Q = (2n + 2K) * dtype_size",
+    "both contracts permit keeping the row on chip; the frozen 3n counts an optional second read of x"
+   ],
+   "affects": "rmsnorm and layernorm, every dtype and device; config.yaml and LLM scoring unchanged"
   }
  },
  "columns": [
@@ -181,7 +202,7 @@
   "approved_threshold_tflops": 3.99
  },
  "sensitivity": "sol/sol_sensitivity_mi300x_bf16.csv (every row with and without the 100 MI300X bf16 conditional cases)",
- "above_one_cases": 549,
+ "above_one_cases": 24,
  "excluded_cases": {
   "invalid_or_missing_rows": 0,
   "known_unsupported": {
@@ -192,7 +213,7 @@
   "nki": "no finalized NKI results; not shown"
  },
  "selection_criteria": "all 45 operators; the seven supported device/DSL combinations; autotuned results",
- "interpretation": "each column is compared with its own device's empirically calibrated envelope; differences between columns are differences in proximity, not absolute latency or hardware capability",
+ "interpretation": "each column is compared with its own device's hybrid SOL reference (published dense compute rates for the direct GEMM, empirically calibrated rates otherwise); differences between columns are differences in proximity, not absolute latency or hardware capability",
  "profiling_evidence_ids": [],
  "known_limitations": {
   "B200": [
@@ -222,7 +243,7 @@
    "row": "Point-wise",
    "device": "B200",
    "dsl": "triton",
-   "sol_proximity": 0.7078478200650968,
+   "sol_proximity": 0.6951800115744251,
    "n_operators": 12,
    "operators": 12
   },
@@ -230,7 +251,7 @@
    "row": "Point-wise",
    "device": "B200",
    "dsl": "cutile",
-   "sol_proximity": 0.6283159992389983,
+   "sol_proximity": 0.623393606232382,
    "n_operators": 12,
    "operators": 12
   },
@@ -238,7 +259,7 @@
    "row": "Point-wise",
    "device": "B200",
    "dsl": "tilelang",
-   "sol_proximity": 0.7085662323872359,
+   "sol_proximity": 0.6961083577100048,
    "n_operators": 12,
    "operators": 12
   },
@@ -246,7 +267,7 @@
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "triton",
-   "sol_proximity": 0.7930037775401271,
+   "sol_proximity": 0.7863065380729192,
    "n_operators": 12,
    "operators": 12
   },
@@ -254,7 +275,7 @@
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "cutile",
-   "sol_proximity": 0.7491061541225225,
+   "sol_proximity": 0.7447206576482267,
    "n_operators": 12,
    "operators": 12
   },
@@ -262,7 +283,7 @@
    "row": "Point-wise",
    "device": "GH200",
    "dsl": "tilelang",
-   "sol_proximity": 0.7905122340501776,
+   "sol_proximity": 0.7842212962133694,
    "n_operators": 12,
    "operators": 12
   },
@@ -270,7 +291,7 @@
    "row": "Point-wise",
    "device": "MI300X",
    "dsl": "triton",
-   "sol_proximity": 0.5956496520259978,
+   "sol_proximity": 0.5904221253040356,
    "n_operators": 12,
    "operators": 12
   },
@@ -278,7 +299,7 @@
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "triton",
-   "sol_proximity": 0.3234514272408513,
+   "sol_proximity": 0.30048402661898527,
    "n_operators": 11,
    "operators": 11
   },
@@ -286,7 +307,7 @@
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "cutile",
-   "sol_proximity": 0.2582033759660008,
+   "sol_proximity": 0.23986906089335908,
    "n_operators": 11,
    "operators": 11
   },
@@ -294,7 +315,7 @@
    "row": "Reduction/Normalization",
    "device": "B200",
    "dsl": "tilelang",
-   "sol_proximity": 0.38458387557849755,
+   "sol_proximity": 0.35727562710833705,
    "n_operators": 11,
    "operators": 11
   },
@@ -302,7 +323,7 @@
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "triton",
-   "sol_proximity": 0.43731818147805185,
+   "sol_proximity": 0.406265414269969,
    "n_operators": 11,
    "operators": 11
   },
@@ -310,7 +331,7 @@
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "cutile",
-   "sol_proximity": 0.3688666646036304,
+   "sol_proximity": 0.34267445226970683,
    "n_operators": 11,
    "operators": 11
   },
@@ -318,7 +339,7 @@
    "row": "Reduction/Normalization",
    "device": "GH200",
    "dsl": "tilelang",
-   "sol_proximity": 0.5145369461977493,
+   "sol_proximity": 0.47800108584034395,
    "n_operators": 11,
    "operators": 11
   },
@@ -326,7 +347,7 @@
    "row": "Reduction/Normalization",
    "device": "MI300X",
    "dsl": "triton",
-   "sol_proximity": 0.28862317821038114,
+   "sol_proximity": 0.2681288362337172,
    "n_operators": 11,
    "operators": 11
   },
@@ -334,7 +355,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "triton",
-   "sol_proximity": 0.1376841433496744,
+   "sol_proximity": 0.12851650600401693,
    "n_operators": 8,
    "operators": 8
   },
@@ -342,7 +363,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "cutile",
-   "sol_proximity": 0.08927029175190727,
+   "sol_proximity": 0.0833262691461665,
    "n_operators": 8,
    "operators": 8
   },
@@ -350,7 +371,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "B200",
    "dsl": "tilelang",
-   "sol_proximity": 0.08478260364441628,
+   "sol_proximity": 0.0791373917520153,
    "n_operators": 8,
    "operators": 8
   },
@@ -358,7 +379,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "triton",
-   "sol_proximity": 0.21878518554890036,
+   "sol_proximity": 0.211427988002728,
    "n_operators": 8,
    "operators": 8
   },
@@ -366,7 +387,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "cutile",
-   "sol_proximity": 0.1392480223952725,
+   "sol_proximity": 0.13456546033740016,
    "n_operators": 8,
    "operators": 8
   },
@@ -374,7 +395,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "GH200",
    "dsl": "tilelang",
-   "sol_proximity": 0.13722341697405638,
+   "sol_proximity": 0.13260893732313295,
    "n_operators": 8,
    "operators": 8
   },
@@ -382,7 +403,7 @@
    "row": "Matrix Multiplication/Attention",
    "device": "MI300X",
    "dsl": "triton",
-   "sol_proximity": 0.03807030404719723,
+   "sol_proximity": 0.03463053190355659,
    "n_operators": 8,
    "operators": 8
   },
@@ -502,7 +523,7 @@
    "row": "Overall",
    "device": "B200",
    "dsl": "triton",
-   "sol_proximity": 0.2382501533118287,
+   "sol_proximity": 0.23003960263060197,
    "n_operators": 45,
    "operators": 45
   },
@@ -510,7 +531,7 @@
    "row": "Overall",
    "device": "B200",
    "dsl": "cutile",
-   "sol_proximity": 0.18663736594816555,
+   "sol_proximity": 0.18069598765633876,
    "n_operators": 45,
    "operators": 45
   },
@@ -518,7 +539,7 @@
    "row": "Overall",
    "device": "B200",
    "dsl": "tilelang",
-   "sol_proximity": 0.20187344068038063,
+   "sol_proximity": 0.19493313922102457,
    "n_operators": 45,
    "operators": 45
   },
@@ -526,7 +547,7 @@
    "row": "Overall",
    "device": "GH200",
    "dsl": "triton",
-   "sol_proximity": 0.3150370303491062,
+   "sol_proximity": 0.3068451025197234,
    "n_operators": 45,
    "operators": 45
   },
@@ -534,7 +555,7 @@
    "row": "Overall",
    "device": "GH200",
    "dsl": "cutile",
-   "sol_proximity": 0.25967223174615567,
+   "sol_proximity": 0.25309603577144046,
    "n_operators": 45,
    "operators": 45
   },
@@ -542,7 +563,7 @@
    "row": "Overall",
    "device": "GH200",
    "dsl": "tilelang",
-   "sol_proximity": 0.2662413060040641,
+   "sol_proximity": 0.25935219869577286,
    "n_operators": 45,
    "operators": 45
   },
@@ -550,7 +571,7 @@
    "row": "Overall",
    "device": "MI300X",
    "dsl": "triton",
-   "sol_proximity": 0.19173017803642947,
+   "sol_proximity": 0.18473062247035377,
    "n_operators": 45,
    "operators": 45
   },
@@ -614,7 +635,7 @@
    "row": "Compute+memory targets",
    "device": "B200",
    "dsl": "triton",
-   "sol_proximity": 0.2950882534533662,
+   "sol_proximity": 0.2808884740296485,
    "n_operators": 32,
    "operators": 32
   },
@@ -622,7 +643,7 @@
    "row": "Compute+memory targets",
    "device": "B200",
    "dsl": "cutile",
-   "sol_proximity": 0.22482187655454317,
+   "sol_proximity": 0.21482292873758876,
    "n_operators": 32,
    "operators": 32
   },
@@ -630,7 +651,7 @@
    "row": "Compute+memory targets",
    "device": "B200",
    "dsl": "tilelang",
-   "sol_proximity": 0.22886307881491713,
+   "sol_proximity": 0.2178762365597391,
    "n_operators": 32,
    "operators": 32
   },
@@ -638,7 +659,7 @@
    "row": "Compute+memory targets",
    "device": "GH200",
    "dsl": "triton",
-   "sol_proximity": 0.38970373430923244,
+   "sol_proximity": 0.3755291720721193,
    "n_operators": 32,
    "operators": 32
   },
@@ -646,7 +667,7 @@
    "row": "Compute+memory targets",
    "device": "GH200",
    "dsl": "cutile",
-   "sol_proximity": 0.3125448638436331,
+   "sol_proximity": 0.30147166928199126,
    "n_operators": 32,
    "operators": 32
   },
@@ -654,7 +675,7 @@
    "row": "Compute+memory targets",
    "device": "GH200",
    "dsl": "tilelang",
-   "sol_proximity": 0.30281087857371985,
+   "sol_proximity": 0.29185061493681,
    "n_operators": 32,
    "operators": 32
   },
@@ -662,7 +683,7 @@
    "row": "Compute+memory targets",
    "device": "MI300X",
    "dsl": "triton",
-   "sol_proximity": 0.2222671465505788,
+   "sol_proximity": 0.21094153987716519,
    "n_operators": 32,
    "operators": 32
   }
@@ -670,15 +691,15 @@
  "outputs": {
   "pdf": {
    "path": "main/fig_rq1_cross_accelerator.pdf",
-   "sha256": "aac832eb813998689fbd3532f0a2ff871ee33b775b47bd2016c83e3431b93eb0"
+   "sha256": "78df4e062a33f38c353405fd4021d302332c40992b7cd68c16d2a77fc1a07fd8"
   },
   "svg": {
    "path": "main/fig_rq1_cross_accelerator.svg",
-   "sha256": "b7b4a3c5de5c6a3ba9a0ce4e447d7c0135124e05d611d24013845ba2f011fad2"
+   "sha256": "7c896373112937215b6386e6db59657d5295262ae6c7a39029a24f0f62ccd6c7"
   },
   "png": {
    "path": "previews/fig_rq1_cross_accelerator.png",
-   "sha256": "8c0b7f7c8ba579f94da29b04deeb3a05531bac97eb7298205d5c1c3ccc6b0b64"
+   "sha256": "d2a92c236933b17ca1f114e76dcd73829214dda72d864abd93b4622574e113bd"
   }
  },
  "layout": {
@@ -698,6 +719,6 @@
  "code_sha256": {
   "scripts/paper_figures/plot_style.py": "8c5d09f68e2eb59d62ad66652ba95398e4909bf6c7cfb2b12b575bbdc22ded36",
   "scripts/paper_figures/figure_data.py": "017dcee51c2cde6829dfa8a514eefd76616ae59a0f4a2d0f2a1ed6e759223885",
-  "scripts/paper_figures/plot_rq1.py": "821bb9311285a092f858b771767259bbdc38d036599a179253590288a92aad0d"
+  "scripts/paper_figures/plot_rq1.py": "de4aa660be5220323b5c4510c59290e2694d36719c9fbaf264fbafb94381a456"
  }
 }

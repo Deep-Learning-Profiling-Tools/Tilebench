@@ -1,4 +1,4 @@
-"""Algorithm-aware SOL compute-mode manifest (one row per operator x dtype) and the empirical peaks it is scored against.
+"""Algorithm-aware SOL compute-mode manifest (one row per operator x dtype) and the hybrid peaks it is scored against.
 
 The reference compute mode of a task is fixed by its frozen canonical algorithm and numerical contract
 (tilebench/llm/v2/contracts/data/<op>/contract.md, sections "Algorithm family and structure" and "Precision and
@@ -7,8 +7,10 @@ report. The entries below were audited against those contracts, against the matr
 impl_{triton,cutile,tilelang}.py (source level), and against the approved declaration
 tilebench/llm/v2/manifests/arithmetic_modes.yaml (revision 2); a disagreement with that declaration fails the build.
 
-Peaks come only from the PR #323 empirical profiles tilebench/data/peak_performance/empirical/<device>.json (read from
-the merged commit, never from the legacy peak_performance/<device>.json).
+Peaks follow the hybrid policy (decision H1): the operators in DATASHEET_COMPUTE_OPS use the vendor's published
+single-GPU dense Tensor-Core rate of their mode (DATASHEET_DENSE); every other operator, and every bandwidth term, uses
+the PR #323 empirical profiles tilebench/data/peak_performance/empirical/<device>.json (read from the merged commit,
+never from the legacy peak_performance/<device>.json).
 
   python scripts/paper_figures/sol_modes.py      -> artifacts/paper_figures/sol/sol_mode_manifest.{json,csv}
 """
@@ -54,6 +56,30 @@ MODE_KEYS = {
     "bf16_vector": {d: "peak_tflops.bf16_vector" for d in DEVICES},      # measured as packed BF16x2 FMA; absent on MI300X
     "memory_only": {d: None for d in DEVICES},
 }
+
+# Hybrid peak policy (decision H1): operator-specific, never dtype- or mode-wide. A designated operator whose (device,
+# mode) has no entry raises instead of falling back to the empirical rate (MI300X fp8 has no data: e4m3fnuz only).
+DATASHEET_COMPUTE_OPS = ("matmul_fp32_fp16_fp8",)
+DATASHEET_DENSE = {   # (device, mode) -> (published single-GPU dense rate, unit, source document)
+    ("B200", "fp16_mma"): (2250.0, "TFLOP/s", "nvidia_hgx_b200"),
+    ("B200", "tf32_class_mma"): (1125.0, "TFLOP/s", "nvidia_hgx_b200"),
+    ("B200", "fp8_e4m3fn_mma"): (4500.0, "TFLOP/s", "nvidia_hgx_b200"),
+    ("GH200", "fp16_mma"): (990.0, "TFLOP/s", "nvidia_gh200_datasheet"),
+    ("GH200", "tf32_class_mma"): (494.0, "TFLOP/s", "nvidia_gh200_datasheet"),
+    ("GH200", "fp8_e4m3fn_mma"): (1979.0, "TFLOP/s", "nvidia_gh200_datasheet"),
+    ("MI300X", "fp16_mma"): (1307.4, "TFLOP/s", "amd_mi300x_datasheet"),
+    ("MI300X", "tf32_class_mma"): (653.7, "TFLOP/s", "amd_mi300x_datasheet"),   # AMD "TF32" = XF32 matrix path (D1)
+}
+DATASHEET_SOURCES = {
+    "nvidia_hgx_b200": "NVIDIA HGX B200 specifications (https://www.nvidia.com/en-us/data-center/hgx/): FP16/BF16 36, "
+                       "TF32 18, FP8 72 PFLOPS for 8 GPUs, sparse; 'Dense is 1/2 sparse spec' -> /8/2. The per-GPU "
+                       "Blackwell datasheet (3384703, sha256 5f87dd70...) prints TF32 2.2 PF sparse, a rounding of 2.25",
+    "nvidia_gh200_datasheet": "NVIDIA GH200 Grace Hopper Superchip datasheet 3773000 (MAR25, sha256 a155d829...), 96GB "
+                              "HBM3 column, dense values: TF32 494, FP16 990, FP8 1979 TFLOPS",
+    "amd_mi300x_datasheet": "AMD Instinct MI300X data sheet (2025-06-16, sha256 60d78bc2...), dense column: TF32 653.7, "
+                            "FP16 1307.4 TFLOPS",
+}
+
 # arithmetic_modes.yaml (rev 2) internal names -> algorithm-level mode, for the consistency check only.
 REV2 = {"mma_fp16_f32acc": "fp16_mma", "mma_bf16_f32acc": "bf16_mma", "mma_tf32_f32acc": "tf32_class_mma",
         "mma_fp8_e4m3_f32acc": "fp8_e4m3fn_mma", "mma_int8_i32acc": "int8_mma", "fp32_fma_vector": "fp32_vector",
@@ -119,12 +145,40 @@ DECISIONS = {
         "if_rejected": "the int8 mul2/vector_add cases get status missing_calibration; no-arithmetic and "
                        "comparison operators stay memory-only (they have no arithmetic term to model)",
     },
+    "H1_hybrid_matmul_datasheet_peak": {
+        "status": "approved",
+        "decided_by": "study owner with Keren, 2026-10-10: hybrid SOL reference; matmul_fp32_fp16_fp8 uses the vendor's "
+                      "published single-GPU dense compute rate (DATASHEET_DENSE), every other operator and every "
+                      "bandwidth term keeps the PR #323 empirical profile",
+        "question": "Score the direct GEMM operator against published dense Tensor-Core rates instead of the empirical "
+                    "library-GEMM rates?",
+        "evidence": [
+            "the empirical MMA rates are sustained torch.matmul / torch._scaled_mm rates measured under SW power-cap "
+            "clock events; 127 matmul_fp32_fp16_fp8 cases exceeded them (max 1.30)",
+            "published dense values, no sparsity and no maximum-clock extrapolation: see DATASHEET_SOURCES",
+        ],
+        "affects": "matmul_fp32_fp16_fp8 (400 cases); batched_matmul, streamk_matmul, matmul_int8 and every MMA-mode "
+                   "convolution/attention operator stay empirical",
+    },
+    "N1_norm_compulsory_io_Q": {
+        "status": "approved",
+        "decided_by": "study owner, 2026-10-10: paper-only compulsory-I/O Q for rmsnorm and layernorm",
+        "question": "Replace the frozen Q = 3 * n * dtype_size of the row normalisations by their compulsory I/O?",
+        "evidence": [
+            "rmsnorm reads x (batch, M, K) and rms_w (K), writes y (batch, M, K): Q = (2n + K) * dtype_size",
+            "layernorm reads X, WEIGHT (K) and BIAS (K), writes Y: Q = (2n + 2K) * dtype_size",
+            "both contracts permit keeping the row on chip; the frozen 3n counts an optional second read of x",
+        ],
+        "affects": "rmsnorm and layernorm, every dtype and device; config.yaml and LLM scoring unchanged",
+    },
 }
 
-# Approved decisions of arithmetic_modes.yaml that the paper reuses unchanged (overrides of the frozen F/Q).
+# Overrides of the frozen F/Q: approved decisions of arithmetic_modes.yaml (M3, M4) and the paper decision N1.
 OVERRIDES = {
     "flash_attention": {"decision": "M3_flash_attention_causal_F", "F": "2 * batch_size * n_heads * head_dim * seq_len * (seq_len + 1)"},
     "radix_sort": {"decision": "M4_radix_sort_Q", "Q": "2 * n * dtype_size"},
+    "rmsnorm": {"decision": "N1_norm_compulsory_io_Q", "Q": "(2 * n + K) * dtype_size"},
+    "layernorm": {"decision": "N1_norm_compulsory_io_Q", "Q": "(2 * n + 2 * K) * dtype_size"},
 }
 
 # Per-operator audit. modes: dtype -> algorithm-level mode. decisions: dtype -> decision ids the row depends on.
@@ -332,12 +386,12 @@ def build(data_dtypes):
                 "mma_eligible": e["cls"] in ("mma", "multistage"),
                 "compute_mode": mode, "rev2_declared_mode": rev2["modes"][dt],
                 "device_specific_peak_key": {d: keys[d] for d in DEVICES},
-                "peak_value": {}, "peak_unit": {},
+                "peak_value": {}, "peak_unit": {}, "peak_source": {}, "empirical_peak_value": {},
                 "F_expression": ov.get("F", cfg.get("flops_expr")).strip() if mode != "memory_only" else None,
                 "F_expression_frozen": str(cfg.get("flops_expr")).strip(),
                 "Q_expression": ov.get("Q", cfg.get("bytes_expr")).strip(),
                 "Q_expression_frozen": str(cfg.get("bytes_expr")).strip(),
-                "f_kind": rev2["f_kind"], "q_kind": "compulsory_io" if op == "radix_sort" else rev2["q_kind"],
+                "f_kind": rev2["f_kind"], "q_kind": "compulsory_io" if "Q" in ov else rev2["q_kind"],
                 "approved_overrides": [ov["decision"]] if ov else [],
                 "source_file": {"contract": f"tilebench/llm/v2/contracts/data/{op}/contract.md",
                                 "config": f"tilebench/benchmarks/operators/{op}/config.yaml",
@@ -350,12 +404,21 @@ def build(data_dtypes):
             }
             if mode == "tf32_class_mma":
                 row["decisions"].append("D1_tf32_class_on_cdna3")
+            if op in DATASHEET_COMPUTE_OPS:
+                row["decisions"].append("H1_hybrid_matmul_datasheet_peak")
+            if ov.get("decision") in DECISIONS:
+                row["decisions"].append(ov["decision"])
             for d in DEVICES:
                 v, u = peak_value(peaks[d][0], keys[d])
-                if keys[d] is not None and v is None:
-                    row["peak_value"][d], row["peak_unit"][d] = None, None
-                else:
-                    row["peak_value"][d], row["peak_unit"][d] = v, u
+                row["empirical_peak_value"][d] = v
+                src = "empirical" if v is not None else None
+                if op in DATASHEET_COMPUTE_OPS and keys[d] is not None:
+                    if (d, mode) not in DATASHEET_DENSE:
+                        problems.append(f"{op}/{dt}/{d}: no published dense rate for {mode} (no empirical fallback)")
+                        continue
+                    v, u, _ = DATASHEET_DENSE[(d, mode)]
+                    src = "datasheet"
+                row["peak_value"][d], row["peak_unit"][d], row["peak_source"][d] = v, u, src
             # Per-device target status. A mode without a calibrated value is never filled from another mode.
             row["target_status"] = {}
             for d in DEVICES:
@@ -397,6 +460,11 @@ def main(out=OUT):
         "classes": CLASSES, "mode_keys": MODE_KEYS, "decisions": DECISIONS, "overrides": OVERRIDES,
         "peaks": {d: {"file": peaks[d][3], "commit": PR323_MERGE, "sha256": peaks[d][1], "git_blob": peaks[d][2],
                       "calibration_id": peaks[d][0]["calibration_id"], "values": peaks[d][0]} for d in DEVICES},
+        "peak_policy": {"decision": "H1_hybrid_matmul_datasheet_peak", "datasheet_compute_operators": list(DATASHEET_COMPUTE_OPS),
+                        "datasheet_dense": {f"{d}/{m}": {"value": v, "unit": u, "source": s}
+                                            for (d, m), (v, u, s) in DATASHEET_DENSE.items()},
+                        "sources": DATASHEET_SOURCES,
+                        "everything_else": "PR #323 empirical profile (compute modes and HBM bandwidth)"},
         "rows": rows,
     }
     (out / "sol_mode_manifest.json").write_text(json.dumps(doc, indent=1) + "\n")
@@ -410,7 +478,9 @@ def main(out=OUT):
         for r in rows:
             w.writerow({**{k: r[k] for k in cols if k in r},
                         **{f"peak_key_{d}": "none (memory-only)" if r["compute_mode"] == "memory_only"
-                           else (r["device_specific_peak_key"][d] if r["peak_value"][d] is not None
+                           else (f"datasheet dense {r['peak_value'][d]} {r['peak_unit'][d]}"
+                                 if r["peak_source"].get(d) == "datasheet"
+                                 else r["device_specific_peak_key"][d] if r["peak_value"][d] is not None
                                  else f"{r['device_specific_peak_key'][d]} absent -> {r['target_status'][d]}")
                            for d in DEVICES},
                         "approved_overrides": ";".join(r["approved_overrides"]), "decisions": ";".join(r["decisions"]),

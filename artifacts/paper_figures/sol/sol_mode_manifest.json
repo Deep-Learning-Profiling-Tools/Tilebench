@@ -94,6 +94,27 @@
     "integer arithmetic without MMA: mul2/int8 and vector_add/int8 (int32_vector is not calibrated on any device); their compute term would reach the memory term only below 3.42 TOP/s"
    ],
    "if_rejected": "the int8 mul2/vector_add cases get status missing_calibration; no-arithmetic and comparison operators stay memory-only (they have no arithmetic term to model)"
+  },
+  "H1_hybrid_matmul_datasheet_peak": {
+   "status": "approved",
+   "decided_by": "study owner with Keren, 2026-10-10: hybrid SOL reference; matmul_fp32_fp16_fp8 uses the vendor's published single-GPU dense compute rate (DATASHEET_DENSE), every other operator and every bandwidth term keeps the PR #323 empirical profile",
+   "question": "Score the direct GEMM operator against published dense Tensor-Core rates instead of the empirical library-GEMM rates?",
+   "evidence": [
+    "the empirical MMA rates are sustained torch.matmul / torch._scaled_mm rates measured under SW power-cap clock events; 127 matmul_fp32_fp16_fp8 cases exceeded them (max 1.30)",
+    "published dense values, no sparsity and no maximum-clock extrapolation: see DATASHEET_SOURCES"
+   ],
+   "affects": "matmul_fp32_fp16_fp8 (400 cases); batched_matmul, streamk_matmul, matmul_int8 and every MMA-mode convolution/attention operator stay empirical"
+  },
+  "N1_norm_compulsory_io_Q": {
+   "status": "approved",
+   "decided_by": "study owner, 2026-10-10: paper-only compulsory-I/O Q for rmsnorm and layernorm",
+   "question": "Replace the frozen Q = 3 * n * dtype_size of the row normalisations by their compulsory I/O?",
+   "evidence": [
+    "rmsnorm reads x (batch, M, K) and rms_w (K), writes y (batch, M, K): Q = (2n + K) * dtype_size",
+    "layernorm reads X, WEIGHT (K) and BIAS (K), writes Y: Q = (2n + 2K) * dtype_size",
+    "both contracts permit keeping the row on chip; the frozen 3n counts an optional second read of x"
+   ],
+   "affects": "rmsnorm and layernorm, every dtype and device; config.yaml and LLM scoring unchanged"
   }
  },
  "overrides": {
@@ -104,6 +125,14 @@
   "radix_sort": {
    "decision": "M4_radix_sort_Q",
    "Q": "2 * n * dtype_size"
+  },
+  "rmsnorm": {
+   "decision": "N1_norm_compulsory_io_Q",
+   "Q": "(2 * n + K) * dtype_size"
+  },
+  "layernorm": {
+   "decision": "N1_norm_compulsory_io_Q",
+   "Q": "(2 * n + 2 * K) * dtype_size"
   }
  },
  "peaks": {
@@ -179,6 +208,60 @@
    }
   }
  },
+ "peak_policy": {
+  "decision": "H1_hybrid_matmul_datasheet_peak",
+  "datasheet_compute_operators": [
+   "matmul_fp32_fp16_fp8"
+  ],
+  "datasheet_dense": {
+   "B200/fp16_mma": {
+    "value": 2250.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "B200/tf32_class_mma": {
+    "value": 1125.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "B200/fp8_e4m3fn_mma": {
+    "value": 4500.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_hgx_b200"
+   },
+   "GH200/fp16_mma": {
+    "value": 990.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "GH200/tf32_class_mma": {
+    "value": 494.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "GH200/fp8_e4m3fn_mma": {
+    "value": 1979.0,
+    "unit": "TFLOP/s",
+    "source": "nvidia_gh200_datasheet"
+   },
+   "MI300X/fp16_mma": {
+    "value": 1307.4,
+    "unit": "TFLOP/s",
+    "source": "amd_mi300x_datasheet"
+   },
+   "MI300X/tf32_class_mma": {
+    "value": 653.7,
+    "unit": "TFLOP/s",
+    "source": "amd_mi300x_datasheet"
+   }
+  },
+  "sources": {
+   "nvidia_hgx_b200": "NVIDIA HGX B200 specifications (https://www.nvidia.com/en-us/data-center/hgx/): FP16/BF16 36, TF32 18, FP8 72 PFLOPS for 8 GPUs, sparse; 'Dense is 1/2 sparse spec' -> /8/2. The per-GPU Blackwell datasheet (3384703, sha256 5f87dd70...) prints TF32 2.2 PF sparse, a rounding of 2.25",
+   "nvidia_gh200_datasheet": "NVIDIA GH200 Grace Hopper Superchip datasheet 3773000 (MAR25, sha256 a155d829...), 96GB HBM3 column, dense values: TF32 494, FP16 990, FP8 1979 TFLOPS",
+   "amd_mi300x_datasheet": "AMD Instinct MI300X data sheet (2025-06-16, sha256 60d78bc2...), dense column: TF32 653.7, FP16 1307.4 TFLOPS"
+  },
+  "everything_else": "PR #323 empirical profile (compute modes and HBM bandwidth)"
+ },
  "rows": [
   {
    "operator": "1d_conv",
@@ -204,6 +287,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
+   },
    "F_expression": "2 * batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * (in_channels // groups) * kernel_size",
    "F_expression_frozen": "2 * batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * (in_channels // groups) * kernel_size",
    "Q_expression": "batch * in_channels * L * dtype_size + out_channels * (in_channels // groups) * kernel_size * dtype_size + batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * dtype_size",
@@ -259,6 +352,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
+   },
    "F_expression": "2 * batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * (in_channels // groups) * kernel_size",
    "F_expression_frozen": "2 * batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * (in_channels // groups) * kernel_size",
    "Q_expression": "batch * in_channels * L * dtype_size + out_channels * (in_channels // groups) * kernel_size * dtype_size + batch * out_channels * ((L + 2 * padding - kernel_size) // stride + 1) * dtype_size",
@@ -316,6 +419,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
+   },
    "F_expression": "2 * batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 2",
    "F_expression_frozen": "2 * batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 2",
    "Q_expression": "batch * in_channels * H * H * dtype_size + out_channels * (in_channels // groups) * kernel_size ** 2 * dtype_size + batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
@@ -371,6 +484,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
+   },
    "F_expression": "2 * batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 2",
    "F_expression_frozen": "2 * batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 2",
    "Q_expression": "batch * in_channels * H * H * dtype_size + out_channels * (in_channels // groups) * kernel_size ** 2 * dtype_size + batch * out_channels * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
@@ -424,6 +547,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -485,6 +618,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * kernel_size ** 2",
    "Q_expression": "N * C * H * H * dtype_size + N * C * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
@@ -538,6 +681,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -599,6 +752,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
+   },
    "F_expression": "2 * batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 3",
    "F_expression_frozen": "2 * batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 3",
    "Q_expression": "batch * in_channels * D * H * H * dtype_size + out_channels * (in_channels // groups) * kernel_size ** 3 * dtype_size + batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * dtype_size",
@@ -653,6 +816,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
    },
    "F_expression": "2 * batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 3",
    "F_expression_frozen": "2 * batch * out_channels * ((D + 2 * padding - kernel_size) // stride + 1) * ((H + 2 * padding - kernel_size) // stride + 1) ** 2 * (in_channels // groups) * kernel_size ** 3",
@@ -711,6 +884,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "M * N",
    "Q_expression": "M * N * dtype_size",
@@ -764,6 +947,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -825,6 +1018,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * N * C",
    "F_expression_frozen": "4 * N * C",
    "Q_expression": "3 * N * C * dtype_size + 2 * C * dtype_size",
@@ -880,6 +1083,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * N * C",
    "F_expression_frozen": "4 * N * C",
    "Q_expression": "3 * N * C * dtype_size + 2 * C * dtype_size",
@@ -934,6 +1147,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "4 * N * C",
    "F_expression_frozen": "4 * N * C",
@@ -990,6 +1213,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1341.43,
+    "GH200": 790.5,
+    "MI300X": 629.06
+   },
    "F_expression": "2 * BATCH * M * M * M",
    "F_expression_frozen": "2 * BATCH * M * M * M",
    "Q_expression": "3 * BATCH * M * M * dtype_size",
@@ -1044,6 +1277,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
    },
    "F_expression": "2 * BATCH * M * M * M",
    "F_expression_frozen": "2 * BATCH * M * M * M",
@@ -1100,6 +1343,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
+   },
    "F_expression": "2 * BATCH * M * M * M",
    "F_expression_frozen": "2 * BATCH * M * M * M",
    "Q_expression": "3 * BATCH * M * M * dtype_size",
@@ -1153,6 +1406,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -1210,6 +1473,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -1271,6 +1544,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
+   },
    "F_expression": "12 * B * H * BLOCK_N * D * (M - BLOCK_M)",
    "F_expression_frozen": "12 * B * H * BLOCK_N * D * (M - BLOCK_M)",
    "Q_expression": "2 * B * (H + H_kv) * M * D * dtype_size",
@@ -1326,6 +1609,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "batch_size * num_classes * 4",
    "F_expression_frozen": "batch_size * num_classes * 4",
    "Q_expression": "batch_size * num_classes * dtype_size + batch_size * 8 + batch_size * dtype_size",
@@ -1380,6 +1673,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "batch_size * num_classes * 4",
    "F_expression_frozen": "batch_size * num_classes * 4",
@@ -1436,6 +1739,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "2 * rows * cols",
    "F_expression_frozen": "2 * rows * cols",
    "Q_expression": "rows * cols * 1 + rows * 4 + rows * cols * 2",
@@ -1487,6 +1800,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -1548,6 +1871,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -1601,6 +1934,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -1662,6 +2005,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -1719,6 +2072,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -1773,6 +2136,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "n",
    "F_expression_frozen": "n",
@@ -1829,6 +2202,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -1883,6 +2266,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
    },
    "F_expression": "2 * batch_size * n_heads * head_dim * seq_len * (seq_len + 1)",
    "F_expression_frozen": "4 * batch_size * n_heads * seq_len * seq_len * head_dim",
@@ -1941,6 +2334,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * batch * heads * (seq_len // block_seq) * head_dim",
    "F_expression_frozen": "4 * batch * heads * (seq_len // block_seq) * head_dim",
    "Q_expression": "batch * heads * (seq_len // block_seq) * head_dim * dtype_size",
@@ -1995,6 +2398,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "5 * n",
    "F_expression_frozen": "5 * n",
@@ -2051,6 +2464,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
    "F_expression_frozen": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
    "Q_expression": "input_rows * input_rows * dtype_size + kernel_rows * kernel_cols * dtype_size + input_rows * input_rows * dtype_size",
@@ -2106,6 +2529,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
    "F_expression_frozen": "2 * input_rows * input_rows * kernel_rows * kernel_cols",
    "Q_expression": "input_rows * input_rows * dtype_size + kernel_rows * kernel_cols * dtype_size + input_rows * input_rows * dtype_size",
@@ -2157,6 +2590,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -2218,6 +2661,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 4",
@@ -2275,6 +2728,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 4",
@@ -2328,6 +2791,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -2389,6 +2862,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 4",
@@ -2444,6 +2927,16 @@
    "peak_unit": {
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
     "MI300X": null
    },
    "F_expression": "4 * rows * rows",
@@ -2503,6 +2996,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "4 * rows * rows",
    "F_expression_frozen": "4 * rows * rows",
    "Q_expression": "2 * rows * rows * dtype_size",
@@ -2557,6 +3060,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "4 * rows * rows",
    "F_expression_frozen": "4 * rows * rows",
@@ -2613,6 +3126,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * rows * cols",
    "F_expression_frozen": "4 * rows * cols",
    "Q_expression": "rows * cols * 4 * 2 + rows * 4",
@@ -2668,6 +3191,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "3 * batch * M * K",
    "F_expression_frozen": "3 * batch * M * K",
    "Q_expression": "2 * batch * M * K * dtype_size",
@@ -2723,6 +3256,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "3 * batch * M * K",
    "F_expression_frozen": "3 * batch * M * K",
    "Q_expression": "2 * batch * M * K * dtype_size",
@@ -2777,6 +3320,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "3 * batch * M * K",
    "F_expression_frozen": "3 * batch * M * K",
@@ -2833,13 +3386,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "6 * n",
    "F_expression_frozen": "6 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + 2 * K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/layernorm/contract.md",
     "config": "tilebench/benchmarks/operators/layernorm/config.yaml",
@@ -2856,13 +3421,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "layernorm",
@@ -2888,13 +3455,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "6 * n",
    "F_expression_frozen": "6 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + 2 * K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/layernorm/contract.md",
     "config": "tilebench/benchmarks/operators/layernorm/config.yaml",
@@ -2911,13 +3490,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "layernorm",
@@ -2943,13 +3524,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "6 * n",
    "F_expression_frozen": "6 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + 2 * K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/layernorm/contract.md",
     "config": "tilebench/benchmarks/operators/layernorm/config.yaml",
@@ -2966,13 +3559,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "leaky_relu",
@@ -2996,6 +3591,16 @@
    "peak_unit": {
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
     "MI300X": null
    },
    "F_expression": "n",
@@ -3055,6 +3660,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -3109,6 +3724,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "n",
    "F_expression_frozen": "n",
@@ -3165,6 +3790,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
+   },
    "F_expression": "4 * M * D * D + 3 * M * D",
    "F_expression_frozen": "4 * M * D * D + 3 * M * D",
    "Q_expression": "(4 * M * D + D * D + D) * dtype_size",
@@ -3213,69 +3848,24 @@
     "MI300X": "peak_tflops.fp16_mma"
    },
    "peak_value": {
+    "B200": 2250.0,
+    "GH200": 990.0,
+    "MI300X": 1307.4
+   },
+   "peak_unit": {
+    "B200": "TFLOP/s",
+    "GH200": "TFLOP/s",
+    "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "datasheet",
+    "GH200": "datasheet",
+    "MI300X": "datasheet"
+   },
+   "empirical_peak_value": {
     "B200": 1267.21,
     "GH200": 740.41,
     "MI300X": 590.42
-   },
-   "peak_unit": {
-    "B200": "TFLOP/s",
-    "GH200": "TFLOP/s",
-    "MI300X": "TFLOP/s"
-   },
-   "F_expression": "2 * M * N * K",
-   "F_expression_frozen": "2 * M * N * K",
-   "Q_expression": "(M * K + K * N + M * N) * dtype_size",
-   "Q_expression_frozen": "(M * K + K * N + M * N) * dtype_size",
-   "f_kind": "flop_count",
-   "q_kind": "compulsory_io",
-   "approved_overrides": [],
-   "source_file": {
-    "contract": "tilebench/llm/v2/contracts/data/matmul_fp32_fp16_fp8/contract.md",
-    "config": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/config.yaml",
-    "impl": [
-     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py",
-     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_cutile.py",
-     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_tilelang.py"
-    ],
-    "declaration": "tilebench/llm/v2/manifests/arithmetic_modes.yaml"
-   },
-   "source_commit": {
-    "contract_and_declaration": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
-    "operators_tree": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
-    "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
-   },
-   "justification": "MMA-eligible GEMM for every dtype; fp32 accumulation does not make it a vector workload",
-   "decisions": [],
-   "target_status": {
-    "B200": "ok",
-    "GH200": "ok",
-    "MI300X": "ok"
-   },
-   "review_status": "approved"
-  },
-  {
-   "operator": "matmul_fp32_fp16_fp8",
-   "dtype": "fp32",
-   "workload_class": "1 MMA-eligible matrix computation",
-   "canonical_algorithm": "blocked dense GEMM with fp32 accumulation",
-   "arithmetic_precision": "fp32 operands TF32-class (10-bit mantissa); fp16 native; fp8_e4m3fn native without scales; fp32 accumulation",
-   "mma_eligible": true,
-   "compute_mode": "tf32_class_mma",
-   "rev2_declared_mode": "mma_tf32_f32acc",
-   "device_specific_peak_key": {
-    "B200": "peak_tflops.tf32_mma",
-    "GH200": "peak_tflops.tf32_mma",
-    "MI300X": "peak_tflops.xf32_mma"
-   },
-   "peak_value": {
-    "B200": 664.46,
-    "GH200": 409.7,
-    "MI300X": 318.12
-   },
-   "peak_unit": {
-    "B200": "TFLOP/s",
-    "GH200": "TFLOP/s",
-    "MI300X": "TFLOP/s"
    },
    "F_expression": "2 * M * N * K",
    "F_expression_frozen": "2 * M * N * K",
@@ -3301,14 +3891,82 @@
    },
    "justification": "MMA-eligible GEMM for every dtype; fp32 accumulation does not make it a vector workload",
    "decisions": [
-    "D1_tf32_class_on_cdna3"
+    "H1_hybrid_matmul_datasheet_peak"
    ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved (D1_tf32_class_on_cdna3)"
+   "review_status": "approved (H1_hybrid_matmul_datasheet_peak)"
+  },
+  {
+   "operator": "matmul_fp32_fp16_fp8",
+   "dtype": "fp32",
+   "workload_class": "1 MMA-eligible matrix computation",
+   "canonical_algorithm": "blocked dense GEMM with fp32 accumulation",
+   "arithmetic_precision": "fp32 operands TF32-class (10-bit mantissa); fp16 native; fp8_e4m3fn native without scales; fp32 accumulation",
+   "mma_eligible": true,
+   "compute_mode": "tf32_class_mma",
+   "rev2_declared_mode": "mma_tf32_f32acc",
+   "device_specific_peak_key": {
+    "B200": "peak_tflops.tf32_mma",
+    "GH200": "peak_tflops.tf32_mma",
+    "MI300X": "peak_tflops.xf32_mma"
+   },
+   "peak_value": {
+    "B200": 1125.0,
+    "GH200": 494.0,
+    "MI300X": 653.7
+   },
+   "peak_unit": {
+    "B200": "TFLOP/s",
+    "GH200": "TFLOP/s",
+    "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "datasheet",
+    "GH200": "datasheet",
+    "MI300X": "datasheet"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
+   },
+   "F_expression": "2 * M * N * K",
+   "F_expression_frozen": "2 * M * N * K",
+   "Q_expression": "(M * K + K * N + M * N) * dtype_size",
+   "Q_expression_frozen": "(M * K + K * N + M * N) * dtype_size",
+   "f_kind": "flop_count",
+   "q_kind": "compulsory_io",
+   "approved_overrides": [],
+   "source_file": {
+    "contract": "tilebench/llm/v2/contracts/data/matmul_fp32_fp16_fp8/contract.md",
+    "config": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/config.yaml",
+    "impl": [
+     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_triton.py",
+     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_cutile.py",
+     "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_tilelang.py"
+    ],
+    "declaration": "tilebench/llm/v2/manifests/arithmetic_modes.yaml"
+   },
+   "source_commit": {
+    "contract_and_declaration": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+    "operators_tree": "ea04fb368c88ed4ee8621e3b1b1d6013a96f1cfe",
+    "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
+   },
+   "justification": "MMA-eligible GEMM for every dtype; fp32 accumulation does not make it a vector workload",
+   "decisions": [
+    "D1_tf32_class_on_cdna3",
+    "H1_hybrid_matmul_datasheet_peak"
+   ],
+   "target_status": {
+    "B200": "ok",
+    "GH200": "ok",
+    "MI300X": "ok"
+   },
+   "review_status": "approved (D1_tf32_class_on_cdna3, H1_hybrid_matmul_datasheet_peak)"
   },
   {
    "operator": "matmul_fp32_fp16_fp8",
@@ -3325,13 +3983,23 @@
     "MI300X": null
    },
    "peak_value": {
-    "B200": 2588.39,
-    "GH200": 1403.91,
+    "B200": 4500.0,
+    "GH200": 1979.0,
     "MI300X": null
    },
    "peak_unit": {
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": "datasheet",
+    "GH200": "datasheet",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 2588.39,
+    "GH200": 1403.91,
     "MI300X": null
    },
    "F_expression": "2 * M * N * K",
@@ -3357,13 +4025,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "MMA-eligible GEMM for every dtype; fp32 accumulation does not make it a vector workload",
-   "decisions": [],
+   "decisions": [
+    "H1_hybrid_matmul_datasheet_peak"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "not_applicable: no MI300X data (UNSUPPORTED_DTYPE; gfx942 has e4m3fnuz only)"
    },
-   "review_status": "approved"
+   "review_status": "approved (H1_hybrid_matmul_datasheet_peak)"
   },
   {
    "operator": "matmul_int8",
@@ -3388,6 +4058,16 @@
     "B200": "TOP/s",
     "GH200": "TOP/s",
     "MI300X": "TOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 2721.39,
+    "GH200": 1015.64,
+    "MI300X": 964.48
    },
    "F_expression": "2 * M * N * K",
    "F_expression_frozen": "2 * M * N * K",
@@ -3444,6 +4124,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "N * N",
    "Q_expression": "N * N * dtype_size * 2",
@@ -3501,6 +4191,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "N * N",
    "Q_expression": "N * N * dtype_size * 2",
@@ -3554,6 +4254,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -3615,6 +4325,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "N * N",
    "Q_expression": "N * N * dtype_size * 2",
@@ -3668,6 +4388,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -3727,6 +4457,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "0",
    "Q_expression": "m * n * dtype_size * 2",
@@ -3778,6 +4518,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -3837,6 +4587,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "0",
    "Q_expression": "m * n * dtype_size * 2",
@@ -3892,6 +4652,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "M * N",
    "F_expression_frozen": "M * N",
    "Q_expression": "M * N * dtype_size",
@@ -3947,6 +4717,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "M * N",
    "F_expression_frozen": "M * N",
    "Q_expression": "M * N * dtype_size",
@@ -4001,6 +4781,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "M * N",
    "F_expression_frozen": "M * N",
@@ -4057,6 +4847,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "M * (4 * k * E + 3 * k)",
    "F_expression_frozen": "M * (4 * k * E + 3 * k)",
    "Q_expression": "M * E * dtype_size + M * k * dtype_size + M * k * 4",
@@ -4112,6 +4912,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "M * (4 * k * E + 3 * k)",
    "F_expression_frozen": "M * (4 * k * E + 3 * k)",
    "Q_expression": "M * E * dtype_size + M * k * dtype_size + M * k * 4",
@@ -4166,6 +4976,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "M * (4 * k * E + 3 * k)",
    "F_expression_frozen": "M * (4 * k * E + 3 * k)",
@@ -4220,6 +5040,16 @@
    "peak_unit": {
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
     "MI300X": null
    },
    "F_expression": "n",
@@ -4279,6 +5109,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4334,6 +5174,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4385,6 +5235,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -4446,6 +5306,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size + n * 2",
@@ -4499,6 +5369,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -4562,6 +5442,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4619,6 +5509,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4672,6 +5572,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -4733,6 +5643,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4786,6 +5706,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -4847,6 +5777,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -4900,6 +5840,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -4961,6 +5911,16 @@
     "GH200": null,
     "MI300X": null
    },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
    "F_expression": null,
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -5018,13 +5978,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * n",
    "F_expression_frozen": "4 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
     "config": "tilebench/benchmarks/operators/rmsnorm/config.yaml",
@@ -5041,13 +6013,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "rmsnorm",
@@ -5073,13 +6047,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * n",
    "F_expression_frozen": "4 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
     "config": "tilebench/benchmarks/operators/rmsnorm/config.yaml",
@@ -5096,13 +6082,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "rmsnorm",
@@ -5128,13 +6116,25 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "4 * n",
    "F_expression_frozen": "4 * n",
-   "Q_expression": "n * dtype_size * 3",
+   "Q_expression": "(2 * n + K) * dtype_size",
    "Q_expression_frozen": "n * dtype_size * 3",
    "f_kind": "simplified_op_count",
    "q_kind": "compulsory_io",
-   "approved_overrides": [],
+   "approved_overrides": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "source_file": {
     "contract": "tilebench/llm/v2/contracts/data/rmsnorm/contract.md",
     "config": "tilebench/benchmarks/operators/rmsnorm/config.yaml",
@@ -5151,13 +6151,15 @@
     "peaks": "72d7cec623e6238643ed5d2099d9aa9889c4ea87"
    },
    "justification": "fp32 arithmetic by contract",
-   "decisions": [],
+   "decisions": [
+    "N1_norm_compulsory_io_Q"
+   ],
    "target_status": {
     "B200": "ok",
     "GH200": "ok",
     "MI300X": "ok"
    },
-   "review_status": "approved"
+   "review_status": "approved (N1_norm_compulsory_io_Q)"
   },
   {
    "operator": "rope",
@@ -5183,6 +6185,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "3 * batch_size * seq_len * n_heads * head_dim",
    "F_expression_frozen": "3 * batch_size * seq_len * n_heads * head_dim",
    "Q_expression": "2 * batch_size * seq_len * n_heads * head_dim * dtype_size",
@@ -5237,6 +6249,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "3 * batch_size * seq_len * n_heads * head_dim",
    "F_expression_frozen": "3 * batch_size * seq_len * n_heads * head_dim",
@@ -5293,6 +6315,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -5348,6 +6380,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 2",
@@ -5402,6 +6444,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "n",
    "F_expression_frozen": "n",
@@ -5457,6 +6509,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "n_rows * n_cols",
    "F_expression_frozen": "n_rows * n_cols",
@@ -5512,6 +6574,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "n_rows * n_cols",
    "F_expression_frozen": "n_rows * n_cols",
@@ -5568,6 +6640,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1341.43,
+    "GH200": 790.5,
+    "MI300X": 629.06
+   },
    "F_expression": "2 * m * n * k",
    "F_expression_frozen": "2 * m * n * k",
    "Q_expression": "(m * k + k * n + m * n) * dtype_size",
@@ -5623,6 +6705,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 1267.21,
+    "GH200": 740.41,
+    "MI300X": 590.42
+   },
    "F_expression": "2 * m * n * k",
    "F_expression_frozen": "2 * m * n * k",
    "Q_expression": "(m * k + k * n + m * n) * dtype_size",
@@ -5677,6 +6769,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 664.46,
+    "GH200": 409.7,
+    "MI300X": 318.12
    },
    "F_expression": "2 * m * n * k",
    "F_expression_frozen": "2 * m * n * k",
@@ -5735,6 +6837,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -5790,6 +6902,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -5845,6 +6967,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -5896,6 +7028,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -5957,6 +7099,16 @@
     "GH200": "TFLOP/s",
     "MI300X": null
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": null
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -6014,6 +7166,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -6069,6 +7231,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
+   },
    "F_expression": "n",
    "F_expression_frozen": "n",
    "Q_expression": "n * dtype_size * 3",
@@ -6120,6 +7292,16 @@
     "MI300X": null
    },
    "peak_unit": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "peak_source": {
+    "B200": null,
+    "GH200": null,
+    "MI300X": null
+   },
+   "empirical_peak_value": {
     "B200": null,
     "GH200": null,
     "MI300X": null
@@ -6181,6 +7363,16 @@
     "GH200": "TFLOP/s",
     "MI300X": null
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": null
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": null
+   },
    "F_expression": "M * M",
    "F_expression_frozen": "M * M",
    "Q_expression": "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size",
@@ -6238,6 +7430,16 @@
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
    },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 73.93,
+    "GH200": 66.54,
+    "MI300X": 145.92
+   },
    "F_expression": "M * M",
    "F_expression_frozen": "M * M",
    "Q_expression": "2 * M * M * dtype_size + ((M + TILE_SIZE - 1) // TILE_SIZE) ** 2 * dtype_size",
@@ -6292,6 +7494,16 @@
     "B200": "TFLOP/s",
     "GH200": "TFLOP/s",
     "MI300X": "TFLOP/s"
+   },
+   "peak_source": {
+    "B200": "empirical",
+    "GH200": "empirical",
+    "MI300X": "empirical"
+   },
+   "empirical_peak_value": {
+    "B200": 69.97,
+    "GH200": 59.8,
+    "MI300X": 130.24
    },
    "F_expression": "M * M",
    "F_expression_frozen": "M * M",
