@@ -31,7 +31,8 @@ def cmd_doctor(a) -> int:
     import importlib.metadata as md
     from tilebench import hardware, provenance
     out = {"protocol": PROTOCOL, "python": sys.version.split()[0], "packages": {}, "device": None}
-    for pkg in ("torch", "triton", "cuda-tile", "tilelang", "apache-tvm-ffi", "openai", "anthropic", "neuronx-cc"):
+    for pkg in ("torch", "triton", "cuda-tile", "tilelang", "apache-tvm-ffi", "openai", "anthropic", "neuronx-cc",
+                "nki", "torch-neuronx"):
         try:
             out["packages"][pkg] = md.version(pkg)
         except md.PackageNotFoundError:
@@ -74,6 +75,11 @@ def cmd_doctor(a) -> int:
     out["contracts"] = {k: (len(v) if isinstance(v, list) else v) for k, v in audit_summary().items()}
     from tilebench.llm.v2.evaluation.launcher import detect_isolation
     out["isolation"] = detect_isolation("auto")
+    from tilebench.llm.v2.evaluation import neuron
+    if neuron.neuron_present():
+        from tilebench.core.neuron_native import hardware_identity
+        out["device"] = {**(out["device"] or {}), "arch": neuron.host_arch(), "neuron": hardware_identity()}
+        out["isolation_trn2"] = neuron.detect_isolation_neuron("auto")
     _print(out)
     return 0
 
@@ -515,7 +521,7 @@ def cmd_reevaluate(a) -> int:
     from tilebench.llm.v2.contracts.loader import load_contract
     from tilebench.llm.v2.evaluation.fingerprint import evaluator_fingerprint
     from tilebench.llm.v2.evaluation.job import build_evaluation_job
-    from tilebench.llm.v2.evaluation.launcher import SubprocessEvaluator
+    from tilebench.llm.v2.evaluation.neuron import host_arch, make_evaluator
     from tilebench.llm.v2.orchestration import state_machine as sm
     from tilebench.llm.v2.orchestration.identity import LLM_V2_OUTPUT_ROOT, attempt_dir
     from tilebench.llm.v2.orchestration.state import TrajectoryState
@@ -546,9 +552,9 @@ def cmd_reevaluate(a) -> int:
         cases = entry["cases"]
     job = build_evaluation_job(operator=st.task["operator"], dtype=st.task["dtype"], cases=cases,
                                params=None if cases else st.task["params"], dsl=st.task["dsl"],
-                               device=st.task["device"], arch=hardware.detect_arch(), rules=contract.rules, study=study, identity=identity)
-    evaluator = SubprocessEvaluator(device=st.task["device"], timeout_s=a.worker_timeout, sandbox_root=tdir.parent / "_reeval_sandbox",
-                                    isolation=a.isolation, lock_root=LLM_V2_OUTPUT_ROOT)
+                               device=st.task["device"], arch=host_arch(), rules=contract.rules, study=study, identity=identity)
+    evaluator = make_evaluator(st.task["device"], timeout_s=a.worker_timeout, sandbox_root=tdir.parent / "_reeval_sandbox",
+                               isolation=a.isolation, lock_root=LLM_V2_OUTPUT_ROOT)
     fp = evaluator_fingerprint(job, worker_timeout_s=a.worker_timeout, isolation_backend=evaluator.report.get("backend", "none"))
     adir = attempt_dir(tdir, rec.round, att.attempt)
     from tilebench.llm.v2.orchestration.runner import next_revision_name
@@ -804,7 +810,7 @@ def _add_live_args(s: argparse.ArgumentParser) -> None:
     s.add_argument("--out-root", help="default outputs/llm_v2")
     s.add_argument("--resume", action="store_true", help="continue persisted trajectories (never re-requests archived responses)")
     s.add_argument("--stop-after-rounds", type=int, help="pause after this many closed rounds (resumable)")
-    s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
+    s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "docker", "none"])
     s.add_argument("--worker-timeout", type=int, default=None, help="default: study.yaml evaluation.worker_timeout_s")
     s.add_argument("--max-trajectories", type=int)
     s.add_argument("--retry-incomplete", action="store_true",
@@ -898,7 +904,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("re-evaluate", help="append-only independent re-evaluation of an archived candidate (no request; eval_NNNN revision)")
     s.add_argument("--trajectory-dir", required=True); s.add_argument("--round", type=int, required=True)
     s.add_argument("--attempt", type=int); s.add_argument("--reason", required=True); s.add_argument("--executor", default="operator")
-    s.add_argument("--worker-timeout", type=int, default=None); s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "none"])
+    s.add_argument("--worker-timeout", type=int, default=None); s.add_argument("--isolation", default="auto", choices=["auto", "bwrap", "docker", "none"])
     s.add_argument("--adopt", action="store_true", help="also make the new result the round's recorded status (default: record only)")
     s.set_defaults(fn=cmd_reevaluate)
 

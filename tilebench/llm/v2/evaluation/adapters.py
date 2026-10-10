@@ -3,12 +3,13 @@
 proton_cuda_graph    NVIDIA: Proton + CUDA-graph replay (evaluation.timing.measure)
 proton_rocm_eager    ROCm: Proton/roctracer, eager (the same function; the
                      torch build decides, see core.timer.effective_use_cuda_graph)
-neuron_runtime_trace Trainium2 / NKI: NOT READY. The manual campaign measures NKI
-                     through tilebench.core.nki_orchestrator.profile_case_on_neuron
-                     (runtime-inspect trace on real inputs). Its Beta-5
-                     compatibility, 1-warmup/3-timed support, timing boundary and
-                     interference must be validated on a Trn2 host before it can
-                     serve as the v2 evaluator; see docs/llm_v2/NKI_HANDOFF.md."""
+neuron_runtime_trace Trainium2 / NKI, LEGACY torch-xla path (core.nki_orchestrator,
+                     runtime-inspect trace): not used, not ready.
+neuron_native_trace  Trainium2 / NKI 0.7 on the native PyTorch Neuron stack
+                     (evaluation.neuron + evaluation.neuron_worker): torch.device("neuron"),
+                     no torch-xla, no torch.compile; device busy sum of every execution of
+                     one run() from the Neuron runtime trace (per-core copies merged,
+                     tilebench.core.neuron_native / neuron_intervals); 1 warmup + 3 timed."""
 from __future__ import annotations
 
 
@@ -26,6 +27,10 @@ ADAPTERS = {
     "neuron_runtime_trace": {"ready": False, "module": "tilebench.core.nki_orchestrator",
                              "device_nodes": ["/dev/neuron*"], "runtime": "Neuron runtime + neuron-profile",
                              "isolation_verified_on": [], "handoff": "docs/llm_v2/NKI_HANDOFF.md"},
+    "neuron_native_trace": {"ready": True, "module": "tilebench.llm.v2.evaluation.neuron",
+                            "device_nodes": ["/dev/neuron*"],
+                            "runtime": "native torch-neuronx + Neuron runtime profiler (NeuronConfig RUNTIME, nc_exec_running)",
+                            "isolation_verified_on": ["Trn2 trn2.3xlarge, docker backend (validation 2026-10-10)"]},
 }
 
 

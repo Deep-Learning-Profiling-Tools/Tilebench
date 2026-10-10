@@ -13,11 +13,18 @@ configured cases of the selected dtype (`cases`); `params` keeps the largest
 - needs_review  : no evidence either way on that device yet (e.g. Trn2
                   before the NKI adapter has been validated there)
 
+Trn2 reads the frozen manifests/trn2_eligibility.json (37 eligible / 8 excluded
+under revision 4): an operator is eligible only when all 20 cases of its
+representative dtype have a valid formal native-PyTorch baseline; an excluded
+operator is `unsupported` with the manifest's reason.
+
 Known device facts come from the archived manual campaigns and are cited in
 `reason`; nothing here is inferred from a generation attempt."""
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from tilebench.paths import list_operators
 
@@ -80,6 +87,50 @@ def _case_set(operator: str, dtype: str, study: dict, config: dict | None) -> tu
     return case_sets.case_set_id(operator, dtype, [c["case_id"] for c in cases]), cases
 
 
+TRN2_ELIGIBILITY_PATH = Path(__file__).resolve().parents[1] / "manifests" / "trn2_eligibility.json"
+TRN2_ELIGIBILITY_SCHEMA = "tilebench-llm-v2-trn2-eligibility/1"
+_TRN2_CACHE: dict = {}
+
+
+def load_trn2_eligibility(path: Path | None = None) -> dict | None:
+    """The frozen Trn2 eligibility manifest (scripts/llm_v2/build_trn2_eligibility.py), seal-checked; None when
+    absent. Built from results/TRN2/csv: an operator is eligible only with 20/20 valid formal baseline cases of its
+    representative dtype."""
+    p = Path(path or TRN2_ELIGIBILITY_PATH)
+    key = str(p)
+    if key in _TRN2_CACHE:
+        return _TRN2_CACHE[key]
+    if not p.exists():
+        return None
+    from tilebench.llm.v2.manifests.schema import canonical_json, sha256_text
+    data = json.loads(p.read_text())
+    if data.get("schema") != TRN2_ELIGIBILITY_SCHEMA:
+        raise ValueError(f"{p}: schema must be {TRN2_ELIGIBILITY_SCHEMA}")
+    if sha256_text(canonical_json({k: v for k, v in data.items() if k != "sha256"})) != data.get("sha256"):
+        raise ValueError(f"{p}: content does not match its sha256 seal")
+    _TRN2_CACHE[key] = data
+    return data
+
+
+def trn2_status(operator: str, dtype: str, case_set_id: str | None) -> tuple[str, str]:
+    """Trn2 status from the frozen eligibility manifest. Only the operator's frozen (dtype, case set) is ever
+    eligible; an excluded operator is `unsupported` with the manifest's reason; another dtype is never substituted."""
+    data = load_trn2_eligibility()
+    if data is None:
+        return "needs_review", "NKI adapter and Trn2 eligibility not yet validated on the device"
+    entry = (data.get("operators") or {}).get(operator)
+    if entry is None:
+        return "needs_review", f"{operator} is not in the frozen Trn2 eligibility manifest"
+    if entry["dtype"] != dtype:
+        return "unsupported", (f"Trn2 eligibility is frozen for the representative dtype {entry['dtype']} only "
+                               f"(trn2_eligibility.json); {dtype} is not a Trn2 task")
+    if case_set_id is not None and entry["case_set_id"] != case_set_id:
+        raise ValueError(f"{operator}: trn2_eligibility.json case set {entry['case_set_id']} != frozen case set {case_set_id}")
+    if entry["status"] == "eligible":
+        return "eligible", f"Trn2 eligibility manifest (results/TRN2/csv): {entry['reason']}"
+    return "unsupported", f"excluded by the frozen Trn2 eligibility manifest: {entry['reason']}"
+
+
 def eligibility(operator: str, dtype: str, device: str, dsl: str, study: dict, folds: dict,
                 config: dict | None = None) -> Eligibility:
     if device not in DEVICES:
@@ -95,7 +146,7 @@ def eligibility(operator: str, dtype: str, device: str, dsl: str, study: dict, f
     elif (device, dtype) in _KNOWN_UNSUPPORTED:
         status, reason = "unsupported", _KNOWN_UNSUPPORTED[(device, dtype)]
     elif device == "Trn2":
-        status, reason = "needs_review", "NKI adapter and Trn2 eligibility not yet validated on the device"
+        status, reason = trn2_status(operator, dtype, cs_id)
     elif device in ("GH200", "MI300X"):
         status, reason = "eligible", f"manual {device} campaign ran this operator/dtype (results/{device}/csv)"
     else:

@@ -12,7 +12,11 @@ Covered (and only this; unrelated files of the repository do not matter):
 - the launcher settings that bound the measurement: worker timeout,
   isolation backend;
 - the environment: package versions (torch, triton, cuda-tile, tilelang,
-  apache-tvm-ffi), CUDA/HIP runtime version, the first visible device name.
+  apache-tvm-ffi), CUDA/HIP runtime version, the first visible device name;
+- Trn2 (timing adapter neuron_native_trace) only: the neuron evaluator sources
+  (evaluation/neuron.py, evaluation/neuron_worker.py), tilebench.core
+  neuron_native / neuron_intervals / nki_timer and the torch / torch-neuronx /
+  nki / neuronx-cc versions (key `neuron`; GPU bodies do not have it).
 
 `fingerprint_sha256` is the hash of the canonical JSON of everything above;
 `diff()` lists the differing keys so a refusal names the change."""
@@ -82,6 +86,18 @@ def evaluator_fingerprint(job, *, worker_timeout_s: int, isolation_backend: str)
         "isolation_backend": isolation_backend,
         "environment": environment_identity(),
     }
+    if getattr(job, "timing_adapter", None) == "neuron_native_trace":
+        # Trn2 only: the native Neuron evaluator and its stack (absent from every GPU job's body, whose
+        # fingerprint is therefore unchanged)
+        from tilebench.llm.v2.evaluation.neuron import NEURON_CORE_SOURCES, NEURON_EVALUATION_SOURCES, NEURON_PACKAGES
+        pk = {}
+        for pkg in NEURON_PACKAGES:
+            try:
+                pk[pkg] = md.version(pkg)
+            except md.PackageNotFoundError:
+                pk[pkg] = None
+        body["neuron"] = {"evaluation_sources_sha256": _sources_sha256(V2_ROOT, NEURON_EVALUATION_SOURCES),
+                          "core_sources_sha256": _sources_sha256(CORE_ROOT, NEURON_CORE_SOURCES), "packages": pk}
     body["fingerprint_sha256"] = sha256_text(canonical_json(body))
     return body
 

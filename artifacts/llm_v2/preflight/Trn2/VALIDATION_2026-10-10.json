@@ -1,0 +1,64 @@
+{
+ "schema": "tilebench-llm-v2-trn2-validation/1",
+ "date": "2026-10-10",
+ "run_type": "validation (unscored; scripted provider; no API request)",
+ "e2e_campaign": "validation_trn2_rev4_e2e_2026-10-10 (outputs/llm_v2/, git-ignored)",
+ "e2e_round1": {
+  "status": "valid",
+  "valid_cases": 20,
+  "cases_total": 20,
+  "latency_ms_geomean": 0.09957542462105097,
+  "worker_wall_s": 104.6,
+  "device_lock_wait_s": 6.628036499023438e-05,
+  "isolation_backend": "docker",
+  "device_stage": {
+   "device": "neuron",
+   "lnc": "2",
+   "num_cores": "1",
+   "reference": "impl_torch.run on CPU copies of the device inputs",
+   "torch_compile_disabled": true
+  },
+  "per_call_executions": [
+   1
+  ],
+  "host_fallback_ops_seen": []
+ },
+ "resume_same_identity": {
+  "requests_sent": 0,
+  "archived_files": 18,
+  "bytes_identical": true
+ },
+ "negative_candidates_direct_worker": {
+  "host_roundtrip (x.cpu()+y.cpu())": "contract_violation (neuron_to_cpu)",
+  "fallback_op (torch.sort on device)": "contract_violation (aten::sort.values_stable + neuron_to_cpu)",
+  "wrong_result (subtract)": "numerical_error",
+  "alias (x.add_(y); return x)": "contract_violation (aliasing + mutation)",
+  "compile_error (bad tile)": "compile_error, suite stopped, 1 case not_evaluated"
+ },
+ "multi_execution_check": "NKI kernel + torch clone: 2 executions per call; busy_sum = union = 0.047 ms, span 0.34 ms (gap excluded)",
+ "isolation_probe_docker": "ok (restricted paths unreadable incl. impl_nki.py, .git masked, home skeleton only, no network, no secrets, /dev/neuron0 inside)",
+ "static_checker_on_nki": {
+  "clean acceptance candidate": "audit_only",
+  "host_roundtrip": "review_required",
+  "alias": "review_required"
+ },
+ "prompts": {
+  "rendered": 37,
+  "chars_min_max": [
+   79289,
+   84960
+  ],
+  "components": [
+   "reference:nki@0.7.0b1",
+   "device:Trn2@2026-10-10"
+  ],
+  "leak_scan": "no manual impl_nki.py line (1,588 checked; 5 hits were impl_torch functional-reference lines), no CSV latency, no calibration value, no speedup/T_emp/efficiency/roofline term"
+ },
+ "cpu_reference_cost": "artifacts/llm_v2/preflight/Trn2/cpu_reference_cost_2026-10-10.json (bitonic_sort ~815 s per 20-case suite; every other operator <= 35 s)",
+ "tests_llm_v2": "268 passed, 3 skipped, 2 failed = the same 2 environment failures as clean HEAD (no triton on the Trn2 host)",
+ "formal_preflight": {
+  "openai": "2 blockers: T1 profile candidate, T2 matmul_int8 peak_unavailable",
+  "anthropic": "same"
+ },
+ "credentials": "OPENAI_API_KEY / CLAUDE_API_KEY present; models.retrieve (free, no generation) resolves gpt-6.1-sol and claude-opus-5-5"
+}

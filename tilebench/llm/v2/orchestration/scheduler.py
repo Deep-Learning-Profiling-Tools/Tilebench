@@ -346,7 +346,7 @@ def run_scheduled(base_spec, dsls: list[str], *, models: list[str] | None = None
     concurrency, one GLOBAL hard evaluation-backlog budget (EvalBudget, `max_pending` slots) and one device
     evaluator. A refused track (preflight blocker) is reported and skipped; the others run. `models` defaults to
     base_spec.model; `providers` ({model: provider}) or `provider` (single model) inject test doubles."""
-    from tilebench.llm.v2.evaluation.launcher import SubprocessEvaluator
+    from tilebench.llm.v2.evaluation.neuron import make_evaluator
     from tilebench.llm.v2.manifests import schema as ms
     from tilebench.llm.v2.orchestration.campaign import prepare_track, run_track_task, track_task_dir
     from tilebench.llm.v2.orchestration.identity import LLM_V2_OUTPUT_ROOT
@@ -365,9 +365,9 @@ def run_scheduled(base_spec, dsls: list[str], *, models: list[str] | None = None
     if present:
         return {"refused": True, "reason": f"pause file(s) {present} present in {cdir}; remove them to resume", "errors": []}
     budget = EvalBudget(max_pending)
-    ev = EvalTracker(evaluator or SubprocessEvaluator(device=base_spec.device, timeout_s=base_spec.worker_timeout_s,
-                                                       sandbox_root=cdir / "_sandbox", isolation=base_spec.isolation,
-                                                       lock_root=out_root))
+    ev = EvalTracker(evaluator or make_evaluator(base_spec.device, timeout_s=base_spec.worker_timeout_s,
+                                                 sandbox_root=cdir / "_sandbox", isolation=base_spec.isolation,
+                                                 lock_root=out_root))
     telemetry = ProcessTelemetry(tdir / f"scheduler_{base_spec.condition}_{tag}_{pid}.jsonl", interval_s=telemetry_interval_s,
                                  labels={"models": models, "condition": base_spec.condition, "role": "scheduler"})
     limiters: dict[str, AdaptiveLimiter] = {}

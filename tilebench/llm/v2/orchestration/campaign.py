@@ -178,25 +178,41 @@ def preflight(device: str, dsl: str, condition: str, *, live: bool, study: dict 
         require_adapter(adapter)
     except AdapterNotReady as e:
         pf.blockers.append(f"{e} (NKI timing adapter is not validated on Trn2; docs/llm_v2/NKI_HANDOFF.md)")
-    arch = hardware.detect_arch()
+    from tilebench.llm.v2.evaluation.neuron import host_arch
+    arch = host_arch()
     pf.facts["detected_arch"] = arch
     expected = study["support_matrix"][device]["arch"]
     if live and arch != expected:
         pf.blockers.append(f"this host detects arch {arch!r}, campaign device {device} expects {expected!r}")
     if live:
         from tilebench.llm.v2.evaluation.launcher import detect_isolation, isolation_probe
-        iso = detect_isolation("auto")
+        from tilebench.llm.v2.evaluation.neuron import ADAPTER as NEURON_ADAPTER, detect_isolation_neuron, \
+            formal_isolation_backends, isolation_probe_neuron
+        neuron = adapter == NEURON_ADAPTER
+        iso = detect_isolation_neuron("auto") if neuron else detect_isolation("auto")
         pf.facts["isolation_backend"] = iso["backend"]
-        if iso["backend"] == "bwrap":
-            probe = isolation_probe()
-            pf.facts["isolation_probe"] = {"ok": probe["ok"], "results": probe["results"], "device_nodes": probe["device_nodes"]}
+        allowed = formal_isolation_backends(device, study)
+        if iso["backend"] in ("bwrap", "docker"):
+            probe = isolation_probe_neuron(backend=iso["backend"]) if neuron else isolation_probe()
+            pf.facts["isolation_probe"] = {"ok": probe["ok"], "results": probe["results"], "device_nodes": probe["device_nodes"],
+                                           **({"neuron_device_nodes_inside": probe.get("neuron_device_nodes_inside")} if neuron else {})}
             if formal and not probe["ok"]:
                 pf.blockers.append("isolation probe failed: a restricted path is readable or a required one is not (see facts.isolation_probe)")
+            if formal and iso["backend"] not in allowed:
+                pf.blockers.append(f"formal runs on {device} require one of {allowed}; detected backend {iso['backend']!r}")
+            if iso["backend"] == "docker":
+                pf.warnings.append("Trn2 isolation backend is docker (same allowlist and probe as bwrap; bwrap cannot create "
+                                   f"user namespaces on this host: {iso.get('bwrap_error')})")
         elif formal:
-            pf.blockers.append(f"formal runs require the bwrap sandbox; detected backend {iso['backend']!r} ({iso.get('probe_error')})")
+            pf.blockers.append(f"formal runs require the bwrap sandbox; detected backend {iso['backend']!r} ({iso.get('probe_error')})"
+                               if allowed == ("bwrap",) else
+                               f"formal runs on {device} require one of {allowed}; detected backend {iso['backend']!r} ({iso.get('probe_error')})")
         else:
             pf.warnings.append(f"isolation backend {iso['backend']!r}: validation run proceeds without the sandbox guarantees")
         nodes = iso["device_nodes"]
+        if neuron and (pf.facts.get("isolation_probe") or {}).get("neuron_device_nodes_inside"):
+            nodes = {**nodes, "neuron": {**nodes.get("neuron", {}), "verified": "isolation probe of this preflight "
+                                         "(Neuron device node visible inside the sandbox)"}}
         vendor = {"blackwell": "nvidia", "hopper": "nvidia", "cdna3": "amd", "trainium2": "neuron"}.get(expected)
         if vendor and nodes.get(vendor, {}).get("verified") == "pending":
             pf.warnings.append(f"{vendor} device-node binding inside the sandbox is pending verification on this device class")
@@ -607,7 +623,6 @@ class Track:
 def prepare_track(spec: CampaignSpec, *, log=print, provider=None, evaluator=None, scheduler: dict | None = None):
     """Preflight, campaign record and task list of one track. Returns a Track,
     or a dict with refused=True (no API call, no device run)."""
-    from tilebench.llm.v2.evaluation.launcher import SubprocessEvaluator
     from tilebench.llm.v2.metrics.cost import pricing_binding
     from tilebench.llm.v2.orchestration.runner import RunnerConfig
     from tilebench.llm.v2.orchestration.telemetry import append_locked
@@ -632,18 +647,22 @@ def prepare_track(spec: CampaignSpec, *, log=print, provider=None, evaluator=Non
     config_hash = ms.study_config_hash(study, models, folds, modes)
     template_hash = templates_sha256()
     manifest = load_manifest()
-    arch = hardware.detect_arch()
+    from tilebench.llm.v2.evaluation.neuron import formal_isolation_backends, host_arch, make_evaluator
+    arch = host_arch()
     out_root = spec.out_root or LLM_V2_OUTPUT_ROOT
     cdir = out_root / spec.name
     cdir.mkdir(parents=True, exist_ok=True)
     if provider is None:
         provider = build_provider(gen, timeout_s=float(models.get("transport", {}).get("timeout_s", 3600)))
     if evaluator is None:
-        evaluator = SubprocessEvaluator(device=spec.device, timeout_s=spec.worker_timeout_s,
-                                        sandbox_root=cdir / "_sandbox", isolation=spec.isolation, lock_root=out_root)
-    if formal and evaluator.report.get("backend") != "bwrap":
+        evaluator = make_evaluator(spec.device, study=study, timeout_s=spec.worker_timeout_s,
+                                   sandbox_root=cdir / "_sandbox", isolation=spec.isolation, lock_root=out_root)
+    allowed = formal_isolation_backends(spec.device, study)
+    if formal and evaluator.report.get("backend") not in allowed:
         return {"refused": True, "preflight": pf.to_dict(),
-                "reason": f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"}
+                "reason": (f"formal runs require the bwrap sandbox; isolation backend is {evaluator.report.get('backend')!r}"
+                           if allowed == ("bwrap",) else
+                           f"formal runs on {spec.device} require one of {allowed}; isolation backend is {evaluator.report.get('backend')!r}")}
     binding = empirical.scoring_binding(spec.device)
     pricing = pricing_binding()
     rec = campaign_record(spec, gen, config_hash, evaluator.report, template_hash, binding,

@@ -22,6 +22,22 @@ def _sha(p):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+# exp/llm-trn2 adds Trn2-only keys to the shared study.yaml / calibration.yaml (documented in
+# frozen/Trn2_base_rev4_2026-10-10.json "shared_manifest_delta"). The B200 freeze is checked on the B200 view of
+# the study: the same document with exactly those Trn2 keys reverted. Any other drift still fails.
+def _b200_view(study):
+    import copy
+    s = copy.deepcopy(study)
+    s["device_snapshots"].pop("Trn2", None)
+    s["torch_baselines"].pop("Trn2", None)
+    s["support_matrix"]["Trn2"]["timing_adapter"] = "neuron_runtime_trace"
+    s["dsls"]["nki"]["reference_version"] = "beta5"
+    return s
+
+
+TRN2_DELTA_FILES = ("study.yaml", "calibration.yaml")
+
+
 def test_frozen_rev4_manifest_matches_the_tree():
     f = json.loads(FROZEN.read_text())
     study, models, folds, modes = ms.load_study(), ms.load_models(), ms.load_folds(), ms.load_arithmetic_modes()
@@ -29,9 +45,12 @@ def test_frozen_rev4_manifest_matches_the_tree():
     assert (p["revision"], p["rounds"], p["max_generations_per_round"], p["cases_per_task"], p["adjudicator"]) == \
         (4, 5, 1, 20, "claude-code")
     assert {k: p[k] for k in protocol_identity(study)} == protocol_identity(study)
-    assert f["study_config_hash"] == ms.study_config_hash(study, models, folds, modes)
+    assert f["study_config_hash"] == ms.study_config_hash(_b200_view(study), models, folds, modes)
     for name, digest in f["manifests"].items():
+        if name in TRN2_DELTA_FILES:
+            continue                                  # Trn2-only additions; B200 content checked via _b200_view / below
         assert _sha(ms.MANIFEST_DIR / name) == digest, name
+    assert E.scoring_binding("B200") == f["scoring_binding"]         # B200 calibration entry unchanged
     cs = ms.load_case_sets()
     assert f["case_sets"]["sha256"] == _sha(ms.MANIFEST_DIR / "case_sets.yaml")
     assert f["case_sets"]["case_set_ids"] == {op: v["case_set_id"] for op, v in cs["operators"].items()}

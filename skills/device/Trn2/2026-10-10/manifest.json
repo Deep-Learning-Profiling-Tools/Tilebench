@@ -1,0 +1,109 @@
+{
+ "device": "Trn2",
+ "snapshot": "2026-10-10",
+ "kind": "device_context",
+ "arch": "trainium2",
+ "supersedes": "skills/device/Trn2/2026-10-05/SKILL.md",
+ "revision_note": "re-issue of the 2026-10-05 snapshot with a runtime capture on the Trn2 host: instance trn2.3xlarge, LNC=2, 4 logical / 8 physical NeuronCore-v3, the per-physical vs per-logical vs per-chip resource scope of one candidate (1 logical core = 2 physical cores + one 24 GB HBM bank), engine clocks, PSUM banks, TensorE dtype limits (no int8, no OCP e4m3fn on v3), native-PyTorch dtype/fallback facts, the Trn2 measurement definition and the full software snapshot. No benchmark results, calibration values or tuning advice.",
+ "sources": [
+  {
+   "id": "S1",
+   "description": "runtime capture (neuron-ls, sysfs core_count, pip/dpkg versions, neuronx-cc --version, kernel, host); instance id omitted",
+   "path_or_url": "skills/device/Trn2/2026-10-10/runtime_capture.json",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S2",
+   "description": "AWS Neuron 'Trainium2 Architecture' (8 NeuronCore-v3, 96 GiB HBM 2.9 TB/s, SBUF 224 MiB per chip, chip TFLOPS, DMA 3.5 TB/s)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/trainium2.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S3",
+   "description": "AWS Neuron NKI 'Trainium2 Architecture Guide' (Table 10 widths and clocks, SBUF 28 MiB = 128 x 224 KiB, PSUM 2 MiB, TensorE per-core TFLOPS, double FP8, PSUM bank access, 16 DMA engines per core)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/guides/architecture/trainium2_arch.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S4",
+   "description": "AWS Neuron 'Logical NeuronCore configuration' (LNC 1|2, default 2; four 24 GB HBM banks each shared by two physical cores; one address space under LNC=2)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/logical-neuroncore-config.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S5",
+   "description": "AWS Neuron nki.isa.nc_matmul (TensorE input dtypes per generation, fp32 PSUM dst on v2/v3, double_row)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/nki.isa.nc_matmul.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S6",
+   "description": "AWS Neuron 'NeuronCore-v3 Architecture' (engines, GpSimd 8 x 512-bit, dtype lists, Vector/Scalar TFLOPS)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/neuron-core-v3.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S7",
+   "description": "installed nki 0.7.0b1 nki/language/_tile_size.py gen3 constants",
+   "path_or_url": "/home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_tile_size.py",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S8",
+   "description": "Neuron Explorer profiles of 71 NKI cases on this host (profile metadata hardware model: HBM 716 GB/s per stack, DMA 435 GB/s and 16 engines per physical core, clocks; two physical cores per logical core)",
+   "path_or_url": "local profiling evidence 2026-10-09 (tb_wt/_profiling/.local/trn2_profiling; HF dataset bcui2/NCU_report/Neuron_trn2)",
+   "accessed": "2026-10-09"
+  },
+  {
+   "id": "S9",
+   "description": "AWS Neuron nki.isa.tensor_scalar / nki.isa.activation (FP32 internal math) and the native PyTorch fallback classification on this stack (get_fallback_ops, host copies)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/nki.isa.activation.html; tb_wt/_native/.local/trn2_native_formal/aws_followup/fallback/FALLBACK_CLASSIFICATION.md",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S10",
+   "description": "AWS Neuron NKI 'Trainium/Inferentia2 Architecture Guide' (2-D SBUF/PSUM, 16 KiB PSUM per partition, 2 KiB bank = 512 fp32, engine roles, async engines with compiler-inserted semaphores, GpSimd lane types)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/guides/architecture/trainium_inferentia2_arch.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S11",
+   "description": "TileArena Trn2 evaluator (launch settings, busy-sum timing definition, host-fallback tracking)",
+   "path_or_url": "tilebench/llm/v2/evaluation/neuron.py; tilebench/llm/v2/evaluation/neuron_worker.py; tilebench/core/neuron_native.py",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S12",
+   "description": "AWS Neuron 'Data types' (Trn2 native INT64/UINT64)",
+   "path_or_url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/data-types.html",
+   "accessed": "2026-10-10"
+  },
+  {
+   "id": "S13",
+   "description": "Amazon EC2 accelerated computing instance specifications, Trn2 rows",
+   "path_or_url": "https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html",
+   "accessed": "2026-10-05"
+  }
+ ],
+ "excluded_sources": [
+  "empirical calibration Trn2-20261010T012011Z-94406dcb (measured ceilings; scoring only)",
+  "hardware-theoretical peak audit (artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2; derived peaks, paper only)",
+  "formal Trn2 benchmark results and NKI kernels (results/TRN2, impl_nki.py)",
+  "private nki-guide"
+ ],
+ "unknown_fields": [
+  "per-bank HBM bandwidth in AWS documentation (only the tool constant [S8] and the chip aggregate are available)",
+  "composition of the per-chip TFLOPS figures (larger than 8 x the per-core TensorE figures)",
+  "VectorE/ScalarE TFLOPS counting convention"
+ ],
+ "vendor_inconsistencies": [
+  "per-chip dense TFLOPS (1,299 / 667 / 181) > 8 x per-core TensorE TFLOPS (158 / 79 / 20)",
+  "HBM per chip: 2.9 TB/s (trainium2.html) vs 3 TB/s (NKI Trainium2 guide)",
+  "CC-Cores per chip: 16 vs 20 (2026-10-05 snapshot)"
+ ],
+ "permission": "public",
+ "status": "approved",
+ "approved_by": "study owner, Trn2 NKI Base preparation instruction (2026-10-10) \u00a72: new Trn2 Device Context snapshot from the 2026-10-05 one with the verified environment, verified_on_device, manifest hash and study snapshot reference",
+ "approved_on": "2026-10-10",
+ "verified_on_device": true
+}

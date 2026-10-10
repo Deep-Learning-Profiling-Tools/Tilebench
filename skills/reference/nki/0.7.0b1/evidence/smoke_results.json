@@ -1,0 +1,2147 @@
+{
+ "generated_by": "evidence/run_smoke.py",
+ "generated_at_utc": "20261010T095943Z",
+ "host": "ip-172-31-25-151",
+ "versions": {
+  "python": "3.12.3",
+  "executable": "/home/ubuntu/workspace/native_venv/bin/python",
+  "nki": "0.7.0b1+34883233359.g2aa6a82a",
+  "neuronx-cc": "2.0.404830.0a0+55f4bf89",
+  "torch": "2.14.0+cpu",
+  "torch-neuronx": "2.14.3.0.0+unknown.dev",
+  "numpy": "2.5.3",
+  "islpy": "2026.2.2",
+  "neuron-ls": "instance-type: trn2.3xlarge\ninstance-id: <redacted before publication>\nlogical-neuroncore-config: 2\n+--------+--------+----------+--------+--------------+----------+------+\n| NEURON | NEURON |  NEURON  | NEURON |     PCI      |   CPU    | NUMA |\n| DEVICE | CORES  | CORE IDS | MEMORY |     BDF      | AFFINITY | NODE |\n+--------+--------+----------+--------+--------------+----------+------+\n| 0      | 4      | 0-3      | 96 GB  | 0000:33:00.0 | 0-11     | 0    |\n+--------+--------+----------+--------+--------------+----------+------+\n"
+ },
+ "environment": {
+  "NEURON_LOGICAL_NC_CONFIG": "2",
+  "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+  "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+  "NEURON_RT_NUM_CORES": "1",
+  "caches": "TORCH_NEURONX_NEFF_CACHE_DIR, TORCH_NEURONX_HLO_CACHE_DIR, TORCH_NEURONX_NEFF_LOCAL_CACHE_DIR, NKI_TRACE_CACHE_URL, NKI_COMPILE_CACHE_URL, TORCH_NEURONX_DEBUG_DIR -> fresh per-run directory",
+  "cache_root": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/nki_ref_skill/cache/runs/nki_ref_smoke_20261010T095943Z_a0prx94n"
+ },
+ "conventions": {
+  "negative": "negative=true cases pass when the call raises; the observed error text is recorded in 'error'",
+  "error_text": "exception type + whitespace-collapsed message, truncated to 900 characters"
+ },
+ "summary": {
+  "tests": 18,
+  "tests_passed": 18,
+  "cases": 160,
+  "cases_passed": 160,
+  "negative_cases": 45,
+  "failed_cases": [],
+  "wall_seconds": 324.9
+ },
+ "tests": [
+  {
+   "test": "a_elementwise_add_launch",
+   "status": "pass",
+   "seconds": 8.47,
+   "cases": [
+    {
+     "case": "bare_call",
+     "api": "nki.jit kernel(...)",
+     "checked": "bare call with neuron tensors; output allocated in nl.shared_hbm and returned; correctness vs CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "out_device": "neuron:0",
+      "out_dtype": "torch.float16",
+      "out_shape": [
+       256,
+       512
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.67
+    },
+    {
+     "case": "lnc2_bracket",
+     "api": "kernel[2](...)",
+     "checked": "explicit LNC=2 launch gives the same correct result",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 0.03
+    },
+    {
+     "case": "lnc1_bracket",
+     "api": "kernel[1](...)",
+     "checked": "LNC=1 launch inside an LNC=2 process (NEURON_LOGICAL_NC_CONFIG=2)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 1.35
+    },
+    {
+     "case": "repeat_bare_call",
+     "api": "nki.jit kernel(...)",
+     "checked": "second identical call (compile cache hit)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "second_call_seconds": 0.001
+     },
+     "status": "pass",
+     "seconds": 0.0
+    }
+   ],
+   "script": "smoke_tests/a_elementwise_add_launch.py",
+   "exit_code": 0,
+   "wall_seconds": 11.46
+  },
+  {
+   "test": "b_lnc2_program_id",
+   "status": "pass",
+   "seconds": 14.75,
+   "cases": [
+    {
+     "case": "probe_bare_call",
+     "api": "nl.program_id / nl.num_programs / nl.program_ndim",
+     "checked": "bare kernel(...) under NEURON_LOGICAL_NC_CONFIG=2: both programs run, num_programs()==2, program_ndim()==1; SBUF private per core",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "row_values": [
+       21.0,
+       121.0
+      ],
+      "decoded": "row r = 100*program_id + 10*num_programs + program_ndim"
+     },
+     "status": "pass",
+     "seconds": 1.33
+    },
+    {
+     "case": "probe_lnc2_bracket",
+     "api": "kernel[2](...)",
+     "checked": "same values as bare call",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "row_values": [
+       21.0,
+       121.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 0.02
+    },
+    {
+     "case": "probe_lnc1_bracket",
+     "api": "kernel[1](...)",
+     "checked": "num_programs()==1, program_id()==0, program_ndim()==0; only one program runs; no runtime error although NEURON_LOGICAL_NC_CONFIG=2",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "row_values": [
+       10.0,
+       121.0
+      ],
+      "row1_note": "row 1 not written under LNC=1 (uninitialised memory, value meaningless)"
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "split_rows_bare",
+     "api": "program_id row split",
+     "checked": "each core handles half the rows (bare call = LNC=2); correctness",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "split_rows_lnc1",
+     "api": "program_id row split under kernel[1]",
+     "checked": "same kernel with one program covers all rows; correctness",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "program_id_in_python_if",
+     "api": "nl.program_id in Python if",
+     "checked": "program_id is a trace-time value usable in a Python if/slice",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 7.0
+     },
+     "status": "pass",
+     "seconds": 1.23
+    }
+   ],
+   "script": "smoke_tests/b_lnc2_program_id.py",
+   "exit_code": 0,
+   "wall_seconds": 17.76
+  },
+  {
+   "test": "c_nc_matmul_accumulate",
+   "status": "pass",
+   "seconds": 12.59,
+   "cases": [
+    {
+     "case": "bf16_k256_accumulate_explicit_fp32_out",
+     "api": "nisa.nc_matmul(dst, stationary, moving, accumulate=(k > 0))",
+     "checked": "bf16 inputs, 2 K tiles, fp32 PSUM -> SBUF fp32 -> HBM",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 2.288818359375e-05,
+      "out_dtype": "torch.float32"
+     },
+     "status": "pass",
+     "seconds": 7.35
+    },
+    {
+     "case": "fp16_k256_accumulate_explicit_fp16_out",
+     "api": "nisa.nc_matmul + nisa.tensor_copy cast",
+     "checked": "fp16 inputs, fp32 PSUM, tensor_copy casts to fp16 on the way to SBUF",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.028167724609375,
+      "out_dtype": "torch.float16"
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "fp32_inputs",
+     "api": "nisa.nc_matmul fp32 inputs",
+     "checked": "fp32 stationary/moving accepted on trn2",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 4.1961669921875e-05,
+      "out_dtype": "torch.float32"
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "bf16_accumulate_none_auto",
+     "api": "nisa.nc_matmul(accumulate=None)",
+     "checked": "default accumulate=None: compiler overwrites on first write, accumulates afterwards",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 1.9073486328125e-05
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "nl_matmul_fp32_inputs",
+     "api": "nl.matmul(x, y, transpose_x=True)",
+     "checked": "fp32 inputs (PSUM tile allocated with x.dtype=fp32)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 2.288818359375e-05
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "nl_matmul_bf16_inputs",
+     "api": "nl.matmul(x, y, transpose_x=True)",
+     "checked": "bf16 inputs: PSUM result allocated as bf16, rejected on trn2",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:():g2|[128,128]:BFloat16:S(C)|[128,512]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: nc_matmul dst dtype must be float32 on gen3, got bfloat16 - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1947:13: error: assertion failed: nc_matmul dst dtype must be float32 on gen3, got bfloat16 assert dst.dtype == float32, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:288:5: note: called from here validate_tensor_engine_output_dtype( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_math_funcs.py:590:9: note: called from here nc_matmul(dst, x, y) ^ ...",
+     "status": "pass",
+     "seconds": 0.14
+    },
+    {
+     "case": "beta1_style_no_dst",
+     "api": "nisa.nc_matmul(stationary, moving) without dst",
+     "checked": "old call style returning a tile",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:75:():g2|[128,128]:BFloat16:S(C)|[128,512]:BFloat16:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: nc_matmul() missing value for required argument 'moving' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:28:1: error: nc_matmul() missing value for required argument 'moving' def nc_matmul( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/c_nc_matmul_accumulate.py:77:9: note: called from here p = nisa.nc_matmul(s, m) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/c_nc_matmul_accumulate.py:68:1: note: when tracing NKI kernel def mm_beta1_style(lhsT, rhs): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:28:1: error:  ...",
+     "status": "pass",
+     "seconds": 0.11
+    }
+   ],
+   "script": "smoke_tests/c_nc_matmul_accumulate.py",
+   "exit_code": 0,
+   "wall_seconds": 15.6
+  },
+  {
+   "test": "d_negative_limits",
+   "status": "pass",
+   "seconds": 13.54,
+   "cases": [
+    {
+     "case": "nc_matmul_int8",
+     "api": "nisa.nc_matmul int8 operands",
+     "checked": "no int8 matmul on trn2 TensorE",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:72:():g2|[128,128]:Char:S(C)|[128,512]:Char:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: nc_matmul stationary dtype int8 not supported. Valid: (float8_e4m3, float8_e5m2, bfloat16, float16, tfloat32, float32) note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1572:5: error: assertion failed: nc_matmul stationary dtype int8 not supported. Valid: (float8_e4m3, float8_e5m2, bfloat16, float16, tfloat32, float32) assert stationary.dtype in VALID_MATMUL_DTYPES, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:285:5: note: called from here validate_matmul_dtypes(stationary, moving) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests ...",
+     "status": "pass",
+     "seconds": 7.21
+    },
+    {
+     "case": "torch_float8_e4m3fn_input",
+     "api": "torch.float8_e4m3fn kernel argument",
+     "checked": "OCP e4m3fn tensors cannot be passed on trn2 (without UNSAFE_FP8FNCAST=1)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:():g2|[128,64]:Float8_e4m3fn:S(C): RuntimeError[WITH __notes__]: float8_e4m3fn is not supported on this target (TRN2 and earlier). Compile for a TRN3 target for native float8_e4m3fn, or set UNSAFE_FP8FNCAST=1 for legacy float8_e4m3fn -> float8_e4m3 casting. __notes__ (len=1): -------------------- For simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these. At: /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(36) ...",
+     "status": "pass",
+     "seconds": 0.0
+    },
+    {
+     "case": "nc_matmul_float8_e4m3fn_tiles",
+     "api": "nisa.nc_matmul nl.float8_e4m3fn operands",
+     "checked": "OCP fp8 operands rejected on NeuronCore-v3",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:(('fp8_dtype', 'float8_e4m3fn'),):g2|[128,128]:BFloat16:S(C)|[128,512]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: nc_matmul stationary dtype float8_e4m3fn not supported. Valid: (float8_e4m3, float8_e5m2, bfloat16, float16, tfloat32, float32) note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1572:5: error: assertion failed: nc_matmul stationary dtype float8_e4m3fn not supported. Valid: (float8_e4m3, float8_e5m2, bfloat16, float16, tfloat32, float32) assert stationary.dtype in VALID_MATMUL_DTYPES, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:285:5: note: called from here validate_matmul_dtypes(stationary, moving) ^ /home/ubuntu/tb_wt/_l ...",
+     "status": "pass",
+     "seconds": 0.11
+    },
+    {
+     "case": "nc_matmul_float8_e4m3_legacy_tiles",
+     "api": "nisa.nc_matmul nl.float8_e4m3",
+     "checked": "legacy fp8_e4m3 operands (cast on chip with tensor_copy) accepted",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "relative_fro_error_vs_bf16_ref": 0.037443190813064575
+     },
+     "status": "pass",
+     "seconds": 1.71
+    },
+    {
+     "case": "nc_matmul_float8_e5m2_tiles",
+     "api": "nisa.nc_matmul nl.float8_e5m2",
+     "checked": "fp8_e5m2 operands (cast on chip) accepted",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "relative_fro_error_vs_bf16_ref": 0.07441695779561996
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "torch_float8_e5m2_input",
+     "api": "torch.float8_e5m2 kernel argument",
+     "checked": "e5m2 tensors pass through a kernel bit-exactly",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.float8_e5m2"
+     },
+     "status": "pass",
+     "seconds": 1.21
+    },
+    {
+     "case": "partition_dim_129",
+     "api": "nl.ndarray((129, 64), buffer=nl.sbuf) + instructions",
+     "checked": "partition dim > 128",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:75:():g2|[129,64]:BFloat16:S(C)|[129,64]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: dma_copy dst partition dimension 129 exceeds maximum 128 - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:282:5: error: assertion failed: dma_copy dst partition dimension 129 exceeds maximum 128 assert tensor.shape[0] <= max_size, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:175:9: note: called from here validate_partition_dim(dst, name=\"dma_copy dst\") ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:67:5: note: called from here nisa ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "psum_matmul_n_1024",
+     "api": "nisa.nc_matmul moving free size 1024",
+     "checked": "N > 512 fp32 (one 2 KiB PSUM bank) per nc_matmul",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('two_banks', False),):g2|[128,128]:BFloat16:S(C)|[128,1024]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: Matmul moving free dimension 1024 exceeds max 512 for nc_version=nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1514:5: error: assertion failed: Matmul moving free dimension 1024 exceeds max 512 for nc_version=nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) assert N <= max_moving_fmax, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/n ...",
+     "status": "pass",
+     "seconds": 0.11
+    },
+    {
+     "case": "psum_tile_two_banks",
+     "api": "nl.ndarray((128, 1024), fp32, buffer=nl.psum)",
+     "checked": "PSUM tile spanning two banks, each nc_matmul writes N=512 slice",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 7.62939453125e-06
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "nc_matmul_moving_in_psum",
+     "api": "nisa.nc_matmul moving operand in PSUM",
+     "checked": "operands must be SBUF",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:77:():g2|[128,128]:BFloat16:S(C)|[128,512]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: nc_matmul moving must be in [sbuf], got psum note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:375:5: error: assertion failed: nc_matmul moving must be in [sbuf], got psum assert tensor_buf_name in allowed_names, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1708:5: note: called from here validate_buffer(moving, sbuf, f\"{name} moving\") ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:260:5: note: called from here validate_matmul_buffers(stationary, moving, dst) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0 ...",
+     "status": "pass",
+     "seconds": 0.11
+    },
+    {
+     "case": "nc_matmul_operands_in_hbm",
+     "api": "nisa.nc_matmul HBM operands",
+     "checked": "operands must be SBUF",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:78:():g2|[128,128]:BFloat16:S(C)|[128,512]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: nc_matmul stationary must be in [sbuf], got shared_hbm note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:375:5: error: assertion failed: nc_matmul stationary must be in [sbuf], got shared_hbm assert tensor_buf_name in allowed_names, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1707:5: note: called from here validate_buffer(stationary, sbuf, f\"{name} stationary\") ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:260:5: note: called from here validate_matmul_buffers(stationary, moving, dst) ^ /home/ubuntu/tb_wt/_llm_ ...",
+     "status": "pass",
+     "seconds": 0.11
+    },
+    {
+     "case": "nc_matmul_fp32_x_bf16",
+     "api": "nisa.nc_matmul fp32 stationary + bf16 moving",
+     "checked": "fp32/tf32 cannot mix with other dtypes",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:79:():g2|[128,128]:Float:S(C)|[128,512]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: nc_matmul: if one input is tfloat32/float32, both must be. Got stationary=float32, moving=bfloat16 note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1597:5: error: assertion failed: nc_matmul: if one input is tfloat32/float32, both must be. Got stationary=float32, moving=bfloat16 assert stat_is_fp32 == mov_is_fp32, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:285:5: note: called from here validate_matmul_dtypes(stationary, moving) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:135:5: note: called from  ...",
+     "status": "pass",
+     "seconds": 0.11
+    },
+    {
+     "case": "removed_nl_arange",
+     "api": "nl.arange",
+     "checked": "absent in 0.7.0b1",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:80:():g2|[128,64]:BFloat16:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: failed to resolve name 'nki.language.arange' note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:145:11: error: failed to resolve name 'nki.language.arange' i_p = nl.arange(128)[:, None] ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:143:1: note: when tracing NKI kernel def uses_arange(x): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:145:11: error: failed to resolve name 'nki.language.arange' i_p = nl.arange(128)[:, None] ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limit ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "removed_nl_par_dim",
+     "api": "nl.par_dim",
+     "checked": "absent in 0.7.0b1",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:81:():g2|[128,64]:BFloat16:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: failed to resolve name 'nki.language.par_dim' note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:155:21: error: failed to resolve name 'nki.language.par_dim' t = nl.ndarray((nl.par_dim(128), 64), dtype=x.dtype, buffer=nl.sbuf) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:153:1: note: when tracing NKI kernel def uses_par_dim(x): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:155:21: error: failed to resolve name 'nki.language.par_dim' t = nl.ndarray((nl.par_dim(128), 64), dtype=x.dtype, buffer=nl.sbuf) ^ /home/ubuntu/ ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "removed_mask_kwarg",
+     "api": "nl.load(..., mask=...)",
+     "checked": "Beta-1 mask= keyword not accepted",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:82:():g2|[128,64]:BFloat16:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: load() got an unexpected keyword argument 'mask' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_core.py:148:1: error: load() got an unexpected keyword argument 'mask' def load(src: NkiTensor, dtype=None): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:164:9: note: called from here t = nl.load(x, mask=None) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/d_negative_limits.py:162:1: note: when tracing NKI kernel def uses_mask(x): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_core.py:148:1: error: load() got an unexpected keywo ...",
+     "status": "pass",
+     "seconds": 0.1
+    }
+   ],
+   "script": "smoke_tests/d_negative_limits.py",
+   "exit_code": 0,
+   "wall_seconds": 16.55
+  },
+  {
+   "test": "e_fori_loop_dynamic_offset",
+   "status": "pass",
+   "seconds": 13.2,
+   "cases": [
+    {
+     "case": "fori_loop_step_nl_ds",
+     "api": "nl.fori_loop(0, rows, body, step=P) + nl.ds(i, P)",
+     "checked": "loop value used directly as the runtime start of nl.ds on HBM rows",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.66
+    },
+    {
+     "case": "fori_loop_python_arith_on_i",
+     "api": "nl.fori_loop + nl.ds(i * P, P)",
+     "checked": "Python arithmetic on the loop value is rejected by the default frontend",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:():g2|[512,256]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 3 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: 'mul' expected (int, int) or (float, float) or (list, int) or (int, list) or (tuple, int) or (int, tuple) or (str, int) or (int, str), got (object, int) - [x2] error: fori_loop body function failed note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/e_fori_loop_dynamic_offset.py:41:34: error: 'mul' expected (int, int) or (float, float) or (list, int) or (int, list) or (tuple, int) or (int, tuple) or (str, int) or (int, str), got (object, int) _tile_io(x, out, x[nl.ds(i * P, P), :], out[nl.ds(i * P, P), :]) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke ...",
+     "status": "pass",
+     "seconds": 0.22
+    },
+    {
+     "case": "fori_loop_reshape_select",
+     "api": "nl.fori_loop + HBM reshape((T, P, N))[i]",
+     "checked": "runtime index on a reshaped HBM view",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "fori_loop_ap_scalar_offset",
+     "api": "nl.fori_loop + (T,P,N)-view .ap(pattern, offset=0, scalar_offset=i, indirect_dim=0)",
+     "checked": "explicit access pattern with scalar_offset",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "fori_loop_register_upper_bound",
+     "api": "nisa.register_alloc/register_load + nl.fori_loop(0, reg, body)",
+     "checked": "runtime trip count from an int32 input",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "first_2_tiles_processed": true,
+      "remaining_tiles_untouched": true
+     },
+     "status": "pass",
+     "seconds": 1.28
+    },
+    {
+     "case": "while_loop_countdown",
+     "api": "nl.while_loop(init_reg, body) with register_load",
+     "checked": "body returns next condition register; runs 3 times",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.26
+    }
+   ],
+   "script": "smoke_tests/e_fori_loop_dynamic_offset.py",
+   "exit_code": 0,
+   "wall_seconds": 16.25
+  },
+  {
+   "test": "f_dynamic_range_and_ranges",
+   "status": "pass",
+   "seconds": 12.91,
+   "cases": [
+    {
+     "case": "dynamic_range_int_bound",
+     "api": "for i in nl.dynamic_range(T)",
+     "checked": "accepted or rejected by the default (parser) frontend; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 1.65
+    },
+    {
+     "case": "loop_carried_range",
+     "api": "range(4)",
+     "checked": "loop-carried accumulation into one SBUF tile is correct; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 1.35
+    },
+    {
+     "case": "loop_carried_nl.range",
+     "api": "nl.range(4)",
+     "checked": "loop-carried accumulation into one SBUF tile is correct; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 0.16
+    },
+    {
+     "case": "loop_carried_affine_range",
+     "api": "affine_range(4)",
+     "checked": "loop-carried accumulation into one SBUF tile is correct; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 0.15
+    },
+    {
+     "case": "loop_carried_sequential_range",
+     "api": "sequential_range(4)",
+     "checked": "loop-carried accumulation into one SBUF tile is correct; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 0.15
+    },
+    {
+     "case": "loop_carried_static_range",
+     "api": "static_range(4)",
+     "checked": "loop-carried accumulation into one SBUF tile is correct; warnings recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0,
+      "python_warnings": [],
+      "compiler_warnings": []
+     },
+     "status": "pass",
+     "seconds": 0.15
+    },
+    {
+     "case": "no_reorder_block",
+     "api": "with nl.no_reorder():",
+     "checked": "context manager accepted; result correct",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.27
+    }
+   ],
+   "script": "smoke_tests/f_dynamic_range_and_ranges.py",
+   "exit_code": 0,
+   "wall_seconds": 15.92
+  },
+  {
+   "test": "g_compute_ops",
+   "status": "pass",
+   "seconds": 17.99,
+   "cases": [
+    {
+     "case": "tensor_scalar_vector_operand_fp32",
+     "api": "nisa.tensor_scalar(op0, operand0=[P,1] fp32 tile, op1, operand1=scalar)",
+     "checked": "per-partition fp32 operand broadcast along free axis",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 7.08
+    },
+    {
+     "case": "tensor_scalar_vector_operand_fp16",
+     "api": "nisa.tensor_scalar operand0=[P,1] fp16 tile",
+     "checked": "docstring: tensor operands must be float32 for arithmetic ops",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:72:():g2|[128,256]:Float:S(C)|[128,1]:Half:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op 'operand0' must be float32, got 'f16' result = get_backend().tensor_scalar_arith( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/g_compute_ops.py:25:5: note: called from nisa.tensor_scalar(dst=r, data=xt, op0=nl.multiply, operand0=vt, op1=nl.add, operand1=1.0) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/g_compute_ops.py:17:1: note: called from def ts_vector_operand(x, v): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op 'opera ...",
+     "status": "pass",
+     "seconds": 0.23
+    },
+    {
+     "case": "activation_bias_scale_fused_reduce",
+     "api": "nisa.activation(op=nl.exp, bias=[P,1], scale=2.0, reduce_op=nl.add, reduce_res, reduce_cmd=reset_reduce)",
+     "checked": "exp(scale*x+bias) and its row sum",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "exp_max_abs_err": 4.0531158447265625e-06,
+      "rowsum_max_abs_err": 7.62939453125e-05
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "activation_engine_gpsimd",
+     "api": "nisa.activation(engine=nisa.engine.gpsimd)",
+     "checked": "GpSimd activation is NeuronCore-v4+ only",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: 'activation with engine=gpsimd' is supported for nki.isa._enums.nc_version(value:4,_value_:4,name:gen4,_sort_order_:2,_name_:gen4,__objclass__:<function 'nki.isa._enums.nc_version'>)+, but current target is nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:132:5: error: assertion failed: 'activation with engine=gpsimd' is supported for nki.isa._enums.nc_version(value:4,_value_:4,name:gen4,_sort_order_:2,_name_:gen4,__ob ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "tensor_reduce_free_axes",
+     "api": "nisa.tensor_reduce(axis=2) / axis=(1, 2), negate=True",
+     "checked": "reduction over trailing free axes",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_err_max": 0.0,
+      "neg_sum_err": 1.9073486328125e-05
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "nc_transpose_tensor_engine_bf16",
+     "api": "nisa.nc_transpose(engine=tensor), PSUM dst bf16",
+     "checked": "bit-exact 128x64 transpose; PSUM dst dtype == input dtype",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "nc_transpose_tensor_engine_fp32_psum_for_bf16",
+     "api": "nisa.nc_transpose PSUM dst fp32 for bf16 input",
+     "checked": "gen3: transpose dst dtype must equal input dtype",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('psum_dtype', 'float32'),):g2|[128,64]:BFloat16:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: assertion failed: nc_matmul (transpose mode) dst dtype must match input dtype on gen3+, got dst=float32 but input=bfloat16 note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1943:13: error: assertion failed: nc_matmul (transpose mode) dst dtype must match input dtype on gen3+, got dst=float32 but input=bfloat16 assert dst.dtype == input_dtype, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_matmul.py:288:5: note: called from here validate_tensor_engine_output_dtype( ^ /home/ubuntu/workspace/native_venv/lib/python ...",
+     "status": "pass",
+     "seconds": 0.14
+    },
+    {
+     "case": "nc_transpose_vector_engine_32x32",
+     "api": "nisa.nc_transpose(engine=vector)",
+     "checked": "32x32 SBUF->SBUF transpose",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "nc_transpose_vector_engine_64x64",
+     "api": "nisa.nc_transpose(engine=vector) 64x64",
+     "checked": "VectorE transpose limited to 32x32",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:77:():g2|[64,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: assertion failed: Vector engine transpose requires shape <= [32, 32], got [64, 64] note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:1731:9: error: assertion failed: Vector engine transpose requires shape <= [32, 32], got [64, 64] assert p_dim <= 32 and f_dim <= 32, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:93:5: note: called from here validate_transpose_shapes(data, engine) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/g_compute_ops.py:95:5: note: called from here nisa.nc_transpose(dst=t ...",
+     "status": "pass",
+     "seconds": 0.14
+    },
+    {
+     "case": "partition_axis_sum_via_ones_matmul",
+     "api": "nisa.nc_matmul(stationary=ones[P,1], moving=x)",
+     "checked": "sum over the partition axis",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 3.814697265625e-06
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "iota_cast_reciprocal_scan",
+     "api": "nisa.iota / tensor_copy cast / nisa.reciprocal / nisa.tensor_tensor_scan",
+     "checked": "generated pattern, int32->fp32, 1/x, running sum",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "iota_exact": true,
+      "reciprocal_err": 0.0,
+      "scan_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "engine_selection",
+     "api": "engine=nisa.engine.vector|gpsimd|scalar",
+     "checked": "tensor_tensor on VectorE and GpSimd, tensor_copy on ScalarE",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "nl_convenience_ops",
+     "api": "nl.load/nl.add/nl.exp/nl.multiply/nl.sum/nl.maximum/nl.store",
+     "checked": "return new SBUF tiles; correct values",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "add": true,
+      "exp": true,
+      "multiply_scalar": true,
+      "maximum_vector": true,
+      "sum_keepdims": true,
+      "buffers": "nl.add/nl.exp/nl.sum results asserted to be SBUF tiles at trace time"
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "tensor_tensor_both_inputs_psum",
+     "api": "nisa.tensor_tensor data1, data2 both PSUM",
+     "checked": "not allowed",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:82:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: Both data1 and data2 cannot be in PSUM simultaneously - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:452:5: error: assertion failed: Both data1 and data2 cannot be in PSUM simultaneously assert not (is_psum(tensor1.buffer) and is_psum(tensor2.buffer)), ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:156:5: note: called from here validate_not_both_psum(data1, data2, \"data1\", \"data2\") ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/g_compute_ops.py:190:5: note: called from he ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "tensor_tensor_dst_hbm",
+     "api": "nisa.tensor_tensor dst in HBM",
+     "checked": "compute engines cannot write HBM",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:83:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: assertion failed: tensor_tensor dst must be in [sbuf, psum], got shared_hbm note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:375:5: error: assertion failed: tensor_tensor dst must be in [sbuf, psum], got shared_hbm assert tensor_buf_name in allowed_names, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:355:5: note: called from here validate_buffer(tensor, allowed, name) ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:153:5: note: called from here validate_compute_engine_buffer(dst, eng ...",
+     "status": "pass",
+     "seconds": 0.12
+    }
+   ],
+   "script": "smoke_tests/g_compute_ops.py",
+   "exit_code": 0,
+   "wall_seconds": 21.0
+  },
+  {
+   "test": "h_dma_compute_lnc_comm",
+   "status": "pass",
+   "seconds": 12.59,
+   "cases": [
+    {
+     "case": "dma_compute_add_sbuf",
+     "api": "nisa.dma_compute(dst, srcs=[a, b], reduce_op=nl.add)",
+     "checked": "SBUF sources/destination",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.66
+    },
+    {
+     "case": "dma_compute_add_hbm",
+     "api": "nisa.dma_compute HBM -> HBM",
+     "checked": "HBM sources and destination",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.35
+    },
+    {
+     "case": "dma_compute_multiply",
+     "api": "nisa.dma_compute reduce_op=nl.multiply",
+     "checked": "only nl.add is supported",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:():g2|[128,256]:Float:S(C)|[128,256]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: dma_compute only supports nl.add for reduce_op - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_advanced.py:175:5: error: assertion failed: dma_compute only supports nl.add for reduce_op assert reduce_op == add, \"dma_compute only supports nl.add for reduce_op\" ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/h_dma_compute_lnc_comm.py:34:5: note: called from here nisa.dma_compute(dst=out, srcs=[a, b], reduce_op=nl.multiply) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/h_dma_co ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "core_barrier_shared_hbm",
+     "api": "nisa.core_barrier(data=shared_hbm_scratch, cores=(0, 1))",
+     "checked": "each core writes one row, barrier, both cores read both rows",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "block0_rows": [
+       1.0,
+       2.0
+      ],
+      "block1_rows": [
+       1.0,
+       2.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.21
+    },
+    {
+     "case": "sendrecv_swap",
+     "api": "nisa.sendrecv(src, dst, send_to_rank, recv_from_rank, pipe_id=0)",
+     "checked": "SBUF tiles swapped between the two cores",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "rows (core0, core1)": [
+       2.0,
+       1.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "sendrecv_compute_add",
+     "api": "nisa.sendrecv_compute(..., reduce_op=nl.add)",
+     "checked": "both cores get the sum of the two tiles",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "rows (core0, core1)": [
+       3.0,
+       3.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.27
+    }
+   ],
+   "script": "smoke_tests/h_dma_compute_lnc_comm.py",
+   "exit_code": 0,
+   "wall_seconds": 15.61
+  },
+  {
+   "test": "i_dtype_cast",
+   "status": "pass",
+   "seconds": 12.79,
+   "cases": [
+    {
+     "case": "tensor_copy_fp32_to_bf16",
+     "api": "nisa.tensor_copy cast fp32 -> bf16",
+     "checked": "bf16 output tensor returned; bits vs torch RNE",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.bfloat16",
+      "elements_differing_from_torch_rne": 0,
+      "max_abs_diff": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.62
+    },
+    {
+     "case": "tensor_copy_fp32_to_fp16",
+     "api": "nisa.tensor_copy cast fp32 -> fp16",
+     "checked": "bits vs torch",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.float16",
+      "elements_differing_from_torch": 0,
+      "max_abs_diff": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.33
+    },
+    {
+     "case": "dma_copy_fp32_sbuf_to_bf16_hbm",
+     "api": "nisa.dma_copy with dtype conversion",
+     "checked": "DMA converts dtype; rounding recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.bfloat16",
+      "elements_differing_from_torch_rne": 0,
+      "max_abs_diff": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "activation_copy_to_bf16",
+     "api": "nisa.activation(op=nl.copy) bf16 dst",
+     "checked": "ScalarE output cast; rounding recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "elements_differing_from_torch_rne": 0,
+      "max_abs_diff": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "tensor_copy_bf16_to_fp32",
+     "api": "nisa.tensor_copy cast bf16 -> fp32",
+     "checked": "exact widening",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "exact": true
+     },
+     "status": "pass",
+     "seconds": 1.22
+    }
+   ],
+   "script": "smoke_tests/i_dtype_cast.py",
+   "exit_code": 0,
+   "wall_seconds": 15.8
+  },
+  {
+   "test": "j_load_store",
+   "status": "pass",
+   "seconds": 12.27,
+   "cases": [
+    {
+     "case": "nl_load_store_tiled",
+     "api": "nl.load(x[slice]) / nl.multiply / nl.store(out[slice], value=)",
+     "checked": "row tiles of a [256, 512] tensor",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 8.33
+    },
+    {
+     "case": "nl_load_dtype_conversion",
+     "api": "nl.load(x, dtype=nl.float32)",
+     "checked": "bf16 HBM loaded as fp32 SBUF tile (exact)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.float32"
+     },
+     "status": "pass",
+     "seconds": 1.31
+    },
+    {
+     "case": "nl_load_transpose2d_bf16",
+     "api": "nl.load_transpose2d (dma_transpose)",
+     "checked": "bf16 [128, 64] -> [64, 128] SBUF",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "nl_load_transpose2d_fp32",
+     "api": "nl.load_transpose2d fp32",
+     "checked": "default dge_mode: 4-byte dtype accepted (the 2-byte rule is for dge_mode=hwdge, see m_data_movement)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "nl_load_256_rows",
+     "api": "nl.load of a [256, 64] HBM tensor",
+     "checked": "SBUF tile partition dim > 128 rejected",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:75:():g2|[256,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: dma_copy dst partition dimension 256 exceeds maximum 128 note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:282:5: error: assertion failed: dma_copy dst partition dimension 256 exceeds maximum 128 assert tensor.shape[0] <= max_size, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:175:9: note: called from here validate_partition_dim(dst, name=\"dma_copy dst\") ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_core.py:161:5: note: called from here dma_copy(dst, src) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/j_load_store.py ...",
+     "status": "pass",
+     "seconds": 0.1
+    }
+   ],
+   "script": "smoke_tests/j_load_store.py",
+   "exit_code": 0,
+   "wall_seconds": 15.28
+  },
+  {
+   "test": "k_cache_specialization",
+   "status": "pass",
+   "seconds": 10.54,
+   "cases": [
+    {
+     "case": "scalar_kernel_argument",
+     "api": "Python scalar kernel argument",
+     "checked": "distinct values give distinct compiled kernels (correct results)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "c=1.0 ->": 1.0,
+      "c=2.0 ->": 2.0
+     },
+     "status": "pass",
+     "seconds": 1.99
+    },
+    {
+     "case": "tuple_and_bool_arguments",
+     "api": "Python tuple / bool kernel arguments (positional and keyword)",
+     "checked": "compile-time constants usable in Python expressions",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "values": [
+       3.0,
+       1.0,
+       6.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.76
+    },
+    {
+     "case": "closure_constant_factory",
+     "api": "kernel factory closing over an enclosing-function local",
+     "checked": "rejected by the default frontend (unbound variable)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:():g2|[128,32]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: unbound variable 'c' note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/k_cache_specialization.py:30:64: error: unbound variable 'c' nisa.tensor_scalar(dst=t, data=t, op0=nl.add, operand0=c) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/k_cache_specialization.py:26:5: note: when tracing NKI kernel def add_const_closure(x): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/k_cache_specialization.py:30:64: error: unbound variable 'c' nisa.tensor_scalar(dst=t, data=t, op0=nl.add, operand0=c) ^ /home/ubuntu/tb_wt/_llm_ ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "module_global_constant",
+     "api": "module-level global read in kernel",
+     "checked": "resolved at trace time",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 3.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    }
+   ],
+   "script": "smoke_tests/k_cache_specialization.py",
+   "exit_code": 0,
+   "wall_seconds": 13.61
+  },
+  {
+   "test": "l_python_subset",
+   "status": "pass",
+   "seconds": 28.74,
+   "cases": [
+    {
+     "case": "module_helper_defaults_and_keyword_call",
+     "api": "kernel body construct: module_helper_defaults_and_keyword_call",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 7.0,
+      "expected_value": 7.0
+     },
+     "status": "pass",
+     "seconds": 1.65
+    },
+    {
+     "case": "module_helper_keyword_only_arg",
+     "api": "kernel body construct: module_helper_keyword_only_arg",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 3 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x1] warning: keyword-only arguments are not supported in NKI - [x2] error: helper_kw_only() got an unexpected keyword argument 'c' note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:29:1: error: helper_kw_only() got an unexpected keyword argument 'c' def helper_kw_only(a, *, c=3): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:40:32: note: called from here return _add_value(x, float(helper_kw_only(1, c=3))) # 4 ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:39:1: note ...",
+     "status": "pass",
+     "seconds": 0.22
+    },
+    {
+     "case": "tuple_unpack_shape_int_ops",
+     "api": "kernel body construct: tuple_unpack_shape_int_ops",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 4.0,
+      "expected_value": 4.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "list_comprehension",
+     "api": "kernel body construct: list_comprehension",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:75:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to specialize NKI kernel: Collected 1 different diagnostics: - [x1] error: unsupported expression note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:51:12: error: unsupported expression vals = [i * 2 for i in range(4)] ^ __notes__ (len=1): -------------------- For simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these. At: /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki /home/ubunt ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "generator_expression",
+     "api": "kernel body construct: generator_expression",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to specialize NKI kernel: Collected 1 different diagnostics: - [x1] error: unsupported expression note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:57:12: error: unsupported expression v = sum(i for i in range(4)) ^ __notes__ (len=1): -------------------- For simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these. At: /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki /home/ubuntu/wo ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "builtins_max_min_abs_int",
+     "api": "kernel body construct: builtins_max_min_abs_int",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 12.0,
+      "expected_value": 12.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "math_module",
+     "api": "kernel body construct: math_module",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 7.0,
+      "expected_value": 7.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "python_while_int",
+     "api": "kernel body construct: python_while_int",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 6.0,
+      "expected_value": 6.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "if_elif_else_on_shape",
+     "api": "kernel body construct: if_elif_else_on_shape",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 2.0,
+      "expected_value": 2.0
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "dict_literal",
+     "api": "kernel body construct: dict_literal",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 5.0,
+      "expected_value": 5.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "lambda",
+     "api": "kernel body construct: lambda",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:82:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to specialize NKI kernel: Collected 1 different diagnostics: - [x1] error: unsupported expression note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:102:9: error: unsupported expression f = lambda z: z + 1.0 # noqa: E731 ^ __notes__ (len=1): -------------------- For simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these. At: /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/python_ops/neuron_nki_call_lowering.py(54): _lower_custom_nki /home/ubu ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "try_except",
+     "api": "kernel body construct: try_except",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:83:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to specialize NKI kernel: Collected 1 different diagnostics: - [x1] error: NKI does not support 'try' statements; use 'if/else' control flow within kernels note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:108:5: error: NKI does not support 'try' statements; use 'if/else' control flow within kernels try: ^ __notes__ (len=1): -------------------- For simplicity, NKI has removed its internal frames from the traceback of this exception. Set NKI_TRACEBACK_FILTERING=off to include these. At: /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_kernel.py(65): get_config /home/ubuntu/workspace/torch_neuron_eager/torch_neuronx/nki_hop.py(293): get_kernel_config /home/ubuntu/workspace/torch_neuron_eager ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "is_not_none_user_code",
+     "api": "kernel body construct: is_not_none_user_code",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 1.0,
+      "expected_value": 1.0
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "is_none_user_code",
+     "api": "kernel body construct: is_none_user_code",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 4.0,
+      "expected_value": 4.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "ne_none",
+     "api": "kernel body construct: ne_none",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 1.0,
+      "expected_value": 1.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "fstring_in_assert",
+     "api": "kernel body construct: fstring_in_assert",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 1.0,
+      "expected_value": 1.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "fstring_value",
+     "api": "kernel body construct: fstring_value",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 3.0,
+      "expected_value": 3.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "print_in_kernel",
+     "api": "kernel body construct: print_in_kernel",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 1.0,
+      "expected_value": 1.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "nested_def_direct_call",
+     "api": "kernel body construct: nested_def_direct_call",
+     "checked": "rejected by the default frontend (error text recorded)",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:90:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' - [x2] error: inner functions can only be used as fori_loop/while_loop body arguments; direct calls are not supported note: /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:162:26: error: inner functions can only be used as fori_loop/while_loop body arguments; direct calls are not supported return _add_value(x, inner(2.0)) # 4 ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:159:1: note: called from def k_nested_def(x): ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/l_python_subset.py:159:1: not ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "tile_size_properties_in_kernel",
+     "api": "kernel body construct: tile_size_properties_in_kernel",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 220.0,
+      "expected_value": 220.0
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "setitem_memset_and_store",
+     "api": "kernel body construct: setitem_memset_and_store",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 9.0,
+      "expected_value": 9.0
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "nested_jit_subkernel_call",
+     "api": "kernel body construct: nested_jit_subkernel_call",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 3.0,
+      "expected_value": 3.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "memset_float_value_into_int32_tile",
+     "api": "kernel body construct: memset_float_value_into_int32_tile",
+     "checked": "accepted by the default frontend and gives the expected value",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "value": 2.0,
+      "expected_value": 2.0
+     },
+     "status": "pass",
+     "seconds": 1.32
+    },
+    {
+     "case": "multiple_return_tensors",
+     "api": "return a, b",
+     "checked": "kernel returns a tuple of two shared_hbm tensors",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "values": [
+       1.0,
+       2.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.25
+    }
+   ],
+   "script": "smoke_tests/l_python_subset.py",
+   "exit_code": 0,
+   "wall_seconds": 31.75
+  },
+  {
+   "test": "m_data_movement",
+   "status": "pass",
+   "seconds": 21.14,
+   "cases": [
+    {
+     "case": "dma_transpose_bf16_default",
+     "api": "nisa.dma_transpose(dst=sbuf, src=hbm) bf16 [128, 64]",
+     "checked": "2-D transpose, default dge_mode",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 7.62
+    },
+    {
+     "case": "dma_transpose_fp32_default",
+     "api": "nisa.dma_transpose fp32 [128, 64]",
+     "checked": "default dge_mode accepts fp32",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "dma_transpose_fp32_hwdge",
+     "api": "nisa.dma_transpose(dge_mode=hwdge) fp32",
+     "checked": "hwdge requires a 2-byte dtype",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:72:(('mode', 'hwdge'),):g2|[16,128]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: dma_transpose hwdge requires 2-byte dtype, got float32 - [x1] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:2335:5: error: assertion failed: dma_transpose hwdge requires 2-byte dtype, got float32 assert dtype_size(src.dtype) == 2, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_transpose.py:601:9: note: called from here validate_hwdge_transpose(src, name=\"dma_transpose\") ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:16:9: note: called from here nisa.dma_t ...",
+     "status": "pass",
+     "seconds": 0.24
+    },
+    {
+     "case": "dma_transpose_bf16_hwdge_16rows",
+     "api": "nisa.dma_transpose(dge_mode=hwdge) bf16 [16, 128]",
+     "checked": "hwdge 2-D: src.shape[0] == 16, src.shape[-1] <= 128",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bit_exact": true
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "ap_pattern_offset",
+     "api": "x.ap(pattern=[[F, 128], [1, F]], offset=128*F)",
+     "checked": "explicit HBM access pattern with element offset",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "ap_without_pattern",
+     "api": "x.ap(offset=0)",
+     "checked": "pattern is a required argument",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:74:():g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: ap() missing value for required argument 'pattern' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/tensor.py:1310:5: error: ap() missing value for required argument 'pattern' def ap( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:38:30: note: called from here nisa.dma_copy(dst=t, src=x.ap(offset=0)) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:35:1: note: when tracing NKI kernel def ap_no_pattern(x): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/tensor.py:1310:5: error: ap() missing value for required argument  ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "hbm_reshape_and_strided_views",
+     "api": "x.reshape(...)[...] / step slices / negative index",
+     "checked": "views on HBM tensors as DMA sources",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "reshape_select_block": true,
+      "reshape_strided_rows_and_cols": true,
+      "negative_index_slice": true
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "partition_slice_32_64",
+     "api": "tensor_scalar on SBUF tile rows [32:64] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "partition_slice_0_100",
+     "api": "tensor_scalar on SBUF tile rows [0:100] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "partition_slice_64_96",
+     "api": "tensor_scalar on SBUF tile rows [64:96] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "partition_slice_96_128",
+     "api": "tensor_scalar on SBUF tile rows [96:128] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "partition_slice_8_24",
+     "api": "tensor_scalar on SBUF tile rows [8:24] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('p0', 8), ('p1', 24)):g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op Expected 'dst' partition start in {0, 32, 64, 96} for a 16-partition access, but got 8. result = get_backend().tensor_scalar_arith( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:68:5: note: called from nisa.tensor_scalar(dst=u[p0:p1, :], data=u[p0:p1, :], op0=nl.add, operand0=1.0) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:61:1: note: called from def sbuf_to_sbuf_and_partition_slice(x, p0, p1): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_ ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "partition_slice_40_72",
+     "api": "tensor_scalar on SBUF tile rows [40:72] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('p0', 40), ('p1', 72)):g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op Expected 'dst' partition start in {0, 32, 64, 96} for a 32-partition access, but got 40. result = get_backend().tensor_scalar_arith( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:68:5: note: called from nisa.tensor_scalar(dst=u[p0:p1, :], data=u[p0:p1, :], op0=nl.add, operand0=1.0) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:61:1: note: called from def sbuf_to_sbuf_and_partition_slice(x, p0, p1): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "partition_slice_5_6",
+     "api": "tensor_scalar on SBUF tile rows [5:6] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('p0', 5), ('p1', 6)):g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op Expected 'dst' partition start in {0, 32, 64, 96} for a 1-partition access, but got 5. result = get_backend().tensor_scalar_arith( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:68:5: note: called from nisa.tensor_scalar(dst=u[p0:p1, :], data=u[p0:p1, :], op0=nl.add, operand0=1.0) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:61:1: note: called from def sbuf_to_sbuf_and_partition_slice(x, p0, p1): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_te ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "partition_slice_33_34",
+     "api": "tensor_scalar on SBUF tile rows [33:34] (after SBUF->SBUF dma_copy)",
+     "checked": "compute-engine access must start at partition 0/32/64/96",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:(('p0', 33), ('p1', 34)):g2|[128,64]:Float:S(C): RuntimeError[WITH __notes__]: Generated MLIR failed verification note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_tensor_ops.py:456:14: error: 'nisa.tensor_scalar_arith' op Expected 'dst' partition start in {0, 32, 64, 96} for a 1-partition access, but got 33. result = get_backend().tensor_scalar_arith( ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:68:5: note: called from nisa.tensor_scalar(dst=u[p0:p1, :], data=u[p0:p1, :], op0=nl.add, operand0=1.0) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/m_data_movement.py:61:1: note: called from def sbuf_to_sbuf_and_partition_slice(x, p0, p1): ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/ ...",
+     "status": "pass",
+     "seconds": 0.12
+    },
+    {
+     "case": "dma_copy_into_arbitrary_partition_offset",
+     "api": "nisa.dma_copy(dst=t[5:6, :]) / t[37:40, :]",
+     "checked": "DMA can address any partition start",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "dma_copy_psum_to_hbm",
+     "api": "nisa.dma_copy(dst=hbm, src=psum)",
+     "checked": "records whether DMA can read PSUM",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:78:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: dma_copy requires HBM or SBUF tensors, got src=nki.language.buffers.MemoryRegion(value:psum,_value_:psum,name:psum,_sort_order_:1,_name_:psum,__objclass__:<function 'nki.language.buffers.MemoryRegion'>), dst=nki.language.buffers.MemoryRegion(value:shared_hbm,_value_:shared_hbm,name:shared_hbm,_sort_order_:3,_name_:shared_hbm,__objclass__:<function 'nki.language.buffers.MemoryRegion'>) note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_copy.py:167:5: error: assertion failed: dma_copy requires HBM or SBUF tensors, got src=nki.language.buffers.MemoryRegion(value:psum,_value_:psum,name:psum,_sort_order_:1,_name_:psum,__objclass__:<function  ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "write_into_kernel_input",
+     "api": "nisa.dma_copy(dst=<input tensor>)",
+     "checked": "records whether the caller's tensor is modified",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "returned_output_correct": true,
+      "input_overwritten_on_host_view": true,
+      "input_unchanged": false
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "kernel_without_return",
+     "api": "kernel(x, out) returning None",
+     "checked": "torch-native dispatch needs at least one returned tensor",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:80:():g2|[128,64]:Float:S(C)|[128,64]:Float:S(C): ValueError: Cannot call .result on operation torch.operator which has 0 results (it is only valid for operations with a single result) At: /home/ubuntu/workspace/torch_neuron_eager/third_party/torch-mlir/python/torch_mlir/extras/fx_importer.py(1880): _import_hop_nki_kernel_wrapper /home/ubuntu/workspace/torch_neuron_eager/third_party/torch-mlir/python/torch_mlir/extras/fx_importer.py(1829): _import_hop /home/ubuntu/workspace/torch_neuron_eager/third_party/torch-mlir/python/torch_mlir/extras/fx_importer.py(1631): import_nodes /home/ubuntu/workspace/torch_neuron_eager/third_party/torch-mlir/python/torch_mlir/extras/fx_importer.py(1083): import_stateless_graph /home/ubuntu/workspace/torch_neuron_eager/third_party/torch-mlir/python/torch_mlir/fx.py(150): stateless_fx_import /home/u ...",
+     "status": "pass",
+     "seconds": 0.15
+    }
+   ],
+   "script": "smoke_tests/m_data_movement.py",
+   "exit_code": 0,
+   "wall_seconds": 24.14
+  },
+  {
+   "test": "n_gen4_only_and_fp8_perf_mode",
+   "status": "pass",
+   "seconds": 12.69,
+   "cases": [
+    {
+     "case": "exponential_gen4_only",
+     "api": "nisa.exponential",
+     "checked": "NeuronCore-v4+ only",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:72:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: exponential requires NeuronCore-v4 or newer note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:3295:5: error: assertion failed: exponential requires NeuronCore-v4 or newer assert get_nc_version() >= nc_version.gen4, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_misc.py:189:5: note: called from here validate_exponential(dst, src, max_value, reduce_res, reduce_cmd, reduce_init) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/n_gen4_only_and_fp8_perf_mode.py:16:5: note: called from here nisa.exponential(dst=t, src=t, max_value=0.0) ^ /home/ubuntu/tb_wt/_llm_trn2/ ...",
+     "status": "pass",
+     "seconds": 5.95
+    },
+    {
+     "case": "activate2_gen4_only",
+     "api": "nisa.activate2",
+     "checked": "NeuronCore-v4+ only",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:73:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 2 different diagnostics: - [x2] error: assertion failed: 'activate2' is supported for nki.isa._enums.nc_version(value:4,_value_:4,name:gen4,_sort_order_:2,_name_:gen4,__objclass__:<function 'nki.isa._enums.nc_version'>)+, but current target is nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) - [x3] warning: the 'is not' operator is not supported in NKI, use '!=' note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:132:5: error: assertion failed: 'activate2' is supported for nki.isa._enums.nc_version(value:4,_value_:4,name:gen4,_sort_order_:2,_name_:gen4,__objclass__:<function 'nki.isa._enums.nc_ve ...",
+     "status": "pass",
+     "seconds": 0.13
+    },
+    {
+     "case": "quantize_mx_gen4_only",
+     "api": "nisa.quantize_mx",
+     "checked": "NeuronCore-v4+ only (docstring); error recorded",
+     "negative": true,
+     "error": "RuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global; error message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: (QuantizeMx: I-1)Source Kernel \"__main__.k_quantize_mx_lnc0\"File \"/home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/n_gen4_only_and_fp8_perf_mode.py\",line 39 [INTERNAL_ERROR] [NCC_IBIR530] QuantizeMx is not supported on arch Trn2, must be Trn3 or greater - Do not use QuantizeMx or switch to at least Trn3 architecture 2026-10-10T10:03:43Z Non-signal exit. Backend exited with code 1 and stderr: (QuantizeMx: I-1)Source Kernel \"__main__.k_quantize_mx_lnc0\"File \"/home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/n_gen4_only_and_fp8_perf_mode.py\",line 39 [INTERNAL_ERROR] [NCC_IBIR530] QuantizeMx is not supported on arch Trn2, must be Trn3 or greater - Do not use QuantizeMx or  ...",
+     "status": "pass",
+     "seconds": 1.66
+    },
+    {
+     "case": "dma_copy_priority_gen4_only",
+     "api": "nisa.dma_copy(priority=0)",
+     "checked": "DMA QoS priority is NeuronCore-v4+ only",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:75:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: dma_copy priority is only supported for NeuronCore-v4 or newer, but current target is nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/isa/_validation.py:3288:5: error: assertion failed: dma_copy priority is only supported for NeuronCore-v4 or newer, but current target is nki.isa._enums.nc_version(value:3,_value_:3,name:gen3,_sort_order_:1,_name_:gen3,__objclass__:<function 'nki.isa._enums.nc_version'>) assert get_nc_version() >= nc_version.gen4, ( ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-pac ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "nc_matmul_double_row_fp8_e4m3",
+     "api": "nisa.nc_matmul(perf_mode=matmul_perf_mode.double_row) fp8_e4m3",
+     "checked": "[128, 2, X] fp8 operands, K = 256 in one instruction",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "relative_fro_error_vs_bf16_ref": 0.03777485340833664
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "nc_matmul_double_row_fp8_e5m2",
+     "api": "nisa.nc_matmul(perf_mode=double_row) fp8_e5m2",
+     "checked": "same with e5m2",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "relative_fro_error_vs_bf16_ref": 0.07487452030181885
+     },
+     "status": "pass",
+     "seconds": 1.24
+    },
+    {
+     "case": "nc_matmul_double_row_bf16",
+     "api": "nisa.nc_matmul(perf_mode=double_row) bf16",
+     "checked": "records whether non-fp8 operands are rejected",
+     "negative": true,
+     "error": "RuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global; error message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: (Matmult: I-2)Source Kernel \"__main__.k_double_row_bf16_lnc0\"File \"/home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/n_gen4_only_and_fp8_perf_mode.py\",line 85 [INTERNAL_ERROR] [NCC_IBIR322] Unspecified - Unspecified 2026-10-10T10:03:47Z Non-signal exit. Backend exited with code 1 and stderr: (Matmult: I-2)Source Kernel \"__main__.k_double_row_bf16_lnc0\"File \"/home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/n_gen4_only_and_fp8_perf_mode.py\",line 85 [INTERNAL_ERROR] [NCC_IBIR322] Unspecified - Unspecified\" neff cache key=nki_77_k_double_row_bf16_fa2e9f5c878e863e_()_[2]_((torch.Size([256, 128]), torch.bfloat16), (torch.Size([256, 512]), torch.bfloat16)):bafa76eb59bdb7612a8 ...",
+     "status": "pass",
+     "seconds": 1.16
+    },
+    {
+     "case": "topk_available_trn2",
+     "api": "nisa.topk(val_dst, idx_dst, src, n)",
+     "checked": "minimal call compiles and runs on NeuronCore-v3",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "ran_on_trn2": true
+     },
+     "status": "pass",
+     "seconds": 1.22
+    }
+   ],
+   "script": "smoke_tests/n_gen4_only_and_fp8_perf_mode.py",
+   "exit_code": 0,
+   "wall_seconds": 15.69
+  },
+  {
+   "test": "o_int_dtypes_creation_capacity",
+   "status": "pass",
+   "seconds": 23.06,
+   "cases": [
+    {
+     "case": "int32_add_default_engine",
+     "api": "nisa.tensor_tensor int32 add (default engine)",
+     "checked": "exact 32-bit integer add (|values| up to 1.5 * 2**30)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "elements_not_exact": 0,
+      "out_dtype": "torch.int32"
+     },
+     "status": "pass",
+     "seconds": 1.65
+    },
+    {
+     "case": "int32_add_vector_engine",
+     "api": "nisa.tensor_tensor int32 add engine=vector",
+     "checked": "records exactness when forced onto VectorE (fp32 internal math)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "elements_not_exact": 8011,
+      "out_dtype": "torch.int32"
+     },
+     "status": "pass",
+     "seconds": 1.26
+    },
+    {
+     "case": "int32_bitwise_and_const",
+     "api": "nisa.tensor_scalar(op0=nl.bitwise_and, operand0=0xFF)",
+     "checked": "bit-exact",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "elements_not_exact": 0,
+      "out_dtype": "torch.int32"
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "int32_right_shift_const",
+     "api": "nisa.tensor_scalar(op0=nl.right_shift, operand0=4)",
+     "checked": "nl.right_shift on int32 is a logical shift (elements_not_exact counts mismatches vs torch arithmetic >>)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "elements_not_exact": 4025,
+      "out_dtype": "torch.int32",
+      "logical_shift_ref_mismatches": 0
+     },
+     "status": "pass",
+     "seconds": 1.35
+    },
+    {
+     "case": "compare_to_uint8_and_fp32",
+     "api": "nisa.tensor_tensor(op=nl.greater)",
+     "checked": "comparison writes 1/0 into uint8 or fp32 dst",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "uint8_values": [
+       0,
+       1
+      ],
+      "float_values": [
+       0.0,
+       1.0
+      ]
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "torch_int64_input",
+     "api": "torch.int64 kernel argument",
+     "checked": "NKI has no 64-bit types (maps to int32); behaviour recorded",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.int32"
+     },
+     "status": "pass",
+     "seconds": 1.43
+    },
+    {
+     "case": "torch_bool_input",
+     "api": "torch.bool kernel argument",
+     "checked": "bool maps to uint8 at the boundary",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.uint8"
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "torch_int8_roundtrip",
+     "api": "torch.int8 kernel argument",
+     "checked": "int8 data movement is exact",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "out_dtype": "torch.int8"
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "creation_helpers",
+     "api": "nl.zeros / nl.full / nl.ones / nl.zeros_like / nl.empty_like",
+     "checked": "SBUF tiles with the expected contents",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "zeros": true,
+      "full_2.5": true,
+      "ones": true,
+      "zeros_like": true,
+      "empty_like_then_copy": true
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "zeros_in_shared_hbm",
+     "api": "nl.zeros(..., buffer=nl.shared_hbm)",
+     "checked": "creating a shared_hbm tensor with an init value is rejected",
+     "negative": true,
+     "error": "RuntimeError: [NkiDispatch] Python lower_func failed for cache_key=nki_call:76:():g2|[128,64]:Float:S(C): AssertionError[WITH __notes__]: error: failed to compile NKI kernel: Collected 1 different diagnostics: - [x2] error: assertion failed: Creating HBM tensor with init value is not supported. note: /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_core.py:101:5: error: assertion failed: Creating HBM tensor with init value is not supported. assert buffer != shared_hbm, \"Creating HBM tensor with init value is not supported.\" ^ /home/ubuntu/workspace/native_venv/lib/python3.12/site-packages/nki/language/_core.py:127:12: note: called from here return full(shape, 0.0, dtype, buffer, name) ^ /home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/evidence/smoke_tests/o_int_dtypes_creation_capacity.py:74:11: note: called from here out = nl.zeros(x.shape, dtype=x.dtype, buffer= ...",
+     "status": "pass",
+     "seconds": 0.1
+    },
+    {
+     "case": "psum_over_capacity",
+     "api": "nl.ndarray((128, 8192), fp32, buffer=nl.psum)",
+     "checked": "PSUM is 16 KiB per partition",
+     "negative": true,
+     "error": "RuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global; error message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: Allocated memory out of bound {_mem_0}@PSUM-1<0,0>(128x32768)#Internal DebugInfo: <_mem_0||[128, 8192]> - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables. 2026-10-10T10:04:13Z Non-signal exit. Backend exited with code 1 and stderr: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: Allocated memory out of bound {_mem_0}@PSUM-1<0,0>(128x32768)#Internal DebugInfo: <_mem_0||[128, 8192]> - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to ...",
+     "status": "pass",
+     "seconds": 1.16
+    },
+    {
+     "case": "sbuf_over_capacity",
+     "api": "nl.ndarray((128, 60000), fp32, buffer=nl.sbuf)",
+     "checked": "usable SBUF per partition is 212984 B on trn2",
+     "negative": true,
+     "error": "RuntimeError: Compilation error occurred on Neuron for operation=nki_kernel_global; error message=\"COMPILATION FAILED: Command failed (neuronx-cc compilation) with exit code 70: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: Allocated memory out of bound {_mem_0}@SB<0,0>(128x240000)#Internal DebugInfo: <_mem_0||[128, 60000]> - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obtain more information using the 'XLA_IR_DEBUG' and 'XLA_HLO_DEBUG' environment variables. 2026-10-10T10:04:14Z Non-signal exit. Backend exited with code 1 and stderr: [INTERNAL_ERROR] [NCC_INLA001] Unhandled exception with message: Allocated memory out of bound {_mem_0}@SB<0,0>(128x240000)#Internal DebugInfo: <_mem_0||[128, 60000]> - Please open a support ticket at https://github.com/aws-neuron/aws-neuron-sdk/issues/new. You may also be able to obt ...",
+     "status": "pass",
+     "seconds": 1.15
+    }
+   ],
+   "script": "smoke_tests/o_int_dtypes_creation_capacity.py",
+   "exit_code": 0,
+   "wall_seconds": 26.12
+  },
+  {
+   "test": "p_shapes_partial_tiles",
+   "status": "pass",
+   "seconds": 9.89,
+   "cases": [
+    {
+     "case": "remainder_rows_200x300",
+     "api": "slice t[0:rows] for the last partial tile",
+     "checked": "R=200 (128 + 72 rows), F=300",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "shape": [
+       200,
+       300
+      ],
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 7.08
+    },
+    {
+     "case": "respecialize_new_shape_77x513",
+     "api": "same kernel, new input shape",
+     "checked": "a new shape triggers a new trace/compile; result correct",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "shape": [
+       77,
+       513
+      ],
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.35
+    },
+    {
+     "case": "noncontiguous_torch_view_input",
+     "api": "kernel(x.t()) with a non-contiguous neuron tensor",
+     "checked": "records whether the kernel sees the logical (transposed) values",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "result_matches_logical_view": true,
+      "max_abs_err": 0.0,
+      "is_contiguous_input": false
+     },
+     "status": "pass",
+     "seconds": 1.45
+    }
+   ],
+   "script": "smoke_tests/p_shapes_partial_tiles.py",
+   "exit_code": 0,
+   "wall_seconds": 12.9
+  },
+  {
+   "test": "q_partition_broadcast",
+   "status": "pass",
+   "seconds": 9.82,
+   "cases": [
+    {
+     "case": "dma_zero_partition_stride",
+     "api": "row.ap(pattern=[[0, 128], [1, F]], offset=0)",
+     "checked": "one HBM row replicated into 128 partitions by DMA",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "exact": true
+     },
+     "status": "pass",
+     "seconds": 1.61
+    },
+    {
+     "case": "ones_matmul_k1",
+     "api": "nisa.nc_matmul(stationary=ones[1,128], moving=row[1,F])",
+     "checked": "K=1 outer product broadcast to PSUM (fp32 inputs)",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.33
+    },
+    {
+     "case": "nl_broadcast_to",
+     "api": "nl.broadcast_to(tile[1, F], (128, F))",
+     "checked": "high-level partition broadcast",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "exact": true
+     },
+     "status": "pass",
+     "seconds": 1.24
+    }
+   ],
+   "script": "smoke_tests/q_partition_broadcast.py",
+   "exit_code": 0,
+   "wall_seconds": 12.88
+  },
+  {
+   "test": "r_skill_examples",
+   "status": "pass",
+   "seconds": 23.52,
+   "cases": [
+    {
+     "case": "example_inventory",
+     "api": "SKILL.md `# example:` blocks",
+     "checked": "every example block has a runner and vice versa",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "examples": [
+       "add_kernel",
+       "add_one_any_shape",
+       "barrier_exchange",
+       "colsum",
+       "fori_rows",
+       "matmul_lhsT",
+       "split_add",
+       "transpose_tile"
+      ],
+      "missing": [],
+      "unrunnable": []
+     },
+     "status": "pass",
+     "seconds": 0.0
+    },
+    {
+     "case": "skill_example_add_kernel",
+     "api": "SKILL.md example add_kernel",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 8.12
+    },
+    {
+     "case": "skill_example_split_add",
+     "api": "SKILL.md example split_add",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bare_call_err": 0.001953125,
+      "lnc1_err": 0.001953125
+     },
+     "status": "pass",
+     "seconds": 1.63
+    },
+    {
+     "case": "skill_example_barrier_exchange",
+     "api": "SKILL.md example barrier_exchange",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.22
+    },
+    {
+     "case": "skill_example_add_one_any_shape",
+     "api": "SKILL.md example add_one_any_shape",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "(200, 300)": true,
+      "(77, 513)": true
+     },
+     "status": "pass",
+     "seconds": 2.51
+    },
+    {
+     "case": "skill_example_fori_rows",
+     "api": "SKILL.md example fori_rows",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "skill_example_colsum",
+     "api": "SKILL.md example colsum",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 3.814697265625e-06
+     },
+     "status": "pass",
+     "seconds": 1.23
+    },
+    {
+     "case": "skill_example_matmul_lhsT",
+     "api": "SKILL.md example matmul_lhsT",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "bf16->fp32": {
+       "ok": true,
+       "max_abs_err": 3.0517578125e-05
+      },
+      "fp16->fp16": {
+       "ok": true,
+       "max_abs_err": 0.03075408935546875
+      },
+      "fp32->fp32": {
+       "ok": true,
+       "max_abs_err": 6.4849853515625e-05
+      }
+     },
+     "status": "pass",
+     "seconds": 3.77
+    },
+    {
+     "case": "skill_example_transpose_tile",
+     "api": "SKILL.md example transpose_tile",
+     "checked": "verbatim SKILL.md code compiles, runs and matches CPU",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.25
+    },
+    {
+     "case": "skill_fragment_7_1_row_reductions",
+     "api": "SKILL.md 7.1 lines",
+     "checked": "tensor_reduce max/sum with axis=1 on a 2-D tile",
+     "negative": false,
+     "observed": {
+      "ok": true
+     },
+     "status": "pass",
+     "seconds": 1.27
+    },
+    {
+     "case": "skill_fragment_7_5_row_scale",
+     "api": "SKILL.md 7.5 lines",
+     "checked": "fp16 HBM [P,1] -> fp32 SBUF via DMA, tensor_scalar with vector operand",
+     "negative": false,
+     "observed": {
+      "ok": true,
+      "max_abs_err": 0.0
+     },
+     "status": "pass",
+     "seconds": 1.25
+    }
+   ],
+   "skill_md": "/home/ubuntu/tb_wt/_llm_trn2/skills/reference/nki/0.7.0b1/SKILL.md",
+   "examples_extracted": [
+    "add_kernel",
+    "add_one_any_shape",
+    "barrier_exchange",
+    "colsum",
+    "fori_rows",
+    "matmul_lhsT",
+    "split_add",
+    "transpose_tile"
+   ],
+   "script": "smoke_tests/r_skill_examples.py",
+   "exit_code": 0,
+   "wall_seconds": 26.52
+  }
+ ]
+}

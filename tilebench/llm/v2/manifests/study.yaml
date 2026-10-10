@@ -125,6 +125,7 @@ evaluation:
 # Device Context snapshot a campaign injects per device (manifest version key).
 device_snapshots:
   B200: "2026-10-06"
+  Trn2: "2026-10-10"
 
 # Stored PyTorch baselines per frozen case (reporting speedup = geomean_j T_torch_j / T_ij;
 # metrics.baselines): the committed results/<device>/csv/<op>_default.csv torch_ms
@@ -133,6 +134,7 @@ torch_baselines:
   B200: artifacts/llm_v2/baselines/B200/torch_baseline_B200_casesets_2026-10-07.json
   GH200: artifacts/llm_v2/baselines/GH200/torch_baseline_GH200_casesets_2026-10-07.json
   MI300X: artifacts/llm_v2/baselines/MI300X/torch_baseline_MI300X_casesets_2026-10-07.json
+  Trn2: artifacts/llm_v2/baselines/Trn2/torch_baseline_Trn2_casesets_2026-10-10.json
 
 # Run types. Both use the identical execution chain; only gating and the
 # downstream use of the results differ.
@@ -155,13 +157,13 @@ support_matrix:
   B200:   {arch: blackwell, dsls: [triton, cutile, tilelang], timing_adapter: proton_cuda_graph}
   GH200:  {arch: hopper,    dsls: [triton, cutile, tilelang], timing_adapter: proton_cuda_graph}
   MI300X: {arch: cdna3,     dsls: [triton],                   timing_adapter: proton_rocm_eager}
-  Trn2:   {arch: trainium2, dsls: [nki],                      timing_adapter: neuron_runtime_trace}
+  Trn2:   {arch: trainium2, dsls: [nki],                      timing_adapter: neuron_native_trace}
 
 dsls:
   triton:   {output_file: impl_triton.py,   reference_version: "3.6.0",  source_device: B200}
   cutile:   {output_file: impl_cutile.py,   reference_version: "1.5.0",  source_device: B200}
   tilelang: {output_file: impl_tilelang.py, reference_version: "0.1.11", source_device: B200}
-  nki:      {output_file: impl_nki.py,      reference_version: "beta5",  source_device: Trn2}
+  nki:      {output_file: impl_nki.py,      reference_version: "0.7.0b1", source_device: Trn2}
 
 # Devices that receive a DSL's frozen Optimization Skills (same text/hash).
 skill_transfer:

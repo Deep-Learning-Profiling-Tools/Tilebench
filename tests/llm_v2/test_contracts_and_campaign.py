@@ -56,7 +56,8 @@ def test_preflight_blocks_live_without_models_and_nki(monkeypatch, study):
                              models_selected=("gpt",), provider="openai")
     assert not any("models.yaml" in b for b in pfv.blockers)
     pf2 = campaign.preflight("Trn2", "nki", "base", live=False, study=study)
-    assert any("NKI timing adapter" in b for b in pf2.blockers)
+    # Trn2 uses the native Neuron adapter (validated on the device); the legacy torch-xla adapter stays not ready
+    assert pf2.facts["timing_adapter"] == "neuron_native_trace" and not any("timing adapter" in b for b in pf2.blockers)
     pf3 = campaign.preflight("MI300X", "cutile", "base", live=False, study=study)
     assert any("not supported on MI300X" in b for b in pf3.blockers)
 
