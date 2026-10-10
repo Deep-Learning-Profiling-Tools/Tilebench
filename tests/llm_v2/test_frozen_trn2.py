@@ -24,8 +24,15 @@ def test_trn2_freeze_protocol_and_scope():
     p = f["protocol"]
     assert (p["revision"], p["rounds"], p["max_generations_per_round"], p["cases_per_task"], p["adjudicator"]) == \
         (4, 5, 1, 20, "claude-code")
-    assert f["representative_dtypes"]["tasks_per_dsl"] == 37 and f["nominal_generations"] == 370
-    assert f["trn2_eligibility"]["counts"] == {"eligible": 37, "excluded": 8}
+    assert f["representative_dtypes"]["tasks_per_dsl"] == 36 and f["nominal_generations"] == 360
+    assert f["trn2_eligibility"]["counts"] == {"eligible": 36, "excluded": 9}
+    assert f["trn2_eligibility"]["excluded_by_class"]["scoring_peak_unavailable"] == ["matmul_int8"]
+    assert f["campaign_size"] == {"operators": 36, "cases_per_task": 20, "cases": 720, "models": 2, "trajectories": 72,
+                                  "rounds_per_trajectory": 5, "generations_per_round": 1, "generation_rounds": 360}
+    # launch decisions T1/T2/T3 recorded: frozen profile, every included case scorable, nothing open
+    assert (f["freeze_status"], f["open_owner_decisions"], sorted(f["decided"])) == ("frozen", [], ["T1", "T2", "T3"])
+    assert f["calibration_profile"]["status"] == "frozen" and f["scoring_binding"]["profile_status"] == "frozen"
+    assert f["scoring_table"]["status_counts"] == {"ok": 720} and f["torch_baseline"]["cases_matched"] == 720
     assert f["contracts_identical_to_b200_freeze"] is True
     assert f["evaluator_fingerprint_policy"]["timing_adapter"] == "neuron_native_trace"
     g = f["generators"]

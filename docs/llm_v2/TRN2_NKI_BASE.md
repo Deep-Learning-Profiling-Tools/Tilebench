@@ -1,4 +1,4 @@
-# Trn2 NKI LLM Base (protocol revision 4) — preparation record
+# Trn2 NKI LLM Base (protocol revision 4) — preparation and launch record
 
 Branch `exp/llm-trn2` (worktree `tb_wt/_llm_trn2`). Revision-4 protocol unchanged:
 
@@ -26,25 +26,28 @@ trn2.3xlarge, 1 Trainium2 chip, LNC=2: 4 logical / 8 physical NeuronCore-v3. Pyt
 | Trn2 Device Context | `skills/device/Trn2/2026-10-10/` (SKILL.md, manifest.json, runtime_capture.json) |
 | eligibility (frozen) | `tilebench/llm/v2/manifests/trn2_eligibility.json` (built by `scripts/llm_v2/build_trn2_eligibility.py`; read by `tasks/support.py`) |
 | torch baseline (reporting speedup) | `artifacts/llm_v2/baselines/Trn2/torch_baseline_Trn2_casesets_2026-10-10.json` |
-| scoring table (candidate profile) | `artifacts/llm_v2/scoring/Trn2/scoring_table_Trn2_rev4_casesets_2026-10-10.json` |
+| scoring table (frozen profile, 720 ok) | `artifacts/llm_v2/scoring/Trn2/scoring_table_Trn2_rev4_casesets_2026-10-10.json` |
 | native evaluator | `tilebench/llm/v2/evaluation/neuron.py`, `neuron_worker.py`; timing adapter `neuron_native_trace` |
-| freeze (prepared) | `tilebench/llm/v2/manifests/frozen/Trn2_base_rev4_2026-10-10.json` (`scripts/llm_v2/build_trn2_freeze.py`) |
-| validation evidence | `artifacts/llm_v2/preflight/Trn2/` |
+| freeze (frozen, T1/T2/T3 recorded) | `tilebench/llm/v2/manifests/frozen/Trn2_base_rev4_2026-10-10.json` (`scripts/llm_v2/build_trn2_freeze.py`) |
+| validation evidence | `artifacts/llm_v2/preflight/Trn2/` (final readiness: `FINAL_READINESS_2026-10-10.json`) |
 
-## Eligibility: 37 eligible / 8 excluded
+## Eligibility: 36 eligible / 9 excluded (720 cases)
 
-A task is eligible only when all 20 frozen cases of its representative dtype have a valid formal PyTorch eager baseline
-in `results/TRN2/csv` (from main #322). The dtype is never changed.
+A task is eligible only when all 20 frozen cases of its representative dtype (1) have a valid formal PyTorch eager
+baseline in `results/TRN2/csv` (from main #322) and (2) have a supported empirical SOL target (status `ok` under the
+declared mode and the frozen Trn2 profile; launch decision T2). The dtype is never changed. Each exclusion carries an
+`exclusion_class` (manifest schema `tilebench-llm-v2-trn2-eligibility/2`):
 
-Excluded operators:
+- `cpu_fallback`: argmax, 2d_max_pooling, radix_sort;
+- `baseline_correctness_failure`: flash_attention;
+- `no_eager_baseline`: block_sparse_attention;
+- `baseline_case_failure`: gaussian_blur (1/20 failed), reverse_array (2/20 failed), top_k_selection (1/20 failed);
+- `scoring_peak_unavailable`: matmul_int8. It runs on the device (20/20 valid baselines, not a CPU fallback), but the
+  declared mode `mma_int8_i32acc` has no calibrated Trn2 ceiling (no int8 TensorE input type). No bf16 or theoretical
+  peak is substituted.
 
-- argmax, 2d_max_pooling, radix_sort: CPU fallback;
-- flash_attention: baseline correctness failure;
-- block_sparse_attention: no pure eager baseline;
-- gaussian_blur (1/20 failed), reverse_array (2/20 failed), top_k_selection (1/20 failed).
-
-Kept, each with 20/20 valid baselines: interleave fp16, matrix_transpose fp16, matmul_fp32_fp16_fp8 fp16 and
-matmul_int8 int8.
+Kept, each with 20/20 valid baselines and 20/20 `ok` targets: interleave fp16, matrix_transpose fp16 and
+matmul_fp32_fp16_fp8 fp16.
 
 ## Native evaluator (Trn2)
 
@@ -85,7 +88,7 @@ matmul_int8 int8.
   - `dsls.nki.reference_version` → `0.7.0b1`;
   - `device_snapshots.Trn2` → `2026-10-10`;
   - `torch_baselines.Trn2` added.
-- `calibration.yaml`: Trn2 candidate profile.
+- `calibration.yaml`: Trn2 profile (frozen by T1; only the Trn2 entry differs).
 - `skills/manifest.json`: the two new assets.
 
 The Trn2 study config hash therefore differs from the B200 one. **Do not merge these changes into exp/llm-b200 /
@@ -95,21 +98,37 @@ exp/llm-gh200 / exp/llm-mi300x while their campaigns run** (it would change thei
 ## SOL calibration and scoring readiness
 
 - **Ceiling basis.** The Trn2 campaign uses the empirical calibration `Trn2-20261010T012011Z-94406dcb`, measured
-  earlier and not re-run. Its file sha256 is `a2b810f7...`, and it is registered in `calibration.yaml` as
-  `candidate`. The architecture-theoretical audit (`artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2`) is
-  for the paper only and is not used for scoring.
-- **Scoring table.** 740 rows (37 tasks x 20 cases): 720 `ok` and 20 `peak_unavailable`. The 20 are matmul_int8:
-  mode `mma_int8_i32acc` is unsupported on NeuronCore-v3 (no int8 TensorE). No bf16 peak is substituted.
-  matmul_int8 is execution-eligible but scoring-unavailable.
+  earlier and not re-run. Its file sha256 is `a2b810f7...`, and it is registered in `calibration.yaml` as `frozen`
+  (launch decision T1). The architecture-theoretical audit (`artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2`)
+  is for the paper only and is not used for scoring.
+- **Scoring table.** 720 rows (36 tasks x 20 cases), all `ok`. Every included case also has a valid stored torch
+  baseline (independent cross-check in `FINAL_READINESS_2026-10-10.json`: 720/720, no problem).
 - **Measured modes in use:**
   - `fp32_fma_vector` 0.747 and `fp16x2_fma_vector` 0.860 TFLOP/s (VectorE + ScalarE + GpSimd probe);
   - `mma_fp16_f32acc` 146.8 and `mma_tf32_f32acc` 121.4 TFLOP/s;
   - `hbm_stream_bw` 672.3 GB/s;
   - `memory_only` / `no_compute_term` as declared.
-- **Known scoring caveats** (central issues, not changed here):
-  - the RMSNorm traffic formula (frozen Q = 3n overcounts, so efficiency can exceed 1);
-  - linear_self_attention (fp32) is declared `mma_tf32_f32acc`, and its ceiling is the compiler auto-cast TF32 path;
-  - the fp32 FMA vector peak comes from a three-engine probe.
+- **Known scoring caveats, reviewed before launch** (shared definitions, not changed here; neither invalidates the
+  formal scores):
+  - **RMSNorm.** The frozen Q = 3·n·dtype_size (two sweeps of x plus one write) is 1.4996x the compulsory
+    (2n + K)·dtype_size on all 20 cases. Both are memory-bound. The torch baseline's efficiency is 0.24–0.64 under the
+    frozen Q (0.16–0.43 under the compulsory Q). The formal manual NKI results (`results/TRN2/csv`, `nki_ms`)
+    reach 0.29–0.80 under the frozen Q, none above 1.
+    - It is a uniform per-operator scale of the definition B200/GH200/MI300X also use. Within-operator comparisons
+      are unchanged, and efficiency > 1 is kept as an audit flag.
+    - T_emp is never used during a run (feedback carries only valid_cases and latency_ms_geomean).
+    - A correction, if wanted, is a central `arithmetic_modes` decision (Q override, as M4 did for radix_sort) for every
+      device at once, after the running campaigns finish. `arithmetic_modes.yaml` is pinned by their scoring bindings.
+  - **linear_self_attention (fp32, `mma_tf32_f32acc`).** The contract allows TF32 operands for S and the numerator.
+    All 20 Trn2 cases are memory-bound (T_emp = Q / BW_emp), so the TF32 rate never sets the target. Even the IEEE fp32
+    control rate would move only the 5 D=256 cases, by at most x1.16.
+  - The fp32 FMA vector peak comes from a three-engine probe.
+- **Reporting note (post hoc, not a launch blocker).** `devtools.recompute_metrics` passes all 45 representative
+  operators to `metrics.efficiency.aggregate` as `eligible`. For Trn2 the 9 predeclared exclusions would count as
+  `missing`: the exact E̅(B) would be None and the lower bound scaled by 36/45.
+  - Minimum correction: build the group's eligibility from `support.task_table` for its device (eligible | unsupported).
+  - This is a no-op for B200/GH200/MI300X, which have 45/45 eligible tasks.
+  - Needed before the Trn2 E̅(B) report; not changed without approval.
 
 ## Validation results (2026-10-10; evidence `artifacts/llm_v2/preflight/Trn2/VALIDATION_2026-10-10.json`)
 
@@ -125,53 +144,77 @@ exp/llm-gh200 / exp/llm-mi300x while their campaigns run** (it would change thei
   - bad tile → `compile_error` (suite stopped).
 - **Multi-execution `run()`:** the busy sum adds the executions and excludes the idle gap between them.
 - **Isolation probe (docker): ok.** The clean NKI candidate is `audit_only` under the unchanged checker.
-- **Prompts:** all 37 render with `reference:nki@0.7.0b1` + `device:Trn2@2026-10-10`. None contains a manual NKI
+- **Prompts:** all 37 pre-T2 tasks (the 36 included ones among them) render with `reference:nki@0.7.0b1` + `device:Trn2@2026-10-10`. None contains a manual NKI
   line, a baseline latency, a calibration/SOL value or a speedup/efficiency term.
 - **Tests:** `tests/llm_v2`: 268 passed. The 2 failures are the same environment failures as clean HEAD (no `triton`
   on this host).
 - **CPU reference cost:** bitonic_sort needs about 815 s per 20-case suite, inside the frozen 3600 s worker limit;
   every other operator needs ≤ 35 s.
 
-## Open owner decisions (formal preflight: exactly T1 + T2 block)
+## Owner decisions (2026-10-10, recorded in the freeze)
 
-- **T1. Freeze the Trn2 empirical profile.** Run
-  `calibration-register --device Trn2 --profile artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json --status frozen --by "<owner>"`.
-- **T2. matmul_int8 (execution-eligible, no empirical int8 ceiling). Choose:**
-  - (a) keep it as an execution-only task: speedup is reported, efficiency is unavailable. This needs a small scoring-gate
-    change that accepts an explicitly declared `scoring_unavailable` Trn2 task. It is shared scoring policy, so it is
-    not implemented without approval.
-  - (b) exclude it from Trn2: 36 tasks, 360 generations.
-- **T3. Accept the docker isolation backend** for formal Trn2 runs. Alternative: install bubblewrap and allow
-  user namespaces (needs sudo).
+- **T1.** Freeze the existing empirical profile `Trn2-20261010T012011Z-94406dcb`; no recalibration; the theoretical audit
+  is separate from revision-4 scoring.
+- **T2.** Exclude matmul_int8 for `scoring_peak_unavailable` (not CPU fallback): 36 eligible / 9 excluded, 20 cases per
+  operator, 2 models x 5 rounds = 360 generation rounds; representative dtypes and frozen case sets unchanged.
+- **T3.** Docker is the formal Trn2 sandbox (the validated docker isolation path; isolation is never disabled; GPU
+  evaluators unchanged).
 
-## Launch (after T1 + T2; run from `tb_wt/_llm_trn2`)
+Final formal preflight (`--live --run-type formal --conditions base`): `ok`, no blocker, for `--provider openai` and
+`--provider anthropic`. The one warning is the docker backend (T3).
+
+## Campaign size and launch plan
+
+| | trajectories | generation rounds |
+|---|---|---|
+| 1. acceptance (`--operators vector_add --dtypes fp16`) | 2 (gpt, claude) | 10 |
+| 2. full set (`--resume`, no filter) | 72 = the 2 above (resumed, no new request) + 70 new | 360 in total (10 + 350) |
+
+Trajectory directories are deterministic per (campaign, task, model, condition):
+
+- an existing trajectory is only resumed: archived responses are reused, never re-requested;
+- without `--resume` an existing trajectory is refused, never restarted;
+- the 9 excluded operators are skipped as predeclared `unsupported`.
+
+## API authentication
+
+- GPT-6.1 Sol reads `OPENAI_API_KEY`, and Claude Opus 5.5 reads `CLAUDE_API_KEY` (`models.yaml` `api_key_env`; read
+  from the environment when the provider is built).
+- `systemd-run --setenv=NAME` (no value) copies the variable from the invoking shell, so a key is never on a command
+  line, in a file of the repository, or in a log.
+- Never run `systemctl --user show -p Environment` on the unit: it would print the keys.
+
+## Launch (run from `tb_wt/_llm_trn2`)
 
 ```bash
 cd /home/ubuntu/tb_wt/_llm_trn2
 PY=/home/ubuntu/workspace/native_venv/bin/python
-# 0. after the owner decisions: refresh the scoring table and the freeze record, then re-check
-$PY -m tilebench.llm.v2 scoring-table --device Trn2 --dsl nki --out artifacts/llm_v2/scoring/Trn2/scoring_table_Trn2_rev4_casesets_2026-10-10.json
-$PY scripts/llm_v2/build_trn2_freeze.py --decided T1="<owner, date>" T2="<owner, date, choice>" T3="<owner, date>"
-$PY -m pytest tests/llm_v2 -q
+# 0. re-check right before launch (no API generation, no device run)
+$PY scripts/llm_v2/build_trn2_freeze.py --check && $PY scripts/llm_v2/build_trn2_eligibility.py --check
 $PY -m tilebench.llm.v2 preflight --devices Trn2 --live --run-type formal --conditions base --provider openai
 $PY -m tilebench.llm.v2 preflight --devices Trn2 --live --run-type formal --conditions base --provider anthropic
-# 1. launch acceptance: both models, vector_add only, formal identity (API keys pass through by name, never on the command line)
-systemd-run --user --unit=tb-trn2-nki-base -p MemoryMax=110G -p OOMPolicy=continue \
+# 1. launch acceptance: both models, vector_add only, formal identity
+systemd-run --user --unit=tb-trn2-nki-base -p MemoryMax=16G -p OOMPolicy=continue \
   --working-directory=/home/ubuntu/tb_wt/_llm_trn2 --setenv=OPENAI_API_KEY --setenv=CLAUDE_API_KEY \
   $PY -m tilebench.llm.v2 schedule --device Trn2 --dsls nki --models gpt claude --condition base \
     --campaign formal_trn2_nki_base_rev4_2026-10-10 --run-type formal --isolation docker \
     --operators vector_add --dtypes fp16 --executor "claude-code (Trn2 NKI Base)"
-# 2. full task set under the same identity
-systemd-run --user --unit=tb-trn2-nki-base-full -p MemoryMax=110G -p OOMPolicy=continue \
+# 2. after the acceptance unit has finished and its 2 trajectories are checked: full task set, same identity
+systemd-run --user --unit=tb-trn2-nki-base-full -p MemoryMax=16G -p OOMPolicy=continue \
   --working-directory=/home/ubuntu/tb_wt/_llm_trn2 --setenv=OPENAI_API_KEY --setenv=CLAUDE_API_KEY \
   $PY -m tilebench.llm.v2 schedule --device Trn2 --dsls nki --models gpt claude --condition base \
     --campaign formal_trn2_nki_base_rev4_2026-10-10 --run-type formal --isolation docker --resume \
     --executor "claude-code (Trn2 NKI Base)"
 # monitor / pause
+journalctl --user -u tb-trn2-nki-base-full -f
 $PY -m tilebench.llm.v2 coverage outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10
 $PY -m tilebench.llm.v2 review-queue outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10
 touch outputs/llm_v2/formal_trn2_nki_base_rev4_2026-10-10/STOP      # graceful pause
 ```
+
+- `MemoryMax=16G` caps the scheduler process only.
+- The evaluation container runs under dockerd with its own 100 GB limit (`evaluation/neuron.py`), so 16 + 100 GB stays
+  under the host's 124 GiB.
 
 API generation runs concurrently (adaptive per provider, global evaluation backlog 16). Device evaluation is serial
 under the Trn2 lock (one candidate on one logical NeuronCore at a time). Tokens and USD are recorded per attempt under

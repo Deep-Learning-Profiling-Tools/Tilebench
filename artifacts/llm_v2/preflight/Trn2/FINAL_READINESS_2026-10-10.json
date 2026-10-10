@@ -1,0 +1,185 @@
+{
+ "calibration": {
+  "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+  "file_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
+  "recalibrated": false,
+  "status": "frozen",
+  "theoretical_audit_used_for_scoring": false
+ },
+ "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
+ "credentials": {
+  "claude": "CLAUDE_API_KEY -> models.retrieve(claude-opus-5-5) ok",
+  "gpt": "OPENAI_API_KEY -> models.retrieve(gpt-6.1-sol) ok",
+  "note": "keys read from the environment only; never written, printed or passed on a command line"
+ },
+ "date": "2026-10-10",
+ "eligibility": {
+  "counts": {
+   "eligible": 36,
+   "excluded": 9
+  },
+  "excluded_by_class": {
+   "baseline_case_failure": [
+    "gaussian_blur",
+    "reverse_array",
+    "top_k_selection"
+   ],
+   "baseline_correctness_failure": [
+    "flash_attention"
+   ],
+   "cpu_fallback": [
+    "2d_max_pooling",
+    "argmax",
+    "radix_sort"
+   ],
+   "no_eager_baseline": [
+    "block_sparse_attention"
+   ],
+   "scoring_peak_unavailable": [
+    "matmul_int8"
+   ]
+  },
+  "seal": "9c772f41f9daaaae645fef33bd5b904d1b233cc71a3e7ae10a948781e241057e"
+ },
+ "included_cases_check": {
+  "cases": 720,
+  "operators": 36,
+  "problems": [],
+  "scoring_table": {
+   "profile_status": "frozen",
+   "scoring_sha256": "dcb3f350a24bafa12d84b71121aacf4bbdc730724349b82edbc5ae4a0455ef5f",
+   "status_counts": {
+    "ok": 720
+   }
+  },
+  "torch_baseline": {
+   "path": "artifacts/llm_v2/baselines/Trn2/torch_baseline_Trn2_casesets_2026-10-10.json",
+   "sha256": "7cfb9a7e7baff053697c06d90d1127f7b38805b54ba9eb6d973a198ef5cc4a2c"
+  },
+  "valid_baseline_and_ok_target": 720
+ },
+ "launch_plan": {
+  "acceptance": {
+   "generation_rounds": 10,
+   "tasks": [
+    "vector_add"
+   ],
+   "trajectories": 2
+  },
+  "full_resume": {
+   "generation_rounds_total": 360,
+   "new": 70,
+   "reused_from_acceptance": 2,
+   "skipped_predeclared": [
+    "2d_max_pooling",
+    "argmax",
+    "block_sparse_attention",
+    "flash_attention",
+    "gaussian_blur",
+    "matmul_int8",
+    "radix_sort",
+    "reverse_array",
+    "top_k_selection"
+   ],
+   "trajectories": 72,
+   "unique_dirs": 72
+  },
+  "repeat_protection": "trajectory dirs are deterministic per (campaign, task, model, condition); an existing trajectory is only resumed (archived responses reused, never re-requested); without --resume an existing trajectory is refused, never restarted"
+ },
+ "owner_decisions": {
+  "T1": "study owner, 2026-10-10: freeze the existing Trn2 empirical calibration Trn2-20261010T012011Z-94406dcb; no recalibration; the hardware-theoretical audit is not used for revision-4 scoring",
+  "T2": "study owner, 2026-10-10: exclude matmul_int8 from the formal NKI Base for scoring_peak_unavailable (runnable, no reliable INT8 SOL ceiling; not CPU fallback); 36 eligible / 9 excluded, 20 cases each, 2 models x 5 rounds = 360 generation rounds; representative dtypes and frozen case sets unchanged",
+  "T3": "study owner, 2026-10-10: Docker approved as the formal Trn2 sandbox (the validated docker isolation path; isolation never disabled; GPU evaluators unchanged)"
+ },
+ "preflight": {
+  "anthropic": {
+   "blockers": [],
+   "components": {
+    "device:Trn2@2026-10-10": "approved",
+    "reference:nki@0.7.0b1": "approved"
+   },
+   "contracts_approved": 45,
+   "isolation_backend": "docker",
+   "isolation_probe_ok": true,
+   "ok": true,
+   "profile_status": "frozen",
+   "scoring_status_counts": {
+    "ok": 720
+   },
+   "warnings": [
+    "Trn2 isolation backend is docker (same allowlist and probe as bwrap; bwrap cannot create user namespaces on this host: bwrap not found)"
+   ]
+  },
+  "openai": {
+   "blockers": [],
+   "components": {
+    "device:Trn2@2026-10-10": "approved",
+    "reference:nki@0.7.0b1": "approved"
+   },
+   "contracts_approved": 45,
+   "isolation_backend": "docker",
+   "isolation_probe_ok": true,
+   "ok": true,
+   "profile_status": "frozen",
+   "scoring_status_counts": {
+    "ok": 720
+   },
+   "warnings": [
+    "Trn2 isolation backend is docker (same allowlist and probe as bwrap; bwrap cannot create user namespaces on this host: bwrap not found)"
+   ]
+  }
+ },
+ "reporting_note": {
+  "affects_launch_or_archive": false,
+  "affects_other_devices": "no (B200/GH200/MI300X have 45/45 eligible tasks: the device-aware status is identical for them)",
+  "issue": "devtools.recompute_metrics passes all 45 representative operators to metrics.efficiency.aggregate as 'eligible'; for Trn2 the 9 predeclared exclusions would count as 'missing' (exact E_bar(B) None, lower bound x36/45)",
+  "minimum_correction": "in recompute_metrics, build g['eligible'] from support.task_table for the group's device (eligible | unsupported) instead of all-eligible; needed before the Trn2 E_bar report, not before launch; not changed without approval"
+ },
+ "schema": "tilebench-llm-v2-trn2-final-readiness/1",
+ "scoring_issue_review": {
+  "linear_self_attention": {
+   "cases": 20,
+   "cases_where_ieee_fp32_rate_would_bind": [
+    3,
+    7,
+    11,
+    15,
+    19
+   ],
+   "declared_mode": "mma_tf32_f32acc",
+   "invalidates_formal_scores": false,
+   "max_target_change_if_ieee_fp32_rate": 1.161,
+   "memory_bound_cases": 20,
+   "why": "the contract allows TF32 operands for S and the numerator; on all 20 Trn2 cases T_emp = Q / BW_emp (the TF32 compute term never binds); the declared mode only makes the target stricter, never inflates efficiency"
+  },
+  "rmsnorm": {
+   "bound": "memory under both Q (compute term 4n / fp32_fma_vector is smaller)",
+   "compulsory_Q": "(2 * n + K) * dtype_size",
+   "frozen_Q": "n * dtype_size * 3",
+   "frozen_over_compulsory_target": [
+    1.4996,
+    1.4996
+   ],
+   "invalidates_formal_scores": false,
+   "manual_nki_efficiency_frozen_Q": {
+    "cases_above_1": 0,
+    "range": [
+     0.287,
+     0.801
+    ],
+    "source": "results/TRN2/csv/rmsnorm_default.csv nki_ms (formal native Trn2 results, main #322) on the 20 frozen fp16 cases"
+   },
+   "minimum_correction_if_wanted": "a central arithmetic_modes decision (like M4 radix_sort_Q): approved Q override for rmsnorm, Q = (2 * n + K) * dtype_size, applied to every device at the same time AFTER the running campaigns finish (arithmetic_modes.yaml is pinned by their scoring bindings; changing it mid-run refuses formal resumes); never a Trn2-only change",
+   "torch_baseline_efficiency_compulsory_Q": [
+    0.158,
+    0.427
+   ],
+   "torch_baseline_efficiency_frozen_Q": [
+    0.238,
+    0.64
+   ],
+   "why": "a uniform x1.5 per-operator scale of a frozen, shared definition (same on B200/GH200/MI300X); within-operator comparisons (models, Base vs Enhanced, rounds) are unchanged; efficiency > 1 is possible and is kept as an audit flag, never clipped; T_emp is not used during the run (prompts and feedback carry no SOL value), so a central correction can be applied post hoc"
+  }
+ },
+ "status": "ready_to_launch"
+}

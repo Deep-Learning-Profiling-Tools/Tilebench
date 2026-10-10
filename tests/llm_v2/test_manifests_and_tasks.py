@@ -98,15 +98,15 @@ def test_task_table_statuses(study, folds):
     # formal task view (protocol revision 3): only the representative dtype
     formal = support.task_table(study, folds, ["matmul_fp32_fp16_fp8", "vector_add"])
     assert {(e.key.operator, e.key.dtype) for e in formal} == {("matmul_fp32_fp16_fp8", "fp16"), ("vector_add", "fp16")}
-    # Trn2: the frozen eligibility manifest (37 eligible / 8 excluded); only the representative dtype is a task
+    # Trn2: the frozen eligibility manifest (36 eligible / 9 excluded); only the representative dtype is a task
     assert by[("Trn2", "nki", "vector_add", "fp16")].status == "eligible"
     assert by[("Trn2", "nki", "vector_add", "fp32")].status == "unsupported"
     assert by[("Trn2", "nki", "matmul_fp32_fp16_fp8", "fp16")].status == "eligible"
     trn2 = [e for e in support.task_table(study, folds) if e.key.device == "Trn2"]
-    assert sum(e.status == "eligible" for e in trn2) == 37 and len(trn2) == 45
+    assert sum(e.status == "eligible" for e in trn2) == 36 and len(trn2) == 45
     assert {e.key.operator for e in trn2 if e.status != "eligible"} == {
         "argmax", "2d_max_pooling", "radix_sort", "flash_attention", "block_sparse_attention", "gaussian_blur",
-        "reverse_array", "top_k_selection"}
+        "reverse_array", "top_k_selection", "matmul_int8"}
     assert all("excluded by the frozen Trn2 eligibility manifest" in e.reason for e in trn2 if e.status != "eligible")
     assert all(e.key.dsl in study["support_matrix"][e.key.device]["dsls"] for e in table)
     assert all(e.fold == ms.fold_of(folds, e.key.operator) for e in table)

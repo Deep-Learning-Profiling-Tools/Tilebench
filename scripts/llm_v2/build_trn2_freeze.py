@@ -4,10 +4,11 @@
     python scripts/llm_v2/build_trn2_freeze.py --check    # rebuild in memory and compare (tests/llm_v2/test_frozen_trn2.py)
 
 Same structure as frozen/B200_base_rev4_2026-10-07.json (schema tilebench-llm-v2-frozen-study/2) for the Trn2 / NKI
-track: 37 eligible tasks (manifests/trn2_eligibility.json), Reference Skill nki@0.7.0b1, Device Context
-Trn2@2026-10-10, native Neuron evaluator (timing adapter neuron_native_trace, docker isolation), the Trn2 empirical
-profile, scoring table and torch baseline. `freeze_status` stays `prepared` and `open_owner_decisions` lists what a
-formal launch still needs; the owner's decisions are recorded by re-running with --decided ... (never edited by hand)."""
+track: the eligible tasks of manifests/trn2_eligibility.json (36 after launch decision T2), Reference Skill
+nki@0.7.0b1, Device Context Trn2@2026-10-10, native Neuron evaluator (timing adapter neuron_native_trace, docker
+isolation), the Trn2 empirical profile, scoring table and torch baseline. `open_owner_decisions` lists what a formal
+launch still needs; the owner's decisions are recorded by re-running with --decided ID=record ... (never edited by
+hand). With T1/T2/T3 decided and the tree consistent, freeze_status is `frozen`."""
 from __future__ import annotations
 
 import argparse
@@ -42,12 +43,26 @@ SHARED_MANIFEST_DELTA = {
         "device_snapshots.Trn2: (absent) -> 2026-10-10",
         "torch_baselines.Trn2: (absent) -> artifacts/llm_v2/baselines/Trn2/torch_baseline_Trn2_casesets_2026-10-10.json",
     ],
-    "calibration.yaml": ["devices.Trn2: none -> Trn2-20261010T012011Z-94406dcb (status as registered)"],
+    "calibration.yaml": ["devices.Trn2: none -> Trn2-20261010T012011Z-94406dcb (status as registered; frozen by launch "
+                         "decision T1)"],
     "skills/manifest.json": ["reference.nki.0.7.0b1 added", "device.Trn2.2026-10-10 added; device.Trn2.2026-10-05 superseded_by"],
     "note": ("every other entry is unchanged; tests/llm_v2/test_frozen_rev4.py checks the B200 freeze on the B200 view of the "
              "study (exactly these Trn2 keys reverted). The study config hash of a Trn2 campaign therefore differs from the "
              "B200 one: these changes must not be merged into exp/llm-b200, exp/llm-gh200 or exp/llm-mi300x while their "
              "campaigns run."),
+}
+
+
+# Shared-definition scoring notes checked before launch (unchanged here; any correction is a central decision for every
+# device, because arithmetic_modes.yaml is pinned by the running campaigns' scoring bindings).
+SCORING_CAVEATS = {
+    "rmsnorm": ("frozen Q = 3*n*dtype_size (two sweeps of x + one write; audit.json) is exactly 1.5x the compulsory "
+                "(2*n + K)*dtype_size on all 20 Trn2 cases; memory-bound under both; uniform per-operator scale, so "
+                "within-operator comparisons are unchanged; efficiency > 1 is possible and kept as an audit flag (never "
+                "clipped); same frozen definition as B200/GH200/MI300X"),
+    "linear_self_attention": ("fp32 task declared mma_tf32_f32acc (contract allows TF32 operands for S and the numerator; "
+                              "the installed nc_matmul lists tfloat32 as a TensorE input type); all 20 Trn2 cases are memory-bound "
+                              "(T_emp = Q / BW_emp), so the TF32 compute rate never sets the target"),
 }
 
 
@@ -82,9 +97,10 @@ def build(decided: dict | None = None) -> dict:
         open_decisions.append({"id": "T1", "decision": "freeze the Trn2 empirical profile Trn2-20261010T012011Z-94406dcb "
                                "(calibration-register --status frozen --by <owner>)", "blocks": "formal preflight"})
     unavailable = sorted({r["operator"] for r in table["rows"] if r["status"] != "ok"})
-    if unavailable:
+    scoring_excluded = elig.get("excluded_by_class", {}).get("scoring_peak_unavailable", [])
+    if unavailable or not scoring_excluded:
         open_decisions.append({"id": "T2", "decision": f"scoring of execution-eligible tasks without an empirical ceiling: "
-                               f"{unavailable} (mode mma_int8_i32acc unsupported on NeuronCore-v3); keep them as "
+                               f"{unavailable or ['matmul_int8']} (mode mma_int8_i32acc unsupported on NeuronCore-v3); keep them as "
                                "execution-only tasks (no efficiency) or exclude them; never a substituted peak",
                                "blocks": "formal preflight (scoring_gate requires every task ok)"})
     open_decisions.append({"id": "T3", "decision": "accept the docker isolation backend for formal Trn2 runs (same allowlist "
@@ -92,6 +108,8 @@ def build(decided: dict | None = None) -> dict:
                            "blocks": "nothing in code (formal_isolation_backends(Trn2) accepts docker); owner sign-off"})
     for d in (decided or {}):
         open_decisions = [o for o in open_decisions if o["id"] != d]
+    n_cases = sum(elig["operators"][op]["n_cases"] for op in eligible)
+    ready = not open_decisions and not unavailable and table["status_counts"] == {"ok": n_cases}
     body = {
         "schema": "tilebench-llm-v2-frozen-study/2",
         "device": "Trn2", "dsls": ["nki"], "condition": "base", "models": ["gpt", "claude"],
@@ -107,7 +125,12 @@ def build(decided: dict | None = None) -> dict:
                       "case_set_ids": {op: cs["operators"][op]["case_set_id"] for op in eligible}},
         "representative_dtypes": {"mapping": {op: representative.selected()[op] for op in eligible}, "tasks_per_dsl": len(eligible)},
         "trn2_eligibility": {"path": str(support.TRN2_ELIGIBILITY_PATH.relative_to(REPO)), "seal": elig["sha256"],
-                             "counts": elig["counts"], "excluded": elig["excluded"], "eligible": eligible},
+                             "counts": elig["counts"], "excluded": elig["excluded"],
+                             "excluded_by_class": elig.get("excluded_by_class"), "eligible": eligible},
+        "campaign_size": {"operators": len(eligible), "cases_per_task": 20, "cases": n_cases, "models": 2,
+                          "trajectories": len(eligible) * 2, "rounds_per_trajectory": study["trajectory"]["rounds"],
+                          "generations_per_round": study["trajectory"]["max_generations_per_round"],
+                          "generation_rounds": len(eligible) * 2 * study["trajectory"]["rounds"]},
         "checker": fpm.checker_fingerprint(),
         "input_kinds": {"file": "tilebench/llm/v2/manifests/input_kinds.yaml", "sha256": _sha(ms.MANIFEST_DIR / "input_kinds.yaml")},
         "contracts": {op: {"contract_md": _sha(REPO / "tilebench/llm/v2/contracts/data" / op / "contract.md"),
@@ -145,6 +168,7 @@ def build(decided: dict | None = None) -> dict:
                            "cases_matched": sum(1 for op in eligible for v in bl["operators"][op]["cases"].values() if "torch_ms" in v)},
         "generators": {m: {k: g[m].get(k) for k in ("provider", "model_id", "reasoning_effort", "output_effort", "thinking",
                                                     "max_output_tokens", "status")} for m in ("gpt", "claude")},
+        "scoring_caveats": SCORING_CAVEATS,
         "folds": b200["folds"], "arithmetic_modes": {"revision": modes.get("revision"), "sha256": E.modes_sha256(), "status": modes.get("status")},
         "pricing": {"file": "tilebench/llm/v2/manifests/api_pricing.yaml", "pricing_snapshot_sha256": cost.pricing_sha256()},
         "transport": models.get("transport"),
@@ -158,10 +182,12 @@ def build(decided: dict | None = None) -> dict:
                                 "2.14.0+cpu, torch-neuronx 2.14.3); docker sandbox (image tilebench-sandbox-empty:1); "
                                 "NEURON_LOGICAL_NC_CONFIG=2, NEURON_RT_NUM_CORES=1; run under a memory-capped systemd user unit",
         "nominal_generations": len(eligible) * 2 * study["trajectory"]["rounds"],
-        "freeze_status": "prepared" if open_decisions and any(o["id"] in ("T1", "T2") for o in open_decisions) else "ready",
+        "freeze_status": "frozen" if ready else "prepared",
         "open_owner_decisions": open_decisions,
         "decided": decided or {},
-        "frozen_by": None, "frozen_on": None,
+        "frozen_by": ("study owner, Trn2 NKI Base launch decisions T1/T2/T3 (2026-10-10); integrated by the Claude Code "
+                      "session") if ready else None,
+        "frozen_on": "2026-10-10" if ready else None,
     }
     return body
 

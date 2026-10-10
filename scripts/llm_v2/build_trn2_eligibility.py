@@ -2,12 +2,17 @@
 
     python scripts/llm_v2/build_trn2_eligibility.py [--check]
 
-Rule (study owner, Trn2 NKI Base preparation instruction, 2026-10-10 §3): a task is the operator's
-predeclared representative dtype (manifests/representative_dtypes.yaml) on its 20 frozen cases
-(manifests/case_sets.yaml). It is eligible only when ALL 20 cases have a valid formal PyTorch eager
-baseline on the native Trn2 stack (results/TRN2/csv/<op>_default.csv: exactly one matching row per case,
-torch_status == "ok" and a finite positive torch_ms). Any CPU fallback, unresolved or failed baseline case
-excludes the operator; the dtype is never changed to avoid an exclusion. Nothing is re-run here.
+Rule (study owner, Trn2 NKI Base preparation instruction, 2026-10-10 §3, and launch decision T2): a task is
+the operator's predeclared representative dtype (manifests/representative_dtypes.yaml) on its 20 frozen cases
+(manifests/case_sets.yaml). It is eligible only when
+  1. ALL 20 cases have a valid formal PyTorch eager baseline on the native Trn2 stack
+     (results/TRN2/csv/<op>_default.csv: exactly one matching row per case, torch_status == "ok" and a finite
+     positive torch_ms). Any CPU fallback, unresolved or failed baseline case excludes the operator; and
+  2. ALL 20 cases have a supported empirical SOL target: metrics.empirical.t_emp with the declared mode
+     (manifests/arithmetic_modes.yaml) and the Trn2 profile registered in manifests/calibration.yaml gives status
+     "ok". A case without a calibrated ceiling (e.g. peak_unavailable) excludes the operator as
+     scoring_<status>; no other mode or theoretical peak is substituted.
+The dtype is never changed to avoid an exclusion. Nothing is re-run here.
 
 Case matching uses the framework's own CSV label matcher (metrics.baselines.label_matches), the same one that
 builds the stored torch baselines. Writes tilebench/llm/v2/manifests/trn2_eligibility.json (sealed);
@@ -25,13 +30,15 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
 from tilebench.llm.v2.manifests.schema import canonical_json, sha256_text  # noqa: E402
+from tilebench.llm.v2.metrics import empirical  # noqa: E402
 from tilebench.llm.v2.metrics.baselines import label_matches  # noqa: E402
 from tilebench.llm.v2.tasks import case_sets as cs_mod  # noqa: E402
+from tilebench.llm.v2.tasks.case_selection import load_operator_config  # noqa: E402
 from tilebench.llm.v2.tasks.representative import selected  # noqa: E402
 
 OUT = REPO / "tilebench" / "llm" / "v2" / "manifests" / "trn2_eligibility.json"
 CSV_ROOT = REPO / "results" / "TRN2" / "csv"
-SCHEMA = "tilebench-llm-v2-trn2-eligibility/1"
+SCHEMA = "tilebench-llm-v2-trn2-eligibility/2"
 # Provenance of results/TRN2/csv: the formal native Trn2 results merged on main (#322, 33e40ace; main 72d7cec6),
 # brought to exp/llm-trn2 by a plain file checkout (byte-identical to main).
 SOURCE_COMMIT = {"results_pr": "#322", "results_commit": "33e40ace", "main_commit": "72d7cec6"}
@@ -52,6 +59,21 @@ EXPLANATION = {
     "gaussian_blur": "a selected fp16 case has no valid PyTorch eager baseline (compiler/runtime failure)",
     "reverse_array": "selected fp16 cases have no valid PyTorch eager baseline (compiler/runtime failure)",
     "top_k_selection": "a selected fp32 case has no valid PyTorch eager baseline (compiler/runtime failure)",
+    "matmul_int8": "runnable on the device (20/20 valid formal baselines; not a CPU fallback) but no supported SOL "
+                   "scoring mode: the declared mode mma_int8_i32acc has no calibrated Trn2 ceiling (NeuronCore-v3 "
+                   "TensorE has no int8 input type); no bf16 or theoretical peak is substituted",
+}
+# Exclusion class of a baseline failure (rule 1); a scoring exclusion (rule 2) is scoring_<t_emp status>.
+BASELINE_CLASS = {
+    "argmax": "cpu_fallback", "2d_max_pooling": "cpu_fallback", "radix_sort": "cpu_fallback",
+    "flash_attention": "baseline_correctness_failure", "block_sparse_attention": "no_eager_baseline",
+    "gaussian_blur": "baseline_case_failure", "reverse_array": "baseline_case_failure",
+    "top_k_selection": "baseline_case_failure",
+}
+DECISIONS = {
+    "T2_scoring_availability": "study owner, Trn2 NKI Base launch decision T2 (2026-10-10): every included task needs "
+                               "valid formal baseline coverage AND a supported SOL scoring mode; matmul_int8 is "
+                               "excluded for scoring_peak_unavailable (not CPU fallback)",
 }
 
 
@@ -78,8 +100,24 @@ def _case_evidence(rows: list[dict], case: dict) -> dict:
     return ev
 
 
+def _scoring(op: str, dtype: str, cases: list[dict], profile: dict, modes_doc: dict) -> dict:
+    """Rule 2: the empirical target of every frozen case (the scoring-table computation)."""
+    metrics_cfg = load_operator_config(op).get("metrics", {})
+    recs = [empirical.t_emp("Trn2", op, dtype, c["params"], c.get("problem_size", 1), metrics_cfg, modes_doc, profile)
+            for c in cases]
+    counts: dict[str, int] = {}
+    for r in recs:
+        counts[r.status] = counts.get(r.status, 0) + 1
+    bad = [r for r in recs if r.status != "ok"]
+    return {"mode": recs[0].mode if recs else None, "status_counts": counts, "supported": not bad and len(recs) == 20,
+            "problem_status": bad[0].status if bad else None, "problem": bad[0].reason if bad else None}
+
+
 def build() -> dict:
     sets = cs_mod.load_manifest()["operators"]
+    entry_cal = empirical.device_entry("Trn2")
+    profile = empirical.load_profile(entry_cal)          # sha256-verified against calibration.yaml
+    modes_doc = empirical.load_modes()
     chosen = selected()
     ops, counts = {}, {"eligible": 0, "excluded": 0}
     for op in sorted(sets):
@@ -92,18 +130,28 @@ def build() -> dict:
         cases = [_case_evidence(rows, c) for c in entry["cases"]]
         n_valid = sum(1 for c in cases if c["baseline_valid"])
         n = len(entry["cases"])
-        eligible = n == 20 and n_valid == n
+        baseline_ok = n == 20 and n_valid == n
+        scoring = _scoring(op, dtype, entry["cases"], profile, modes_doc)
+        eligible = baseline_ok and scoring["supported"]
         bad = [c for c in cases if not c["baseline_valid"]]
         reasons = sorted({c.get("na_reason") or c.get("problem") or c.get("torch_status") or "invalid" for c in bad})
         if eligible:
-            reason = f"20/20 configured {dtype} cases have a valid formal PyTorch eager baseline on the native Trn2 stack"
-        else:
+            exclusion_class = None
+            reason = (f"20/20 configured {dtype} cases have a valid formal PyTorch eager baseline on the native Trn2 "
+                      f"stack and a supported empirical SOL target (mode {scoring['mode']})")
+        elif not baseline_ok:
+            exclusion_class = BASELINE_CLASS.get(op, "baseline_invalid")
             reason = (f"{EXPLANATION.get(op, 'baseline not valid on every case')}: {n_valid}/{n} configured {dtype} "
                       f"cases have a valid baseline; CSV reasons {reasons}")
+        else:
+            exclusion_class = f"scoring_{scoring['problem_status']}"
+            reason = (f"{EXPLANATION.get(op, 'no supported SOL scoring mode')}: {n_valid}/{n} configured {dtype} cases "
+                      f"have a valid baseline, empirical targets {scoring['status_counts']} ({scoring['problem']})")
         counts["eligible" if eligible else "excluded"] += 1
         ops[op] = {"dtype": dtype, "case_set_id": entry["case_set_id"], "n_cases": n,
                    "cases_matched": sum(1 for c in cases if c["matching_rows"] == 1), "baseline_valid_cases": n_valid,
-                   "status": "eligible" if eligible else "excluded", "reason": reason,
+                   "baseline_complete": baseline_ok, "scoring": scoring,
+                   "status": "eligible" if eligible else "excluded", "exclusion_class": exclusion_class, "reason": reason,
                    "csv": {"path": str(path.relative_to(REPO)), "sha256": _sha256(path) if path.exists() else None,
                            "rows_for_dtype": len(rows)},
                    "cases": cases}
@@ -111,9 +159,17 @@ def build() -> dict:
         "schema": SCHEMA, "device": "Trn2", "dsl": "nki", "status": "frozen", "frozen_on": "2026-10-10",
         "approved_by": "study owner, Trn2 NKI Base preparation instruction (2026-10-10) §3: an operator whose selected "
                        "task has any CPU-fallback or otherwise invalid formal baseline case is excluded; 20/20 valid "
-                       "baseline cases are required; the dtype is never changed",
-        "rule": "eligible iff all 20 frozen cases of the representative dtype have exactly one row in "
-                "results/TRN2/csv/<op>_default.csv with torch_status == 'ok' and finite positive torch_ms",
+                       "baseline cases are required; the dtype is never changed. Launch decision T2 (2026-10-10): "
+                       "an included task also needs a supported SOL scoring mode on every case",
+        "decisions": DECISIONS,
+        "rule": "eligible iff all 20 frozen cases of the representative dtype (1) have exactly one row in "
+                "results/TRN2/csv/<op>_default.csv with torch_status == 'ok' and finite positive torch_ms and "
+                "(2) have empirical-target status 'ok' under the declared mode and the registered Trn2 profile",
+        "scoring_source": {"calibration_id": profile.get("calibration_id"), "profile": entry_cal.get("profile"),
+                           "profile_file_sha256": entry_cal.get("sha256"),
+                           "profile_seal_sha256": profile.get("profile_sha256"),
+                           "arithmetic_modes_sha256": empirical.modes_sha256(),
+                           "ceiling_basis": profile.get("ceiling_basis")},
         "protocol": {"revision": 4, "operators": len(ops), "cases_per_task": 20,
                      "representative_dtypes_sha256": _sha256(REPO / "tilebench/llm/v2/manifests/representative_dtypes.yaml"),
                      "case_sets_sha256": _sha256(REPO / "tilebench/llm/v2/manifests/case_sets.yaml")},
@@ -121,6 +177,8 @@ def build() -> dict:
                    "stack": "native PyTorch eager on torch.device('neuron') vs NKI 0.7, device busy sum, warmup 1 / repeat 3"},
         "counts": counts,
         "excluded": sorted(op for op, v in ops.items() if v["status"] == "excluded"),
+        "excluded_by_class": {k: sorted(op for op, v in ops.items() if v["exclusion_class"] == k)
+                              for k in sorted({v["exclusion_class"] for v in ops.values() if v["exclusion_class"]})},
         "operators": ops,
     }
     body["sha256"] = sha256_text(canonical_json({k: v for k, v in body.items() if k != "sha256"}))

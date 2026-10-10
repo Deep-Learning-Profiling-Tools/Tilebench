@@ -1,8 +1,11 @@
 {
- "approved_by": "study owner, Trn2 NKI Base preparation instruction (2026-10-10) \u00a73: an operator whose selected task has any CPU-fallback or otherwise invalid formal baseline case is excluded; 20/20 valid baseline cases are required; the dtype is never changed",
+ "approved_by": "study owner, Trn2 NKI Base preparation instruction (2026-10-10) \u00a73: an operator whose selected task has any CPU-fallback or otherwise invalid formal baseline case is excluded; 20/20 valid baseline cases are required; the dtype is never changed. Launch decision T2 (2026-10-10): an included task also needs a supported SOL scoring mode on every case",
  "counts": {
-  "eligible": 37,
-  "excluded": 8
+  "eligible": 36,
+  "excluded": 9
+ },
+ "decisions": {
+  "T2_scoring_availability": "study owner, Trn2 NKI Base launch decision T2 (2026-10-10): every included task needs valid formal baseline coverage AND a supported SOL scoring mode; matmul_int8 is excluded for scoring_peak_unavailable (not CPU fallback)"
  },
  "device": "Trn2",
  "dsl": "nki",
@@ -12,13 +15,36 @@
   "block_sparse_attention",
   "flash_attention",
   "gaussian_blur",
+  "matmul_int8",
   "radix_sort",
   "reverse_array",
   "top_k_selection"
  ],
+ "excluded_by_class": {
+  "baseline_case_failure": [
+   "gaussian_blur",
+   "reverse_array",
+   "top_k_selection"
+  ],
+  "baseline_correctness_failure": [
+   "flash_attention"
+  ],
+  "cpu_fallback": [
+   "2d_max_pooling",
+   "argmax",
+   "radix_sort"
+  ],
+  "no_eager_baseline": [
+   "block_sparse_attention"
+  ],
+  "scoring_peak_unavailable": [
+   "matmul_int8"
+  ]
+ },
  "frozen_on": "2026-10-10",
  "operators": {
   "1d_conv": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs1d8520afbc91ca",
    "cases": [
@@ -470,11 +496,22 @@
     "sha256": "6399e2b50c7d03b8e0360749f9dad3422ff6e900ea5a33c5aa30756163b93fed"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "2d_conv": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs9697a5536da422",
    "cases": [
@@ -926,11 +963,22 @@
     "sha256": "35a3c67ca10d8b5117d1b8efd556827cb085cd8e5cc9c1d5f57fe72683c452db"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "2d_max_pooling": {
+   "baseline_complete": false,
    "baseline_valid_cases": 0,
    "case_set_id": "cs0cf0c692f84139",
    "cases": [
@@ -1342,11 +1390,22 @@
     "sha256": "733850d20f3d298f0efd900333314742832bcfb505b2969be74e1d7358f9bba9"
    },
    "dtype": "fp16",
+   "exclusion_class": "cpu_fallback",
    "n_cases": 20,
    "reason": "PyTorch eager baseline is a whole-op CPU fallback on the native Neuron stack (aten::max_pool2d_with_indices.out, 0 device executions): 0/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_cpu_fallback']",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "3d_conv": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cseb9b3e9894d920",
    "cases": [
@@ -1818,11 +1877,22 @@
     "sha256": "9ca6f71805df1ee3e33a4f032662cc6a4fcc7c197198b21e38b849d2dafcd732"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "argmax": {
+   "baseline_complete": false,
    "baseline_valid_cases": 0,
    "case_set_id": "cs669a73db6df5b2",
    "cases": [
@@ -2154,11 +2224,22 @@
     "sha256": "0f09ed20c0e717774efd42c01647ed9a168c05438dd024f8aba15679ad1e8602"
    },
    "dtype": "fp16",
+   "exclusion_class": "cpu_fallback",
    "n_cases": 20,
    "reason": "PyTorch eager baseline is a whole-op CPU fallback on the native Neuron stack (aten::argmax.out, 0 device executions): 0/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_cpu_fallback']",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "batch_normalization": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs8199ba4fc0dd31",
    "cases": [
@@ -2510,11 +2591,22 @@
     "sha256": "6b0932127990453424d252cd5c6a5643efced0f8c1fc03fa0e03755d4743b333"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "batched_matmul": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs6cb415daa08740",
    "cases": [
@@ -2846,11 +2938,22 @@
     "sha256": "9311a908c0946bad60c00901dd947eb302474676fbc358423763281ab11bbcac"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "bitonic_sort": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csaa7d57e1d85162",
    "cases": [
@@ -3162,11 +3265,22 @@
     "sha256": "7295376e01c725535202d08dd4ef1dd18eb72636ee77cb26fb2c2725d29d533d"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "block_sparse_attention": {
+   "baseline_complete": false,
    "baseline_valid_cases": 0,
    "case_set_id": "cs78fcbdb4308a03",
    "cases": [
@@ -3618,11 +3732,22 @@
     "sha256": "e5ca8eb21e5c0239120f6433394e9b979a4cb20e758e5b7612cea54df11c2229"
    },
    "dtype": "fp16",
+   "exclusion_class": "no_eager_baseline",
    "n_cases": 20,
    "reason": "the PyTorch baseline is flex_attention, which cannot run without torch.compile; no pure eager baseline (unresolved): 0/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_compiler_runtime_failure', 'pytorch_compiler_runtime_failure+nki_compile_failure']",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "cross_entropy": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs995a83c46b5a76",
    "cases": [
@@ -3954,11 +4079,22 @@
     "sha256": "2fd82fa47d39ca02e037a516549431f9f7ca53660e8938d534618e79758dfd90"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "dequantize_rowwise": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs2d56e784a7673d",
    "cases": [
@@ -4290,11 +4426,22 @@
     "sha256": "a5f7dae799c5d1e1b3374112f829150dd05bc1f7eed28bafc1f626d8c57732d5"
    },
    "dtype": "int8",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured int8 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured int8 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "destindex": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs27a541db79362f",
    "cases": [
@@ -4706,11 +4853,22 @@
     "sha256": "bc968460426c1ef05ec7d34ff9fedbc1c9f28fa2baf8ca61c8d7a8261e1de487"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "dropout": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csbcfaae391dbf3d",
    "cases": [
@@ -5042,11 +5200,22 @@
     "sha256": "39a2913b6edcae6e2b7bfb5c28695ed99b5124db107d6316cf7e602c5bb49dbe"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "flash_attention": {
+   "baseline_complete": false,
    "baseline_valid_cases": 0,
    "case_set_id": "cs2bba98c2ae2cc2",
    "cases": [
@@ -5438,11 +5607,22 @@
     "sha256": "3da316ebaf3a6976363e8ce752f8094c760476318b025831ed8ed600da585cf7"
    },
    "dtype": "fp16",
+   "exclusion_class": "baseline_correctness_failure",
    "n_cases": 20,
    "reason": "PyTorch eager baseline (scaled_dot_product_attention, fp16) fails the operator's verify tolerance on the device (baseline correctness failure); baseline unresolved: 0/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_correctness_failure']",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "flash_decode": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csea7201186f2501",
    "cases": [
@@ -5834,11 +6014,22 @@
     "sha256": "e4de2697c8df5aa8fbf8d773f9d58303f79942a5b3c8eda4fbe515dc7b6fa2bd"
    },
    "dtype": "fp32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "fused_activation": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs7afc46137c977a",
    "cases": [
@@ -6150,11 +6341,22 @@
     "sha256": "ec27c32459768ca1dc58f71ba97b2f69a3f657a0467ac847cb363903a27d8b34"
    },
    "dtype": "fp32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "gaussian_blur": {
+   "baseline_complete": false,
    "baseline_valid_cases": 19,
    "case_set_id": "cs6396ee6a61c519",
    "cases": [
@@ -6506,11 +6708,22 @@
     "sha256": "37aede2947d8d38312570e489ca1aea06f9ffa7827693ffb39dc23066e600e35"
    },
    "dtype": "fp16",
+   "exclusion_class": "baseline_case_failure",
    "n_cases": 20,
    "reason": "a selected fp16 case has no valid PyTorch eager baseline (compiler/runtime failure): 19/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_compiler_runtime_failure']",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "histogramming": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs54621674520c5f",
    "cases": [
@@ -6842,11 +7055,22 @@
     "sha256": "56ed2370cf3d829c4d73da51869107a011c416b9dfcbaf931965cc9d979cee4d"
    },
    "dtype": "int32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured int32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured int32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "interleave": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs2d6eed9099371b",
    "cases": [
@@ -7158,11 +7382,22 @@
     "sha256": "34c8bcec24a0d2120d0bda43a68d0ff37226b01f1761878bbaa35dc7fa4204cf"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "jacobi_stencil_2d": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs9452bbd82634ee",
    "cases": [
@@ -7474,11 +7709,22 @@
     "sha256": "da9985842476dbc3e2bf80d5c2e50b754f4957af5ad33aebd2bab855b6ed79d6"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "kl_divergence": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cse8a6515f2c9a64",
    "cases": [
@@ -7810,11 +8056,22 @@
     "sha256": "75f1e20c8283e2a7e73d1296b688ed29b9f7d38608be90a37f062f9ab50d26b5"
    },
    "dtype": "fp32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "l2_norm": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs3186bb04badec6",
    "cases": [
@@ -8186,11 +8443,22 @@
     "sha256": "74bd136983f1356093f64a96b780b7cbe0e10599da8dcf1a228f8586487b2113"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "layernorm": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs91444377a8babf",
    "cases": [
@@ -8542,11 +8810,22 @@
     "sha256": "9cf04b1a59efd5ec17d3deb23e9f04cb8eaf2e5059edfdb9ced7cc54b26b358a"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "leaky_relu": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs11ae44a787e6c8",
    "cases": [
@@ -8858,11 +9137,22 @@
     "sha256": "ee79f01216bf7fda496c2196c4a88356e257221cb48a324648f199d6e599ca66"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "linear_self_attention": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csc732b2bf2559b5",
    "cases": [
@@ -9214,11 +9504,22 @@
     "sha256": "df93bf3083c474a6098d14a5699a8892c96c313076119e17d975c88686dc4373"
    },
    "dtype": "fp32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_tf32_f32acc)",
+   "scoring": {
+    "mode": "mma_tf32_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "matmul_fp32_fp16_fp8": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cscdc555a8cece79",
    "cases": [
@@ -9570,11 +9871,22 @@
     "sha256": "f5f0b91eaa76e0be8bb2ed49ba21967fa4edb05ee233689e637814806f8d2e5b"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "matmul_int8": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs29312ffd455385",
    "cases": [
@@ -9926,11 +10238,22 @@
     "sha256": "cf89ae130237f647737650f6557b3674303a2b42a001396301780f89d719da4b"
    },
    "dtype": "int8",
+   "exclusion_class": "scoring_peak_unavailable",
    "n_cases": 20,
-   "reason": "20/20 configured int8 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
-   "status": "eligible"
+   "reason": "runnable on the device (20/20 valid formal baselines; not a CPU fallback) but no supported SOL scoring mode: the declared mode mma_int8_i32acc has no calibrated Trn2 ceiling (NeuronCore-v3 TensorE has no int8 input type); no bf16 or theoretical peak is substituted: 20/20 configured int8 cases have a valid baseline, empirical targets {'peak_unavailable': 20} (mode 'mma_int8_i32acc' is unsupported in profile Trn2-20261010T012011Z-94406dcb)",
+   "scoring": {
+    "mode": "mma_int8_i32acc",
+    "problem": "mode 'mma_int8_i32acc' is unsupported in profile Trn2-20261010T012011Z-94406dcb",
+    "problem_status": "peak_unavailable",
+    "status_counts": {
+     "peak_unavailable": 20
+    },
+    "supported": false
+   },
+   "status": "excluded"
   },
   "matrix_copy": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csd5b9d774a2fc60",
    "cases": [
@@ -10242,11 +10565,22 @@
     "sha256": "0fd84d8b669c951b31ce091cbd5a89d4fd45142a959209f3af3c8132cd0128e7"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "matrix_transpose": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs09eea75aea1ead",
    "cases": [
@@ -10578,11 +10912,22 @@
     "sha256": "d8a151f56327dc4bc653a01fda05ff5fd520af48e3bcfedcae288928d7bef3b4"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode no_compute_term)",
+   "scoring": {
+    "mode": "no_compute_term",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "mean_reduction": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csb1e501cd397cbf",
    "cases": [
@@ -10914,11 +11259,22 @@
     "sha256": "393b1f56e4739df81d5777591e118858228de53615e47b25d6617c0b19264610"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "moe_topk_gating": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs1228f576141cee",
    "cases": [
@@ -11270,11 +11626,22 @@
     "sha256": "efbed991bf55f08d1b8c1d12f3acb759d2a22300e346769fe97d04336fde6a74"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "mul2": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs1e86374317d8eb",
    "cases": [
@@ -11586,11 +11953,22 @@
     "sha256": "79a8a17b0ddde1f9d38356119ad8fbce7fe8816a30fd63ca5d278ec209e1f757"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "quantize_global": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csbe3d2473607bb1",
    "cases": [
@@ -11902,11 +12280,22 @@
     "sha256": "fcd8077746b1b746b2baca0faab01b5fadec29211aefe4ff29de1848c858b6c0"
    },
    "dtype": "fp32",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp32 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "radix_sort": {
+   "baseline_complete": false,
    "baseline_valid_cases": 0,
    "case_set_id": "csb333b61a315e71",
    "cases": [
@@ -12218,11 +12607,22 @@
     "sha256": "e4a9d4be3f7f0116c58bc166b302e6b9a3270d318aea32e71af3e0acb3d637d9"
    },
    "dtype": "int32",
+   "exclusion_class": "cpu_fallback",
    "n_cases": 20,
    "reason": "PyTorch eager baseline (torch.sort) is a whole-op CPU fallback on the native Neuron stack (aten::sort.values_stable); baseline unresolved: 0/20 configured int32 cases have a valid baseline; CSV reasons ['pytorch_cpu_fallback']",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "relu": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csfbe98a30766d2b",
    "cases": [
@@ -12534,11 +12934,22 @@
     "sha256": "03f0a0b5e0364438b6ba4c8624d44979bd06234d87f1e2d02bbc24adc6f2f470"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode memory_only)",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "reverse_array": {
+   "baseline_complete": false,
    "baseline_valid_cases": 18,
    "case_set_id": "cs98acffa69eb133",
    "cases": [
@@ -12850,11 +13261,22 @@
     "sha256": "954859433c5220ed5026b85c0963108670a00424d485dc290b1c8c979557c1cf"
    },
    "dtype": "fp16",
+   "exclusion_class": "baseline_case_failure",
    "n_cases": 20,
    "reason": "selected fp16 cases have no valid PyTorch eager baseline (compiler/runtime failure): 18/20 configured fp16 cases have a valid baseline; CSV reasons ['pytorch_compiler_runtime_failure']",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "rmsnorm": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs9112d8da431d44",
    "cases": [
@@ -13206,11 +13628,22 @@
     "sha256": "69b2f74558a89f9e63cbbefaffc717e5888b9e224a0aecaca52f8ffa293eaad1"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "rope": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs82374c327612ea",
    "cases": [
@@ -13582,11 +14015,22 @@
     "sha256": "60157ffa7f8981d7c5206f112fe950dd618876a7751d5eb2264f793cd8b556bd"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "sigmoid": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs0e2d4d76124f8e",
    "cases": [
@@ -13898,11 +14342,22 @@
     "sha256": "648ae424695c15816fcebb904aae2b5aa093e8adfecc99aa2541c1e37fa68254"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "softmax": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csbad126edff3052",
    "cases": [
@@ -14234,11 +14689,22 @@
     "sha256": "46b4d815cc49a824ba1c1664aa13ebc12b414f6752a62243e97fc6c64dadc97b"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "streamk_matmul": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "csa6d1726ea07d69",
    "cases": [
@@ -14590,11 +15056,22 @@
     "sha256": "3744a413c22ef7eea2d7e003111497f8f49f0e6da31a5b478e9365f352018253"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode mma_fp16_f32acc)",
+   "scoring": {
+    "mode": "mma_fp16_f32acc",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "swiglu": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs7c11daea9eef1d",
    "cases": [
@@ -14926,11 +15403,22 @@
     "sha256": "85dab23bfc53f459c85b5b0e0b5787a13b2f8963dffa20a8833a57a085059303"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp32_fma_vector)",
+   "scoring": {
+    "mode": "fp32_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "top_k_selection": {
+   "baseline_complete": false,
    "baseline_valid_cases": 19,
    "case_set_id": "csab1807ad4f92d3",
    "cases": [
@@ -15262,11 +15750,22 @@
     "sha256": "3b06b3c7590c6a0b18501249aafa346ff660e58da16ec4877672608e8aae1be0"
    },
    "dtype": "fp32",
+   "exclusion_class": "baseline_case_failure",
    "n_cases": 20,
    "reason": "a selected fp32 case has no valid PyTorch eager baseline (compiler/runtime failure): 19/20 configured fp32 cases have a valid baseline; CSV reasons ['pytorch_compiler_runtime_failure']",
+   "scoring": {
+    "mode": "memory_only",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "excluded"
   },
   "vector_add": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs47da23e923da6c",
    "cases": [
@@ -15578,11 +16077,22 @@
     "sha256": "ed9fb68383a45495b68131f090464a3e6e80e77b2e2af98e1c3d5742015725a6"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   },
   "weight_dequant": {
+   "baseline_complete": true,
    "baseline_valid_cases": 20,
    "case_set_id": "cs0739cc12568be0",
    "cases": [
@@ -15914,8 +16424,18 @@
     "sha256": "22798630fc944e1968fd9610f4f8f605010fdcd98583b59ac25fcd70b7d421ec"
    },
    "dtype": "fp16",
+   "exclusion_class": null,
    "n_cases": 20,
-   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack",
+   "reason": "20/20 configured fp16 cases have a valid formal PyTorch eager baseline on the native Trn2 stack and a supported empirical SOL target (mode fp16x2_fma_vector)",
+   "scoring": {
+    "mode": "fp16x2_fma_vector",
+    "problem": null,
+    "problem_status": null,
+    "status_counts": {
+     "ok": 20
+    },
+    "supported": true
+   },
    "status": "eligible"
   }
  },
@@ -15926,9 +16446,17 @@
   "representative_dtypes_sha256": "12c8d7928b17a5ac8e6a49a2bf03f06a389828e6094e91f6d29660acd1160185",
   "revision": 4
  },
- "rule": "eligible iff all 20 frozen cases of the representative dtype have exactly one row in results/TRN2/csv/<op>_default.csv with torch_status == 'ok' and finite positive torch_ms",
- "schema": "tilebench-llm-v2-trn2-eligibility/1",
- "sha256": "0752107cb4473e5969988cbc2a82c1af42530872209e1d82d39ae93a06b96118",
+ "rule": "eligible iff all 20 frozen cases of the representative dtype (1) have exactly one row in results/TRN2/csv/<op>_default.csv with torch_status == 'ok' and finite positive torch_ms and (2) have empirical-target status 'ok' under the declared mode and the registered Trn2 profile",
+ "schema": "tilebench-llm-v2-trn2-eligibility/2",
+ "scoring_source": {
+  "arithmetic_modes_sha256": "f81f6a99fb8e532109a3710767c778bdccad5b7efb1eb390baffda4f8b002e70",
+  "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+  "ceiling_basis": "empirical",
+  "profile": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json",
+  "profile_file_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
+  "profile_seal_sha256": "3915ffa3d97967926fd2c845f3bcdb7e1b44ac636ec6df698cef4c1926b986d2"
+ },
+ "sha256": "9c772f41f9daaaae645fef33bd5b904d1b233cc71a3e7ae10a948781e241057e",
  "source": {
   "csv_root": "results/TRN2/csv",
   "main_commit": "72d7cec6",

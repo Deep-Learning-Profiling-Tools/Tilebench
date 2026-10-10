@@ -10,10 +10,20 @@
   "embedded_seal": "3915ffa3d97967926fd2c845f3bcdb7e1b44ac636ec6df698cef4c1926b986d2",
   "file_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
   "path": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json",
-  "status": "candidate"
+  "status": "frozen"
  },
  "campaign": "formal_trn2_nki_base_rev4_2026-10-10",
  "campaign_environment": "trn2.3xlarge; /home/ubuntu/workspace/native_venv (nki 0.7.0b1, neuronx-cc 2.0.404830.0a0, torch 2.14.0+cpu, torch-neuronx 2.14.3); docker sandbox (image tilebench-sandbox-empty:1); NEURON_LOGICAL_NC_CONFIG=2, NEURON_RT_NUM_CORES=1; run under a memory-capped systemd user unit",
+ "campaign_size": {
+  "cases": 720,
+  "cases_per_task": 20,
+  "generation_rounds": 360,
+  "generations_per_round": 1,
+  "models": 2,
+  "operators": 36,
+  "rounds_per_trajectory": 5,
+  "trajectories": 72
+ },
  "case_sets": {
   "case_set_ids": {
    "1d_conv": "cs1d8520afbc91ca",
@@ -37,7 +47,6 @@
    "leaky_relu": "cs11ae44a787e6c8",
    "linear_self_attention": "csc732b2bf2559b5",
    "matmul_fp32_fp16_fp8": "cscdc555a8cece79",
-   "matmul_int8": "cs29312ffd455385",
    "matrix_copy": "csd5b9d774a2fc60",
    "matrix_transpose": "cs09eea75aea1ead",
    "mean_reduction": "csb1e501cd397cbf",
@@ -175,11 +184,6 @@
    "contract_md": "7d777b9c79174883c16d974ccd66f338f82435fc78c6ec1d1d8b2b34e2fcf693",
    "evaluator_rules_json": "d994b4beb5f05ccd00b5b0ecfed1464ef65de0a296a53279192953bde2b8b7a3"
   },
-  "matmul_int8": {
-   "audit_json": "d21fb288a10d3004f694c9e798d1ad81244ca8d59e66cc429f511a72f5ace27e",
-   "contract_md": "4a28ad0b64df58ff0cc44ebca6795c4209bec8f94638b45ae585f6361e450862",
-   "evaluator_rules_json": "c76a939a8a1a51453c0400c065f7a009f0b2bcb68e9b7611ff4617853a047a6e"
-  },
   "matrix_copy": {
    "audit_json": "51459ac4534fdff6bd6e364364ba94b9ee5dd0a6762a69e31b47ead172fa56c8",
    "contract_md": "42758dfc3a80991be6ead6093a5e30404ac22673931f6becf8adac1ab481a347",
@@ -257,7 +261,11 @@
   }
  },
  "contracts_identical_to_b200_freeze": true,
- "decided": {},
+ "decided": {
+  "T1": "study owner, 2026-10-10: freeze the existing Trn2 empirical calibration Trn2-20261010T012011Z-94406dcb; no recalibration; the hardware-theoretical audit is not used for revision-4 scoring",
+  "T2": "study owner, 2026-10-10: exclude matmul_int8 from the formal NKI Base for scoring_peak_unavailable (runnable, no reliable INT8 SOL ceiling; not CPU fallback); 36 eligible / 9 excluded, 20 cases each, 2 models x 5 rounds = 360 generation rounds; representative dtypes and frozen case sets unchanged",
+  "T3": "study owner, 2026-10-10: Docker approved as the formal Trn2 sandbox (the validated docker isolation path; isolation never disabled; GPU evaluators unchanged)"
+ },
  "device": "Trn2",
  "dsls": [
   "nki"
@@ -296,9 +304,9 @@
   "sha256": "5a178da67c949e182f57d56121a672c0a5ccfba151cdf92b15fc60a96c007daa",
   "status": "frozen"
  },
- "freeze_status": "prepared",
- "frozen_by": null,
- "frozen_on": null,
+ "freeze_status": "frozen",
+ "frozen_by": "study owner, Trn2 NKI Base launch decisions T1/T2/T3 (2026-10-10); integrated by the Claude Code session",
+ "frozen_on": "2026-10-10",
  "generators": {
   "claude": {
    "max_output_tokens": 128000,
@@ -328,7 +336,7 @@
  "manifests": {
   "api_pricing.yaml": "8eeac6c290fab04ee02b05390fbab28c0f6ee8e5cd91d7160e6cbfaef29a2c44",
   "arithmetic_modes.yaml": "f81f6a99fb8e532109a3710767c778bdccad5b7efb1eb390baffda4f8b002e70",
-  "calibration.yaml": "0c9c08c6e7845170e68123c26590a940468421f89afc1e3b7b6f524aa142b6fe",
+  "calibration.yaml": "712287815b214bdab9684b8751a87d183725f9f6554e47e8c67fe15ca125a1f6",
   "case_sets.yaml": "eec555d62616cf6e3b6ffd85221d8ab9640a3b710121f3961c3b98bd53911b30",
   "excluded_campaigns.yaml": "719031a919eb8effd8ed278b0e8fbaae9303486d11ec7035ac0524e316c3cb30",
   "folds.yaml": "5a178da67c949e182f57d56121a672c0a5ccfba151cdf92b15fc60a96c007daa",
@@ -336,30 +344,14 @@
   "models.yaml": "8a0bcacb0e6e64e81cc5fc725a706f52c9a484d66537c415f13e60fc46bb731c",
   "representative_dtypes.yaml": "12c8d7928b17a5ac8e6a49a2bf03f06a389828e6094e91f6d29660acd1160185",
   "study.yaml": "ed4b6aca96ae014dd7d5130c7062dc8cc5e4ef96267fc0f209ea61ea317c1546",
-  "trn2_eligibility.json": "b7f90597c89186a0429a2abe776ad37072631c04746ae353daf806b093fe0ad0"
+  "trn2_eligibility.json": "5740430c8aa3dddc49d99f6e59485c8f3ed8355961746a54a61505ffffd4a157"
  },
  "models": [
   "gpt",
   "claude"
  ],
- "nominal_generations": 370,
- "open_owner_decisions": [
-  {
-   "blocks": "formal preflight",
-   "decision": "freeze the Trn2 empirical profile Trn2-20261010T012011Z-94406dcb (calibration-register --status frozen --by <owner>)",
-   "id": "T1"
-  },
-  {
-   "blocks": "formal preflight (scoring_gate requires every task ok)",
-   "decision": "scoring of execution-eligible tasks without an empirical ceiling: ['matmul_int8'] (mode mma_int8_i32acc unsupported on NeuronCore-v3); keep them as execution-only tasks (no efficiency) or exclude them; never a substituted peak",
-   "id": "T2"
-  },
-  {
-   "blocks": "nothing in code (formal_isolation_backends(Trn2) accepts docker); owner sign-off",
-   "decision": "accept the docker isolation backend for formal Trn2 runs (same allowlist and probe as bwrap; bwrap cannot create user namespaces on this host without root)",
-   "id": "T3"
-  }
- ],
+ "nominal_generations": 360,
+ "open_owner_decisions": [],
  "pricing": {
   "file": "tilebench/llm/v2/manifests/api_pricing.yaml",
   "pricing_snapshot_sha256": "8eeac6c290fab04ee02b05390fbab28c0f6ee8e5cd91d7160e6cbfaef29a2c44"
@@ -407,7 +399,6 @@
    "leaky_relu": "fp16",
    "linear_self_attention": "fp32",
    "matmul_fp32_fp16_fp8": "fp16",
-   "matmul_int8": "int8",
    "matrix_copy": "fp16",
    "matrix_transpose": "fp16",
    "mean_reduction": "fp16",
@@ -424,7 +415,7 @@
    "vector_add": "fp16",
    "weight_dequant": "fp16"
   },
-  "tasks_per_dsl": 37
+  "tasks_per_dsl": 36
  },
  "scheduling_policy": {
   "backlog_bound": "hard: a slot is reserved before each generation request and released when the round closes",
@@ -443,23 +434,24 @@
   "device": "Trn2",
   "profile": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json",
   "profile_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
-  "profile_status": "candidate"
+  "profile_status": "frozen"
+ },
+ "scoring_caveats": {
+  "linear_self_attention": "fp32 task declared mma_tf32_f32acc (contract allows TF32 operands for S and the numerator; the installed nc_matmul lists tfloat32 as a TensorE input type); all 20 Trn2 cases are memory-bound (T_emp = Q / BW_emp), so the TF32 compute rate never sets the target",
+  "rmsnorm": "frozen Q = 3*n*dtype_size (two sweeps of x + one write; audit.json) is exactly 1.5x the compulsory (2*n + K)*dtype_size on all 20 Trn2 cases; memory-bound under both; uniform per-operator scale, so within-operator comparisons are unchanged; efficiency > 1 is possible and kept as an audit flag (never clipped); same frozen definition as B200/GH200/MI300X"
  },
  "scoring_table": {
   "ceiling_basis": "empirical",
-  "execution_eligible_scoring_unavailable": [
-   "matmul_int8"
-  ],
+  "execution_eligible_scoring_unavailable": [],
   "path": "artifacts/llm_v2/scoring/Trn2/scoring_table_Trn2_rev4_casesets_2026-10-10.json",
-  "scoring_sha256": "cf9088c9be837894dccd7e279c49cbf88213bdcfff3792b0d7093510e6e5f1a2",
+  "scoring_sha256": "dcb3f350a24bafa12d84b71121aacf4bbdc730724349b82edbc5ae4a0455ef5f",
   "status_counts": {
-   "ok": 720,
-   "peak_unavailable": 20
+   "ok": 720
   }
  },
  "shared_manifest_delta": {
   "calibration.yaml": [
-   "devices.Trn2: none -> Trn2-20261010T012011Z-94406dcb (status as registered)"
+   "devices.Trn2: none -> Trn2-20261010T012011Z-94406dcb (status as registered; frozen by launch decision T1)"
   ],
   "note": "every other entry is unchanged; tests/llm_v2/test_frozen_rev4.py checks the B200 freeze on the B200 view of the study (exactly these Trn2 keys reverted). The study config hash of a Trn2 campaign therefore differs from the B200 one: these changes must not be merged into exp/llm-b200, exp/llm-gh200 or exp/llm-mi300x while their campaigns run.",
   "skills/manifest.json": [
@@ -505,7 +497,7 @@
  "study_config_hash": "c80c9c9267653127315c3c43117ff5af499d3db85f35610b4e711e38b7ab6e92",
  "templates_sha256": "cc6cec0821a52a2f19f2fe95dbd64d18f144d6a80dc3797ac44dffb5132aadcd",
  "torch_baseline": {
-  "cases_matched": 740,
+  "cases_matched": 720,
   "path": "artifacts/llm_v2/baselines/Trn2/torch_baseline_Trn2_casesets_2026-10-10.json",
   "sha256": "7cfb9a7e7baff053697c06d90d1127f7b38805b54ba9eb6d973a198ef5cc4a2c"
  },
@@ -517,8 +509,8 @@
  },
  "trn2_eligibility": {
   "counts": {
-   "eligible": 37,
-   "excluded": 8
+   "eligible": 36,
+   "excluded": 9
   },
   "eligible": [
    "1d_conv",
@@ -542,7 +534,6 @@
    "leaky_relu",
    "linear_self_attention",
    "matmul_fp32_fp16_fp8",
-   "matmul_int8",
    "matrix_copy",
    "matrix_transpose",
    "mean_reduction",
@@ -565,11 +556,33 @@
    "block_sparse_attention",
    "flash_attention",
    "gaussian_blur",
+   "matmul_int8",
    "radix_sort",
    "reverse_array",
    "top_k_selection"
   ],
+  "excluded_by_class": {
+   "baseline_case_failure": [
+    "gaussian_blur",
+    "reverse_array",
+    "top_k_selection"
+   ],
+   "baseline_correctness_failure": [
+    "flash_attention"
+   ],
+   "cpu_fallback": [
+    "2d_max_pooling",
+    "argmax",
+    "radix_sort"
+   ],
+   "no_eager_baseline": [
+    "block_sparse_attention"
+   ],
+   "scoring_peak_unavailable": [
+    "matmul_int8"
+   ]
+  },
   "path": "tilebench/llm/v2/manifests/trn2_eligibility.json",
-  "seal": "0752107cb4473e5969988cbc2a82c1af42530872209e1d82d39ae93a06b96118"
+  "seal": "9c772f41f9daaaae645fef33bd5b904d1b233cc71a3e7ae10a948781e241057e"
  }
 }

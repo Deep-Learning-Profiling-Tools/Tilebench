@@ -15,14 +15,22 @@ from tilebench.paths import REPO_ROOT
 
 def test_trn2_eligibility_manifest_is_sealed_and_rebuilds():
     data = support.load_trn2_eligibility()
-    assert data["counts"] == {"eligible": 37, "excluded": 8} and data["status"] == "frozen"
-    assert set(data["excluded"]) == {"argmax", "2d_max_pooling", "radix_sort", "flash_attention", "block_sparse_attention",
-                                     "gaussian_blur", "reverse_array", "top_k_selection"}
+    assert data["counts"] == {"eligible": 36, "excluded": 9} and data["status"] == "frozen"
+    assert data["excluded_by_class"] == {
+        "cpu_fallback": ["2d_max_pooling", "argmax", "radix_sort"], "baseline_correctness_failure": ["flash_attention"],
+        "no_eager_baseline": ["block_sparse_attention"],
+        "baseline_case_failure": ["gaussian_blur", "reverse_array", "top_k_selection"],
+        "scoring_peak_unavailable": ["matmul_int8"]}
     for op, e in data["operators"].items():
         assert e["n_cases"] == 20 and e["cases_matched"] == 20, op
-        assert (e["status"] == "eligible") == (e["baseline_valid_cases"] == 20), op
-    for op in ("interleave", "matrix_transpose", "matmul_fp32_fp16_fp8", "matmul_int8"):
+        assert (e["status"] == "eligible") == (e["baseline_valid_cases"] == 20 and e["scoring"]["status_counts"] == {"ok": 20}), op
+        assert (e["exclusion_class"] is None) == (e["status"] == "eligible"), op
+    for op in ("interleave", "matrix_transpose", "matmul_fp32_fp16_fp8"):
         assert data["operators"][op]["status"] == "eligible", op
+    # matmul_int8 runs (20/20 baselines) but has no int8 SOL ceiling: excluded for scoring, not as a CPU fallback
+    i8 = data["operators"]["matmul_int8"]
+    assert (i8["baseline_valid_cases"], i8["exclusion_class"], i8["scoring"]["mode"]) == (20, "scoring_peak_unavailable", "mma_int8_i32acc")
+    assert sum(e["n_cases"] for e in data["operators"].values() if e["status"] == "eligible") == 720
     r = subprocess.run([sys.executable, str(REPO_ROOT / "scripts/llm_v2/build_trn2_eligibility.py"), "--check"],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -34,7 +42,9 @@ def test_trn2_status_never_substitutes_a_dtype():
     assert support.trn2_status("vector_add", e["dtype"], e["case_set_id"])[0] == "eligible"
     assert support.trn2_status("vector_add", "fp32", None)[0] == "unsupported"
     st, why = support.trn2_status("argmax", "fp16", data["operators"]["argmax"]["case_set_id"])
-    assert st == "unsupported" and "CPU fallback" in why
+    assert st == "unsupported" and "CPU fallback" in why and "(cpu_fallback)" in why
+    st, why = support.trn2_status("matmul_int8", "int8", data["operators"]["matmul_int8"]["case_set_id"])
+    assert st == "unsupported" and "(scoring_peak_unavailable)" in why
     with pytest.raises(ValueError):
         support.trn2_status("vector_add", e["dtype"], "cs_wrong")
 

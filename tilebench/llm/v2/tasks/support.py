@@ -13,10 +13,11 @@ configured cases of the selected dtype (`cases`); `params` keeps the largest
 - needs_review  : no evidence either way on that device yet (e.g. Trn2
                   before the NKI adapter has been validated there)
 
-Trn2 reads the frozen manifests/trn2_eligibility.json (37 eligible / 8 excluded
+Trn2 reads the frozen manifests/trn2_eligibility.json (36 eligible / 9 excluded
 under revision 4): an operator is eligible only when all 20 cases of its
-representative dtype have a valid formal native-PyTorch baseline; an excluded
-operator is `unsupported` with the manifest's reason.
+representative dtype have a valid formal native-PyTorch baseline and a supported
+empirical SOL target; an excluded operator is `unsupported` with the manifest's
+exclusion class and reason.
 
 Known device facts come from the archived manual campaigns and are cited in
 `reason`; nothing here is inferred from a generation attempt."""
@@ -88,14 +89,14 @@ def _case_set(operator: str, dtype: str, study: dict, config: dict | None) -> tu
 
 
 TRN2_ELIGIBILITY_PATH = Path(__file__).resolve().parents[1] / "manifests" / "trn2_eligibility.json"
-TRN2_ELIGIBILITY_SCHEMA = "tilebench-llm-v2-trn2-eligibility/1"
+TRN2_ELIGIBILITY_SCHEMA = "tilebench-llm-v2-trn2-eligibility/2"
 _TRN2_CACHE: dict = {}
 
 
 def load_trn2_eligibility(path: Path | None = None) -> dict | None:
     """The frozen Trn2 eligibility manifest (scripts/llm_v2/build_trn2_eligibility.py), seal-checked; None when
-    absent. Built from results/TRN2/csv: an operator is eligible only with 20/20 valid formal baseline cases of its
-    representative dtype."""
+    absent. Built from results/TRN2/csv and the registered Trn2 profile: an operator is eligible only with 20/20 valid
+    formal baseline cases of its representative dtype and a supported empirical SOL target on every case."""
     p = Path(path or TRN2_ELIGIBILITY_PATH)
     key = str(p)
     if key in _TRN2_CACHE:
@@ -127,8 +128,8 @@ def trn2_status(operator: str, dtype: str, case_set_id: str | None) -> tuple[str
     if case_set_id is not None and entry["case_set_id"] != case_set_id:
         raise ValueError(f"{operator}: trn2_eligibility.json case set {entry['case_set_id']} != frozen case set {case_set_id}")
     if entry["status"] == "eligible":
-        return "eligible", f"Trn2 eligibility manifest (results/TRN2/csv): {entry['reason']}"
-    return "unsupported", f"excluded by the frozen Trn2 eligibility manifest: {entry['reason']}"
+        return "eligible", f"Trn2 eligibility manifest: {entry['reason']}"
+    return "unsupported", f"excluded by the frozen Trn2 eligibility manifest ({entry['exclusion_class']}): {entry['reason']}"
 
 
 def eligibility(operator: str, dtype: str, device: str, dsl: str, study: dict, folds: dict,
