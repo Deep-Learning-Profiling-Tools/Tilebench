@@ -1,0 +1,336 @@
+{
+ "schema": "tilearena-empirical-peak/1",
+ "device": "Trn2",
+ "architecture": "AWS Trainium2 (NeuronCore-v3)",
+ "measurement_type": "empirical_sustained_calibration",
+ "ceiling_basis": "empirical",
+ "description": "Empirically measured sustained throughput and bandwidth on the Trn2 campaign device (one logical NeuronCore, LNC=2), copied verbatim from the TileArena calibration profile (not an AWS datasheet value). Intended as the Trn2 P_emp / BW_emp of the empirical SOL T_SOL = max(F / P_emp[mode], Q / BW_emp).",
+ "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+ "calibration_status": "candidate",
+ "frozen_by": null,
+ "registered_at": null,
+ "source": {
+  "profile_path": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json",
+  "profile_file_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
+  "profile_embedded_seal_sha256": "3915ffa3d97967926fd2c845f3bcdb7e1b44ac636ec6df698cef4c1926b986d2",
+  "environment_path": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/environment.json",
+  "environment_file_sha256": "dd82b5404dad183e731c2b633daadd7c026e4da60a05eaed170cf41e2f378484",
+  "branch": "exp/llm-trn2",
+  "commit": "94406dcb4c36e59889448351b1289c99f69e379b",
+  "calibration_manifest_entry": "not registered (candidate; tilebench/llm/v2/manifests/calibration.yaml devices.Trn2 stays status none until the owner decides)"
+ },
+ "protocol": {
+  "id": "tilebench-empirical-roofline/2+trn2-native",
+  "quick": false,
+  "sha256": "039d62950bf69c21f3d2e1dc7b5096abe2de2bbd8ac7028b2f2194e0a9a79d43"
+ },
+ "measured_with_code": {
+  "calibration_sources_sha256": {
+   "calibration/schema.py": "b59b14414bfff728c21a7959ba5fd6c2b54dae5953e5a418c1b45e6350b6ef54",
+   "calibration/stats.py": "0245450dda03386fc9361f348ae2407fbb1c17186159fc619039b6446b027007",
+   "scripts/llm_v2/calibrate_trn2.py": "2322f28736595cf5f9f277ab3485bcd538f7507ae02ecacbe3bb6f70e3b15c4a",
+   "tilebench/core/nki_timer.py": "7142d774f15dc9b92a82f5121d23c32a1f8c1d01ae3e59ef13f7347572deba3e"
+  },
+  "dirty_paths": [
+   "artifacts/llm_v2/calibration/Trn2/"
+  ],
+  "git_sha": "94406dcb4c36e59889448351b1289c99f69e379b"
+ },
+ "scope": {
+  "backend": "neuron",
+  "device_total": {
+   "device_memory": "96 GB",
+   "logical_neuroncores": 4,
+   "neuron_devices": 1,
+   "physical_neuroncores": 8
+  },
+  "instance_type": "trn2.3xlarge",
+  "kind": "single_logical_neuroncore",
+  "llc_bytes": 50331648,
+  "llc_note": "SBUF capacity of the two physical cores used as the 'last-level' capacity for HBM eligibility; Trn2 has no hardware cache between HBM and SBUF",
+  "logical_neuroncore_config": "2",
+  "logical_neuroncores_in_scope": 1,
+  "name": "AWS Trainium2 (NeuronCore-v3)",
+  "note": "one logical NeuronCore (LNC=2: two physical NeuronCore-v3), NEURON_RT_NUM_CORES=1: the scope on which NKI candidates and the formal TileBench NKI results are timed. Rates are per logical NeuronCore. Per-physical-core values are diagnostics measured with one core active; the whole device (4 logical / 8 physical cores) was not measured and is never obtained by scaling.",
+  "physical_neuroncores_in_scope": 2,
+  "visible_devices": {
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_RT_NUM_CORES": "1",
+   "NEURON_RT_VISIBLE_CORES": "<unset>"
+  }
+ },
+ "environment": {
+  "instance_type": "trn2.3xlarge",
+  "logical_neuroncore_config": "2",
+  "packages": {
+   "torch": "2.14.0+cpu",
+   "torch-neuronx": "2.14.3.0.0+unknown.dev",
+   "nki": "0.7.0b1+34883233359.g2aa6a82a",
+   "neuronx-cc": "2.0.404830.0a0+55f4bf89",
+   "numpy": "2.5.3"
+  },
+  "aws_neuronx_debs": {
+   "aws-neuronx-collectives": "2.x.78358.0-d99c038af",
+   "aws-neuronx-dkms": "2.x.11820.0",
+   "aws-neuronx-oci-hook": "2.18.25.0",
+   "aws-neuronx-runtime-lib": "2.x.79381.0-fbc4aac0b",
+   "aws-neuronx-tools": "2.32.28.0-526c2b7f6"
+  },
+  "neuron_driver": "2.x.11820.0",
+  "device_memory": "96 GB"
+ },
+ "modes": {
+  "bf16x2_fma_vector": {
+   "value": 860771744762.9407,
+   "unit": "FLOP/s",
+   "value_scaled": 0.8607717447629407,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 21.3%"
+   ],
+   "meaning": {
+    "input": "bf16 (packed pairs)",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP per lane"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "per_physical_core_diagnostic": [
+    {
+     "id": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "value": 430597884364.684,
+     "value_scaled": 0.43059788436468405,
+     "unit_scaled": "TFLOP/s",
+     "valid": true
+    }
+   ]
+  },
+  "fp16x2_fma_vector": {
+   "value": 860370051282.0514,
+   "unit": "FLOP/s",
+   "value_scaled": 0.8603700512820514,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 21.2%"
+   ],
+   "meaning": {
+    "input": "fp16 (packed pairs)",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP per lane"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "per_physical_core_diagnostic": [
+    {
+     "id": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "value": 430403243764.27423,
+     "value_scaled": 0.43040324376427425,
+     "unit_scaled": "TFLOP/s",
+     "valid": true
+    }
+   ]
+  },
+  "fp32_fma_vector": {
+   "value": 746719142504.301,
+   "unit": "FLOP/s",
+   "value_scaled": 0.746719142504301,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "fp32_fma_vector/vector+scalar+gpsimd/iters=400",
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 5.8%"
+   ],
+   "meaning": {
+    "input": "fp32",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP each, non-matrix units"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "per_physical_core_diagnostic": [
+    {
+     "id": "fp32_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "value": 373983934598.27356,
+     "value_scaled": 0.37398393459827356,
+     "unit_scaled": "TFLOP/s",
+     "valid": true
+    }
+   ]
+  },
+  "gemm_fp32_ieee": {
+   "value": 36925348507660.78,
+   "unit": "FLOP/s",
+   "value_scaled": 36.92534850766078,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "control",
+   "source_kind": "measured",
+   "selected_point": "gemm_fp32_ieee/M=4096",
+   "flags": [],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp32 (IEEE, TF32 disabled)",
+    "kind": "matrix",
+    "note": "library SGEMM; an empirical control, not a vector FMA rate",
+    "output": "fp32"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "control only: IEEE fp32 eager matmul (error <= 1e-5 vs float64), never a scoring ceiling"
+   ]
+  },
+  "hbm_stream_bw": {
+   "value": 672271417525.2084,
+   "unit": "byte/s",
+   "value_scaled": 672.2714175252083,
+   "unit_scaled": "GB/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "nki_copy_via_sbuf/256MiB",
+   "flags": [],
+   "meaning": {
+    "kind": "bandwidth",
+    "meaning": "sustained streaming bandwidth of device memory (read+write copy probes), working sets far above the last-level cache"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "NKI DMA copies (HBM->SBUF->HBM and HBM->HBM) and eager copy_ on one logical NeuronCore; read+write bytes; the bandwidth one logical core can drive, not the device total"
+   ],
+   "per_physical_core_diagnostic": [
+    {
+     "id": "nki_copy_via_sbuf/1024MiB/pcores=1",
+     "value": 426473628636.0504,
+     "value_scaled": 426.4736286360504,
+     "unit_scaled": "GB/s",
+     "valid": true
+    }
+   ]
+  },
+  "mma_bf16_f32acc": {
+   "value": 151489720423716.22,
+   "unit": "FLOP/s",
+   "value_scaled": 151.48972042371622,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "mma_bf16_f32acc/M=12288",
+   "flags": [],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "bf16",
+    "kind": "matrix",
+    "output": "bf16",
+    "product": "bf16 x bf16"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ]
+  },
+  "mma_fp16_f32acc": {
+   "value": 146785501961191.1,
+   "unit": "FLOP/s",
+   "value_scaled": 146.7855019611911,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "mma_fp16_f32acc/M=8192",
+   "flags": [],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp16",
+    "kind": "matrix",
+    "output": "fp16",
+    "product": "fp16 x fp16"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ]
+  },
+  "mma_tf32_f32acc": {
+   "value": 121435641008674.95,
+   "unit": "FLOP/s",
+   "value_scaled": 121.43564100867495,
+   "unit_scaled": "TFLOP/s",
+   "status": "calibrated",
+   "role": "scoring",
+   "source_kind": "measured",
+   "selected_point": "mma_tf32_f32acc/M=8192",
+   "flags": [],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp32 operands rounded to TF32",
+    "kind": "matrix",
+    "output": "fp32",
+    "product": "tf32 x tf32"
+   },
+   "resource_scope": "per logical NeuronCore (LNC=2: two physical NeuronCore-v3)",
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ],
+   "precision_path": "neuronx-cc --auto-cast matmult --auto-cast-type tf32 on eager fp32 torch.matmul; TF32 identified by the error window [5e-5, 2e-3] vs float64 (the default fp32 matmul is IEEE, error <= 1e-5)"
+  }
+ },
+ "modes_not_calibrated": {
+  "int32_vector": {
+   "status": "not_measured",
+   "unit": "OP/s",
+   "reason": "no probe registered (as on every device)"
+  },
+  "mma_fp8_e4m3_f32acc": {
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "reason": "NeuronCore-v3 TensorE takes the legacy float8_e4m3 format, not OCP float8_e4m3fn (installed nki 0.7 nc_matmul docs: e4m3fn from NeuronCore-v4); eager torch._scaled_mm(e4m3fn) produces no device execution (host path)"
+  },
+  "mma_fp8_e4m3fnuz_f32acc": {
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "reason": "AMD float8_e4m3fnuz (AMD only)"
+  },
+  "mma_fp8_e5m2_f32acc": {
+   "status": "not_measured",
+   "unit": "FLOP/s",
+   "reason": "supported by TensorE (float8_e5m2, double_row) but declared by no Trn2 task; not measured"
+  },
+  "mma_int8_i32acc": {
+   "status": "unsupported",
+   "unit": "OP/s",
+   "reason": "NeuronCore-v3 TensorE has no int8 input type (installed nki 0.7 nc_matmul: float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32); eager torch._int_mm returns a correct int32 result but produces no device execution (host path), so no device rate exists"
+  },
+  "mma_xf32_f32acc": {
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "reason": "ROCm XF32 matrix path (AMD only)"
+  }
+ },
+ "notes": [
+  "value is the exact number stored in the profile (unit as stored: byte/s, FLOP/s, OP/s); value_scaled = value / 1e9 (GB/s) or value / 1e12 (TFLOP/s) for readability only.",
+  "All values are per logical NeuronCore (LNC=2, two physical NeuronCore-v3, NEURON_RT_NUM_CORES=1), the scope on which NKI kernels are timed. per_physical_core_diagnostic entries were measured with one of the two cores active and are not scoring values; whole-device rates (4 logical / 8 physical cores) were not measured and must not be derived by multiplying.",
+  "Timing: device busy time per execution from the Neuron runtime trace (the formal TileBench NKI method), no host interval; compilation and warmup outside the timed sessions.",
+  "mma_tf32_f32acc uses neuronx-cc --auto-cast matmult --auto-cast-type tf32 on fp32 operands; the default eager fp32 matmul is IEEE (gemm_fp32_ieee, control only).",
+  "fp32_fma_vector / fp16x2_fma_vector / bf16x2_fma_vector are NKI multiply-add chains on VectorE, ScalarE and GpSimd (Trn2 has no packed-pair FMA; the 16-bit modes are FMA on fp16/bf16 tiles).",
+  "mma_int8_i32acc and mma_fp8_e4m3_f32acc are unsupported on this device path (see modes_not_calibrated).",
+  "The legacy tilebench/data/peak_performance/Trainium2.json is unchanged; its 577.7 GB/s is an older torch-xla measurement and its compute entries are not empirical.",
+  "This file is a data-only copy; the scoring path reads the profile through manifests/calibration.yaml, not this file."
+ ]
+}

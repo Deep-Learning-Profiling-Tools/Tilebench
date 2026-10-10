@@ -1,0 +1,1328 @@
+{
+ "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+ "ceiling_basis": "empirical",
+ "code": {
+  "calibration_sources_sha256": {
+   "calibration/schema.py": "b59b14414bfff728c21a7959ba5fd6c2b54dae5953e5a418c1b45e6350b6ef54",
+   "calibration/stats.py": "0245450dda03386fc9361f348ae2407fbb1c17186159fc619039b6446b027007",
+   "scripts/llm_v2/calibrate_trn2.py": "2322f28736595cf5f9f277ab3485bcd538f7507ae02ecacbe3bb6f70e3b15c4a",
+   "tilebench/core/nki_timer.py": "7142d774f15dc9b92a82f5121d23c32a1f8c1d01ae3e59ef13f7347572deba3e"
+  },
+  "dirty_paths": [
+   "artifacts/llm_v2/calibration/Trn2/"
+  ],
+  "git_sha": "94406dcb4c36e59889448351b1289c99f69e379b"
+ },
+ "created_at": 1791596426.3985333,
+ "datasheet_reference": {
+  "note": "legacy per-logical-core compute entries (not measured); reference only, never a scoring ceiling",
+  "path": "tilebench/data/peak_performance/Trainium2.json",
+  "peak_tflops": {
+   "bf16": 158,
+   "fp16": 158,
+   "fp32": 40,
+   "fp64": 0,
+   "fp8_e4m3fn": 316,
+   "fp8_e5m2": 316,
+   "int8": 316,
+   "tf32": 158
+  },
+  "sha256": "4cdf47ed67c50e7e5d01ae52c6c2584063c4270f121adf1034bc8d3c42b48cfa",
+  "source_kind": "datasheet"
+ },
+ "device": "Trn2",
+ "environment": {
+  "file": "environment.json",
+  "sha256": "dd82b5404dad183e731c2b633daadd7c026e4da60a05eaed170cf41e2f378484",
+  "subruns": {
+   "environment_subrun_mma_tf32_f32acc.json": "c82deacb0a5a1cd18eeca3b9c06b095823c5b66161d26da56dd0c6246a29bf28"
+  }
+ },
+ "legacy_reference": {
+  "interpretation": "torch-xla compiled mul2 reference on one logical core (older stack); comparison only",
+  "method": "peak_bw_GBs measured via torch_xla-compiled mul2 reference, n=20,971,520 fp32, single logical core (NEURON_RT_NUM_CORES=1), on-device latency via neuron-profile (see core/nki_timer.py bench_nki). Stable across n=14.7M-21M (577-583 GB/s), taken at largest tested case for consistency with other reported metrics. Custom NKI kernel currently achieves ~98 GB/s on the same case (free_tile_size=16384, not yet autotuned).",
+  "path": "tilebench/data/peak_performance/Trainium2.json",
+  "source_kind": "measured_legacy",
+  "values": {
+   "hbm_GBs": 577.7
+  }
+ },
+ "modes": {
+  "bf16x2_fma_vector": {
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 21.3%"
+   ],
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "meaning": {
+    "input": "bf16 (packed pairs)",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP per lane"
+   },
+   "per_physical_core_diagnostic": [
+    {
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "id": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "throughput": 430597884364.684,
+     "valid": true
+    }
+   ],
+   "points": [
+    {
+     "batch_spread": 5.989515196027768e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3337492942810059,
+     "id": "bf16x2_fma_vector/vector/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.001586105,
+     "role": "scoring",
+     "throughput": 528881000942.56055,
+     "valid": true
+    },
+    {
+     "batch_spread": 9.291174593279396e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.343125343322754,
+     "id": "bf16x2_fma_vector/scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0023570755000000003,
+     "role": "scoring",
+     "throughput": 355890509234.85474,
+     "valid": true
+    },
+    {
+     "batch_spread": 2.4359791727809583e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.355694055557251,
+     "id": "bf16x2_fma_vector/gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0025041265,
+     "role": "scoring",
+     "throughput": 334991383222.85236,
+     "valid": true
+    },
+    {
+     "batch_spread": 1.6496680360185212e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.333726167678833,
+     "id": "bf16x2_fma_vector/vector+scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.002364112,
+     "role": "scoring",
+     "throughput": 709662486379.664,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0002259173939291166,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3292255401611328,
+     "id": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.002923635,
+     "role": "scoring",
+     "scaling": {
+      "ok": true,
+      "time_ratio_2x_iters": 1.986276672703672
+     },
+     "throughput": 860771744762.9407,
+     "valid": true
+    },
+    {
+     "batch_spread": 7.464938038427014e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "800 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.338744878768921,
+     "id": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=800",
+     "physical_cores_active": 2,
+     "point_time_s": 0.005807148,
+     "role": "scaling_check",
+     "throughput": 866718878182.5433,
+     "valid": true
+    },
+    {
+     "batch_spread": 4.209163965924703e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.325822114944458,
+     "id": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "physical_cores_active": 1,
+     "point_time_s": 0.0029221955,
+     "role": "per_physical_core_diagnostic",
+     "throughput": 430597884364.684,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "probe": {
+    "wall_s": 24.310640811920166
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "bf16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 860771744762.9407
+  },
+  "fp16x2_fma_vector": {
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 21.2%"
+   ],
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "meaning": {
+    "input": "fp16 (packed pairs)",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP per lane"
+   },
+   "per_physical_core_diagnostic": [
+    {
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "id": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "throughput": 430403243764.27423,
+     "valid": true
+    }
+   ],
+   "points": [
+    {
+     "batch_spread": 0.0001739730625404435,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.329374074935913,
+     "id": "fp16x2_fma_vector/vector/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0015864525,
+     "role": "scoring",
+     "throughput": 528765153699.84283,
+     "valid": true
+    },
+    {
+     "batch_spread": 4.051373107900878e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3307576179504395,
+     "id": "fp16x2_fma_vector/scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0023572255000000003,
+     "role": "scoring",
+     "throughput": 355867862451.00433,
+     "valid": true
+    },
+    {
+     "batch_spread": 1.596539341334206e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3078534603118896,
+     "id": "fp16x2_fma_vector/gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.002505419,
+     "role": "scoring",
+     "throughput": 334818567273.57776,
+     "valid": true
+    },
+    {
+     "batch_spread": 4.885304264562407e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.357569694519043,
+     "id": "fp16x2_fma_vector/vector+scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0023642335,
+     "role": "scoring",
+     "throughput": 709626016212.0197,
+     "valid": true
+    },
+    {
+     "batch_spread": 7.538461538467655e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.349621295928955,
+     "id": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0029249999999999996,
+     "role": "scoring",
+     "scaling": {
+      "ok": true,
+      "time_ratio_2x_iters": 1.9863100854700861
+     },
+     "throughput": 860370051282.0514,
+     "valid": true
+    },
+    {
+     "batch_spread": 4.509499812136415e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "800 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3557074069976807,
+     "id": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=800",
+     "physical_cores_active": 2,
+     "point_time_s": 0.005809957000000001,
+     "role": "scaling_check",
+     "throughput": 866299836642.5085,
+     "valid": true
+    },
+    {
+     "batch_spread": 1.1458801163050387e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 0.02
+     },
+     "first_call_s": 1.3530714511871338,
+     "id": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "physical_cores_active": 1,
+     "point_time_s": 0.0029235170000000005,
+     "role": "per_physical_core_diagnostic",
+     "throughput": 430403243764.27423,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "probe": {
+    "wall_s": 24.33372712135315
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "fp16x2_fma_vector/vector+scalar+gpsimd/iters=400",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 860370051282.0514
+  },
+  "fp32_fma_vector": {
+   "flags": [
+    "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 5.8%"
+   ],
+   "limitations": [
+    "NKI nisa.tensor_scalar(multiply, add) chains on SBUF-resident tiles over VectorE / ScalarE / GpSimd (2 FLOP per element per instruction); Trn2 has no packed-pair FMA instruction, so the fp16x2/bf16x2 modes are FMA on fp16/bf16 tiles; exp/compare/convert/reduce instruction rates are not measured"
+   ],
+   "meaning": {
+    "input": "fp32",
+    "kind": "vector",
+    "operation": "fused multiply-add, 2 FLOP each, non-matrix units"
+   },
+   "per_physical_core_diagnostic": [
+    {
+     "check": {
+      "max_rel_err": 9.849911293713376e-06,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "id": "fp32_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "throughput": 373983934598.27356,
+     "valid": true
+    }
+   ],
+   "points": [
+    {
+     "batch_spread": 4.413009248648412e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.4183659553527832,
+     "id": "fp32_fma_vector/vector/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.001982774,
+     "role": "scoring",
+     "throughput": 423074339284.25525,
+     "valid": true
+    },
+    {
+     "batch_spread": 2.6231317061645903e-05,
+     "check": {
+      "max_rel_err": 1.2934593542013317e-05,
+      "ok": false,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.3026854991912842,
+     "id": "fp32_fma_vector/scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.002363587,
+     "role": "scoring",
+     "throughput": 354910058313.9102,
+     "valid": false
+    },
+    {
+     "batch_spread": 5.672781991999759e-05,
+     "check": {
+      "max_rel_err": 0.0,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.306757926940918,
+     "id": "fp32_fma_vector/gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.002511995,
+     "role": "scoring",
+     "throughput": 333942065967.488,
+     "valid": true
+    },
+    {
+     "batch_spread": 6.730910401913597e-05,
+     "check": {
+      "max_rel_err": 9.849911293713376e-06,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.306720495223999,
+     "id": "fp32_fma_vector/vector+scalar/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0023770930000000003,
+     "role": "scoring",
+     "throughput": 705787110558.9894,
+     "valid": true
+    },
+    {
+     "batch_spread": 6.646517432562474e-05,
+     "check": {
+      "max_rel_err": 9.849911293713376e-06,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.3109519481658936,
+     "id": "fp32_fma_vector/vector+scalar+gpsimd/iters=400",
+     "physical_cores_active": 2,
+     "point_time_s": 0.003370186,
+     "role": "scoring",
+     "scaling": {
+      "ok": true,
+      "time_ratio_2x_iters": 1.9829055428988194
+     },
+     "throughput": 746719142504.301,
+     "valid": true
+    },
+    {
+     "batch_spread": 1.907894200302615e-05,
+     "check": {
+      "max_rel_err": 1.2301588867558166e-05,
+      "ok": false,
+      "rule": "800 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.3137059211730957,
+     "id": "fp32_fma_vector/vector+scalar+gpsimd/iters=800",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0066827605,
+     "role": "scaling_check",
+     "throughput": 753156543616.9679,
+     "valid": false
+    },
+    {
+     "batch_spread": 1.9319022296903855e-05,
+     "check": {
+      "max_rel_err": 9.849911293713376e-06,
+      "ok": true,
+      "rule": "400 dependent steps x <- a*x+b per element vs a CPU reference rounded per step",
+      "tolerance": 1e-05
+     },
+     "first_call_s": 1.4461629390716553,
+     "id": "fp32_fma_vector/vector+scalar+gpsimd/iters=400/pcores=1",
+     "physical_cores_active": 1,
+     "point_time_s": 0.0033645595,
+     "role": "per_physical_core_diagnostic",
+     "throughput": 373983934598.27356,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "probe": {
+    "wall_s": 24.605608463287354
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "fp32_fma_vector/vector+scalar+gpsimd/iters=400",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 746719142504.301
+  },
+  "gemm_fp32_ieee": {
+   "flags": [],
+   "limitations": [
+    "control only: IEEE fp32 eager matmul (error <= 1e-5 vs float64), never a scoring ceiling"
+   ],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp32 (IEEE, TF32 disabled)",
+    "kind": "matrix",
+    "note": "library SGEMM; an empirical control, not a vector FMA rate",
+    "output": "fp32"
+   },
+   "points": [
+    {
+     "batch_spread": 0.00756217766644198,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 2.6939948877843997e-07,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       1e-05
+      ]
+     },
+     "first_call_s": 2.123775005340576,
+     "id": "gemm_fp32_ieee/M=4096",
+     "point_time_s": 0.003722076,
+     "throughput": 36925348507660.78,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.013675754047695181,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 1.9446743790050972e-07,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       1e-05
+      ]
+     },
+     "first_call_s": 11.549497365951538,
+     "id": "gemm_fp32_ieee/M=8192",
+     "point_time_s": 0.036971964999999996,
+     "throughput": 29739063849487.04,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.025672047196953318,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 1.9745077072199328e-07,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       1e-05
+      ]
+     },
+     "first_call_s": 48.10234189033508,
+     "id": "gemm_fp32_ieee/M=12288",
+     "point_time_s": 0.12812513450000002,
+     "throughput": 28962714913239.758,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.041852915794584784,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 2.653510891707253e-07,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       1e-05
+      ]
+     },
+     "first_call_s": 97.50427508354187,
+     "id": "gemm_fp32_ieee/M=16384",
+     "point_time_s": 0.30298240299999996,
+     "throughput": 29031696016378.883,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [
+    "gemm_fp32_ieee/M=16384"
+   ],
+   "probe": {
+    "neuron_cc_flags": "--target trn2 --lnc 2",
+    "wall_s": 255.0795156955719
+   },
+   "reason": null,
+   "role": "control",
+   "selected_point": "gemm_fp32_ieee/M=4096",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 36925348507660.78
+  },
+  "hbm_stream_bw": {
+   "flags": [],
+   "limitations": [
+    "NKI DMA copies (HBM->SBUF->HBM and HBM->HBM) and eager copy_ on one logical NeuronCore; read+write bytes; the bandwidth one logical core can drive, not the device total"
+   ],
+   "meaning": {
+    "kind": "bandwidth",
+    "meaning": "sustained streaming bandwidth of device memory (read+write copy probes), working sets far above the last-level cache"
+   },
+   "per_physical_core_diagnostic": [
+    {
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "id": "nki_copy_via_sbuf/1024MiB/pcores=1",
+     "throughput": 426473628636.0504,
+     "valid": true
+    }
+   ],
+   "plateau": {
+    "nki_copy_dram_to_dram": {
+     "ok": true,
+     "points": 3,
+     "spread": 0.012632866414334138
+    },
+    "nki_copy_via_sbuf": {
+     "ok": true,
+     "points": 3,
+     "spread": 0.023108723295332416
+    }
+   },
+   "points": [
+    {
+     "batch_spread": 0.001313004313020216,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.604301929473877,
+     "hbm_eligible": false,
+     "id": "nki_copy_via_sbuf/16MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 6.2833e-05,
+     "primary": true,
+     "role": "cache_scale_diagnostic",
+     "throughput": 534025623478.10864,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.00038188436064216005,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.327317237854004,
+     "hbm_eligible": false,
+     "id": "nki_copy_via_sbuf/64MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0002094875,
+     "primary": true,
+     "role": "cache_scale_diagnostic",
+     "throughput": 640695640551.3456,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0009673268907484916,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.3314027786254883,
+     "hbm_eligible": true,
+     "id": "nki_copy_via_sbuf/256MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0007985925,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 672271417525.2084,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0011978835046824775,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.581606388092041,
+     "hbm_eligible": true,
+     "id": "nki_copy_via_sbuf/1024MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.003269934,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 656736083358.2574,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.001418665690959708,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.9201629161834717,
+     "hbm_eligible": true,
+     "id": "nki_copy_via_sbuf/2048MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0065374809999999995,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 656975874346.7095,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0009771647804183465,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.2604577541351318,
+     "hbm_eligible": false,
+     "id": "nki_copy_dram_to_dram/16MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 6.242550000000001e-05,
+     "primary": true,
+     "role": "cache_scale_diagnostic",
+     "throughput": 537511625858.0227,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0007807820406145901,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.2678356170654297,
+     "hbm_eligible": false,
+     "id": "nki_copy_dram_to_dram/64MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0002145285,
+     "primary": true,
+     "role": "cache_scale_diagnostic",
+     "throughput": 625640546594.0422,
+     "valid": true
+    },
+    {
+     "batch_spread": 1.4025253994365671e-05,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.2916555404663086,
+     "hbm_eligible": true,
+     "id": "nki_copy_dram_to_dram/256MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0008199495,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 654760948082.7783,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0001605249799075055,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.4336271286010742,
+     "hbm_eligible": true,
+     "id": "nki_copy_dram_to_dram/1024MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.003242486,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 662295426410.4763,
+     "valid": true
+    },
+    {
+     "batch_spread": 7.743105528807042e-05,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.612187385559082,
+     "hbm_eligible": true,
+     "id": "nki_copy_dram_to_dram/2048MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.006476729499999999,
+     "primary": true,
+     "role": "hbm",
+     "throughput": 663138285457.1896,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0014506343519830951,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.1395244598388672,
+     "hbm_eligible": false,
+     "id": "torch_copy/16MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 6.23865e-05,
+     "primary": false,
+     "role": "cache_scale_diagnostic",
+     "throughput": 537847643320.2696,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.00021029462276657648,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.1374588012695312,
+     "hbm_eligible": false,
+     "id": "torch_copy/64MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.00021398549999999999,
+     "primary": false,
+     "role": "cache_scale_diagnostic",
+     "throughput": 627228143963.0255,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.00020580391318857725,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.1751842498779297,
+     "hbm_eligible": true,
+     "id": "torch_copy/256MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0008235995,
+     "primary": false,
+     "role": "hbm",
+     "throughput": 651859200983.0021,
+     "valid": true
+    },
+    {
+     "batch_spread": 2.2109209360945296e-05,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.159663438796997,
+     "hbm_eligible": true,
+     "id": "torch_copy/1024MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.0032565615,
+     "primary": false,
+     "role": "hbm",
+     "throughput": 659432855175.62,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0001260378610351498,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.164891004562378,
+     "hbm_eligible": true,
+     "id": "torch_copy/2048MiB",
+     "physical_cores_active": 2,
+     "point_time_s": 0.006502014499999999,
+     "primary": false,
+     "role": "hbm",
+     "throughput": 660559476759.0875,
+     "valid": true
+    },
+    {
+     "batch_spread": 4.8655103432662735e-06,
+     "check": {
+      "ok": true,
+      "rule": "output equals the random int32 input (full comparison)"
+     },
+     "first_call_s": 1.619858980178833,
+     "hbm_eligible": true,
+     "id": "nki_copy_via_sbuf/1024MiB/pcores=1",
+     "physical_cores_active": 1,
+     "point_time_s": 0.0050354430000000006,
+     "primary": false,
+     "role": "per_physical_core_diagnostic",
+     "throughput": 426473628636.0504,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "probe": {
+    "llc_equivalent_bytes": 50331648,
+    "wall_s": 75.39578008651733
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "nki_copy_via_sbuf/256MiB",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "byte/s",
+   "value": 672271417525.2084
+  },
+  "int32_vector": {
+   "reason": "no probe registered (as on every device)",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "not_measured",
+   "unit": "OP/s",
+   "value": null
+  },
+  "mma_bf16_f32acc": {
+   "flags": [],
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "bf16",
+    "kind": "matrix",
+    "output": "bf16",
+    "product": "bf16 x bf16"
+   },
+   "points": [
+    {
+     "batch_spread": 0.00031480937749422163,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0026836703861586393,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.016
+      ]
+     },
+     "first_call_s": 1.9366700649261475,
+     "id": "mma_bf16_f32acc/M=4096",
+     "point_time_s": 0.000967252,
+     "throughput": 142092188459677.5,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0001528490266569533,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0018851496063077967,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.016
+      ]
+     },
+     "first_call_s": 9.093602180480957,
+     "id": "mma_bf16_f32acc/M=8192",
+     "point_time_s": 0.0073863735000000005,
+     "throughput": 148856760056338.88,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0768950453534091,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00243283959663585,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.016
+      ]
+     },
+     "first_call_s": 31.44216513633728,
+     "id": "mma_bf16_f32acc/M=12288",
+     "point_time_s": 0.024495733000000002,
+     "throughput": 151489720423716.22,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.020715826870135515,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.002849456573665651,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.016
+      ]
+     },
+     "first_call_s": 73.58924341201782,
+     "id": "mma_bf16_f32acc/M=16384",
+     "point_time_s": 0.0652986245,
+     "throughput": 134705640272836.06,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [
+    "mma_bf16_f32acc/M=12288"
+   ],
+   "probe": {
+    "neuron_cc_flags": "--target trn2 --lnc 2",
+    "wall_s": 146.33658814430237
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "mma_bf16_f32acc/M=12288",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 151489720423716.22
+  },
+  "mma_fp16_f32acc": {
+   "flags": [],
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp16",
+    "kind": "matrix",
+    "output": "fp16",
+    "product": "fp16 x fp16"
+   },
+   "points": [
+    {
+     "batch_spread": 0.000584856679991958,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.000330440975703952,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.0025
+      ]
+     },
+     "first_call_s": 1.9212877750396729,
+     "id": "mma_fp16_f32acc/M=4096",
+     "point_time_s": 0.0009959705,
+     "throughput": 137995004341996.06,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0028686616734758304,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0002932890960195693,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.0025
+      ]
+     },
+     "first_call_s": 9.051085472106934,
+     "id": "mma_fp16_f32acc/M=8192",
+     "point_time_s": 0.0074906009999999995,
+     "throughput": 146785501961191.1,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.008784653398960394,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0004054157959021118,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.0025
+      ]
+     },
+     "first_call_s": 30.814604997634888,
+     "id": "mma_fp16_f32acc/M=12288",
+     "point_time_s": 0.030350486,
+     "throughput": 122266633349594.47,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.024186398446496143,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00036871629143790733,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.0025
+      ]
+     },
+     "first_call_s": 69.94142818450928,
+     "id": "mma_fp16_f32acc/M=16384",
+     "point_time_s": 0.0741191585,
+     "throughput": 118675025461979.58,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "probe": {
+    "neuron_cc_flags": "--target trn2 --lnc 2",
+    "wall_s": 144.20901942253113
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "mma_fp16_f32acc/M=8192",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 146785501961191.1
+  },
+  "mma_fp8_e4m3_f32acc": {
+   "evidence": [
+    {
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00201738561159425,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.016
+      ]
+     },
+     "error": "no device execution in the timed sessions: the call does not run on the NeuronCore (host/CPU path); its result is correct but no device rate exists",
+     "id": "mma_fp8_e4m3_f32acc/M=2048",
+     "no_device_execution": true
+    }
+   ],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "float8_e4m3fn",
+    "kind": "matrix",
+    "output": "bf16"
+   },
+   "reason": "NeuronCore-v3 TensorE takes the legacy float8_e4m3 format, not OCP float8_e4m3fn (installed nki 0.7 nc_matmul docs: e4m3fn from NeuronCore-v4); eager torch._scaled_mm(e4m3fn) produces no device execution (host path)",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "value": null
+  },
+  "mma_fp8_e4m3fnuz_f32acc": {
+   "reason": "AMD float8_e4m3fnuz (AMD only)",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "value": null
+  },
+  "mma_fp8_e5m2_f32acc": {
+   "reason": "supported by TensorE (float8_e5m2, double_row) but declared by no Trn2 task; not measured",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "not_measured",
+   "unit": "FLOP/s",
+   "value": null
+  },
+  "mma_int8_i32acc": {
+   "evidence": [
+    {
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       0.0,
+       0.0
+      ]
+     },
+     "error": "no device execution in the timed sessions: the call does not run on the NeuronCore (host/CPU path); its result is correct but no device rate exists",
+     "id": "mma_int8_i32acc/M=2048",
+     "no_device_execution": true
+    }
+   ],
+   "meaning": {
+    "accumulate": "int32",
+    "input": "int8",
+    "kind": "matrix",
+    "output": "int32",
+    "product": "int8 x int8"
+   },
+   "reason": "NeuronCore-v3 TensorE has no int8 input type (installed nki 0.7 nc_matmul: float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32); eager torch._int_mm returns a correct int32 result but produces no device execution (host path), so no device rate exists",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "unsupported",
+   "unit": "OP/s",
+   "value": null
+  },
+  "mma_tf32_f32acc": {
+   "flags": [],
+   "limitations": [
+    "eager torch.matmul on torch.device('neuron') (neuronx-cc compiled) on square shapes 4096..16384, one logical NeuronCore (2 physical cores); the sustained rate of this compiler path, not a proof of the hardware maximum; TensorE activity throttling, if any, is part of the sustained rate"
+   ],
+   "meaning": {
+    "accumulate": "fp32",
+    "input": "fp32 operands rounded to TF32",
+    "kind": "matrix",
+    "output": "fp32",
+    "product": "tf32 x tf32"
+   },
+   "points": [
+    {
+     "batch_spread": 0.01491726097931474,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00011773021354317504,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       5e-05,
+       0.002
+      ]
+     },
+     "first_call_s": 2.1940321922302246,
+     "id": "mma_tf32_f32acc/M=4096",
+     "point_time_s": 0.001233638,
+     "throughput": 111409468151921.39,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0006839863315387302,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00011912095522467524,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       5e-05,
+       0.002
+      ]
+     },
+     "first_call_s": 11.626936197280884,
+     "id": "mma_tf32_f32acc/M=8192",
+     "point_time_s": 0.0090542745,
+     "throughput": 121435641008674.95,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.00047113417717230813,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.0001432814184183695,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       5e-05,
+       0.002
+      ]
+     },
+     "first_call_s": 49.46900701522827,
+     "id": "mma_tf32_f32acc/M=12288",
+     "point_time_s": 0.038779823,
+     "throughput": 95690270266163.94,
+     "valid": true
+    },
+    {
+     "batch_spread": 0.0012567643382410086,
+     "check": {
+      "max_abs_err_over_max_abs_ref": 0.00015163832123686672,
+      "ok": true,
+      "rule": "C[:128,:128] vs float64 product of the same rounded operands",
+      "window": [
+       5e-05,
+       0.002
+      ]
+     },
+     "first_call_s": 90.36612915992737,
+     "id": "mma_tf32_f32acc/M=16384",
+     "point_time_s": 0.0782712375,
+     "throughput": 112379633990174.23,
+     "valid": true
+    }
+   ],
+   "points_batch_spread_flagged": [],
+   "precision_path": "neuronx-cc --auto-cast matmult --auto-cast-type tf32 on eager fp32 torch.matmul; TF32 identified by the error window [5e-5, 2e-3] vs float64 (the default fp32 matmul is IEEE, error <= 1e-5)",
+   "probe": {
+    "neuron_cc_flags": "--target trn2 --lnc 2 --auto-cast matmult --auto-cast-type tf32",
+    "wall_s": 189.66455698013306
+   },
+   "reason": null,
+   "role": "scoring",
+   "selected_point": "mma_tf32_f32acc/M=8192",
+   "source_kind": "measured",
+   "status": "calibrated",
+   "unit": "FLOP/s",
+   "value": 121435641008674.95
+  },
+  "mma_xf32_f32acc": {
+   "reason": "ROCm XF32 matrix path (AMD only)",
+   "role": "scoring",
+   "source_kind": "measured",
+   "status": "unsupported",
+   "unit": "FLOP/s",
+   "value": null
+  }
+ },
+ "profile_sha256": "3915ffa3d97967926fd2c845f3bcdb7e1b44ac636ec6df698cef4c1926b986d2",
+ "protocol": {
+  "id": "tilebench-empirical-roofline/2+trn2-native",
+  "quick": false,
+  "sha256": "039d62950bf69c21f3d2e1dc7b5096abe2de2bbd8ac7028b2f2194e0a9a79d43"
+ },
+ "schema": "tilebench-empirical-profile/1",
+ "scope": {
+  "backend": "neuron",
+  "device_total": {
+   "device_memory": "96 GB",
+   "logical_neuroncores": 4,
+   "neuron_devices": 1,
+   "physical_neuroncores": 8
+  },
+  "instance_type": "trn2.3xlarge",
+  "kind": "single_logical_neuroncore",
+  "llc_bytes": 50331648,
+  "llc_note": "SBUF capacity of the two physical cores used as the 'last-level' capacity for HBM eligibility; Trn2 has no hardware cache between HBM and SBUF",
+  "logical_neuroncore_config": "2",
+  "logical_neuroncores_in_scope": 1,
+  "name": "AWS Trainium2 (NeuronCore-v3)",
+  "note": "one logical NeuronCore (LNC=2: two physical NeuronCore-v3), NEURON_RT_NUM_CORES=1: the scope on which NKI candidates and the formal TileBench NKI results are timed. Rates are per logical NeuronCore. Per-physical-core values are diagnostics measured with one core active; the whole device (4 logical / 8 physical cores) was not measured and is never obtained by scaling.",
+  "physical_neuroncores_in_scope": 2,
+  "visible_devices": {
+   "NEURON_LOGICAL_NC_CONFIG": "2",
+   "NEURON_RT_NUM_CORES": "1",
+   "NEURON_RT_VISIBLE_CORES": "<unset>"
+  }
+ }
+}

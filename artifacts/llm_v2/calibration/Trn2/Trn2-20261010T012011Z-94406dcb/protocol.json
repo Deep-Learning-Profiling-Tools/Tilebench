@@ -1,0 +1,73 @@
+{
+ "protocol": "tilebench-empirical-roofline/2+trn2-native",
+ "base_protocol": "tilebench-empirical-roofline/2 (calibration/protocol.py); Trn2 adaptation below",
+ "timing": "device busy time per execution from the Neuron runtime system trace (nc_exec_running, per-core copies merged), the formal NKI timing method; no host interval; compilation and warmup outside the timed sessions",
+ "batches": 3,
+ "warmup": 30,
+ "repeat": 50,
+ "statistic": "per point: median of the executions within each batch, then median of the batch medians; mode value: maximum over the valid points (stats.select_mode_value)",
+ "batch_spread_flag": 0.03,
+ "saturation_tolerance": 0.02,
+ "validity": "correctness check passes AND every timed call is exactly one device execution of one executable",
+ "hbm": {
+  "primary_probes": [
+   "nki_copy_via_sbuf",
+   "nki_copy_dram_to_dram"
+  ],
+  "diagnostic_probes": [
+   "torch_copy"
+  ],
+  "sizes_mib": [
+   16,
+   64,
+   256,
+   1024,
+   2048
+  ],
+  "min_working_set_over_llc": 4.0,
+  "plateau_tolerance": 0.05,
+  "llc_equivalent": "SBUF capacity of the scope (2 x 24 MiB): Trn2 has no hardware cache between HBM and SBUF; working sets >= 4 x 48 MiB are HBM-scale",
+  "work": "read + write bytes (2 x buffer size), random int32 payload, output compared in full"
+ },
+ "gemm": {
+  "api": "torch.matmul on torch.device('neuron') (neuronx-cc compiled, the PyTorch eager library path)",
+  "sizes": [
+   4096,
+   8192,
+   12288,
+   16384
+  ],
+  "check_block": 128,
+  "check": "C[:128,:128] against a float64 product of the same (rounded) operands"
+ },
+ "vector": {
+  "api": "NKI nisa.tensor_scalar(op0=multiply, op1=add) chains on SBUF-resident tiles, 2 FLOP per element",
+  "partition": 128,
+  "free": 2048,
+  "chains_per_engine": 2,
+  "iters": 400,
+  "engine_sets": [
+   [
+    "vector"
+   ],
+   [
+    "scalar"
+   ],
+   [
+    "gpsimd"
+   ],
+   [
+    "vector",
+    "scalar"
+   ],
+   [
+    "vector",
+    "scalar",
+    "gpsimd"
+   ]
+  ],
+  "scaling_check": "the same point at 2 x iters must take 2x the time within 10 %",
+  "a": 0.999,
+  "b": 0.001
+ }
+}
