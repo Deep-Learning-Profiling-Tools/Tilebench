@@ -1,0 +1,1247 @@
+{
+  "schema": "tilearena-hardware-theoretical-peak/1",
+  "status": "audit_candidate_not_frozen",
+  "generated_utc": "2026-10-10T06:14:32Z",
+  "device": {
+    "device_key": "TRN2",
+    "vendor": "AWS",
+    "device": "Trainium2",
+    "architecture": "NeuronCore-v3",
+    "instance_type": "trn2.3xlarge",
+    "dsl": "NKI 0.7"
+  },
+  "sol_formula": "T_SOL,arch = max(F / P_arch[mode], Q / BW_arch); P_arch and BW_arch below are per logical NeuronCore",
+  "resource_scope": {
+    "instance_type": "trn2.3xlarge",
+    "neuron_devices": 1,
+    "physical_neuroncores_per_device": 8,
+    "lnc_degree": 2,
+    "logical_neuroncores_per_device": 4,
+    "logical_cores_allocated": 1,
+    "physical_cores_participating": 2,
+    "observed_ids": {
+      "neuron_device_idx": 0,
+      "logical_neuroncore_idx": 2,
+      "physical_neuroncores": [
+        4,
+        5
+      ],
+      "note": "ids observed in all 71 profiles (T1 metadata; throttle counters nc4/nc5); the runtime may pick any free logical core - the resource count, not the id, matters"
+    },
+    "per_logical_core_resources": {
+      "TensorE": 2,
+      "VectorE": 2,
+      "ScalarE": 2,
+      "GpSimd": 2,
+      "DMA_engines": 32,
+      "SBUF_MiB": 56,
+      "PSUM_MiB": 4,
+      "HBM_stacks": 1,
+      "HBM_capacity_GB": 24,
+      "sources": [
+        "S4",
+        "S3 (SBUF 28 MiB per NC-v3, 16 DMA per core)",
+        "T1"
+      ]
+    },
+    "full_device_reference": {
+      "HBM_capacity_GiB": 96,
+      "HBM_stacks": 4,
+      "HBM_bandwidth_Bps": 2900000000000.0,
+      "DMA_bandwidth_Bps": 3500000000000.0,
+      "DMA_engines": 128,
+      "TensorE_published_TFLOPs": {
+        "bf16": 667.0,
+        "fp8": 1299.0,
+        "fp32": 181.0,
+        "sparse": 2563.0
+      },
+      "sources": [
+        "S1",
+        "S3",
+        "S6"
+      ]
+    },
+    "evidence": {
+      "code": {
+        "file": "tilebench/core/neuron_native.py (origin/main 72d7cec6)",
+        "sets": "NEURON_LOGICAL_NC_CONFIG from neuron-ls (2), NEURON_CC_FLAGS='--target trn2 --lnc 2', NEURON_RT_NUM_CORES=1; device time merges the per-core copies of one execution"
+      },
+      "formal_manifest": {
+        "path": "~/tb_wt/_native/.local/trn2_native_formal/final_manifest.json",
+        "sha256": "2d7b5ed7defb907d62f1dd2df188f31f85f92490717e4a661e58753b1df4714b",
+        "hardware": {
+          "instance_type": "trn2.3xlarge",
+          "logical_neuroncore_config": 2
+        },
+        "lnc_note": "1d_conv diagnostic: an NKI kernel without program_id runs the full workload on both physical cores (AWS 2026-10-06)"
+      },
+      "calibration_environment": {
+        "path": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/environment.json",
+        "sha256": "dd82b5404dad183e731c2b633daadd7c026e4da60a05eaed170cf41e2f378484",
+        "values": {
+          "instance_type": "trn2.3xlarge",
+          "logical_neuroncore_config": "2",
+          "neuron_devices": 1,
+          "logical_cores_per_device": 4,
+          "physical_cores_per_device": 8,
+          "device_memory": "96 GB"
+        },
+        "env": {
+          "NEURON_CC_FLAGS": "--target trn2 --lnc 2",
+          "NEURON_LOGICAL_NC_CONFIG": "2",
+          "NEURON_PLATFORM_TARGET_OVERRIDE": "trn2",
+          "NEURON_RT_NUM_CORES": "1",
+          "NKI_TRACE_CACHE_URL": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/trn2cal/full/trn2_cal_Trn2-20261010T012012Z-94406dcb/cache/nki_trace",
+          "TORCH_NEURONX_DEBUG_DIR": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/trn2cal/full/trn2_cal_Trn2-20261010T012012Z-94406dcb/cache/debug",
+          "TORCH_NEURONX_HLO_CACHE_DIR": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/trn2cal/full/trn2_cal_Trn2-20261010T012012Z-94406dcb/cache/hlo",
+          "TORCH_NEURONX_NEFF_CACHE_DIR": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/trn2cal/full/trn2_cal_Trn2-20261010T012012Z-94406dcb/cache/neff",
+          "TORCH_NEURONX_NEFF_LOCAL_CACHE_DIR": "/tmp/claude-1000/-home-ubuntu/8286a68e-7ddd-47f3-a29e-9b6ce9e0e3f5/scratchpad/trn2cal/full/trn2_cal_Trn2-20261010T012012Z-94406dcb/cache/local"
+        }
+      },
+      "profiles": {
+        "count": 71,
+        "num_physical_cores_values": [
+          2
+        ],
+        "neuroncore_idx_values": [
+          2
+        ],
+        "throttle_counter_cores": [
+          [
+            "4",
+            "5"
+          ]
+        ],
+        "both_physical_cores_execute_instructions": 71,
+        "min_instruction_count_ratio_between_cores": 0.926,
+        "hardware_constants_identical_in_all": true
+      }
+    }
+  },
+  "conventions": {
+    "flop": "1 multiply-add = 2 FLOP (Neuron Explorer MFU uses the same, T2)",
+    "int_op": "1 int multiply-add = 2 OP",
+    "units": {
+      "compute": "FLOP/s (OP/s for int8)",
+      "bandwidth": "byte/s"
+    },
+    "prefixes": "decimal (T = 1e12, G = 1e9)",
+    "hbm_traffic": "read + write bytes",
+    "dense_only": true,
+    "sparse_figures": "recorded in documented_values/chip reference only; never a dense peak",
+    "value_semantics": "value = strict theoretical upper bound for SOL when status is verified or derived_with_assumptions; null when unresolved or unsupported (no provisional substitution)"
+  },
+  "peaks": {
+    "bf16_mma": {
+      "registry_mode": "mma_bf16_f32acc",
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, bfloat16 stationary/moving, perf_mode=none",
+      "input_dtypes": [
+        "bfloat16"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 157286400000000.0,
+      "value_TFLOPs": 157.2864,
+      "per_physical_core": 78643200000000.0,
+      "per_physical_core_TFLOPs": 78.6432,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 1,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 79,
+          "source": "S2",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 cFP8 TFLOPS, and 79 BF16/FP16/TF32 TFLOPS of tensor computations."
+        },
+        {
+          "per_physical_core_TFLOPs": 79,
+          "source": "S3",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 FP8, 79 BF16/FP16/TF32 and 20 FP32 dense TFLOPS of tensor computations. It also delivers 316 FP8/BF16/FP16/TF32 sparse TFLOPS."
+        }
+      ],
+      "status": "verified",
+      "status_reason": "Array size (S5), clock (S3, T1), datapath 2x128 for dense BF16 = 1 MAC/PE/cycle (S3, same encoding as NC-v2 S7); reproduces the published 79 TFLOP/s per NeuronCore-v3 (S2, S3) and the profiler's own MFU denominator (T2) for this exact 2-physical-core execution.",
+      "notes": [
+        "TensorE-only bound. Chip/4 = 166.75 TFLOP/s is NOT used (see chip_vs_core_discrepancy)."
+      ],
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "mma_bf16_f32acc",
+        "value": 151489720423716.22,
+        "fraction_of_theoretical": 0.9631
+      }
+    },
+    "fp16_mma": {
+      "registry_mode": "mma_fp16_f32acc",
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, float16 stationary/moving, perf_mode=none",
+      "input_dtypes": [
+        "float16"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 157286400000000.0,
+      "value_TFLOPs": 157.2864,
+      "per_physical_core": 78643200000000.0,
+      "per_physical_core_TFLOPs": 78.6432,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 1,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 79,
+          "source": "S2",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 cFP8 TFLOPS, and 79 BF16/FP16/TF32 TFLOPS of tensor computations."
+        }
+      ],
+      "status": "verified",
+      "status_reason": "Same evidence as bf16_mma; S3 Table 10 lists BF16/FP16 together.",
+      "notes": [],
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "mma_fp16_f32acc",
+        "value": 146785501961191.1,
+        "fraction_of_theoretical": 0.9332
+      }
+    },
+    "tf32_mma": {
+      "registry_mode": "mma_tf32_f32acc",
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, tfloat32 stationary/moving",
+      "input_dtypes": [
+        "tfloat32"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 157286400000000.0,
+      "value_TFLOPs": 157.2864,
+      "per_physical_core": 78643200000000.0,
+      "per_physical_core_TFLOPs": 78.6432,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 1,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 79,
+          "source": "S2",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 cFP8 TFLOPS, and 79 BF16/FP16/TF32 TFLOPS of tensor computations."
+        }
+      ],
+      "status": "derived_with_assumptions",
+      "status_reason": "The published per-core figure (79 BF16/FP16/TF32, S2/S3) implies 1 MAC/PE/cycle, but S3 Table 10 lists the full-rate datapath only for BF16/FP16 (TF32 not listed). Assumption: TF32 operands stream at the BF16/FP16 rate.",
+      "notes": [
+        "TileArena declares fp32 MMA operators (matmul, batched_matmul, streamk_matmul, convs, ... fp32) as mma_tf32_f32acc. The Trn2 NKI implementations run float32 nc_matmul (1/4 rate, see fp32_tensor_mma; profile: matmul fp32 K20480 37.8 TFLOP/s), so a TF32-mode SOL is 4x tighter than the FP32 path the kernels use. Declaration unchanged (shared, out of scope)."
+      ],
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "mma_tf32_f32acc",
+        "value": 121435641008674.95,
+        "fraction_of_theoretical": 0.7721
+      }
+    },
+    "fp32_tensor_mma": {
+      "registry_mode": "gemm_fp32_ieee",
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, float32 stationary/moving (IEEE fp32 multiply, fp32 accumulate)",
+      "input_dtypes": [
+        "float32"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 39321600000000.0,
+      "value_TFLOPs": 39.3216,
+      "per_physical_core": 19660800000000.0,
+      "per_physical_core_TFLOPs": 19.6608,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 0.25,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 20,
+          "source": "S3",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 FP8, 79 BF16/FP16/TF32 and 20 FP32 dense TFLOPS of tensor computations. It also delivers 316 FP8/BF16/FP16/TF32 sparse TFLOPS."
+        },
+        {
+          "nc_v2_reference": "For FP32 input data type, the instruction cost is roughly 4x higher than BF16/FP16/TF32/cFP8.",
+          "source": "S7"
+        },
+        {
+          "source": "T1/T2",
+          "note": "Neuron Explorer's instruction-level MFU (mfu_inst_estimated_percent) for profiled matmul fp32 K20480 is 0.9622 at (hardware_flops - transpose_flops)/total_time = 37.83 TFLOP/s, i.e. the tool's denominator is 39.32 TFLOP/s for the 2-physical-core execution (fp16 K20480: 0.8906 at 140.07 -> 157.29). The AWS tool applies the 1/4 FP32 TensorE rate independently of this audit."
+        }
+      ],
+      "status": "verified",
+      "status_reason": "Published 20 FP32 dense TFLOP/s per NeuronCore-v3 (S3) = 1/4 of the BF16 rate (19.66 rounds to 20); the 1/4 factor is the documented FP32 instruction cost on TensorE (S7, 'roughly 4x higher'; NC-v2 23 = 92/4). Distinct from FP32 vector arithmetic.",
+      "notes": [
+        "is_stationary_onezero/is_moving_onezero can double fp32 throughput when an operand is a 0/1 matrix (S5); not applicable to a general GEMM, excluded.",
+        "Registry name gemm_fp32_ieee is a control mode in the empirical schema."
+      ],
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "gemm_fp32_ieee",
+        "value": 36925348507660.78,
+        "fraction_of_theoretical": 0.9391
+      }
+    },
+    "fp8_e4m3_legacy_mma": {
+      "registry_mode": null,
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, float8_e4m3 (Neuron legacy E4M3), perf_mode=double_row",
+      "input_dtypes": [
+        "float8_e4m3"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 314572800000000.0,
+      "value_TFLOPs": 314.5728,
+      "per_physical_core": 157286400000000.0,
+      "per_physical_core_TFLOPs": 157.2864,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 2,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 158,
+          "source": "S3",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 FP8, 79 BF16/FP16/TF32 and 20 FP32 dense TFLOPS of tensor computations. It also delivers 316 FP8/BF16/FP16/TF32 sparse TFLOPS."
+        },
+        {
+          "source": "S3",
+          "quote": "each processing element performs two pairs of FP8 multiplications and also accumulation of the two multiplication results per cycle"
+        }
+      ],
+      "status": "verified",
+      "status_reason": "Datapath 4x128 for dense FP8_E4/FP8_E5 (S3) = 2 MAC/PE/cycle, stated explicitly (S3, S5); reproduces published 158 TFLOP/s per core.",
+      "notes": [
+        "Requires NKI nc_matmul(perf_mode=double_row) with [128,2,*] tiles (S3/S5); cannot be combined with column tiling, sparse or transpose modes. No TileArena Trn2 operator uses this format (the fp8 operator dtype is OCP float8_e4m3fn, see fp8_e4m3fn_mma). FP8_E3 runs at the BF16 rate (S3).",
+        "Not the OCP format: legacy float8_e4m3 and OCP float8_e4m3fn cannot be mixed (S5)."
+      ]
+    },
+    "fp8_e5m2_mma": {
+      "registry_mode": "mma_fp8_e5m2_f32acc",
+      "engine": "TensorE",
+      "instruction": "nki.isa.nc_matmul, float8_e5m2, perf_mode=double_row",
+      "input_dtypes": [
+        "float8_e5m2"
+      ],
+      "accumulation": "fp32 (PSUM)",
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": 314572800000000.0,
+      "value_TFLOPs": 314.5728,
+      "per_physical_core": 157286400000000.0,
+      "per_physical_core_TFLOPs": 157.2864,
+      "derivation": {
+        "formula": "physical_cores_used x PE_rows x PE_cols x MAC_per_PE_per_cycle x 2 FLOP/MAC x f_TensorE",
+        "physical_cores_used": 2,
+        "pe_rows": 128,
+        "pe_cols": 128,
+        "mac_per_pe_per_cycle": 2,
+        "f_TensorE_Hz": 2400000000.0,
+        "clock_assumption": "documented single TensorE frequency (S3 Table 10, identical in T1); AWS documents no boost or alternative clock; hardware throttling lowers utilization, never raises the clock"
+      },
+      "documented_values": [
+        {
+          "per_physical_core_TFLOPs": 158,
+          "source": "S3",
+          "quote": "A NeuronCore-v3 Tensor Engine delivers 158 FP8, 79 BF16/FP16/TF32 and 20 FP32 dense TFLOPS of tensor computations. It also delivers 316 FP8/BF16/FP16/TF32 sparse TFLOPS."
+        }
+      ],
+      "status": "verified",
+      "status_reason": "S3 names FP8_E5 explicitly for the double-FP8 mode; same derivation as fp8_e4m3_legacy_mma.",
+      "notes": [
+        "Requires NKI nc_matmul(perf_mode=double_row) with [128,2,*] tiles (S3/S5); cannot be combined with column tiling, sparse or transpose modes. No TileArena Trn2 operator uses this format (the fp8 operator dtype is OCP float8_e4m3fn, see fp8_e4m3fn_mma). FP8_E3 runs at the BF16 rate (S3)."
+      ]
+    },
+    "fp8_e4m3fn_mma": {
+      "registry_mode": "mma_fp8_e4m3_f32acc",
+      "engine": "TensorE",
+      "input_dtypes": [
+        "float8_e4m3fn (OCP)"
+      ],
+      "dense_or_sparse": "dense",
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": null,
+      "status": "unsupported",
+      "status_reason": "nc_matmul accepts float8_e4m3fn only starting NeuronCore-v4 (S5); Trn2 is NeuronCore-v3. The legacy E4M3 rate is NOT assigned to the OCP format.",
+      "evidence": [
+        {
+          "source": "S5",
+          "quote": "The input stationary and moving tiles can be one of these supported data types: float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32. Starting NeuronCore-v4, float8_e4m3fn (OCP FP8) is also supported; float8_e4m3 (legacy) and float8_e4m3fn cannot be mixed in the same matmul."
+        },
+        {
+          "source": "TileBench impl",
+          "file": "tilebench/benchmarks/operators/matmul_fp32_fp16_fp8/impl_nki.py (origin/main)",
+          "quote": "matmul NKI: fp8 is not supported on trn2 (neuronxcc rejects F8E4M3FN before TRN3 ...)"
+        },
+        {
+          "source": "empirical calibration",
+          "note": "Trn2-20261010T012011Z-94406dcb: torch._scaled_mm e4m3fn ran with no device execution (host)"
+        }
+      ],
+      "affected_operator_cases": "matmul_fp32_fp16_fp8:fp8_e4m3fn (formal Trn2 result N/A)"
+    },
+    "int8_mma": {
+      "registry_mode": "mma_int8_i32acc",
+      "engine": "TensorE",
+      "input_dtypes": [
+        "int8"
+      ],
+      "dense_or_sparse": "dense",
+      "unit": "OP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "value": null,
+      "status": "unsupported",
+      "status_reason": "NeuronCore-v3 TensorE input types are float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32 (S5; S2 lists no INT8 input). NeuronCore-v2 listed INT8 inputs/INT32 outputs (S10, S11 380 INT8 TOPS); no Trn2 document gives an INT8 TOPS figure. No BF16 rate is substituted.",
+      "evidence": [
+        {
+          "source": "S5",
+          "quote": "The input stationary and moving tiles can be one of these supported data types: float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32. Starting NeuronCore-v4, float8_e4m3fn (OCP FP8) is also supported; float8_e4m3 (legacy) and float8_e4m3fn cannot be mixed in the same matmul."
+        },
+        {
+          "source": "S2",
+          "quote": "Tensor Engines support mixed-precision computations, including cFP8, FP16, BF16, TF32, and FP32 inputs and outputs."
+        },
+        {
+          "source": "empirical calibration",
+          "note": "Trn2-20261010T012011Z-94406dcb: torch._int_mm ran with no device execution (host)"
+        }
+      ],
+      "implementation_mapping_not_a_peak": {
+        "operator": "matmul_int8 (int8 A x packed uint8 B -> int32)",
+        "observed_path": "impl_nki.py converts int8/uint8 tiles to bfloat16 (nisa.tensor_copy) and runs bfloat16 nc_matmul with fp32 PSUM accumulation, then casts to int32",
+        "ceiling_of_that_path": "bf16_mma (157.29 TFLOP/s per logical core), only if the owner decides to score this operator by its implementation path; it does not establish native INT8 MMA support",
+        "affected_operator_cases": "matmul_int8:int8 (20 valid formal cases; empirical SOL currently peak_unavailable)"
+      }
+    },
+    "fp32_vector": {
+      "flop_convention": "tensor_scalar(op0=multiply, op1=add) or activation(identity, scale, bias): one fused a*x+b per element = 2 FLOP; one or two operators cost the same (S8, S9)",
+      "arithmetic_precision": "VectorE/ScalarE/GpSimd tensor_scalar arithmetic is always FP32 internally (S3, S8, S9); BF16/FP16 change only the datapath width (VectorE performance mode), not the math. There is no packed half2 FMA comparable to GPU fp16x2/bf16x2.",
+      "documented_engine_tflops_not_used": {
+        "values_per_physical_core": {
+          "VectorE_FP32": 1000000000000.0,
+          "ScalarE_FP32": 1200000000000.0
+        },
+        "source": "S2",
+        "quotes": [
+          "Vector Engines are highly parallelized, and deliver a total of 1 TFLOPS of FP32 computations.",
+          "Scalar Engines are highly parallelized, and deliver a total of 1.2 TFLOPS of FP32 computations."
+        ],
+        "why_not_used": "They equal ~1024 FLOP per engine cycle (1.0e12/0.96e9 = 1042, 1.2e12/1.2e9 = 1000); NeuronCore-v2 figures equal ~2048 FLOP/cycle (2.3e12/1.12e9, 2.9e12/1.4e9, S10/S7) although v3 doubled the VectorE datapath. The counting convention is undocumented and cannot be reproduced from the documented datapath widths with 1 FMA = 2 FLOP (ScalarE would need 7.8 FLOP per lane-cycle). Not an elementwise-FMA bound."
+      },
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "dense_or_sparse": "not_applicable",
+      "registry_mode": "fp32_fma_vector",
+      "data_dtype": "float32",
+      "value": null,
+      "status": "unresolved",
+      "status_reason": "TileArena's vector modes count elementwise FLOPs a kernel may spread over VectorE, ScalarE and GpSimd (the empirical calibration measured all three together). A strict bound for that combined execution needs the GpSimd FMA issue rate (undocumented, S7: 'no rule-of-thumb') and the VectorE/GpSimd shared-bus arbitration (S3), so it is not established. Per-engine bounds below.",
+      "engine_bounds": {
+        "VectorE": {
+          "engine": "VectorE",
+          "elements_per_cycle_per_physical_core": 256,
+          "f_Hz": 960000000.0,
+          "value": 983040000000.0,
+          "value_TFLOPs": 0.983,
+          "per_physical_core": 491520000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: '256 input/output for other data types' at 0.96 GHz. Assumption: the 256-element width applies to a single-input tensor_scalar on fp32 data. If the 256 counts both inputs of tensor_tensor (NC-v2 cost model: one-input instruction = N cycles, S7), the fp32 tensor_scalar bound is half (alternative below). The larger value is kept as the upper bound.",
+          "alternative_if_1_element_per_partition_per_cycle": {
+            "value": 491520000000.0,
+            "value_TFLOPs": 0.4915
+          }
+        },
+        "ScalarE": {
+          "engine": "ScalarE",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: 128 input/output elements/cycle at 1.2 GHz; activation/tensor_scalar perform a*x+b in one pass at no extra cost (S8, S9). Assumption: one element per lane per cycle in steady state (no ScalarE cost model published for NC-v3)."
+        },
+        "GpSimd": {
+          "engine": "GpSimd",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "unresolved",
+          "status_reason": "8 processors x 512-bit = 128 fp32 lanes at 1.2 GHz (S2, S3, S7); whether a lane retires one fused multiply-add per cycle is undocumented (S7: no cost rule). Value = upper candidate assuming one FMA/lane/cycle; tensor_scalar on GpSimd computes in fp32 (S8), so 16-bit data does not widen it."
+        }
+      },
+      "combined_candidates": [
+        {
+          "id": "VectorE+ScalarE+GpSimd (naive sum)",
+          "value": 2211840000000.0,
+          "value_TFLOPs": 2.2118,
+          "status": "unresolved",
+          "assumptions": [
+            "VectorE 256 elem/cycle fp32",
+            "ScalarE 128 elem/cycle",
+            "GpSimd 1 FMA/lane/cycle (undocumented)",
+            "no SBUF port contention among the three engines (S3 allows VectorE/GpSimd parallel SBUF access)"
+          ]
+        },
+        {
+          "id": "VectorE+ScalarE",
+          "value": 1597440000000.0,
+          "value_TFLOPs": 1.5974,
+          "status": "derived_with_assumptions",
+          "assumptions": [
+            "valid only for kernels that leave GpSimd idle; not a strict bound for the declared mode"
+          ]
+        }
+      ],
+      "other_paths_not_bounded": "TensorE can apply per-partition affine maps via diagonal-matrix matmul (<=128 useful elements/cycle at 2.4 GHz per core) but its output lands in PSUM and must be evacuated by VectorE/ScalarE/GpSimd, so it is not additive; not included.",
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "fp32_fma_vector",
+        "value_combined_three_engines": 746719142504.301,
+        "fraction_of_combined_candidates": {
+          "VectorE+ScalarE+GpSimd (naive sum)": 0.3376,
+          "VectorE+ScalarE": 0.4674
+        },
+        "single_engine_points": {
+          "VectorE": {
+            "measured": 423074339284.25525,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.4304
+          },
+          "ScalarE": {
+            "measured": 354910058313.9102,
+            "check_passed": false,
+            "fraction_of_engine_bound": 0.5777
+          },
+          "GpSimd": {
+            "measured": 333942065967.488,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.5435
+          }
+        }
+      }
+    },
+    "bf16_vector": {
+      "flop_convention": "tensor_scalar(op0=multiply, op1=add) or activation(identity, scale, bias): one fused a*x+b per element = 2 FLOP; one or two operators cost the same (S8, S9)",
+      "arithmetic_precision": "VectorE/ScalarE/GpSimd tensor_scalar arithmetic is always FP32 internally (S3, S8, S9); BF16/FP16 change only the datapath width (VectorE performance mode), not the math. There is no packed half2 FMA comparable to GPU fp16x2/bf16x2.",
+      "documented_engine_tflops_not_used": {
+        "values_per_physical_core": {
+          "VectorE_FP32": 1000000000000.0,
+          "ScalarE_FP32": 1200000000000.0
+        },
+        "source": "S2",
+        "quotes": [
+          "Vector Engines are highly parallelized, and deliver a total of 1 TFLOPS of FP32 computations.",
+          "Scalar Engines are highly parallelized, and deliver a total of 1.2 TFLOPS of FP32 computations."
+        ],
+        "why_not_used": "They equal ~1024 FLOP per engine cycle (1.0e12/0.96e9 = 1042, 1.2e12/1.2e9 = 1000); NeuronCore-v2 figures equal ~2048 FLOP/cycle (2.3e12/1.12e9, 2.9e12/1.4e9, S10/S7) although v3 doubled the VectorE datapath. The counting convention is undocumented and cannot be reproduced from the documented datapath widths with 1 FMA = 2 FLOP (ScalarE would need 7.8 FLOP per lane-cycle). Not an elementwise-FMA bound."
+      },
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "dense_or_sparse": "not_applicable",
+      "registry_mode": "bf16x2_fma_vector",
+      "data_dtype": "bfloat16",
+      "value": null,
+      "status": "unresolved",
+      "status_reason": "TileArena's vector modes count elementwise FLOPs a kernel may spread over VectorE, ScalarE and GpSimd (the empirical calibration measured all three together). A strict bound for that combined execution needs the GpSimd FMA issue rate (undocumented, S7: 'no rule-of-thumb') and the VectorE/GpSimd shared-bus arbitration (S3), so it is not established. Per-engine bounds below.",
+      "engine_bounds": {
+        "VectorE": {
+          "engine": "VectorE",
+          "elements_per_cycle_per_physical_core": 512,
+          "f_Hz": 960000000.0,
+          "value": 1966080000000.0,
+          "value_TFLOPs": 1.9661,
+          "per_physical_core": 983040000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: 512 BF16/FP16 elements/cycle at 0.96 GHz, reached only in the VectorE 4x performance mode (tensor_scalar or tensor_copy, SBUF->SBUF, BF16/FP16 in and out, contiguous innermost free dim; S3). 2x mode (PSUM operand or non-contiguous) = 256 elem/cycle. Math still fp32 (S3).",
+          "value_2x_mode": {
+            "value": 983040000000.0,
+            "value_TFLOPs": 0.983
+          },
+          "value_outside_performance_mode": "same as fp32_vector VectorE bound"
+        },
+        "ScalarE": {
+          "engine": "ScalarE",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: 128 input/output elements/cycle at 1.2 GHz; activation/tensor_scalar perform a*x+b in one pass at no extra cost (S8, S9). Assumption: one element per lane per cycle in steady state (no ScalarE cost model published for NC-v3)."
+        },
+        "GpSimd": {
+          "engine": "GpSimd",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "unresolved",
+          "status_reason": "8 processors x 512-bit = 128 fp32 lanes at 1.2 GHz (S2, S3, S7); whether a lane retires one fused multiply-add per cycle is undocumented (S7: no cost rule). Value = upper candidate assuming one FMA/lane/cycle; tensor_scalar on GpSimd computes in fp32 (S8), so 16-bit data does not widen it."
+        }
+      },
+      "combined_candidates": [
+        {
+          "id": "VectorE(4x)+ScalarE+GpSimd (naive sum)",
+          "value": 3194880000000.0,
+          "value_TFLOPs": 3.1949,
+          "status": "unresolved",
+          "assumptions": [
+            "ignores the VectorE/GpSimd shared bus used by the performance mode (S3)",
+            "GpSimd 1 FMA/lane/cycle (undocumented)"
+          ]
+        },
+        {
+          "id": "shared-bus-exclusive: max(VectorE(4x)+ScalarE, VectorE(fp32 width)+ScalarE+GpSimd)",
+          "value": 2580480000000.0,
+          "value_TFLOPs": 2.5805,
+          "status": "unresolved",
+          "assumptions": [
+            "VectorE performance mode and GpSimd SBUF traffic mutually exclusive (S3 says 'arbitrating'; the split is undocumented)"
+          ]
+        }
+      ],
+      "other_paths_not_bounded": "TensorE can apply per-partition affine maps via diagonal-matrix matmul (<=128 useful elements/cycle at 2.4 GHz per core) but its output lands in PSUM and must be evacuated by VectorE/ScalarE/GpSimd, so it is not additive; not included.",
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "bf16x2_fma_vector",
+        "value_combined_three_engines": 860771744762.9407,
+        "fraction_of_combined_candidates": {
+          "VectorE(4x)+ScalarE+GpSimd (naive sum)": 0.2694,
+          "shared-bus-exclusive: max(VectorE(4x)+ScalarE, VectorE(fp32 width)+ScalarE+GpSimd)": 0.3336
+        },
+        "single_engine_points": {
+          "VectorE": {
+            "measured": 528881000942.56055,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.269
+          },
+          "ScalarE": {
+            "measured": 355890509234.85474,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.5792
+          },
+          "GpSimd": {
+            "measured": 334991383222.85236,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.5452
+          }
+        }
+      }
+    },
+    "fp16_vector": {
+      "flop_convention": "tensor_scalar(op0=multiply, op1=add) or activation(identity, scale, bias): one fused a*x+b per element = 2 FLOP; one or two operators cost the same (S8, S9)",
+      "arithmetic_precision": "VectorE/ScalarE/GpSimd tensor_scalar arithmetic is always FP32 internally (S3, S8, S9); BF16/FP16 change only the datapath width (VectorE performance mode), not the math. There is no packed half2 FMA comparable to GPU fp16x2/bf16x2.",
+      "documented_engine_tflops_not_used": {
+        "values_per_physical_core": {
+          "VectorE_FP32": 1000000000000.0,
+          "ScalarE_FP32": 1200000000000.0
+        },
+        "source": "S2",
+        "quotes": [
+          "Vector Engines are highly parallelized, and deliver a total of 1 TFLOPS of FP32 computations.",
+          "Scalar Engines are highly parallelized, and deliver a total of 1.2 TFLOPS of FP32 computations."
+        ],
+        "why_not_used": "They equal ~1024 FLOP per engine cycle (1.0e12/0.96e9 = 1042, 1.2e12/1.2e9 = 1000); NeuronCore-v2 figures equal ~2048 FLOP/cycle (2.3e12/1.12e9, 2.9e12/1.4e9, S10/S7) although v3 doubled the VectorE datapath. The counting convention is undocumented and cannot be reproduced from the documented datapath widths with 1 FMA = 2 FLOP (ScalarE would need 7.8 FLOP per lane-cycle). Not an elementwise-FMA bound."
+      },
+      "unit": "FLOP/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3)",
+      "dense_or_sparse": "not_applicable",
+      "registry_mode": "fp16x2_fma_vector",
+      "data_dtype": "float16",
+      "value": null,
+      "status": "unresolved",
+      "status_reason": "TileArena's vector modes count elementwise FLOPs a kernel may spread over VectorE, ScalarE and GpSimd (the empirical calibration measured all three together). A strict bound for that combined execution needs the GpSimd FMA issue rate (undocumented, S7: 'no rule-of-thumb') and the VectorE/GpSimd shared-bus arbitration (S3), so it is not established. Per-engine bounds below.",
+      "engine_bounds": {
+        "VectorE": {
+          "engine": "VectorE",
+          "elements_per_cycle_per_physical_core": 512,
+          "f_Hz": 960000000.0,
+          "value": 1966080000000.0,
+          "value_TFLOPs": 1.9661,
+          "per_physical_core": 983040000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: 512 BF16/FP16 elements/cycle at 0.96 GHz, reached only in the VectorE 4x performance mode (tensor_scalar or tensor_copy, SBUF->SBUF, BF16/FP16 in and out, contiguous innermost free dim; S3). 2x mode (PSUM operand or non-contiguous) = 256 elem/cycle. Math still fp32 (S3).",
+          "value_2x_mode": {
+            "value": 983040000000.0,
+            "value_TFLOPs": 0.983
+          },
+          "value_outside_performance_mode": "same as fp32_vector VectorE bound"
+        },
+        "ScalarE": {
+          "engine": "ScalarE",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "derived_with_assumptions",
+          "status_reason": "S3 Table 10: 128 input/output elements/cycle at 1.2 GHz; activation/tensor_scalar perform a*x+b in one pass at no extra cost (S8, S9). Assumption: one element per lane per cycle in steady state (no ScalarE cost model published for NC-v3)."
+        },
+        "GpSimd": {
+          "engine": "GpSimd",
+          "elements_per_cycle_per_physical_core": 128,
+          "f_Hz": 1200000000.0,
+          "value": 614400000000.0,
+          "value_TFLOPs": 0.6144,
+          "per_physical_core": 307200000000.0,
+          "formula": "2 physical cores x elements/cycle x 2 FLOP x f",
+          "status": "unresolved",
+          "status_reason": "8 processors x 512-bit = 128 fp32 lanes at 1.2 GHz (S2, S3, S7); whether a lane retires one fused multiply-add per cycle is undocumented (S7: no cost rule). Value = upper candidate assuming one FMA/lane/cycle; tensor_scalar on GpSimd computes in fp32 (S8), so 16-bit data does not widen it."
+        }
+      },
+      "combined_candidates": [
+        {
+          "id": "VectorE(4x)+ScalarE+GpSimd (naive sum)",
+          "value": 3194880000000.0,
+          "value_TFLOPs": 3.1949,
+          "status": "unresolved",
+          "assumptions": [
+            "ignores the VectorE/GpSimd shared bus used by the performance mode (S3)",
+            "GpSimd 1 FMA/lane/cycle (undocumented)"
+          ]
+        },
+        {
+          "id": "shared-bus-exclusive: max(VectorE(4x)+ScalarE, VectorE(fp32 width)+ScalarE+GpSimd)",
+          "value": 2580480000000.0,
+          "value_TFLOPs": 2.5805,
+          "status": "unresolved",
+          "assumptions": [
+            "VectorE performance mode and GpSimd SBUF traffic mutually exclusive (S3 says 'arbitrating'; the split is undocumented)"
+          ]
+        }
+      ],
+      "other_paths_not_bounded": "TensorE can apply per-partition affine maps via diagonal-matrix matmul (<=128 useful elements/cycle at 2.4 GHz per core) but its output lands in PSUM and must be evacuated by VectorE/ScalarE/GpSimd, so it is not additive; not included.",
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "fp16x2_fma_vector",
+        "value_combined_three_engines": 860370051282.0514,
+        "fraction_of_combined_candidates": {
+          "VectorE(4x)+ScalarE+GpSimd (naive sum)": 0.2693,
+          "shared-bus-exclusive: max(VectorE(4x)+ScalarE, VectorE(fp32 width)+ScalarE+GpSimd)": 0.3334
+        },
+        "single_engine_points": {
+          "VectorE": {
+            "measured": 528765153699.84283,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.2689
+          },
+          "ScalarE": {
+            "measured": 355867862451.00433,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.5792
+          },
+          "GpSimd": {
+            "measured": 334818567273.57776,
+            "check_passed": true,
+            "fraction_of_engine_bound": 0.545
+          }
+        }
+      }
+    },
+    "hbm_bandwidth": {
+      "registry_mode": "hbm_stream_bw",
+      "unit": "byte/s",
+      "scope": "per_logical_neuroncore_lnc2 (2 physical NeuronCore-v3); one HBM stack (24 GB bank)",
+      "traffic_convention": "bytes read from HBM + bytes written to HBM (same as TileArena Q, the empirical hbm_stream_bw probes, and Neuron Explorer MBU, T2); the vendor figure is the stack's total (read+write) interface bandwidth, so nothing is doubled for copies",
+      "value": 716000000000.0,
+      "value_GBps": 716.0,
+      "status": "derived_with_assumptions",
+      "status_reason": "One logical core at LNC=2 owns one of the four HBM banks (S4: each 24 GB bank shared by the two physical cores that form the logical core). AWS's profiler defines hbm_max_bandwidth as 'the maximum HBM bandwidth of a HBM stack ... For LNC1 and LNC2 the same' (T2) and embeds 716.0 GB/s for these exact executions (T1). 4 x 716 = 2.864 TB/s, which the documentation rounds to 2.9 TB/s (S1; S6 46.4/16) and 3 TB/s (S3).",
+      "assumptions": [
+        "A1 TileBench tensors of the logical core reside in its own bank (runtime allocation; not observed directly). DMA engines can address any HBM on the device (S3/S7), so a kernel with data spread over several banks could exceed one stack (then bounded by DMA, below).",
+        "A2 The profiler constant is the hardware peak per stack (it is the denominator AWS uses for MBU), not a derated value.",
+        "A3 The four stacks are identical (S3: 4 stacks; no unequal split documented; T2 uses a single per-stack value).",
+        "A4 Decimal units (1 TB/s = 1e12 B/s): AWS writes 'TB/sec' (S1) but the Trn1 page writes '820 GiB/sec' (S11) where the NKI guide writes '820 GB/s' (S7), so AWS unit spelling is not reliable; the profiler constant 716.0e9 is decimal."
+      ],
+      "candidates": [
+        {
+          "id": "per_stack_profiler_constant",
+          "value": 716000000000.0,
+          "GBps": 716.0,
+          "source": "T1, T2",
+          "selected": true
+        },
+        {
+          "id": "chip_spec_divided_by_4_stacks",
+          "value": 725000000000.0,
+          "GBps": 725.0,
+          "source": "S1/S3/S4",
+          "selected": false,
+          "why_not_selected": "2.9 TB/s is a 2-significant-digit rounding (2.864 -> 2.9, the same rounding maps 4x716 and 8x435 GB/s to the documented 2.9 and 3.5 TB/s); 725 overstates the stack by 1.26 %. Use it instead only if the owner prefers 'never below any documented figure'."
+        },
+        {
+          "id": "chip_aggregate",
+          "value": 2900000000000.0,
+          "selected": false,
+          "why_not_selected": "whole device (4 stacks); not accessible to one logical core's local allocation"
+        }
+      ],
+      "dma_is_not_hbm": {
+        "dma_per_physical_core": 435000000000.0,
+        "dma_per_logical_core": 870000000000.0,
+        "dma_engines_per_physical_core": 16,
+        "dma_engines_per_logical_core": 32,
+        "source": "T1 (dma_ddr_bandwidth 435.0 GB/s, num_dma_engines_per_neuroncore 16); S1 3.5 TB/s = 8 x 435 rounded; S3 128 engines = 8 x 16; per engine 27.2 GB/s (S7 NC-v2: 27 GiB/s)",
+        "gpsimd_integrated_dma_per_physical_core": 307000000000.0,
+        "binding_resource": "logical core (2 physical): min(HBM stack 716, DMA 870 [+ GpSimd DMA]) = HBM stack -> HBM-bound. Single physical core (LNC=1 or one core idle): min(716, 435) = DMA-bound at 435 GB/s.",
+        "not_used_as_roofline": "3.5 TB/s and 870 GB/s are DMA engine throughput, not HBM bandwidth"
+      },
+      "empirical_reference_only": {
+        "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+        "mode": "hbm_stream_bw",
+        "value": 672271417525.2084,
+        "fraction_of_theoretical": 0.9389
+      }
+    }
+  },
+  "status_legend": {
+    "verified": "published by AWS for this engine/mode and reproduced from documented array/datapath x clock",
+    "derived_with_assumptions": "computed from documented constants plus explicitly listed assumptions",
+    "unresolved": "no strict bound can be established from available evidence; value null",
+    "unsupported": "hardware/ISA does not support the mode on NeuronCore-v3; value null"
+  },
+  "mode_name_map_to_empirical_registry": {
+    "bf16_mma": "mma_bf16_f32acc",
+    "fp16_mma": "mma_fp16_f32acc",
+    "tf32_mma": "mma_tf32_f32acc",
+    "fp8_e4m3fn_mma": "mma_fp8_e4m3_f32acc",
+    "fp8_e5m2_mma": "mma_fp8_e5m2_f32acc",
+    "int8_mma": "mma_int8_i32acc",
+    "fp32_tensor_mma": "gemm_fp32_ieee",
+    "fp32_vector": "fp32_fma_vector",
+    "bf16_vector": "bf16x2_fma_vector",
+    "fp16_vector": "fp16x2_fma_vector",
+    "hbm_bandwidth": "hbm_stream_bw",
+    "fp8_e4m3_legacy_mma": null
+  },
+  "operator_mode_coverage": {
+    "source": "tilebench/llm/v2/manifests/arithmetic_modes.yaml (revision 2, sha256 f81f6a99fb8e532109a3710767c778bdccad5b7efb1eb390baffda4f8b002e70)",
+    "modes": {
+      "mma_fp16_f32acc": {
+        "theoretical_mode": "fp16_mma",
+        "operator_dtype_pairs": 8,
+        "compute_peak_status": "verified"
+      },
+      "mma_bf16_f32acc": {
+        "theoretical_mode": "bf16_mma",
+        "operator_dtype_pairs": 2,
+        "compute_peak_status": "verified"
+      },
+      "mma_tf32_f32acc": {
+        "theoretical_mode": "tf32_mma",
+        "operator_dtype_pairs": 7,
+        "compute_peak_status": "derived_with_assumptions"
+      },
+      "mma_fp8_e4m3_f32acc": {
+        "theoretical_mode": "fp8_e4m3fn_mma",
+        "operator_dtype_pairs": 1,
+        "compute_peak_status": "unsupported"
+      },
+      "mma_int8_i32acc": {
+        "theoretical_mode": "int8_mma",
+        "operator_dtype_pairs": 1,
+        "compute_peak_status": "unsupported"
+      },
+      "fp32_fma_vector": {
+        "theoretical_mode": "fp32_vector",
+        "operator_dtype_pairs": 43,
+        "compute_peak_status": "unresolved"
+      },
+      "fp16x2_fma_vector": {
+        "theoretical_mode": "fp16_vector",
+        "operator_dtype_pairs": 6,
+        "compute_peak_status": "unresolved"
+      },
+      "bf16x2_fma_vector": {
+        "theoretical_mode": "bf16_vector",
+        "operator_dtype_pairs": 5,
+        "compute_peak_status": "unresolved"
+      },
+      "memory_only": {
+        "theoretical_mode": null,
+        "operator_dtype_pairs": 33,
+        "compute_peak_status": "not_needed (Q/BW only)"
+      },
+      "no_compute_term": {
+        "theoretical_mode": null,
+        "operator_dtype_pairs": 4,
+        "compute_peak_status": "not_needed (Q/BW only)"
+      }
+    }
+  },
+  "chip_vs_core_discrepancy": {
+    "published_chip_TFLOPs": {
+      "bf16": 667.0,
+      "fp8": 1299.0,
+      "fp32": 181.0,
+      "sparse": 2563.0
+    },
+    "published_per_core_TFLOPs": {
+      "bf16": 79.0,
+      "fp8": 158.0,
+      "fp32": 20.0,
+      "sparse": 316.0
+    },
+    "derived_8_cores_TensorE_TFLOPs": {
+      "bf16": 629.1456,
+      "fp8": 1258.2912,
+      "fp32": 157.2864
+    },
+    "chip_div_4_per_logical_TFLOPs": {
+      "bf16": 166.75,
+      "fp8": 324.75,
+      "fp32": 45.25,
+      "sparse": 640.75
+    },
+    "chip_over_8xderived": {
+      "bf16": 1.0602,
+      "fp8": 1.0324,
+      "fp32": 1.1508
+    },
+    "implied_TensorE_clock_if_chip_were_TensorE_only_GHz": {
+      "bf16": 2.5444,
+      "fp8": 2.4776,
+      "fp32": 2.7618,
+      "sparse_4x": 2.4443
+    },
+    "chip_minus_8x_published_core_TFLOPs": {
+      "bf16": 35.0,
+      "fp8": 35.0,
+      "fp32": 21.0,
+      "sparse": 35.0
+    },
+    "analysis": [
+      "H1 'chip figures use a higher TensorE clock': rejected. The clock that would reproduce each chip figure differs per precision (2.544 / 2.478 / 2.762 / 2.444 GHz); a single physical clock cannot. AWS documents one TensorE frequency (2.4 GHz, S3) and the profiler reports 2.4 GHz for these runs (T1).",
+      "H2 'chip figures add non-TensorE engines': consistent but undocumented. chip - 8 x published-per-core is exactly 35 TFLOP/s for FP8, BF16/FP16/TF32 and sparse, and 21 TFLOP/s for FP32 - a precision-independent additive term, as expected if VectorE/ScalarE/GpSimd contributions were added. Its composition cannot be reproduced from the documented per-engine figures (8 x (1.0+1.2) = 17.6 TFLOP/s FP32).",
+      "H3 'different power/clock regime for single-core vs full-chip': no documentation found; throttling (T2) only lowers utilization.",
+      "Conclusion: per-logical-core TensorE bounds use 2 x the documented per-core derivation (157.29 TFLOP/s BF16/FP16/TF32, 314.57 FP8, 39.32 FP32). Chip/4 (166.75 / 324.75 / 45.25) is recorded but not used; it exceeds the TensorE bound by 6.0 / 3.2 / 15.1 % and, under H2, counts engines that the matrix modes do not represent. A strict bound for a kernel that adds VectorE/ScalarE FLOPs to TensorE FLOPs is unresolved (no TileArena mode mixes them)."
+    ]
+  },
+  "per_physical_core_reference": {
+    "bf16_mma": 78643200000000.0,
+    "fp16_mma": 78643200000000.0,
+    "tf32_mma": 78643200000000.0,
+    "fp32_tensor_mma": 19660800000000.0,
+    "fp8_e4m3_legacy_mma": 157286400000000.0,
+    "fp8_e5m2_mma": 157286400000000.0,
+    "hbm_stack_Bps": 716000000000.0,
+    "dma_Bps": 435000000000.0,
+    "note": "a single physical core reaches one HBM stack only through its 16 DMA engines, so its memory ceiling is DMA (435 GB/s), not 716 GB/s"
+  },
+  "empirical_vs_theoretical_explanations": [
+    "Throttling: Neuron Explorer reports hardware utilization limited below 100% in 16 of 71 profiled cases (activity and GPIO throttling, T2). matmul fp16 K20480 averaged a 97.1 % utilization limit (non-transpose TensorE rate 140.1 TFLOP/s = 0.891 of 157.29, tool mfu_inst); streamk 86-87 %, batched_matmul 69-71 %, linear_self_attention fp32 11 %. The theoretical bound assumes no throttling.",
+    "Clock: no evidence of a clock above or below 2.4 GHz; throttling acts on utilization (T2).",
+    "TensorE utilization: each MultiplyMoving has an initiation interval of max(N, 64) cycles with N <= 512 (S7, S5), plus LoadStationary, PSUM evacuation by VectorE/ScalarE and DMA feed; eager torch.matmul schedules come from neuronx-cc, not NKI.",
+    "Compiler / precision path: TF32 was reached only through neuronx-cc --auto-cast matmult tf32 (77.2 % of 157.29); the native NKI tfloat32 path was not measured. FP32 IEEE GEMM 36.9 = 93.9 % of 39.32.",
+    "Workload size: empirical fp16/bf16/tf32 GEMM throughput falls at the largest sizes (e.g. fp16 118.7 at M=16384), consistent with schedule/throttling effects; the theoretical bound is size-independent.",
+    "DMA: HBM copy reaches 672.3 GB/s = 93.9 % of the 716 GB/s stack using 32 DMA engines (870 GB/s capacity). With one physical core, the copy reached 426.5 GB/s = 98 % of that core's 435 GB/s DMA ceiling (calibration diagnostic), i.e. the single-core limit is DMA, the two-core limit is the stack.",
+    "Non-matrix engines: measured single-engine FMA chains reach 43 % (VectorE fp32 vs 256-wide bound; 86 % of the 128-wide alternative), 58 % (ScalarE), 54 % (GpSimd candidate); bf16 VectorE 27 % of the 4x-mode bound - the calibration probe (2 dependent chains, free size 2048) did not demonstrate the performance mode."
+  ],
+  "empirical_calibration_reference": {
+    "calibration_id": "Trn2-20261010T012011Z-94406dcb",
+    "profile": "artifacts/llm_v2/calibration/Trn2/Trn2-20261010T012011Z-94406dcb/profile.json",
+    "profile_sha256": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
+    "public_json": "tilebench/data/peak_performance/empirical/Trainium2.json",
+    "public_json_sha256": "81b0b13e28d4cc83996cc2e57a0c32f1cf35d15cb4b9d3232c937355cdd542e9",
+    "status": "candidate (unchanged by this audit)",
+    "use": "consistency checks only; no theoretical value depends on it"
+  },
+  "legacy_reference": {
+    "path": "tilebench/data/peak_performance/Trainium2.json",
+    "sha256": "4cdf47ed67c50e7e5d01ae52c6c2584063c4270f121adf1034bc8d3c42b48cfa",
+    "note": "legacy peak_tflops (fp32 40, tf32/fp16/bf16 158, fp8/int8 316) = 2 x rounded per-core datasheet values; its int8 316 and fp8_e4m3fn 316 are not supported on NeuronCore-v3"
+  },
+  "unresolved": [
+    {
+      "id": "U1_hbm_per_logical_core",
+      "selected": "716 GB/s (derived_with_assumptions)",
+      "open": "bank locality of runtime allocations not observed; 716 (profiler per-stack constant) vs 725 (2.9 TB/s / 4) differ by 1.26 %; the per-stack figure is not in public documentation"
+    },
+    {
+      "id": "U2_chip_vs_core_tensor",
+      "selected": "TensorE-only 2 x per-core derivation",
+      "open": "AWS does not document how 667/1299/181/2563 chip TFLOPS are composed; a strict bound for mixed TensorE+vector-engine FLOPs is not established"
+    },
+    {
+      "id": "U3_tf32_rate",
+      "open": "TF32 not listed in the datapath table; only the compiler auto-cast path was measured (77 %)"
+    },
+    {
+      "id": "U4_vector_modes",
+      "open": "combined VectorE+ScalarE+GpSimd strict bound unresolved (GpSimd FMA rate, shared bus); VectorE fp32 width 256 vs 128 elements/cycle ambiguous"
+    },
+    {
+      "id": "U5_documented_engine_tflops_convention",
+      "open": "VectorE 1.0 / ScalarE 1.2 TFLOPS FP32 convention unknown"
+    }
+  ],
+  "unsupported": [
+    "int8_mma",
+    "fp8_e4m3fn_mma"
+  ],
+  "not_measured_or_not_needed": {
+    "fp8_e4m3_legacy_mma": "no TileArena Trn2 operator uses Neuron legacy e4m3",
+    "fp8_e5m2_mma": "no TileArena Trn2 operator declares e5m2",
+    "sparse_tensor": "dense workloads only"
+  },
+  "sources": [
+    {
+      "id": "S1",
+      "kind": "aws_official_documentation",
+      "title": "Trainium2 Architecture",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/trainium2.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:57:21Z",
+      "html_sha256": "977c1aab6d9beda3ab0e62beb9fbe001ac5f6cdb5f478c7863db0c8d47b2fd30"
+    },
+    {
+      "id": "S2",
+      "kind": "aws_official_documentation",
+      "title": "NeuronCore-v3 Architecture",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/neuron-core-v3.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:57:22Z",
+      "html_sha256": "d9fbcf7da24c0615ca8926602816562931cbcf9732cfbf7e2f3a39a045b490f5"
+    },
+    {
+      "id": "S3",
+      "kind": "aws_official_documentation",
+      "title": "Trainium2 Architecture Guide for NKI",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/guides/architecture/trainium2_arch.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:57:23Z",
+      "html_sha256": "8e90b91e3452c5368ffc170c5cad86a93323fb9cbce2b93ca99c27879dac4470"
+    },
+    {
+      "id": "S4",
+      "kind": "aws_official_documentation",
+      "title": "Logical NeuronCore configuration",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/logical-neuroncore-config.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:57:25Z",
+      "html_sha256": "0f644e3e3fd8701d808b18e52be76bc8476e381312c90a80ba1546e0617c419a"
+    },
+    {
+      "id": "S5",
+      "kind": "aws_official_documentation",
+      "title": "nki.isa.nc_matmul",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/nki.isa.nc_matmul.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:57:26Z",
+      "html_sha256": "5aff7929597e4b4e9b50f9d19774383185fd72974d5ec3a0caffef2106dbc430"
+    },
+    {
+      "id": "S6",
+      "kind": "aws_official_documentation",
+      "title": "Amazon EC2 Trn2 Architecture",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/trn2-arch.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:12Z",
+      "html_sha256": "859137475db90be81c6abc17d8576cbdc35558ea201af27baac33f933b41879f"
+    },
+    {
+      "id": "S7",
+      "kind": "aws_official_documentation",
+      "title": "Trainium/Inferentia2 Architecture Guide for NKI",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/guides/architecture/trainium_inferentia2_arch.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:22Z",
+      "html_sha256": "378b72ad195b93a7fcfecb5a0db72a6231b61b876ea828359866e275ba467b66"
+    },
+    {
+      "id": "S8",
+      "kind": "aws_official_documentation",
+      "title": "nki.isa.tensor_scalar",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/nki.isa.tensor_scalar.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:18Z",
+      "html_sha256": "925d04596263fcec9b6b1a02e66e913ac78afb3914cd229031c7fcd06383dd5b"
+    },
+    {
+      "id": "S9",
+      "kind": "aws_official_documentation",
+      "title": "nki.isa.activation",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/api/generated/nki.isa.activation.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:19Z",
+      "html_sha256": "ee8bc2cba374dd9b9fe011409e92b4884f9c77db21f33c0ae773087503bd8508"
+    },
+    {
+      "id": "S10",
+      "kind": "aws_official_documentation",
+      "title": "NeuronCore-v2 Architecture",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/neuron-core-v2.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:13Z",
+      "html_sha256": "b02b12c5361294023f514bf7e36095c9534d5a179b842f194d3bcc9b6e478697"
+    },
+    {
+      "id": "S11",
+      "kind": "aws_official_documentation",
+      "title": "Trainium Architecture",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-hardware/trainium.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:16Z",
+      "html_sha256": "3f63106b1d72d96a46a56d189b980c2b99be26b6877aa5b55fd38914e3e4a112"
+    },
+    {
+      "id": "S12",
+      "kind": "aws_official_documentation",
+      "title": "Neuron data types",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/about-neuron/arch/neuron-features/data-types.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:17Z",
+      "html_sha256": "f89b087e89b394e1a5a471adb39a23407b8565fe519ee90901b3f0da8a664e8d"
+    },
+    {
+      "id": "S13",
+      "kind": "aws_official_documentation",
+      "title": "Trainium3 Architecture Guide for NKI",
+      "url": "https://awsdocs-neuron.readthedocs-hosted.com/en/latest/nki/guides/architecture/trainium3_arch.html",
+      "docs_release": "Neuron 2.32.0 (readthedocs slug 'latest')",
+      "retrieved_utc": "2026-10-10T05:59:23Z",
+      "html_sha256": "f322b22b092a131295c9d5ecefd932df47dc46e6611da56af0c9c2ef12dfd771"
+    },
+    {
+      "id": "T1",
+      "kind": "aws_tool_hardware_model",
+      "title": "Neuron Explorer 2.32.0.498 device-profile metadata (hardware constants embedded in every Trn2 profile)",
+      "files": {
+        "~/tb_wt/_profiling/.local/trn2_profiling/cases/matmul_fp32_fp16_fp8/fp16/K20480/processed/timing/metrics.json": "8116f9cdf1bf7c5d7c3fbbae2e93408244c8ca83914c92189e604cfed3527120",
+        "~/tb_wt/_profiling/.local/trn2_profiling/cases/matmul_fp32_fp16_fp8/fp16/K20480/processed/timing/summary_device.json": "0e6374908106e2f7626b02949277900fc00e88e59169a1d0ed7b52ba291dd6fd",
+        "~/tb_wt/_profiling/.local/trn2_profiling/cases/matrix_copy/fp32/N5120/processed/timing/metrics.json": "21183fea79af11e0e53ee3689270401d310e2e68f9a5d234a35c28a5217d814a",
+        "~/tb_wt/_profiling/.local/trn2_profiling/cases/matrix_copy/fp32/N5120/processed/timing/summary_device.json": "409de44cb1167cb8b7a0bcdadb0986f8218bfddb7264073a454f6ac006431865"
+      },
+      "note": "identical metadata in all 71 profiles of the 2026-10-09 TileBench Trn2 NKI profiling campaign (HF bcui2/NCU_report Neuron_trn2/); local copies under the profiling worktree's git-ignored .local/"
+    },
+    {
+      "id": "T2",
+      "kind": "aws_tool_documentation",
+      "title": "Neuron Explorer 2.32 metric terminology (exported from the tool)",
+      "files": {
+        "~/tb_wt/_profiling/.local/trn2_profiling/neuron_explorer_terminology_2.32.txt": "3e5919865169ccbff61e1247b67cbb5bd8b188a463fe0fbc6da8b7e32e6d7343"
+      }
+    }
+  ],
+  "quotes": {
+    "S1_compute": "Eight NeuronCore-v3 that collectively deliver: 1,299 FP8 TFLOPS; 667 BF16/FP16/TF32 TFLOPS; 2,563 FP8/FP16/BF16/TF32 sparse TFLOPS; 181 FP32 TFLOPS",
+    "S1_mem": "96 GiB of device memory with 2.9 TB/sec of bandwidth.",
+    "S1_dma": "3.5 TB/sec of DMA bandwidth, with inline memory compression and decompression.",
+    "S2_te": "A NeuronCore-v3 Tensor Engine delivers 158 cFP8 TFLOPS, and 79 BF16/FP16/TF32 TFLOPS of tensor computations.",
+    "S2_inputs": "Tensor Engines support mixed-precision computations, including cFP8, FP16, BF16, TF32, and FP32 inputs and outputs.",
+    "S2_sparse": "The NeuronCore-v3 Tensor Engine also supports Structured Sparsity, delivering up to 316 TFLOPS of cFP8/FP16/BF16/TF32 compute.",
+    "S2_vec": "Vector Engines are highly parallelized, and deliver a total of 1 TFLOPS of FP32 computations.",
+    "S2_sca": "Scalar Engines are highly parallelized, and deliver a total of 1.2 TFLOPS of FP32 computations.",
+    "S2_gps": "Each GPSIMD engine consists of eight fully-programmable 512-bit wide vector processors.",
+    "S3_hbm": "4 HBM stacks with a total device memory capacity of 96GiB and bandwidth of 3TB/s.",
+    "S3_dma": "128 DMA (Direct Memory Access) engines to move data within and across devices.",
+    "S3_table": "Table 10 Compute Engine Specifications (Trainium2): Tensor 4x128 (dense FP8_E4/FP8_E5 input), 2x128 (dense BF16/FP16 input) or 5x128 (sparse input); 1x128 (output), 2.4 GHz; Vector 512 BF16/FP16 input/output; 256 input/output for other data types, 0.96 GHz; Scalar 128 input/output, 1.2 GHz; GpSimd 1.2 GHz",
+    "S3_te": "A NeuronCore-v3 Tensor Engine delivers 158 FP8, 79 BF16/FP16/TF32 and 20 FP32 dense TFLOPS of tensor computations. It also delivers 316 FP8/BF16/FP16/TF32 sparse TFLOPS.",
+    "S3_fp8": "each processing element performs two pairs of FP8 multiplications and also accumulation of the two multiplication results per cycle",
+    "S3_fp8e3": "FP8_E3 format is still supported by NeuronCore-v3 TensorE similar to NeuronCore-v2, but its matmul performance is the same as BF16/FP16.",
+    "S3_vecperf": "NeuronCore-v3 Vector Engine provides a new performance mode BF16/FP16 data types, which quadruples or doubles the instruction throughput depending on the instruction type compared to NeuronCore-v2 ... Enabling this performance mode does not change the computation precision - all computation is still done in FP32",
+    "S3_vec4x": "nisa.tensor_copy and nisa.tensor_scalar when both input/output tensors: are in SBUF; are in BF16/FP16 (input and output data types do not need to match); have physically contiguous elements in the inner-most (most minor) free dimension",
+    "S3_bus": "VectorE's performance mode leverages a shared memory bus between the VectorE and GpsimdE engines to deliver 2-4x performance improvement for select VectorE instructions. The hardware automatically coordinates access between engines to optimize bus utilization, including arbitrating between GpsimdE and relevant VectorE instructions.",
+    "S3_par": "VectorE and GpSimdE can access SBUF in parallel. ... VectorE and ScalarE can access PSUM in parallel.",
+    "S3_16dma": "In Trainium2, each NeuronCore-v3 is typically paired with 16x DMA engines to drive its corresponding SBUF bandwidth.",
+    "S3_gpsdma": "All eight processors together have a total integrated DMA bandwidth of 307 GB/s (153 GB/s per read/write direction).",
+    "S3_sbuf": "NeuronCore-v3 SBUF capacity is 28MiB (or, 128 partitions of 224KiB), up from 24 MiB in NeuronCore-v2.",
+    "S4_lnc": "On Trn2, each chip has 8 physical NeuronCores. With LNC=2 (default), these are grouped into 4 Logical NeuronCores.",
+    "S4_bank": "Trainium2 devices contain four 24GB HBM banks. Each bank is shared by two physical NeuronCore-v3. When LNC=2, the two physical NeuronCores share a single address space.",
+    "S5_dtypes": "The input stationary and moving tiles can be one of these supported data types: float8_e4m3/float8_e5m2/bfloat16/float16/tfloat32/float32. Starting NeuronCore-v4, float8_e4m3fn (OCP FP8) is also supported; float8_e4m3 (legacy) and float8_e4m3fn cannot be mixed in the same matmul.",
+    "S5_array": "NeuronCore Tensor Engine is built upon a systolic array with 128 rows and 128 columns of processing elements (PEs).",
+    "S5_acc": "The accumulation precision internal to Tensor Engine is float32. The dst tile must be a float32 tile in NeuronCore-v2 and NeuronCore-v3.",
+    "S5_double": "matmul_perf_mode.double_row enables double FP8 mode which achieves 2x matmul throughput by packing two FP8 weight/ifmap element pairs and computing two multiplications in parallel per cycle",
+    "S5_onezero": "is_stationary_onezero ... setting this field explicitly could lead to 2x better performance if stationary tile is in float32",
+    "S6_inst": "trn2.48xlarge: 16 Trainium2 chips; FP8 20.8 PFLOPS; FP16/BF16/TF32 10.7 PFLOPS; Sparse 41 PFLOPS; FP32 2.9 PFLOPS; Device Memory Bandwidth 46.4 TB/sec",
+    "S7_table": "Trainium/Inferentia2 (NeuronCore-v2): Tensor 2x128 (input); 1x128 (output), 2.8 GHz; Vector 128 input/output, 1.12 GHz; Scalar 1.4 GHz; GpSimd 1.4 GHz",
+    "S7_te": "TensorE supports BF16, FP16, TF32, and cFP8 input matrix data types at a maximum throughput of 92 TFLOPS, as well as 23 TFLOPS for FP32 inputs.",
+    "S7_fp32cost": "For FP32 input data type, the instruction cost is roughly 4x higher than BF16/FP16/TF32/cFP8.",
+    "S7_mmcost": "The initiation interval between subsequent MM instructions in this case is roughly max(N, MM_INIT_LATENCY), where MM_INIT_LATENCY is 64 TensorE cycles on NeuronCore-v2",
+    "S7_veccost": "If there is only one input tile, most VectorE instructions can execute in roughly N cycles (example: nki.isa.tensor_scalar). If there are two input tiles, the instruction can execute in roughly 2N cycles (example: nki.isa.tensor_tensor)",
+    "S7_gps": "GpSimdE has 128 parallel compute lanes for 32-bit computation data types across SIMD lanes of all eight processors ... Unlike VectorE/ScalarE, there is no rule-of-thumb to estimate execution cost of a GpSimdE instruction.",
+    "S7_dma": "Each DMA engine can process one DMA transfer at a time driving a peak bandwidth of 27 GiB/s",
+    "S8_ts": "Apply up to two math operators ... (data <op0> operand0) <op1> operand1 ... performing one operator has the same performance cost as performing two operators in the instruction. ... The Scalar Engine on trn2 only supports some operator combinations: op0=nl.multiply and op1=nl.add ... The compute engine automatically casts data.dtype to float32 and performs the operators in float32 math.",
+    "S9_act": "output = op(data * scale + bias) ... All these optional operations incur no further performance penalty compared to only applying the activation function ... The Scalar Engine always performs the math operations in float32 precision.",
+    "S10_v2": "The ScalarEngine ... delivers 2.9 TFLOPS of FP32 computations ... The VectorEngine ... delivers 2.3 TFLOPS of FP32 computations ... (cFP8 / FP16 / BF16 / TF32 / FP32 / INT8 inputs, FP32 / INT32 outputs). Each NeuronCore-v2 TensorEngine delivers over 90 TFLOPS of FP16/BF16 tensor computations",
+    "S11_trn1": "Two NeuronCore-v2 delivering 380 INT8 TOPS, 190 FP16/BF16/cFP8/TF32 TFLOPS, and 47.5 FP32 TFLOP. 32 GiB of device memory (for storing model state), with 820 GiB/sec of bandwidth.",
+    "T1_meta": "num_physical_cores=2, vnc_enabled=true, neuroncore_idx=2, neuron_device_idx=0, instance_type=trn2.3xlarge, tensor_engine_num_rows=128, tensor_engine_num_cols=128, tensor_engine_clock_freq=2.4, vector_engine_clock_freq=0.96, scalar_engine_clock_freq=1.2, gpsimd_engine_clock_freq=1.2, neuroncore_clock_freq=1.2, hbm_ddr_bandwidth=716000002048.0, dma_ddr_bandwidth=434999984128.0, num_dma_engines_per_neuroncore=16",
+    "T2_mbu": "Calculated as: (hbm_write_bytes + hbm_read_bytes) / total_time / hbm_max_bandwidth. The hbm_max_bandwidth is the maximum HBM bandwidth of a HBM stack. For LNC1 and LNC2, the hbm_max_bandwidth is the same.",
+    "T2_mfu": "each floating point multiply-add is counted as two FLOPs, and tensor_engine_max_ops_per_sec is 2 times the number of Tensor Engine elements times the clock speed.",
+    "T2_throttle": "throttle_active_nc0_time_ns: Total time in nsec when hardware utilization was limited to less than 100% due to throttling.",
+    "T2_baseclk": "The NeuronCore base clock rate for Inferentia1 is 1.0 GHz, Trainium1 is 1.4 GHz, and Trainium2 is 1.2 GHz."
+  },
+  "provenance": {
+    "worktree": "~/tb_wt/_llm_trn2",
+    "branch": "exp/llm-trn2",
+    "head": "15712e7e45f8cb4719cf318139b17aba847e30a3",
+    "origin_main": "72d7cec623e6238643ed5d2099d9aa9889c4ea87",
+    "generator": "scratchpad build_trn2_theoretical.py (not committed); inputs listed in sources",
+    "neuron_stack_in_profiles": {
+      "runtime": "2.0.79381",
+      "driver": "2.120.0",
+      "collectives": "2.0.78358",
+      "explorer": "2.32.0.498-b1f3998",
+      "compiler": "2.0.404830.0a0+55f4bf89",
+      "nki": "0.7.0b1+34883233359.g2aa6a82a"
+    },
+    "no_new_measurements": "this audit ran no benchmark, profiler capture or calibration; it reads existing files and AWS docs"
+  }
+}

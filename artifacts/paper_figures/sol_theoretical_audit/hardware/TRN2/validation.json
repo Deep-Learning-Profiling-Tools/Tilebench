@@ -1,0 +1,195 @@
+{
+  "schema": "tilearena-hardware-theoretical-peak-validation/1",
+  "device_key": "TRN2",
+  "generated_utc": "2026-10-10T06:14:32Z",
+  "all_pass": true,
+  "checks": [
+    {
+      "id": 1,
+      "check": "all values are per logical core (2 physical cores)",
+      "pass": true,
+      "detail": "scope fields; 71/71 profiles show 2 physical cores executing; env NEURON_RT_NUM_CORES=1, LNC=2"
+    },
+    {
+      "id": 2,
+      "check": "two participating physical cores counted exactly once (value = 2 x per physical core)",
+      "pass": true,
+      "detail": "TensorE and vector-engine values; HBM is per stack (shared by the 2 cores), not doubled"
+    },
+    {
+      "id": 3,
+      "check": "no full-chip or chip/4 figure used as a per-logical-core value",
+      "pass": true,
+      "detail": "compared every selected value with chip totals, chip/4 and DMA figures"
+    },
+    {
+      "id": 4,
+      "check": "engine and arithmetic mode identified for every peak",
+      "pass": true,
+      "detail": {
+        "bf16_mma": "TensorE",
+        "fp16_mma": "TensorE",
+        "tf32_mma": "TensorE",
+        "fp32_tensor_mma": "TensorE",
+        "fp8_e4m3_legacy_mma": "TensorE",
+        "fp8_e5m2_mma": "TensorE",
+        "fp8_e4m3fn_mma": "TensorE",
+        "int8_mma": "TensorE",
+        "fp32_vector": "VectorE/ScalarE/GpSimd",
+        "bf16_vector": "VectorE/ScalarE/GpSimd",
+        "fp16_vector": "VectorE/ScalarE/GpSimd",
+        "hbm_bandwidth": "HBM"
+      }
+    },
+    {
+      "id": 5,
+      "check": "legacy FP8 E4M3 and OCP E4M3FN distinguished",
+      "pass": true,
+      "detail": "legacy 314.57 TFLOP/s (NKI double_row only); e4m3fn unsupported on NC-v3"
+    },
+    {
+      "id": 6,
+      "check": "INT8 TensorE not assigned an invented peak",
+      "pass": true,
+      "detail": "bf16 implementation path recorded separately"
+    },
+    {
+      "id": 7,
+      "check": "dense and sparse not mixed",
+      "pass": true,
+      "detail": "no selected value equals a sparse figure"
+    },
+    {
+      "id": 8,
+      "check": "units and FMA convention consistent",
+      "pass": true,
+      "detail": "TensorE: 2 FLOP per MAC; vector: 2 FLOP per a*x+b; HBM byte/s read+write; decimal prefixes"
+    },
+    {
+      "id": 9,
+      "check": "HBM and DMA not confused",
+      "pass": true,
+      "detail": "HBM 716 GB/s; DMA 435/870 GB/s and 3.5 TB/s recorded only under dma_is_not_hbm"
+    },
+    {
+      "id": 10,
+      "check": "theoretical values independent of benchmark results",
+      "pass": true,
+      "detail": "values computed from documented constants before the empirical section is attached; no selected value equals a measured one; every measured value is below its theoretical bound"
+    },
+    {
+      "id": 11,
+      "check": "conflicts between official sources documented",
+      "pass": true,
+      "detail": [
+        "chip 667/1299/181/2563 vs 8 x per-core (chip_vs_core_discrepancy)",
+        "HBM 2.9 TB/s (S1) vs 3 TB/s (S3) vs 4 x 716 (T1)",
+        "DMA 3.5 TB/s vs 8 x 435",
+        "Trn1 820 GiB/sec (S11) vs 820 GB/s (S7) unit spelling",
+        "VectorE/ScalarE documented TFLOPS vs datapath widths",
+        "SBUF: S3 28 MiB per core vs calibration protocol llc_equivalent 2 x 24 MiB (no effect on the empirical HBM selection: eligible probes >= 256 MiB either way)",
+        "TF32 rate in S2/S3 text but not in S3 Table 10"
+      ]
+    },
+    {
+      "id": 12,
+      "check": "empirical calibration files unchanged",
+      "pass": true,
+      "detail": {
+        "SHA256SUMS": "all OK",
+        "profile.json": "a2b810f7c5ecb90470c1faf3140c54627d65fb400ac0517919783ce1b48a5b43",
+        "public_json": "81b0b13e28d4cc83996cc2e57a0c32f1cf35d15cb4b9d3232c937355cdd542e9"
+      }
+    },
+    {
+      "id": 13,
+      "check": "no NKI kernel, benchmark CSV, LLM scoring file or shared SOL formula modified",
+      "pass": true,
+      "detail": {
+        "tracked_changes": [],
+        "untracked_files": [
+          "artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2/PEAK_AUDIT.md",
+          "artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2/hardware_theoretical_peaks.json",
+          "artifacts/paper_figures/sol_theoretical_audit/hardware/TRN2/validation.json"
+        ],
+        "head": "15712e7e45f8cb4719cf318139b17aba847e30a3"
+      }
+    }
+  ],
+  "peaks_json_sha256": "259a839f431a1bba8f82a86ee9e83157d2526af11509461e8b94ddb4a6f028b0",
+  "summary_table": [
+    {
+      "mode": "bf16_mma",
+      "status": "verified",
+      "value": 157286400000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp16_mma",
+      "status": "verified",
+      "value": 157286400000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "tf32_mma",
+      "status": "derived_with_assumptions",
+      "value": 157286400000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp32_tensor_mma",
+      "status": "verified",
+      "value": 39321600000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp8_e4m3_legacy_mma",
+      "status": "verified",
+      "value": 314572800000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp8_e5m2_mma",
+      "status": "verified",
+      "value": 314572800000000.0,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp8_e4m3fn_mma",
+      "status": "unsupported",
+      "value": null,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "int8_mma",
+      "status": "unsupported",
+      "value": null,
+      "unit": "OP/s"
+    },
+    {
+      "mode": "fp32_vector",
+      "status": "unresolved",
+      "value": null,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "bf16_vector",
+      "status": "unresolved",
+      "value": null,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "fp16_vector",
+      "status": "unresolved",
+      "value": null,
+      "unit": "FLOP/s"
+    },
+    {
+      "mode": "hbm_bandwidth",
+      "status": "derived_with_assumptions",
+      "value": 716000000000.0,
+      "unit": "byte/s"
+    }
+  ],
+  "attestation": "no benchmark, profiler capture or calibration was run; no commit, push or merge"
+}

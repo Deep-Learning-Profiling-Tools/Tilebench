@@ -75,6 +75,15 @@ def hardware_label(label: str) -> str:
     return label
 
 
+#: Hardware namespaces of AWS Neuron devices (e.g. TRN2). NKI measurements are recorded only
+#: here, with their own PyTorch baseline from the same device, never in a GPU namespace.
+NEURON_HARDWARE_PREFIX = "TRN"
+
+
+def is_neuron_hardware(label: str) -> bool:
+    return label.upper().startswith(NEURON_HARDWARE_PREFIX)
+
+
 def results_root(hardware: str) -> Path:
     return RESULTS_ROOT / hardware_label(hardware)
 
