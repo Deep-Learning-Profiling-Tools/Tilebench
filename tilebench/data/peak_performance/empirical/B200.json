@@ -1,0 +1,276 @@
+{
+  "schema": "tilearena-empirical-peak/1",
+  "device": "B200",
+  "gpu": "NVIDIA B200",
+  "definition": "Sustained rates measured on this device by TileArena's empirical roofline calibration (protocol tilebench-empirical-roofline/2). Not vendor datasheet theoretical peaks. Copied unchanged from the frozen calibration profile; no calibration was rerun.",
+  "ceiling_basis": "empirical",
+  "calibration_id": "B200-20261006T063415Z-39b55bd3",
+  "calibration_status": "frozen",
+  "frozen_by": "study owner, FINAL_FREEZE_AND_START_B200.md \u00a74 D2 (2026-10-06)",
+  "registered_at": "2026-10-06T07:59:28Z",
+  "measured_at_utc": "2026-10-06T06:37:48Z",
+  "source": {
+    "profile_path": "artifacts/llm_v2/calibration/B200/B200-20261006T063415Z-39b55bd3/profile.json",
+    "profile_file_sha256": "96a55a674b64b40c1d29d23fd83394433df3254598fcf4f7112a533db2378502",
+    "profile_sha256_seal": "430660afb1e2d238f8e4fad16e90db5b12a9a3370943d54820dd8562ba95ca36",
+    "calibration_manifest": "tilebench/llm/v2/manifests/calibration.yaml",
+    "raw_measurements_dir": "artifacts/llm_v2/calibration/B200/B200-20261006T063415Z-39b55bd3",
+    "protocol": {
+      "id": "tilebench-empirical-roofline/2",
+      "quick": false,
+      "sha256": "25370ebcb1da9cd8de7caeaabac64abe194383348143a007d8c20ced89b33d3f"
+    },
+    "environment": {
+      "file": "environment.json",
+      "sha256": "7451ab75686a9290b8cfc09cc9ba89d416643f1a3c3e67e16706962db665d96f"
+    }
+  },
+  "scope": {
+    "kind": "single_device_full",
+    "name": "NVIDIA B200",
+    "sm_or_cu_count": 148,
+    "llc_bytes": 132644864,
+    "mig_mode": "Disabled",
+    "backend": "cuda"
+  },
+  "memory_bandwidth": {
+    "mode": "hbm_stream_bw",
+    "value": 6840426909475.56,
+    "unit": "byte/s",
+    "value_scaled": 6840.43,
+    "unit_scaled": "GB/s",
+    "status": "calibrated",
+    "role": "scoring",
+    "source_kind": "measured",
+    "meaning": {
+      "kind": "bandwidth",
+      "meaning": "sustained streaming bandwidth of device memory (read+write copy probes), working sets far above the last-level cache"
+    },
+    "probe_api": "torch copy_/fill_ + Triton SM streaming kernels",
+    "selected_point": "sm_copy/4096MiB",
+    "flags": [],
+    "limitations": []
+  },
+  "arithmetic_modes": {
+    "bf16x2_fma_vector": {
+      "value": 73929414891662.22,
+      "unit": "FLOP/s",
+      "value_scaled": 73.93,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "input": "bf16 (packed pairs)",
+        "kind": "vector",
+        "operation": "fused multiply-add, 2 FLOP per lane"
+      },
+      "probe_api": "triton micro-benchmark (tl.fma, 8 independent chains, runtime trip count)",
+      "selected_point": "bf16x2_fma_vector/programs_per_sm32",
+      "flags": [],
+      "limitations": [
+        "dependent FMA chains in registers; the rate of other vector instructions (exp, compare, convert) is not measured by this probe"
+      ]
+    },
+    "fp16x2_fma_vector": {
+      "value": 73925425814303.84,
+      "unit": "FLOP/s",
+      "value_scaled": 73.93,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "input": "fp16 (packed pairs)",
+        "kind": "vector",
+        "operation": "fused multiply-add, 2 FLOP per lane"
+      },
+      "probe_api": "triton micro-benchmark (tl.fma, 8 independent chains, runtime trip count)",
+      "selected_point": "fp16x2_fma_vector/programs_per_sm32",
+      "flags": [],
+      "limitations": [
+        "dependent FMA chains in registers; the rate of other vector instructions (exp, compare, convert) is not measured by this probe"
+      ]
+    },
+    "fp32_fma_vector": {
+      "value": 69967425003600.12,
+      "unit": "FLOP/s",
+      "value_scaled": 69.97,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "input": "fp32",
+        "kind": "vector",
+        "operation": "fused multiply-add, 2 FLOP each, non-matrix units"
+      },
+      "probe_api": "triton micro-benchmark (tl.fma, 8 independent chains, runtime trip count)",
+      "selected_point": "fp32_fma_vector/programs_per_sm32",
+      "flags": [],
+      "limitations": [
+        "dependent FMA chains in registers; the rate of other vector instructions (exp, compare, convert) is not measured by this probe"
+      ]
+    },
+    "gemm_fp32_ieee": {
+      "value": 66518069026504.21,
+      "unit": "FLOP/s",
+      "value_scaled": 66.52,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "control",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "fp32",
+        "input": "fp32 (IEEE, TF32 disabled)",
+        "kind": "matrix",
+        "note": "library SGEMM; an empirical control, not a vector FMA rate",
+        "output": "fp32"
+      },
+      "probe_api": "torch.matmul",
+      "selected_point": "gemm_fp32_ieee/M16384",
+      "flags": [
+        "saturation_not_demonstrated: best point is the last registered one and exceeds the runner-up by 4.1%"
+      ],
+      "limitations": [
+        "control only: library SGEMM rate, never a scoring ceiling and not a vector FMA rate"
+      ]
+    },
+    "mma_bf16_f32acc": {
+      "value": 1341431999530153.0,
+      "unit": "FLOP/s",
+      "value_scaled": 1341.43,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "fp32",
+        "input": "bf16",
+        "kind": "matrix",
+        "output": "bf16",
+        "product": "bf16 x bf16"
+      },
+      "probe_api": "torch.matmul",
+      "selected_point": "mma_bf16_f32acc/M12288",
+      "flags": [],
+      "limitations": [
+        "library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of this library on these shapes, not a proof of the hardware maximum"
+      ]
+    },
+    "mma_fp16_f32acc": {
+      "value": 1267208144178580.0,
+      "unit": "FLOP/s",
+      "value_scaled": 1267.21,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "fp32",
+        "input": "fp16",
+        "kind": "matrix",
+        "output": "fp16",
+        "product": "fp16 x fp16"
+      },
+      "probe_api": "torch.matmul",
+      "selected_point": "mma_fp16_f32acc/M12288",
+      "flags": [],
+      "limitations": [
+        "library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of this library on these shapes, not a proof of the hardware maximum"
+      ]
+    },
+    "mma_fp8_e4m3_f32acc": {
+      "value": 2588389504453349.5,
+      "unit": "FLOP/s",
+      "value_scaled": 2588.39,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "fp32",
+        "input": "float8_e4m3fn",
+        "kind": "matrix",
+        "output": "bf16"
+      },
+      "probe_api": "torch._scaled_mm",
+      "selected_point": "mma_fp8_e4m3_f32acc/M16384",
+      "flags": [],
+      "limitations": [
+        "library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of this library on these shapes, not a proof of the hardware maximum"
+      ]
+    },
+    "mma_int8_i32acc": {
+      "value": 2721388385212220.5,
+      "unit": "OP/s",
+      "value_scaled": 2721.39,
+      "unit_scaled": "TOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "int32",
+        "input": "int8",
+        "kind": "matrix",
+        "output": "int32",
+        "product": "int8 x int8"
+      },
+      "probe_api": "torch._int_mm",
+      "selected_point": "mma_int8_i32acc/M16384",
+      "flags": [],
+      "limitations": [
+        "library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of this library on these shapes, not a proof of the hardware maximum"
+      ]
+    },
+    "mma_tf32_f32acc": {
+      "value": 664458215693499.9,
+      "unit": "FLOP/s",
+      "value_scaled": 664.46,
+      "unit_scaled": "TFLOP/s",
+      "status": "calibrated",
+      "role": "scoring",
+      "source_kind": "measured",
+      "meaning": {
+        "accumulate": "fp32",
+        "input": "fp32 operands rounded to TF32",
+        "kind": "matrix",
+        "output": "fp32",
+        "product": "tf32 x tf32"
+      },
+      "probe_api": "torch.matmul",
+      "selected_point": "mma_tf32_f32acc/M4096",
+      "flags": [],
+      "limitations": [
+        "library GEMM (vendor BLAS) on square shapes 4096..16384; the sustained rate of this library on these shapes, not a proof of the hardware maximum"
+      ]
+    }
+  },
+  "not_measured_modes": {
+    "int32_vector": {
+      "status": "not_measured",
+      "unit": "OP/s",
+      "reason": "not in this run's mode list"
+    },
+    "mma_fp8_e4m3fnuz_f32acc": {
+      "status": "not_measured",
+      "unit": "FLOP/s",
+      "reason": "not in this run's mode list"
+    },
+    "mma_fp8_e5m2_f32acc": {
+      "status": "not_measured",
+      "unit": "FLOP/s",
+      "reason": "not in this run's mode list"
+    },
+    "mma_xf32_f32acc": {
+      "status": "not_measured",
+      "unit": "FLOP/s",
+      "reason": "not in this run's mode list"
+    }
+  },
+  "notes": [
+    "value/unit are the profile's SI values (FLOP/s, OP/s, byte/s); value_scaled/unit_scaled are the same value divided by 1e12 (TFLOP/s, TOP/s) or 1e9 (GB/s) and rounded to 2 decimals, for reading only.",
+    "role 'scoring' = rates used by the LLM protocol's T_SOL = max(F / P_mode, Q / BW); role 'control' (gemm_fp32_ieee) is an empirical reference, never a ceiling.",
+    "The legacy tilebench/data/peak_performance/B200.json (datasheet compute peaks + measured copy bandwidth) uses a different definition and is kept unchanged."
+  ]
+}
